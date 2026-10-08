@@ -123,6 +123,11 @@ describe("POST /api/pedidos — cuotas sin interés congeladas", () => {
     expect(await r.json()).toMatchObject({ cuotas: 6 });
   });
 
+  it("pedido de Mercado Pago: la respuesta trae la public key del Brick; con otro medio, no", async () => {
+    expect((await (await post({})).json()).mpPublicKey).toBe("TEST-key");
+    expect((await (await post({ pagoMetodo: "transferencia" })).json()).mpPublicKey).toBeUndefined();
+  });
+
   it("sin cuotas en el body: un pago (1), con la lista del pago único", async () => {
     await post();
     expect(listaCotizada()).toBe("L1");

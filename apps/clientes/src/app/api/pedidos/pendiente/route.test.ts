@@ -44,6 +44,11 @@ describe("GET /api/pedidos/pendiente", () => {
     expect(pendiente).toHaveBeenCalledTimes(1);
   });
 
+  it("pedido de Mercado Pago: suma la public key del Brick (resolver de credenciales)", async () => {
+    pendiente.mockResolvedValue({ id: "p1", numero: "PED-1", total: 1000, cuotas: 1, pagoMetodo: "mercadopago" });
+    expect((await (await GET()).json()).pedido.mpPublicKey).toBe("TEST-key");
+  });
+
   it("sin pendiente: { pedido: null }", async () => {
     pendiente.mockResolvedValue(null);
     expect(await (await GET()).json()).toEqual({ pedido: null });

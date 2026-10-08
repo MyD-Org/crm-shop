@@ -174,6 +174,9 @@ describe("convieneReintentar", () => {
     expect(convieneReintentar("datos_invalidos")).toBe(true);
     expect(convieneReintentar("cuotas_no_disponibles")).toBe(true);
     expect(convieneReintentar("desafio_vencido")).toBe(true);
+    // Cuotas: se elige otra cantidad en el mismo formulario (o se reintenta si MP no respondió).
+    expect(convieneReintentar("marca_no_permitida")).toBe(true);
+    expect(convieneReintentar("planes_no_disponibles")).toBe(true);
   });
 
   /**

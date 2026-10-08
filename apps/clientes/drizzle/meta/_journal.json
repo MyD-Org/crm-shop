@@ -239,6 +239,13 @@
       "when": 1791424405992,
       "tag": "0033_pago_info",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791480137659,
+      "tag": "0034_pago_intentos_intencion",
+      "breakpoints": true
     }
   ]
 }

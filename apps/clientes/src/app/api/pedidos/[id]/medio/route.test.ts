@@ -136,6 +136,14 @@ describe("POST /api/pedidos/:id/medio", () => {
     expect(avisarPedidoRecibido).not.toHaveBeenCalled();
   });
 
+  it("a Mercado Pago: la respuesta trae la public key del Brick (resolver de credenciales)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-clave-publica");
+    pedidoParaCambiarMedio.mockResolvedValue({ entregaTipo: "retiro", pagoMetodo: "mercadopago", lineas: [{ id: "1", qty: 2 }] });
+    const r = await llamar({ pagoMetodo: "mercadopago" });
+    expect((await r.json()).mpPublicKey).toBe("TEST-clave-publica");
+    vi.unstubAllEnvs();
+  });
+
   it("la cotización ignora el stock que el propio pedido ya reserva", async () => {
     cotizar.mockResolvedValue({
       ...COT,

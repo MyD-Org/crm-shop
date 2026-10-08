@@ -816,6 +816,15 @@ export const pagoIntentos = shop.table(
     totalPagado: numeric("total_pagado", { precision: 14, scale: 2 }),
     /** Medio con el que se cobró, según el proveedor (ver `InfoPago`). */
     info: jsonb("info").$type<InfoPago>(),
+    /**
+     * Intención del cobro, escrita al reservar el intento (ver `IntencionCobro`): cuotas que se pidieron
+     * al procesador, monto que se le mandó y si son cuotas con interés del procesador. La reconciliación
+     * la usa para no marcar como discrepancia un cobro con interés que el comprador eligió. NULL = intento
+     * anterior a la migración 0034 o recuperado por el webhook sin reserva: rigen las reglas de antes.
+     */
+    cuotasSolicitadas: integer("cuotas_solicitadas"),
+    totalEsperado: numeric("total_esperado", { precision: 14, scale: 2 }),
+    conInteres: boolean("con_interes"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -25,7 +25,7 @@ import { vaciarCarritoTx } from "./carrito-db";
 import type { CartItem } from "./carrito-cliente";
 import { disponiblesEnTx, noVisiblesEnTx, ProductoNoDisponibleError, StockInsuficienteError } from "./stock-disponible";
 import type { Cotizacion } from "./cotizacion";
-import { revisionDeCuotas, type RevisionDeCuotas } from "./pagos/cuotas-validacion";
+import { revisionDeCuotas, type IntencionCobro, type RevisionDeCuotas } from "./pagos/cuotas-validacion";
 import type { MotivoRevisionPedido } from "./motivo-revision";
 import type { InfoPago } from "./pagos/tipos";
 import {
@@ -1190,6 +1190,9 @@ async function registrarCobroTx(
         cuotas: pagoIntentos.cuotas,
         totalPagado: pagoIntentos.totalPagado,
         info: pagoIntentos.info,
+        cuotasSolicitadas: pagoIntentos.cuotasSolicitadas,
+        totalEsperado: pagoIntentos.totalEsperado,
+        conInteres: pagoIntentos.conInteres,
       })
       .from(pagoIntentos)
       .where(and(eq(pagoIntentos.orderId, pedidoId), intentoDeEsteTenant()))
@@ -1217,8 +1220,9 @@ async function registrarCobroTx(
       coinciden.find((i) => i.id === intento.id) ??
       coinciden[coinciden.length - 1];
 
-    // Cobro en cuotas: lo que informó el procesador contra lo congelado en el pedido. Una
-    // discrepancia NO bloquea ni revierte el cobro: lo deja marcado para que un operador lo revise.
+    // Cobro en cuotas: lo que informó el procesador contra lo que se le pidió (la intención del intento)
+    // o, sin intención, contra lo congelado en el pedido. Una discrepancia NO bloquea ni revierte el
+    // cobro: lo deja marcado para que un operador lo revise.
     const revisionCuotas =
       nuevo === "pagado" && decisivo
         ? revisionDeCuotas(
@@ -1227,6 +1231,7 @@ async function registrarCobroTx(
               cuotas: decisivo.cuotas ?? undefined,
               totalPagado: decisivo.totalPagado != null ? Number(decisivo.totalPagado) : undefined,
             },
+            intencionDelIntento(decisivo),
           )
         : null;
     if (revisionCuotas) {
@@ -1283,6 +1288,16 @@ async function registrarCobroTx(
   });
 }
 
+/** La intención guardada en un intento; null si falta alguna columna (intento anterior a la 0034). */
+function intencionDelIntento(i: {
+  cuotasSolicitadas: number | null;
+  totalEsperado: string | null;
+  conInteres: boolean | null;
+}): IntencionCobro | null {
+  if (i.cuotasSolicitadas == null || i.totalEsperado == null || i.conInteres == null) return null;
+  return { cuotas: i.cuotasSolicitadas, totalEsperado: Number(i.totalEsperado), conInteres: i.conInteres };
+}
+
 /** Intento abierto de un pedido: reservado (sin referencia) o pendiente en el proveedor. */
 export interface IntentoAbierto {
   id: string;
@@ -1298,11 +1313,15 @@ export interface IntentoAbierto {
  * paga dos veces. El lock sobre la fila del pedido hace que dos requests
  * simultáneos no puedan pasar los dos el chequeo: el segundo espera y ve la
  * reserva del primero.
+ *
+ * `intencion`: lo que se le va a pedir al procesador (cuotas, monto, con interés). Queda en el intento
+ * para que la reconciliación no marque como discrepancia un cobro con interés que el comprador eligió.
  */
 export async function reservarIntento(
   pedidoId: string,
   proveedor: string,
   medio: string,
+  intencion?: IntencionCobro,
 ): Promise<{ intentoId: string } | { abierto: IntentoAbierto } | { noCobrable: true } | null> {
   return getDb().transaction(async (tx) => {
     const [pedido] = await tx
@@ -1337,7 +1356,19 @@ export async function reservarIntento(
 
     const [creado] = await tx
       .insert(pagoIntentos)
-      .values({ tenantId: shopTenantId(), orderId: pedidoId, proveedor, medio })
+      .values({
+        tenantId: shopTenantId(),
+        orderId: pedidoId,
+        proveedor,
+        medio,
+        ...(intencion
+          ? {
+              cuotasSolicitadas: intencion.cuotas,
+              totalEsperado: intencion.totalEsperado.toFixed(2),
+              conInteres: intencion.conInteres,
+            }
+          : {}),
+      })
       .returning({ id: pagoIntentos.id });
     return { intentoId: creado.id };
   });
@@ -1692,6 +1723,11 @@ export async function pedidoParaCambiarMedio(
   entregaTipo: EntregaTipo;
   pagoMetodo: string;
   lineas: { id: string; qty: number }[];
+  /** Cuotas y total congelados hoy (el formulario de pago los compara con la opción elegida). */
+  cuotas: number | null;
+  total: number;
+  /** Sucursal del pedido (credenciales del procesador por sucursal, a futuro). */
+  sucursal: string | null;
   /** Si ya salieron "Recibimos su pedido" y "Nuevo pedido" (pedido sin cobro en línea). */
   avisosEnviados: boolean;
   /** Lo que el checkout precarga al volver al paso Pago con un pedido retomado. */
@@ -1703,6 +1739,8 @@ export async function pedidoParaCambiarMedio(
     .select({
       entregaTipo: orders.entregaTipo,
       pagoMetodo: orders.pagoMetodo,
+      cuotas: orders.cuotas,
+      total: orders.total,
       sucursal: orders.sucursal,
       entregaCiudad: orders.entregaCiudad,
       entregaDireccion: orders.entregaDireccion,
@@ -1723,6 +1761,9 @@ export async function pedidoParaCambiarMedio(
     entregaTipo: p.entregaTipo as EntregaTipo,
     pagoMetodo: p.pagoMetodo,
     lineas: items.map((i) => ({ id: i.id, qty: Number(i.qty) })),
+    cuotas: p.cuotas,
+    total: Number(p.total),
+    sucursal: p.sucursal ?? null,
     avisosEnviados: p.avisosEnviadosEn !== null,
     entrega: {
       // Con retiro, la sucursal del pedido es el local elegido.

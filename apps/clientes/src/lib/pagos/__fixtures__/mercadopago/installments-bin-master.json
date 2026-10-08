@@ -1,0 +1,160 @@
+[
+  {
+    "payment_method_id": "master",
+    "payment_type_id": "credit_card",
+    "issuer": {
+      "id": "3",
+      "name": "Mastercard",
+      "secure_thumbnail": "https://http2.mlstatic.com/storage/logos-api-admin/0daa1670-5c81-11ec-ae75-df2bef173be2-xl@2x.png"
+    },
+    "processing_mode": "aggregator",
+    "merchant_account_id": null,
+    "payer_costs": [
+      {
+        "installments": 1,
+        "installment_rate": 0,
+        "discount_rate": 0,
+        "reimbursement_rate": 0,
+        "labels": [
+          "CFT_0,00%|TEA_0,00%"
+        ],
+        "installment_rate_collector": [
+          "MERCADOPAGO"
+        ],
+        "min_allowed_amount": 3,
+        "max_allowed_amount": 15000000,
+        "recommended_message": "1 cuota de $ 50.000,00 ($ 50.000,00)",
+        "installment_amount": 50000,
+        "total_amount": 50000,
+        "payment_method_option_id": "opcion-de-prueba"
+      },
+      {
+        "installments": 2,
+        "installment_rate": 16.75,
+        "discount_rate": 0,
+        "reimbursement_rate": 0,
+        "labels": [
+          "CFT_249,00%|TEA_184,00%"
+        ],
+        "installment_rate_collector": [
+          "MERCADOPAGO"
+        ],
+        "min_allowed_amount": 3,
+        "max_allowed_amount": 15000000,
+        "recommended_message": "2 cuotas de $ 29.187,50 ($ 58.375,00)",
+        "installment_amount": 29187.5,
+        "total_amount": 58375,
+        "payment_method_option_id": "opcion-de-prueba"
+      },
+      {
+        "installments": 3,
+        "installment_rate": 19.69,
+        "discount_rate": 0,
+        "reimbursement_rate": 0,
+        "labels": [
+          "CFT_199,00%|TEA_150,00%"
+        ],
+        "installment_rate_collector": [
+          "MERCADOPAGO"
+        ],
+        "min_allowed_amount": 3,
+        "max_allowed_amount": 15000000,
+        "recommended_message": "3 cuotas de $ 19.948,33 ($ 59.845,00)",
+        "installment_amount": 19948.33,
+        "total_amount": 59845,
+        "payment_method_option_id": "opcion-de-prueba"
+      },
+      {
+        "installments": 6,
+        "installment_rate": 32.14,
+        "discount_rate": 0,
+        "reimbursement_rate": 0,
+        "labels": [
+          "CFT_169,00%|TEA_130,00%"
+        ],
+        "installment_rate_collector": [
+          "MERCADOPAGO"
+        ],
+        "min_allowed_amount": 3,
+        "max_allowed_amount": 15000000,
+        "recommended_message": "6 cuotas de $ 11.011,67 ($ 66.070,00)",
+        "installment_amount": 11011.67,
+        "total_amount": 66070,
+        "payment_method_option_id": "opcion-de-prueba"
+      },
+      {
+        "installments": 9,
+        "installment_rate": 43.47,
+        "discount_rate": 0,
+        "reimbursement_rate": 0,
+        "labels": [
+          "CFT_149,00%|TEA_116,00%"
+        ],
+        "installment_rate_collector": [
+          "MERCADOPAGO"
+        ],
+        "min_allowed_amount": 3,
+        "max_allowed_amount": 15000000,
+        "recommended_message": "9 cuotas de $ 7.970,56 ($ 71.735,00)",
+        "installment_amount": 7970.56,
+        "total_amount": 71735,
+        "payment_method_option_id": "opcion-de-prueba"
+      },
+      {
+        "installments": 12,
+        "installment_rate": 55.39,
+        "discount_rate": 0,
+        "reimbursement_rate": 0,
+        "labels": [
+          "CFT_139,00%|TEA_109,00%"
+        ],
+        "installment_rate_collector": [
+          "MERCADOPAGO"
+        ],
+        "min_allowed_amount": 3,
+        "max_allowed_amount": 15000000,
+        "recommended_message": "12 cuotas de $ 6.474,58 ($ 77.695,00)",
+        "installment_amount": 6474.58,
+        "total_amount": 77695,
+        "payment_method_option_id": "opcion-de-prueba"
+      },
+      {
+        "installments": 18,
+        "installment_rate": 80.87,
+        "discount_rate": 0,
+        "reimbursement_rate": 0,
+        "labels": [
+          "CFT_129,00%|TEA_102,00%"
+        ],
+        "installment_rate_collector": [
+          "MERCADOPAGO"
+        ],
+        "min_allowed_amount": 3,
+        "max_allowed_amount": 15000000,
+        "recommended_message": "18 cuotas de $ 5.024,17 ($ 90.435,00)",
+        "installment_amount": 5024.17,
+        "total_amount": 90435,
+        "payment_method_option_id": "opcion-de-prueba"
+      },
+      {
+        "installments": 24,
+        "installment_rate": 111.99,
+        "discount_rate": 0,
+        "reimbursement_rate": 0,
+        "labels": [
+          "CFT_129,00%|TEA_103,00%"
+        ],
+        "installment_rate_collector": [
+          "MERCADOPAGO"
+        ],
+        "min_allowed_amount": 3,
+        "max_allowed_amount": 15000000,
+        "recommended_message": "24 cuotas de $ 4.416,46 ($ 105.995,00)",
+        "installment_amount": 4416.46,
+        "total_amount": 105995,
+        "payment_method_option_id": "opcion-de-prueba"
+      }
+    ],
+    "agreements": null
+  }
+]

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
+import type { MedioPago } from "@/lib/medios-pago";
 import { opcionHabilitada, type OpcionCobro } from "./opciones-cobro";
 import { MENSAJE_RECHAZO } from "./tipos";
 
@@ -14,14 +15,15 @@ export const MSG_MEDIO_NO_VERIFICADO =
  * Lee los medios SIN caché: deshabilitar una opción en el admin rige en el próximo cobro. Si el medio
  * no se puede leer (o no está), falla cerrado con 502: no se cobra lo que no se pudo verificar. NO se
  * exige que el medio esté activo (un pedido en vuelo se paga aunque el operador lo desactive): sólo
- * cuenta la forma de pago.
+ * cuenta la forma de pago. `medios`: los ya leídos (sin caché) por quien llama, para no leerlos dos veces.
  */
 export async function rechazoPorOpcionDeCobro(
   pagoMetodo: string,
   procesadorId: string,
   opcion: OpcionCobro,
+  medios?: readonly MedioPago[],
 ): Promise<NextResponse | null> {
-  const medio = (await leerMediosPagoTolerante()).find((m) => m.slug === pagoMetodo);
+  const medio = (medios ?? (await leerMediosPagoTolerante())).find((m) => m.slug === pagoMetodo);
   if (!medio) {
     return NextResponse.json({ error: MSG_MEDIO_NO_VERIFICADO, motivo: "medio_no_verificado" }, { status: 502 });
   }

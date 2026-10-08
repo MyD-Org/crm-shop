@@ -18,6 +18,7 @@ import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { esCompradorCuentaCorriente, pagoValidoConMedios } from "@/lib/medios-pago";
 import { procesadorConfigurado } from "@/lib/pagos";
+import { mpPublicKeyPara } from "@/lib/pagos/mp-public-key";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { motivoRevisionPedido } from "@/lib/motivo-revision";
@@ -547,7 +548,7 @@ export async function POST(req: Request) {
     const contacto = await contactoDelPedido(pedido.id, pedido.numero);
 
     return NextResponse.json(
-      { ...pedido, cotizacion, ...(contacto ? { contacto } : {}) },
+      { ...pedido, cotizacion, ...(contacto ? { contacto } : {}), ...mpPublicKeyPara(pagoMetodo) },
       { status: pedido.repetido ? 200 : 201 },
     );
   } catch (err) {

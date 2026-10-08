@@ -15,7 +15,8 @@ import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
-import { baseParaCuotas, condicionAlcanzada, condicionesAplicables, cuotasElegidas, montoPorCuota, progresoCuotas, proximoEscalon } from "@/lib/cuotas-sin-interes";
+import { condicionAlcanzada, cuotasElegidas, montoPorCuota, progresoCuotas, proximoEscalon } from "@/lib/cuotas-sin-interes";
+import { baseParaCuotasCon, opcionesSinInteresCotizadas } from "@/lib/cuotas-opciones";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { idListaDelMedio } from "@/lib/lista-medio";
 import { procesadorConfigurado } from "@/lib/pagos";
@@ -155,18 +156,9 @@ export async function POST(req: Request) {
     // Base de un medio: cotización a la lista de su pago único y, si esa lista no sirve (el medio no
     // tiene o un producto no tiene precio en ella), a la de referencia. null = no se pudo calcular:
     // nunca se promete con base 0.
-    const baseDelMedio = async (medios: typeof mediosCrm, slug: string): Promise<number | null> => {
-      const lista = idListaDelMedio(medios, entregaTipo, slug, undefined, 1);
-      for (const idListaMedio of lista ? [lista, undefined] : [undefined]) {
-        try {
-          const b = baseParaCuotas(await cotizar(lineas, { ...opcionesCotizar, idListaMedio }));
-          if (b !== null) return b;
-        } catch (err) {
-          console.error("[/api/carrito/cotizar] base de cuotas:", err);
-        }
-      }
-      return null;
-    };
+    const cotizarConLista = (idListaMedio: string | undefined) => cotizar(lineas, { ...opcionesCotizar, idListaMedio });
+    const baseDelMedio = (medios: typeof mediosCrm, slug: string): Promise<number | null> =>
+      baseParaCuotasCon(cotizarConLista, idListaDelMedio(medios, entregaTipo, slug, undefined, 1), "/api/carrito/cotizar");
     // `totalBase` valida el mínimo (0 si no se pudo: sólo las cantidades sin mínimo); `baseValida`
     // habilita barra y "sume": sólo con una base real.
     let totalBase: number | undefined;
@@ -194,23 +186,13 @@ export async function POST(req: Request) {
     // cantidades cuyo mínimo alcanza la base.
     const cuotasOpciones =
       conCuotas && body.conCuotas === true && medioCobro
-        ? (
-            await Promise.all(
-              [
-                // Un pago: la lista del pago único del medio (o la de referencia si no tiene).
-                { cuotas: 1, idListaPrecios: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1) },
-                ...(totalBase === undefined
-                  ? (medioCobro.condicionesCuotas ?? [])
-                  : condicionesAplicables(medioCobro.condicionesCuotas, totalBase)),
-              ].map(async (c) => {
-                const q = await cotizar(lineas, { ...opcionesCotizar, idListaMedio: c.idListaPrecios });
-                if (q.hayProblemas || !(q.total > 0)) return null;
-                return { cuotas: c.cuotas, total: q.total, montoCuota: montoPorCuota(q.total, c.cuotas) };
-              }),
-            )
-          )
-            .filter((o): o is NonNullable<typeof o> => o !== null)
-            .sort((a, b) => a.cuotas - b.cuotas)
+        ? await opcionesSinInteresCotizadas({
+            condiciones: medioCobro.condicionesCuotas,
+            // Un pago: la lista del pago único del medio (o la de referencia si no tiene).
+            idListaUnPago: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1),
+            totalBase,
+            cotizarConLista,
+          })
         : undefined;
     // "Le faltan $X para N cuotas": sólo con las opciones pedidas (checkout) y algún mínimo sin alcanzar.
     const escalon =

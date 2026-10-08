@@ -162,7 +162,11 @@ describe("POST /api/pagos/mercadopago — caracterización", () => {
     const r = await pagar({ ...base, monto: 1 });
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ estado: "pagado", reintentable: false, referencia: "r1" });
-    expect(reservarIntento).toHaveBeenCalledWith("p1", "mercadopago", "tarjeta");
+    expect(reservarIntento).toHaveBeenCalledWith("p1", "mercadopago", "tarjeta", {
+      cuotas: 1,
+      totalEsperado: 100,
+      conInteres: false,
+    });
     expect(crearPago).toHaveBeenCalledWith({
       pedidoId: "p1",
       monto: 100,

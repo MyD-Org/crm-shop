@@ -1,0 +1,66 @@
+[
+  {
+    "payment_method_id": "debvisa",
+    "payment_type_id": "debit_card",
+    "issuer": {
+      "id": "1",
+      "name": "Visa",
+      "secure_thumbnail": "https://http2.mlstatic.com/storage/logos-api-admin/d589be70-eb86-11e9-b9a8-097ac027487d-xl@2x.png"
+    },
+    "processing_mode": "aggregator",
+    "merchant_account_id": null,
+    "payer_costs": [
+      {
+        "installments": 1,
+        "installment_rate": 0,
+        "discount_rate": 0,
+        "reimbursement_rate": 0,
+        "labels": [
+          "CFT_0,00%|TEA_0,00%"
+        ],
+        "installment_rate_collector": [
+          "MERCADOPAGO"
+        ],
+        "min_allowed_amount": 3,
+        "max_allowed_amount": 15000000,
+        "recommended_message": "1 cuota de $ 50.000,00 ($ 50.000,00)",
+        "installment_amount": 50000,
+        "total_amount": 50000,
+        "payment_method_option_id": "opcion-de-prueba"
+      }
+    ],
+    "agreements": null
+  },
+  {
+    "payment_method_id": "debvisa",
+    "payment_type_id": "debit_card",
+    "issuer": {
+      "id": "12706",
+      "name": "Openbank",
+      "secure_thumbnail": "https://http2.mlstatic.com/storage/logos-api-admin/43465d10-43e5-11ed-ad44-4315bd3cf4c3-xl.png"
+    },
+    "processing_mode": "aggregator",
+    "merchant_account_id": null,
+    "payer_costs": [
+      {
+        "installments": 1,
+        "installment_rate": 0,
+        "discount_rate": 0,
+        "reimbursement_rate": 0,
+        "labels": [
+          "CFT_0,00%|TEA_0,00%"
+        ],
+        "installment_rate_collector": [
+          "MERCADOPAGO"
+        ],
+        "min_allowed_amount": 3,
+        "max_allowed_amount": 15000000,
+        "recommended_message": "1 cuota de $ 50.000,00 ($ 50.000,00)",
+        "installment_amount": 50000,
+        "total_amount": 50000,
+        "payment_method_option_id": "opcion-de-prueba"
+      }
+    ],
+    "agreements": null
+  }
+]

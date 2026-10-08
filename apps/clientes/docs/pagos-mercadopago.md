@@ -349,9 +349,34 @@ de Mercado Pago, sync y cron, ya retirados).
   cotiza con la lista de su condición. `POST /api/pedidos` valida la cantidad contra las condiciones del
   medio (si no hay condición, 422), cotiza con esa lista y congela `orders.cuotas` (1 = un pago).
 - **Cobro**: `POST /api/pagos/mercadopago` exige `cuotas === pedido.cuotas` (422 `cuotas_distintas` sin
-  llamar al procesador) y cobra siempre `pedido.total` leído de la base. Un pedido sin cuotas
-  congeladas (flag apagado o anterior) mantiene el clamp 1..24 de siempre.
+  llamar al procesador) y cobra siempre `pedido.total` leído de la base. Desde el change
+  `cuotas-en-el-formulario` ya no hay clamp 1..24: ver la sección siguiente.
 - **Reconciliación**: al registrar un cobro acreditado, si el procesador informó otras cuotas u otro
-  monto, `orders.pago_revision` queda en `cuotas_distintas` / `monto_distinto` (el CRM lo muestra).
+  monto (contra la intención del intento, ver abajo), `orders.pago_revision` queda en `cuotas_distintas` / `monto_distinto` (el CRM lo muestra).
   No bloquea ni revierte el cobro.
 - **Flag apagado**: sin cuotas en la tienda, el pedido no congela cuotas y el cobro queda como estaba.
+
+## Cuotas en el formulario de pago (change `cuotas-en-el-formulario`, servidor)
+
+- **Opciones por pedido**: `POST /api/pedidos/[id]/cuotas` (`{ bin?, marca? }`, sin efectos) devuelve
+  1 pago, las sin interés de la tienda (cotizadas sobre las líneas del pedido con `lib/cuotas-opciones.ts`,
+  con mínimo y filtradas por marca: `restringidas` avisa las que no valen para la tarjeta) y las con
+  interés de Mercado Pago. Cada opción trae `pedidoCuotas`: en cuántas cuotas tiene que quedar el pedido
+  antes de cobrar (N para las sin interés de la tienda, 1 para el resto). Lo combina `lib/cuotas-pedido.ts`.
+- **Planes con interés**: los consulta el SERVIDOR (`lib/pagos/mercadopago-planes.ts`,
+  `GET /v1/payment_methods/installments` con el access token y el BIN; sin BIN, una Visa de referencia).
+  Timeout 3 s, caché 60 s, fail-closed: si MP no responde no se ofrecen ni se aceptan. Una cuota con
+  interés sin CFT/TEA (`labels: "CFT_x%|TEA_y%"`) no se ofrece. Sin BIN MP responde un plan por emisor:
+  la referencia es el que más cuotas tiene. Fixtures reales en `src/lib/pagos/__fixtures__/mercadopago/`.
+- **Cobro** (`validarCuotasPago`): 1 pago; las sin interés congeladas con una tarjeta de sus marcas
+  (`marca_no_permitida`); o, con el pedido en 1 pago, las con interés que MP ofrece para el BIN (sólo
+  crédito, sólo Mercado Pago; sin BIN 422; MP caído 503 `planes_no_disponibles`). El monto sigue siendo
+  `pedido.total` (precio de 1 pago): el interés lo agrega MP y no entra al pedido ni a la factura.
+- **Intención** (migración Shop 0034): `reservarIntento` guarda en `pago_intentos` las cuotas pedidas,
+  el monto mandado y si son con interés. La reconciliación compara contra eso: un cobro con interés
+  elegido (mismas cuotas, total pagado mayor) no se marca; menos plata o otras cuotas, sí. Intentos sin
+  intención (anteriores o recuperados por el webhook) siguen con las reglas de antes.
+- **Credenciales**: todo acceso a las de Mercado Pago y Payway pasa por `lib/pagos/credenciales.ts`
+  (hoy un juego, cuenta `principal`; mañana una por sucursal). La public key del Brick sale del servidor
+  (`mpPublicKey` en las respuestas de crear, retomar y cambiar el medio del pedido, y `publicKey` en las
+  opciones de cuotas).

@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { crearPedido, registrarCobro, type DatosCliente, type DatosPedido } from "@/lib/pedidos";
+import { crearPedido, registrarCobro, reservarIntento, type DatosCliente, type DatosPedido } from "@/lib/pedidos";
 import type { Cotizacion, LineaCotizada } from "@/lib/cotizacion";
 import { assertLocalTestDb } from "./db-url";
 
@@ -170,5 +170,65 @@ describe("registrarCobro: medio con el que se cobró (pago_info)", () => {
     )) as unknown as { pago_info: unknown; info: unknown }[];
     expect(f.pago_info).toEqual(info);
     expect(f.info).toEqual(info);
+  });
+});
+
+describe("intención del intento (0034): cobro con interés elegido vs. no elegido", () => {
+  async function intencion(intentoId: string) {
+    const [f] = (await getDb().execute(
+      sql`select cuotas_solicitadas, total_esperado, con_interes from shop.pago_intentos where id = ${intentoId}`,
+    )) as unknown as { cuotas_solicitadas: number | null; total_esperado: string | null; con_interes: boolean | null }[];
+    return f;
+  }
+
+  async function reservar(pedidoId: string, i?: { cuotas: number; totalEsperado: number; conInteres: boolean }) {
+    const r = await reservarIntento(pedidoId, "mercadopago", "tarjeta", i);
+    if (!r || !("intentoId" in r)) throw new Error("no se reservó el intento");
+    return r.intentoId;
+  }
+
+  it("reservarIntento guarda la intención en el mismo INSERT", async () => {
+    const p = await crearPedido(cliente, datos({ cuotas: 1 }), cotizacion);
+    const id = await reservar(p.id, { cuotas: 6, totalEsperado: 1210, conInteres: true });
+    expect(await intencion(id)).toEqual({ cuotas_solicitadas: 6, total_esperado: "1210.00", con_interes: true });
+  });
+
+  it("sin intención: columnas NULL (como antes de la migración)", async () => {
+    const p = await crearPedido(cliente, datos({ cuotas: 1 }), cotizacion);
+    const id = await reservar(p.id);
+    expect(await intencion(id)).toEqual({ cuotas_solicitadas: null, total_esperado: null, con_interes: null });
+  });
+
+  it("con interés elegido: el webhook informa 6 cuotas y más total → pagado SIN marca, pedido en 1 pago", async () => {
+    const p = await crearPedido(cliente, datos({ cuotas: 1 }), cotizacion);
+    await reservar(p.id, { cuotas: 6, totalEsperado: 1210, conInteres: true });
+    // El webhook no pasa intentoId: toma la reserva abierta del pedido.
+    await registrarCobro(p.id, cobro({ cuotas: 6, totalPagado: 1599.5 }), { avisar: false });
+    const f = await fila(p.id);
+    expect(f.pago_estado).toBe("pagado");
+    expect(f.pago_revision).toBeNull();
+    expect(f.cuotas).toBe(1);
+    expect(f.total).toBe("1210.00");
+  });
+
+  it("con interés elegido pero el procesador cobró otras cuotas → cuotas_distintas", async () => {
+    const p = await crearPedido(cliente, datos({ cuotas: 1 }), cotizacion);
+    await reservar(p.id, { cuotas: 6, totalEsperado: 1210, conInteres: true });
+    await registrarCobro(p.id, cobro({ cuotas: 3, totalPagado: 1400 }), { avisar: false });
+    expect((await fila(p.id)).pago_revision).toBe("cuotas_distintas");
+  });
+
+  it("interés NO elegido (intento en 1 pago) → sigue marcado", async () => {
+    const p = await crearPedido(cliente, datos({ cuotas: 1 }), cotizacion);
+    await reservar(p.id, { cuotas: 1, totalEsperado: 1210, conInteres: false });
+    await registrarCobro(p.id, cobro({ cuotas: 6, totalPagado: 1599.5 }), { avisar: false });
+    expect((await fila(p.id)).pago_revision).toBe("cuotas_distintas");
+  });
+
+  it("pedido sin cuotas congeladas (null) con intención: SÍ se revisa", async () => {
+    const p = await crearPedido(cliente, datos(), cotizacion);
+    await reservar(p.id, { cuotas: 1, totalEsperado: 1210, conInteres: false });
+    await registrarCobro(p.id, cobro({ cuotas: 1, totalPagado: 1300 }), { avisar: false });
+    expect((await fila(p.id)).pago_revision).toBe("monto_distinto");
   });
 });

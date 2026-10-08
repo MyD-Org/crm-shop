@@ -20,9 +20,12 @@ import {
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
 import { procesadorDeMedio } from "@/lib/medios-pago";
 import { permitir } from "@/lib/rate-limit";
-import { validarCuotasPago } from "@/lib/pagos/cuotas-validacion";
+import { requierePlanesMP, validarCuotasPago, type EntradaValidacionCuotas } from "@/lib/pagos/cuotas-validacion";
 import { opcionDelCobro } from "@/lib/pagos/opciones-cobro";
 import { rechazoPorOpcionDeCobro } from "@/lib/pagos/opcion-cobro-guard";
+import { consultarPlanesMP } from "@/lib/pagos/mercadopago-planes";
+import { marcaDeMercadoPago, marcaDePayway } from "@/lib/pagos/marcas";
+import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 
 /** Intentos de cobro por usuario. Alto para no molestar a quien reintenta bien. */
 const MAX_INTENTOS = 10;
@@ -106,10 +109,11 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
     return NextResponse.json({ error: "Falta el token de la tarjeta." }, { status: 400 });
   }
 
-  // El BIN lo informa la tokenización del navegador. Se valida antes de reservar nada: sin él un
-  // procesador que lo exige rechazaría el request.
-  const bin = typeof body.bin === "string" && /^\d{6}$/.test(body.bin) ? body.bin : undefined;
-  if (proveedor.requiereBin && !bin) {
+  // El BIN (6 a 8 dígitos) lo informa la tokenización del navegador. Se valida antes de reservar nada:
+  // sin él un procesador que lo exige rechazaría el request. Mercado Pago lo usa para consultar sus planes
+  // de cuotas con interés; Payway exige exactamente 6.
+  const bin = typeof body.bin === "string" && /^\d{6,8}$/.test(body.bin) ? body.bin : undefined;
+  if (proveedor.requiereBin && bin?.length !== 6) {
     return NextResponse.json(
       { error: "Faltan datos de la tarjeta. Vuelva a ingresarla.", motivo: "datos_invalidos" },
       { status: 400 },
@@ -153,33 +157,59 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
 
   // Forma de pago habilitada para el medio en el admin (crédito, débito, cuenta de Mercado Pago). Se
   // decide con lo que manda el navegador; un id desconocido cuenta como crédito. Rechazo sin reservar
-  // intento ni llamar al procesador.
-  const rechazoOpcion = await rechazoPorOpcionDeCobro(
-    pedido.pagoMetodo,
-    proveedor.id,
-    opcionDelCobro({ procesadorId: proveedor.id, medio, metodoPagoId }),
-  );
+  // intento ni llamar al procesador. Los medios se leen SIN caché: rige lo último del admin.
+  const medios = await leerMediosPagoTolerante();
+  const opcion = opcionDelCobro({ procesadorId: proveedor.id, medio, metodoPagoId });
+  const rechazoOpcion = await rechazoPorOpcionDeCobro(pedido.pagoMetodo, proveedor.id, opcion, medios);
   if (rechazoOpcion) return rechazoOpcion;
 
   /**
-   * Cuotas contra lo congelado en el pedido: IGUALDAD estricta (cada cantidad es una lista de precios
-   * distinta, así que no se puede cobrar otra). Un rechazo corta ACÁ, sin llamar al procesador: el
-   * navegador no decide cuántas cuotas se cobran. El monto cobrado es siempre `pedido.total` (leído de
-   * la base, nunca del body). Pedido sin cuotas congeladas (flag apagado o anterior) → clamp 1..24 de
-   * siempre. `metodoPagoId` sólo viaja al procesador, no participa de la validación.
+   * Cuotas (ver `validarCuotasPago`): 1 pago; las sin interés congeladas en el pedido, con una tarjeta de
+   * las marcas de esa condición; o las con interés que Mercado Pago ofrece para el BIN (consultadas acá,
+   * con el total del pedido). Un rechazo corta ACÁ, sin reservar el intento ni llamar al procesador: el
+   * navegador no decide cuántas cuotas se cobran. El monto cobrado es siempre `pedido.total` (leído de la
+   * base, nunca del body). Lo validado queda como intención en el intento, para la reconciliación.
    */
-  const validacion = validarCuotasPago({
+  const marca =
+    proveedor.id === "mercadopago"
+      ? marcaDeMercadoPago(metodoPagoId)
+      : proveedor.id === "payway"
+        ? marcaDePayway(metodoPagoId)
+        : null;
+  // Condición de las cuotas congeladas. Si el admin la quitó después de congelar el pedido, sin
+  // restricción de marcas (como antes de esta validación).
+  const condicion = medios
+    .find((m) => m.slug === pedido.pagoMetodo)
+    ?.condicionesCuotas?.find((c) => c.cuotas === pedido.cuotas);
+  const entradaCuotas: EntradaValidacionCuotas = {
     cuotas: body.cuotas,
     medio,
     cuotasPedido: pedido.cuotas,
-  });
+    procesadorId: proveedor.id,
+    opcion,
+    marca,
+    marcasCondicion: condicion?.marcas ?? null,
+    totalPedido: pedido.total,
+    planes: null,
+  };
+  if (requierePlanesMP(entradaCuotas)) {
+    if (!bin) {
+      return NextResponse.json(
+        { error: "Faltan datos de la tarjeta. Vuelva a ingresarla.", motivo: "datos_invalidos" },
+        { status: 422 },
+      );
+    }
+    entradaCuotas.planes = await consultarPlanesMP({ amount: pedido.total, bin });
+  }
+  const validacion = validarCuotasPago(entradaCuotas);
   if (!validacion.ok) {
     return NextResponse.json(
       { error: MENSAJE_RECHAZO[validacion.motivo], motivo: validacion.motivo },
-      { status: 422 },
+      // MP no respondió: no es un error del comprador, puede reintentar en un rato.
+      { status: validacion.motivo === "planes_no_disponibles" ? 503 : 422 },
     );
   }
-  const cuotas = validacion.cuotas;
+  const { cuotas, intencion } = validacion;
 
   /**
    * Datos para el control de fraude del procesador (sólo si lo pide). Salen del pedido congelado y de la
@@ -235,13 +265,13 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
    * en Mercado Pago); si no se puede, el comprador espera. Dos pagos abiertos
    * pueden aprobarse los dos.
    */
-  let reserva = await reservarIntento(pedido.id, proveedor.id, medio);
+  let reserva = await reservarIntento(pedido.id, proveedor.id, medio, intencion);
   if (reserva && "abierto" in reserva) {
     const resolucion = await resolverIntentoAbierto(pedido.id, reserva.abierto, proveedor);
     if (resolucion === "pagado") {
       return NextResponse.json({ estado: "pagado", yaEstaba: true });
     }
-    reserva = resolucion === "libre" ? await reservarIntento(pedido.id, proveedor.id, medio) : reserva;
+    reserva = resolucion === "libre" ? await reservarIntento(pedido.id, proveedor.id, medio, intencion) : reserva;
   }
   if (!reserva) {
     return NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404 });

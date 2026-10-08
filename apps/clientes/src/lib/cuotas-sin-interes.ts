@@ -13,6 +13,7 @@
 import { precioDeLista, type AlegraPrice } from "./alegra";
 import { precioFinal } from "./precio-final";
 import type { Cotizacion } from "./cotizacion";
+import { marcaPermitida } from "./pagos/marcas";
 
 export const CUOTAS_MIN = 2;
 export const CUOTAS_MAX = 24;
@@ -27,6 +28,12 @@ export interface CondicionCuotas {
    * contra la base: el total a la lista del PAGO ÚNICO del medio. null o ausente = sin mínimo.
    */
   montoMinimo?: number | null;
+  /**
+   * Tarjetas a las que aplica (`marcas` del CRM, migración 0074; ids de `pagos/marcas.ts`). null o
+   * ausente = todas. Sólo la filtra el checkout, con la marca de la tarjeta cargada
+   * (`condicionesAplicablesParaMarca`); la exhibición muestra la condición sin filtrar.
+   */
+  marcas?: string[] | null;
 }
 
 /** El medio de pago que cobra en cuotas, con sus condiciones. Serializable: viaja al cliente. */
@@ -95,6 +102,19 @@ export function condicionesAplicables(
   return condicionesValidas(condiciones).filter(
     (c) => c.montoMinimo == null || !(aCentavos(c.montoMinimo) > baseCentavos),
   );
+}
+
+/**
+ * Las condiciones que se ofrecen con una tarjeta concreta: `condicionesAplicables` y además la marca.
+ * `marca` null = desconocida: sólo valen las condiciones sin restricción de marcas. Explícita para el
+ * checkout, para no confundir "todavía no hay tarjeta" (no se filtra) con "tarjeta desconocida".
+ */
+export function condicionesAplicablesParaMarca(
+  condiciones: readonly CondicionCuotas[] | null | undefined,
+  base: number,
+  marca: string | null,
+): CondicionCuotas[] {
+  return condicionesAplicables(condiciones, base).filter((c) => marcaPermitida(c.marcas, marca));
 }
 
 /**

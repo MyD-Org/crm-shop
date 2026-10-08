@@ -107,20 +107,22 @@ describe("leerMediosPago", () => {
     const L3 = "00000000-0000-4000-8000-000000000003";
     const L6 = "00000000-0000-4000-8000-000000000006";
     const g = dbGrabadora((c) =>
-      c.sql.includes("lista_precio_condiciones")
-        ? [
-            ["mercadopago", L6, 6, "60000.00"],
-            ["mercadopago", UUID_LISTA, null, null],
-            ["mercadopago", L3, 3, null],
-            ["efectivo", L3, null, null],
-          ]
-        : [["mercadopago", "Mercado Pago", "", true, true, true, true, 0, false, false, "publico"]],
+      c.sql.includes('"marcas"')
+        ? []
+        : c.sql.includes("lista_precio_condiciones")
+          ? [
+              ["mercadopago", L6, 6, "60000.00"],
+              ["mercadopago", UUID_LISTA, null, null],
+              ["mercadopago", L3, 3, null],
+              ["efectivo", L3, null, null],
+            ]
+          : [["mercadopago", "Mercado Pago", "", true, true, true, true, 0, false, false, "publico"]],
     );
     const [mp] = await leerMediosPago(g.db as never);
     expect(mp.idListaPrecios).toBe(UUID_LISTA);
     expect(mp.condicionesCuotas).toEqual([
-      { cuotas: 3, idListaPrecios: L3, montoMinimo: null },
-      { cuotas: 6, idListaPrecios: L6, montoMinimo: 60000 },
+      { cuotas: 3, idListaPrecios: L3, montoMinimo: null, marcas: null },
+      { cuotas: 6, idListaPrecios: L6, montoMinimo: 60000, marcas: null },
     ]);
   });
 
@@ -197,6 +199,77 @@ describe("formas de pago del cobro en línea (migración 0073 del CRM)", () => {
       throw Object.assign(new Error("se cortó la conexión"), { code: "08006" });
     });
     await expect(leerMediosPago(g.db as never)).rejects.toThrow();
+  });
+});
+
+describe("marcas de las condiciones de cuotas (migración 0074 del CRM)", () => {
+  const MP = ["mercadopago", "Mercado Pago", "", true, true, true, true, 0, false, false, "publico"];
+  const L3 = "00000000-0000-4000-8000-000000000003";
+  const L6 = "00000000-0000-4000-8000-000000000006";
+  const conMarcas = (marcas: (c: { sql: string }) => unknown[][]) =>
+    dbGrabadora((c) =>
+      c.sql.includes('"marcas"')
+        ? marcas(c)
+        : c.sql.includes("lista_precio_condiciones")
+          ? [
+              ["mercadopago", L3, 3, null],
+              ["mercadopago", L6, 6, null],
+            ]
+          : c.sql.includes("opciones_cobro")
+            ? []
+            : [MP],
+    );
+
+  it("las lee en una consulta aparte, del tenant; null = todas, desconocidas se descartan", async () => {
+    const g = conMarcas(() => [
+      ["mercadopago", 3, null],
+      ["mercadopago", 6, ["visa", "nativa"]],
+    ]);
+    const [mp] = await leerMediosPago(g.db as never);
+    expect(mp.condicionesCuotas!.map((c) => [c.cuotas, c.marcas])).toEqual([
+      [3, null],
+      [6, ["visa"]],
+    ]);
+    const consulta = g.consultas.find((c) => c.sql.includes('"marcas"'))!;
+    expect(consulta.sql).toContain('"public"."lista_precio_condiciones"');
+    expect(consulta.params).toContain("tenant-ejemplo");
+    // La consulta de condiciones no la pide: una columna ausente no puede tirar las condiciones.
+    expect(g.consultas.filter((c) => c.sql.includes("lista_precio_condiciones") && !c.sql.includes('"marcas"'))).toHaveLength(1);
+  });
+
+  it("una restricción que queda vacía tras filtrar hace la condición inaccesible: no se ofrece, con aviso", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const g = conMarcas(() => [["mercadopago", 6, ["nativa"]]]);
+    const [mp] = await leerMediosPago(g.db as never);
+    expect(mp.condicionesCuotas!.map((c) => c.cuotas)).toEqual([3]);
+    expect(aviso).toHaveBeenCalled();
+    aviso.mockRestore();
+  });
+
+  it("columna ausente (42703): las condiciones siguen, para todas las tarjetas", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const g = conMarcas(() => {
+      throw Object.assign(new Error('column "marcas" does not exist'), { code: "42703" });
+    });
+    const [mp] = await leerMediosPago(g.db as never);
+    expect(mp.condicionesCuotas!.map((c) => [c.cuotas, c.marcas])).toEqual([
+      [3, null],
+      [6, null],
+    ]);
+    aviso.mockRestore();
+  });
+
+  it("otro error al leerlas no se disfraza: tira", async () => {
+    const g = conMarcas(() => {
+      throw Object.assign(new Error("se cortó la conexión"), { code: "08006" });
+    });
+    await expect(leerMediosPago(g.db as never)).rejects.toThrow();
+  });
+
+  it("sin condiciones de cuotas no consulta las marcas", async () => {
+    const g = dbGrabadora((c) => (c.sql.includes("lista_precio_condiciones") || c.sql.includes("opciones_cobro") ? [] : [MP]));
+    await leerMediosPago(g.db as never);
+    expect(g.consultas.some((c) => c.sql.includes('"marcas"'))).toBe(false);
   });
 });
 

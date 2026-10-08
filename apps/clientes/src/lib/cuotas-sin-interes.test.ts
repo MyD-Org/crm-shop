@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   condicionesAplicables,
+  condicionesAplicablesParaMarca,
   proximoEscalon,
   cuotasElegidas,
   idListaDeCuotas,
@@ -194,6 +195,30 @@ describe("cuotasElegidas / idListaDeCuotas (lo que el servidor acepta)", () => {
     expect(idListaDeCuotas(medio.condiciones, 3)).toBe("L3");
     expect(idListaDeCuotas(medio.condiciones, 1)).toBeUndefined();
     expect(idListaDeCuotas(medio.condiciones, 9)).toBeUndefined();
+  });
+});
+
+describe("condiciones por marca de tarjeta (migración 0074 del CRM)", () => {
+  const c3 = { cuotas: 3, idListaPrecios: "L3", marcas: null };
+  const c6 = { cuotas: 6, idListaPrecios: "L6", marcas: ["visa", "mastercard"] };
+  const c9 = { cuotas: 9, idListaPrecios: "L9", montoMinimo: 100000, marcas: ["visa"] };
+
+  it("condicionesAplicables SIN marca no filtra por marcas (exhibición y carrito)", () => {
+    expect(condicionesAplicables([c3, c6, c9], 200000).map((x) => x.cuotas)).toEqual([3, 6, 9]);
+  });
+
+  it("con la marca incluida aplica; con otra marca sólo las sin restricción", () => {
+    expect(condicionesAplicablesParaMarca([c3, c6, c9], 200000, "visa").map((x) => x.cuotas)).toEqual([3, 6, 9]);
+    expect(condicionesAplicablesParaMarca([c3, c6, c9], 200000, "mastercard").map((x) => x.cuotas)).toEqual([3, 6]);
+    expect(condicionesAplicablesParaMarca([c3, c6, c9], 200000, "amex").map((x) => x.cuotas)).toEqual([3]);
+  });
+
+  it("marca desconocida (null): sólo las condiciones sin restricción", () => {
+    expect(condicionesAplicablesParaMarca([c3, c6, c9], 200000, null).map((x) => x.cuotas)).toEqual([3]);
+  });
+
+  it("el mínimo se sigue aplicando además de la marca", () => {
+    expect(condicionesAplicablesParaMarca([c3, c6, c9], 50000, "visa").map((x) => x.cuotas)).toEqual([3, 6]);
   });
 });
 

@@ -7,6 +7,7 @@ import {
   LISTA_POR_DEFECTO,
   aplicarMedioGuardado,
   cambiosDeCuotas,
+  cuerpoDeOpciones,
   cuerpoDePrecios,
   validarFilasCuotas,
   type CondicionCuotasForm,
@@ -15,6 +16,13 @@ import {
 import { normalizarIdentificador } from "@/lib/identificador"
 import { EditorChipsMedio } from "@/components/admin/EditorChipsMedio"
 import { TONO_BADGE_DE_CHIP, type ChipMedio } from "@/lib/medios-pago-shop-chips"
+import {
+  OPCIONES_COBRO,
+  ROTULO_OPCION,
+  errorDeOpcionesResultantes,
+  opcionesDelMedio,
+  type OpcionCobro,
+} from "@/lib/medios-pago-shop-opciones"
 import { esSlugCobro, validarMedioPagoCambios, validarMedioPagoNuevo } from "@/lib/medios-pago-shop-validacion"
 
 // Configuración → Sucursales y ventas: medios de pago que el checkout del Shop ofrece. Cada
@@ -41,6 +49,8 @@ type Form = {
   soloCuentaCorriente: boolean
   /** Etiquetas del medio en el checkout (hasta 3), en el orden en que se muestran. */
   chips: ChipMedio[]
+  /** Formas de pago del cobro en línea (sólo se editan en un medio con cobro en línea). */
+  opcionesCobro: OpcionCobro[]
 }
 
 type Lista = { id: string; nombre: string }
@@ -60,6 +70,7 @@ const formVacio: Form = {
   mostrarEnFicha: false,
   soloCuentaCorriente: false,
   chips: [],
+  opcionesCobro: [...OPCIONES_COBRO],
 }
 
 const desdeDto = (m: MedioPagoDto): Form => ({
@@ -80,6 +91,7 @@ const desdeDto = (m: MedioPagoDto): Form => ({
   mostrarEnFicha: m.mostrarEnFicha,
   soloCuentaCorriente: m.audiencia === "cuenta_corriente",
   chips: m.chips ?? [],
+  opcionesCobro: m.opcionesCobro ?? [...OPCIONES_COBRO],
 })
 
 // El destacado y la ficha se configuran sólo editando un medio ya creado; la lista se enlaza aparte
@@ -201,9 +213,17 @@ export function MediosPagoShopCard() {
   async function guardar() {
     if (!form) return
     setErrores({})
-    const c = cuerpo(form)
+    const actual = form.editandoSlug ? medios?.find((m) => m.slug === form.editandoSlug) : undefined
+    const c = {
+      ...cuerpo(form),
+      ...(actual?.cobroOnline ? cuerpoDeOpciones(form.opcionesCobro, actual.opcionesCobro ?? OPCIONES_COBRO) : {}),
+    }
     const v = form.editandoSlug ? validarMedioPagoCambios(c) : validarMedioPagoNuevo(c)
     if (!v.ok) return setErrores({ [v.campo === "body" ? "general" : v.campo]: v.error })
+    if (actual?.cobroOnline) {
+      const e = errorDeOpcionesResultantes({ slug: actual.slug, activo: form.activo, cobroOnline: true, opcionesCobro: form.opcionesCobro })
+      if (e) return setErrores({ opcionesCobro: e })
+    }
 
     // Cuotas sin interés: sólo un medio con cobro en línea las tiene; se validan antes de guardar nada.
     let cuotasDeseadas: CondicionCuotasForm[] | null = null
@@ -526,6 +546,27 @@ export function MediosPagoShopCard() {
                   La ficha del producto muestra una línea con el precio de este medio. Puede marcar todos los que quiera.
                 </p>
                 {errores.destacarEnCatalogo && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.destacarEnCatalogo}</p>}
+              </div>
+            )}
+            {form.editandoSlug && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline && (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>Formas de pago</p>
+                <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                  Lo que el cliente puede usar para pagar con este medio en el checkout. Un medio activo necesita al
+                  menos una.
+                </p>
+                {opcionesDelMedio(form.editandoSlug).map((o) => (
+                  <CheckboxLabel
+                    key={o}
+                    id={`medio-opcion-${o}`}
+                    checked={form.opcionesCobro.includes(o)}
+                    onChange={(v) =>
+                      cambiar({ opcionesCobro: v ? [...form.opcionesCobro, o] : form.opcionesCobro.filter((x) => x !== o) })
+                    }
+                    label={ROTULO_OPCION[o]}
+                  />
+                ))}
+                {errores.opcionesCobro && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.opcionesCobro}</p>}
               </div>
             )}
             {form.editandoSlug && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline && (

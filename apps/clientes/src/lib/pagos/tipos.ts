@@ -35,6 +35,10 @@ export interface InfoPago {
   autorizacion?: string;
   /** Número de cupón (ticket) de Payway. */
   cupon?: string;
+  /** Lo que acredita el proveedor a la tienda, en pesos, ya descontados sus cargos. */
+  netoRecibido?: number;
+  /** Lo que descontó el proveedor (comisión, costo de las cuotas sin interés, retenciones), en pesos. */
+  costoProcesador?: number;
 }
 
 /**

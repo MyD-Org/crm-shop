@@ -322,9 +322,12 @@ export function textoEvento(evento: EventoHistorialDto): string {
   }
 }
 
+const PROCESADOR: Readonly<Record<string, string>> = { mercadopago: "Mercado Pago", payway: "Payway" }
+
 /**
  * Datos del cobro en línea para la tarjeta "Pago" del detalle: con qué pagó, cuotas, total con
- * interés (sólo si difiere del total del pedido), fecha y los números para buscarlo en el proveedor.
+ * interés (sólo si difiere del total del pedido), neto que recibe la tienda y lo que descontó el
+ * procesador (sólo Mercado Pago lo informa), fecha y los números para buscarlo en el proveedor.
  * Sólo los que hay: un pago anterior a `pago_info` muestra medio, cuotas y número de operación.
  */
 export function datosCobroEnLinea(p: PagoEnLineaDto, totalPedido: number): { label: string; valor: string }[] {
@@ -336,6 +339,13 @@ export function datosCobroEnLinea(p: PagoEnLineaDto, totalPedido: number): { lab
   }
   if (p.totalPagado != null && Math.abs(p.totalPagado - totalPedido) > 0.01) {
     datos.push({ label: "Total pagado por el cliente", valor: fmtMoneda(p.totalPagado) })
+  }
+  if (p.info.netoRecibido != null) {
+    datos.push({ label: "Recibe neto", valor: fmtMoneda(p.info.netoRecibido) })
+    if (p.info.costoProcesador != null) {
+      const procesador = Object.hasOwn(PROCESADOR, p.proveedor) ? PROCESADOR[p.proveedor] : "el procesador"
+      datos.push({ label: `Comisión y costos de ${procesador}`, valor: fmtMoneda(p.info.costoProcesador) })
+    }
   }
   if (p.info.aprobadoEn) datos.push({ label: "Fecha del pago", valor: fmtFechaPedido(p.info.aprobadoEn) })
   if (p.proveedor === "mercadopago" && p.referencia) {

@@ -13,6 +13,10 @@ export interface InfoPagoDto {
   aprobadoEn: string | null
   autorizacion: string | null
   cupon: string | null
+  /** Lo que el proveedor le acredita a la tienda, ya descontados sus cargos. Pagos anteriores: null. */
+  netoRecibido: number | null
+  /** Lo que descontó el proveedor (comisión, costo de las cuotas sin interés…). */
+  costoProcesador: number | null
 }
 
 export interface PagoEnLineaDto {
@@ -33,6 +37,8 @@ const TIPOS: readonly TipoMedioPago[] = ["credito", "debito", "prepaga", "dinero
 const texto = (v: unknown, max = 80): string | null =>
   typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null
 
+const monto = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null)
+
 export function parseInfoPago(raw: unknown): InfoPagoDto {
   const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
   const tipo = typeof o.tipo === "string" && (TIPOS as readonly string[]).includes(o.tipo) ? (o.tipo as TipoMedioPago) : null
@@ -45,6 +51,8 @@ export function parseInfoPago(raw: unknown): InfoPagoDto {
     aprobadoEn: aprobado && !Number.isNaN(Date.parse(aprobado)) ? new Date(aprobado).toISOString() : null,
     autorizacion: texto(o.autorizacion, 40),
     cupon: texto(o.cupon, 40),
+    netoRecibido: monto(o.netoRecibido),
+    costoProcesador: monto(o.costoProcesador),
   }
 }
 

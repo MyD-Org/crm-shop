@@ -114,6 +114,10 @@ async function enviarAviso(
       total: Number(pedido.total),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, medios),
+      // Cuotas con interés del procesador: lo pagado va aparte (el total del pedido es el de 1 pago).
+      ...(aviso === "pago_recibido" && pedido.pagoCuotas && pedido.pagoTotalPagado
+        ? { pagado: { total: Number(pedido.pagoTotalPagado), cuotas: pedido.pagoCuotas } }
+        : {}),
       // Cuenta corriente: el medio del pedido es el de audiencia `cuenta_corriente` (por el campo,
       // nunca por el nombre ni el slug).
       pagoCuentaCorriente: Boolean(medios?.some((m) => m.slug === pedido.pagoMetodo && esMedioCuentaCorriente(m))),

@@ -79,24 +79,19 @@ export function variablesDelTema(): VariablesBrick {
 }
 
 /**
- * Con cuotas congeladas en el pedido, la tarjeta de crédito ofrece exactamente esas (mínimo = máximo):
- * el comprador ya las eligió en la tienda y el precio las incluye. El selector aparece al cargar el
- * número de tarjeta, porque Mercado Pago necesita saber qué tarjeta es. El débito es siempre un pago.
+ * Las cuotas se eligen en nuestro desplegable (`SelectorCuotas`, con sus totales y el chip "Sin
+ * interés"), no en el Brick: en crédito el Brick va en un pago (mínimo = máximo = 1), así su selector
+ * queda oculto y cambiar de cuotas no le cambia las props. El servidor cobra las cuotas que mandamos
+ * nosotros sobre el total del pedido. El débito es siempre un pago.
  */
-export function customizacionBrick(
-  tipo: TipoTarjeta,
-  maxCuotas: number | undefined,
-  leerVariables: () => VariablesBrick = variablesDelTema,
-): CustomizacionBrick {
-  const valido = tipo === "credito" && typeof maxCuotas === "number" && Number.isInteger(maxCuotas) && maxCuotas >= 1;
-  const clave = `${tipo}|${valido ? maxCuotas : "sin"}`;
-  const previa = cache.get(clave);
+export function customizacionBrick(tipo: TipoTarjeta, leerVariables: () => VariablesBrick = variablesDelTema): CustomizacionBrick {
+  const previa = cache.get(tipo);
   if (previa) return previa;
 
   const nueva: CustomizacionBrick = {
     paymentMethods: {
       types: { included: [tipo === "credito" ? "credit_card" : "debit_card"] },
-      ...(valido ? { minInstallments: maxCuotas, maxInstallments: maxCuotas } : {}),
+      ...(tipo === "credito" ? { minInstallments: 1, maxInstallments: 1 } : {}),
     },
     visual: {
       hideFormTitle: true,
@@ -104,6 +99,6 @@ export function customizacionBrick(
       style: { theme: "default", customVariables: leerVariables() },
     },
   };
-  cache.set(clave, nueva);
+  cache.set(tipo, nueva);
   return nueva;
 }

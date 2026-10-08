@@ -5,13 +5,18 @@ import { CardPayment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-rea
 import { Button, PaymentLogos, RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
-import { customizacionBrick, textoCuotas, type CustomizacionSdk, type TipoTarjeta } from "./pago-brick";
+import { customizacionBrick, type CustomizacionSdk, type TipoTarjeta } from "./pago-brick";
 import { opcionesMercadoPagoHabilitadas as opcionesHabilitadas, type OpcionMercadoPago } from "./pago-opciones";
 import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { AvisoProcesador } from "./AvisoProcesador";
 import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "./PagoIconos";
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
 import type { TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
+import { asegurarCuotasDelPedido } from "@/lib/checkout-cuotas-cliente";
+import { eleccionVigente, opcionesDeRespaldo, textoBotonPagar, type EleccionCuotas } from "@/lib/cuotas-formulario";
+import { SelectorCuotas } from "./checkout/SelectorCuotas";
+import { binValido } from "./checkout/consultor-cuotas";
+import { useOpcionesCuotas } from "./checkout/useOpcionesCuotas";
 import { alEstarListo, alFallarBrick, alVencerPlazo, iniciarPlazoCarga } from "./pago-mp-carga";
 import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "./PagoMercadoPagoAvisos";
 
@@ -24,19 +29,23 @@ import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "
  * nuestro código: acá solo llega un token de un solo uso. Eso es lo que nos
  * deja en el nivel más liviano de PCI.
  *
- * El monto que se muestra es informativo. El que se cobra sale del pedido
- * persistido en el servidor — ver /api/pagos/mercadopago.
+ * Las cuotas se eligen en nuestro desplegable "Cuotas" (`SelectorCuotas`), según la tarjeta cargada:
+ * las sin interés de la tienda y las con interés de Mercado Pago sobre el precio en 1 pago. El monto
+ * que se muestra es informativo: el que se cobra sale del pedido persistido en el servidor (que vuelve a
+ * validar las cuotas) — ver /api/pagos/mercadopago.
  */
 
-let iniciado = false;
+/** Procesador que financia las cuotas con interés de este medio (aviso del desplegable). */
+const PROCESADOR = "Mercado Pago";
 
-function inicializar() {
-  if (iniciado) return;
-  const key = process.env.NEXT_PUBLIC_MP_PUBLIC_KEY;
-  if (!key) return;
+let iniciadoCon: string | null = null;
+
+/** La public key de la cuenta del pedido; si cambia (otra cuenta), se vuelve a iniciar el SDK. */
+function inicializar(key: string | undefined) {
+  if (!key || iniciadoCon === key) return;
   // `locale` acá y no en cada brick: si no, los textos salen en portugués.
   initMercadoPago(key, { locale: "es-AR" });
-  iniciado = true;
+  iniciadoCon = key;
 }
 
 type Opcion = OpcionMercadoPago;
@@ -57,12 +66,16 @@ interface Props {
   numero: string;
   monto: number;
   emailComprador?: string;
-  /**
-   * Máximo de cuotas congelado en el pedido (sólo con el flag `cuotas`). Sin
-   * valor, el Brick ofrece lo que devuelva Mercado Pago, como antes. Es
-   * constante durante la vida del pedido: no reinicia el Brick.
-   */
-  maxCuotas?: number;
+  /** Medio de pago del pedido (slug): va en el `POST /medio` que re-congela las cuotas antes de cobrar. */
+  pagoMetodo: string;
+  /** Cuotas congeladas hoy en el pedido (null = sin elegir, cuenta como 1 pago). */
+  cuotasPedido: number | null;
+  /** Public key de la cuenta del pedido (la manda el servidor); sin ella, la del entorno. */
+  publicKey?: string;
+  /** Lo elegido en el desplegable, para el resumen lateral (null al salir del formulario). Estable. */
+  onEleccionCuotas?: (e: EleccionCuotas | null) => void;
+  /** El pedido pasó a otras cuotas (y otro total) antes de cobrar. */
+  onPedidoActualizado?: (p: { cuotas: number | null; total: number }) => void;
   /**
    * Formas de pago habilitadas para el medio en el admin (migración 0073 del CRM). Sin valor, todas.
    * Las deshabilitadas no se muestran; el servidor igual las rechaza.
@@ -103,7 +116,11 @@ export function PagoMercadoPago({
   numero,
   monto,
   emailComprador,
-  maxCuotas,
+  pagoMetodo,
+  cuotasPedido,
+  publicKey,
+  onEleccionCuotas,
+  onPedidoActualizado,
   opcionesCobro,
   onPagado,
   onPendiente,
@@ -114,13 +131,9 @@ export function PagoMercadoPago({
   onConfirmacionAgotada,
   tarjetas,
 }: Props) {
-  /** El débito es siempre un pago: con cuotas congeladas no se ofrece. */
-  const debitoDisponible = !(maxCuotas !== undefined && maxCuotas > 1);
   const habilitadas = opcionesHabilitadas(opcionesCobro);
-  // Arranca en la primera forma habilitada que se pueda usar (el débito no, con cuotas congeladas).
-  const [opcion, setOpcion] = useState<Opcion>(
-    () => habilitadas.find((o) => o !== "debito" || debitoDisponible) ?? habilitadas[0] ?? "credito",
-  );
+  // Arranca en la primera forma habilitada (el débito y la cuenta pasan el pedido a 1 pago al cobrar).
+  const [opcion, setOpcion] = useState<Opcion>(() => habilitadas[0] ?? "credito");
   const [estado, setEstado] = useState<Estado>(
     iniciarEnConfirmacion ? { fase: "pendiente" } : opcion === "cuenta" ? { fase: "formulario" } : { fase: "cargando" },
   );
@@ -130,11 +143,58 @@ export function PagoMercadoPago({
     onCobroEnCurso?.(cobroEnCurso);
   }, [cobroEnCurso, onCobroEnCurso]);
 
+  const key = publicKey || process.env.NEXT_PUBLIC_MP_PUBLIC_KEY;
   useEffect(() => {
-    inicializar();
-  }, []);
+    inicializar(key);
+  }, [key]);
 
-  const faltaKey = !process.env.NEXT_PUBLIC_MP_PUBLIC_KEY;
+  const faltaKey = !key;
+
+  /**
+   * Cuotas: las opciones del pedido para la tarjeta cargada (BIN del Brick). Sin respuesta del servidor
+   * queda lo que el pedido ya tiene congelado, que el cobro acepta tal cual.
+   */
+  const [bin, setBin] = useState<string | null>(null);
+  const cuotas = useOpcionesCuotas(pedidoId, opcion === "credito" ? bin : null, !faltaKey);
+  const datosCuotas = cuotas.datos;
+  const opcionesCuotas = useMemo(
+    () => (datosCuotas && datosCuotas.opciones.length > 0 ? datosCuotas.opciones : opcionesDeRespaldo({ cuotas: cuotasPedido, total: monto })),
+    [datosCuotas, cuotasPedido, monto],
+  );
+  const precioUnPago = datosCuotas?.precioUnPago ?? monto;
+  const unPago = useMemo(
+    () => opcionesCuotas.find((o) => o.tipo === "un_pago") ?? opcionesDeRespaldo({ cuotas: null, total: precioUnPago })[0],
+    [opcionesCuotas, precioUnPago],
+  );
+  const [claveCuotas, setClaveCuotas] = useState<string | null>(null);
+  // Si la elegida deja de ofrecerse (otra tarjeta), vuelve a 1 pago. Débito y cuenta: siempre 1 pago.
+  const eleccion = opcion === "credito" ? (eleccionVigente(opcionesCuotas, claveCuotas) ?? unPago) : unPago;
+
+  useEffect(() => {
+    onEleccionCuotas?.({ opcion: eleccion, precioUnPago });
+  }, [eleccion, precioUnPago, onEleccionCuotas]);
+  // Al salir del formulario (otro medio, pagado), el resumen vuelve al total del pedido.
+  useEffect(() => () => onEleccionCuotas?.(null), [onEleccionCuotas]);
+
+  /**
+   * Antes de cobrar, el pedido queda en las cuotas de la opción (N sin interés de la tienda; 1 para el
+   * resto). Devuelve el error a mostrar, o null. Un 409/422 vuelve a pedir las opciones.
+   */
+  async function asegurarCuotas(cuotasDelPedido: number, totalOpcion: number): Promise<string | null> {
+    const r = await asegurarCuotasDelPedido({
+      pedidoId,
+      pagoMetodo,
+      cuotas: cuotasDelPedido,
+      totalVisto: datosCuotas ? (cuotasDelPedido > 1 ? totalOpcion : precioUnPago) : undefined,
+      actual: { cuotas: cuotasPedido, total: monto },
+    });
+    if (!r.ok) {
+      cuotas.recargar();
+      return r.error;
+    }
+    if (r.cambio) onPedidoActualizado?.({ cuotas: r.cuotas, total: r.total });
+    return null;
+  }
 
   /**
    * `initialization` y `customization` DEBEN tener identidad estable.
@@ -148,23 +208,28 @@ export function PagoMercadoPago({
    * El remontado a propósito —cuando conviene reintentar— se sigue haciendo con
    * `key={intento}`, que es explícito y controlado por nosotros.
    */
+  // El monto del Brick queda congelado: elegir otras cuotas cambia el total del pedido, pero un monto
+  // nuevo remontaría el Brick y borraría la tarjeta. El Brick no cobra: cobra el servidor con el pedido.
+  const [montoBrick] = useState(monto);
   const initialization = useMemo(
     () => ({
-      amount: monto,
+      amount: montoBrick,
       payer: emailComprador ? { email: emailComprador } : undefined,
     }),
-    [monto, emailComprador],
+    [montoBrick, emailComprador],
   );
 
   /**
-   * La tarjeta elegida, con las cuotas del pedido congelado (ver `pago-brick.ts`). La identidad sólo
-   * cambia si cambia la tarjeta, las cuotas o el monto (test de regresión #21).
+   * La tarjeta elegida (ver `pago-brick.ts`): la identidad sólo cambia si cambia la tarjeta, nunca con
+   * las cuotas (test de regresión #21).
    */
   const tipoTarjeta: TipoTarjeta = opcion === "debito" ? "debito" : "credito";
-  const customization = useMemo(
-    () => customizacionBrick(tipoTarjeta, maxCuotas) as CustomizacionSdk,
-    [tipoTarjeta, maxCuotas],
-  );
+  const customization = useMemo(() => customizacionBrick(tipoTarjeta) as CustomizacionSdk, [tipoTarjeta]);
+
+  /** El BIN de la tarjeta (6 u 8 dígitos): recarga las cuotas. Estable, como el resto de las props del Brick. */
+  const onBinChange = useCallback((b: string) => {
+    setBin(binValido(b));
+  }, []);
 
   /**
    * El brick espera una promesa: mientras no se resuelva, mantiene el botón en
@@ -176,9 +241,17 @@ export function PagoMercadoPago({
 
     const datos = formData as {
       token?: string;
-      installments?: number;
       payment_method_id?: string;
     };
+
+    // Las cuotas son las de nuestro desplegable (el Brick va en un pago). Débito: siempre 1.
+    const elegida = opcion === "credito" ? eleccion : unPago;
+    const errorCuotas = await asegurarCuotas(elegida.pedidoCuotas, elegida.total);
+    if (errorCuotas) {
+      // Sin remontar el Brick: la tarjeta cargada sigue ahí para volver a intentar.
+      setEstado({ fase: "rechazado", mensaje: errorCuotas, reintentable: true });
+      return;
+    }
 
     try {
       const res = await fetch("/api/pagos/mercadopago", {
@@ -188,8 +261,9 @@ export function PagoMercadoPago({
           pedidoId,
           medio: "tarjeta",
           token: datos?.token,
-          cuotas: datos?.installments,
+          cuotas: elegida.cuotas,
           metodoPagoId: datos?.payment_method_id,
+          ...(bin ? { bin } : {}),
         }),
       });
 
@@ -333,6 +407,8 @@ export function PagoMercadoPago({
   function elegir(nueva: Opcion) {
     if (nueva === opcion || estado.fase === "procesando") return;
     setOpcion(nueva);
+    // El Brick nuevo arranca vacío: sin tarjeta, sin BIN.
+    setBin(null);
     if (nueva === "cuenta") {
       setEstado({ fase: "formulario" });
     } else {
@@ -351,7 +427,7 @@ export function PagoMercadoPago({
       <div className="rounded-xl border border-success/30 bg-success/5 p-5 text-center">
         <p className="text-sm font-bold text-text">Pago acreditado</p>
         <p className="mt-1 text-sm text-muted">
-          Cobramos {fmtPrecio(monto)} para el pedido {numero}.
+          Cobramos {fmtPrecio(eleccion.total)} para el pedido {numero}.
         </p>
       </div>
     );
@@ -421,6 +497,7 @@ export function PagoMercadoPago({
     return <AvisoPagoRechazado mensaje={estado.mensaje} />;
   }
 
+  const textoBoton = textoBotonPagar(eleccion);
   const formularioTarjeta = (
     <div className="relative min-h-48" aria-busy={estado.fase === "cargando"}>
       {estado.fase === "cargando" && (
@@ -439,13 +516,35 @@ export function PagoMercadoPago({
           onSubmit={onSubmit}
           onReady={onReady}
           onError={onError}
+          onBinChange={onBinChange}
         />
       </div>
+      {estado.fase !== "cargando" && opcion === "credito" && (
+        <div className="mt-4">
+          <SelectorCuotas
+            opciones={opcionesCuotas}
+            elegida={eleccion}
+            onElegir={setClaveCuotas}
+            marca={datosCuotas?.marca ?? null}
+            restringidas={datosCuotas?.restringidas ?? []}
+            procesador={PROCESADOR}
+            deshabilitado={procesando}
+          />
+        </div>
+      )}
       {estado.fase !== "cargando" && (
         <div className="mt-4 flex flex-col">
           <Button size="lg" onClick={pagarConTarjeta} loading={procesando} disabled={procesando}>
             <IconoCandado />
-            {procesando ? "Procesando su pago…" : `Pagar ${fmtPrecio(monto)}`}
+            {procesando ? (
+              "Procesando su pago…"
+            ) : (
+              <>
+                {/* En el celular, la versión corta ("Pagar 6 × $X") para que entre en una línea. */}
+                <span className="sm:hidden">{textoBoton.corto}</span>
+                <span className="hidden sm:inline">{textoBoton.largo}</span>
+              </>
+            )}
           </Button>
         </div>
       )}
@@ -464,31 +563,25 @@ export function PagoMercadoPago({
         ? { media: <PaymentLogos aria-label="Tarjetas de crédito aceptadas" logos={logosCredito} /> }
         : { description: "Visa, Mastercard, American Express y más" }),
       icon: <IconoTarjeta />,
-      ...(maxCuotas !== undefined
-        ? { badge: { label: textoCuotas(maxCuotas), tone: maxCuotas > 1 ? ("success" as const) : ("neutral" as const) } }
-        : {}),
       content: formularioTarjeta,
       disabled: procesando && opcion !== "credito",
     },
     {
       value: "debito",
       label: "Tarjeta de débito",
-      ...(!debitoDisponible
-        ? { description: "Para pagar con débito, pase su compra a un pago." }
-        : logosDebito.length > 0
-          ? { media: <PaymentLogos aria-label="Tarjetas de débito aceptadas" logos={logosDebito} /> }
-          : { description: "Visa Débito, Maestro y más" }),
+      ...(logosDebito.length > 0
+        ? { media: <PaymentLogos aria-label="Tarjetas de débito aceptadas" logos={logosDebito} /> }
+        : { description: "Visa Débito, Maestro y más" }),
       icon: <IconoTarjetaDebito />,
-      ...(debitoDisponible ? {} : { badge: { label: "Sólo en un pago" } }),
       content: formularioTarjeta,
-      disabled: !debitoDisponible || (procesando && opcion !== "debito"),
+      disabled: procesando && opcion !== "debito",
     },
     {
       value: "cuenta",
       label: "Cuenta de Mercado Pago",
       description: "Dinero disponible o tarjetas guardadas en su cuenta",
       icon: <IconoBilletera />,
-      content: <PagoCuentaMercadoPago pedidoId={pedidoId} cuotas={maxCuotas} />,
+      content: <PagoCuentaMercadoPago pedidoId={pedidoId} antesDeIr={() => asegurarCuotas(1, unPago.total)} />,
       disabled: procesando,
     },
   ];

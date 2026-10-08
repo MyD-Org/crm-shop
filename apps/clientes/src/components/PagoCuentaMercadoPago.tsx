@@ -10,7 +10,14 @@ import { IconoSalida } from "./PagoIconos";
  * `/checkout?pedido=<id>` al terminar (ver `/api/pagos/mercadopago/preferencia`). El botón dice a dónde
  * va, cosa que el Brick no permite.
  */
-export function PagoCuentaMercadoPago({ pedidoId, cuotas }: { pedidoId: string; cuotas?: number }) {
+export function PagoCuentaMercadoPago({
+  pedidoId,
+  antesDeIr,
+}: {
+  pedidoId: string;
+  /** Deja el pedido listo para este cobro (en 1 pago); devuelve el error a mostrar, o null. */
+  antesDeIr?: () => Promise<string | null>;
+}) {
   const [yendo, setYendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,6 +34,12 @@ export function PagoCuentaMercadoPago({ pedidoId, cuotas }: { pedidoId: string; 
   async function irAMercadoPago() {
     setYendo(true);
     setError(null);
+    const errorAntes = antesDeIr ? await antesDeIr() : null;
+    if (errorAntes) {
+      setError(errorAntes);
+      setYendo(false);
+      return;
+    }
     try {
       const res = await fetch("/api/pagos/mercadopago/preferencia", {
         method: "POST",
@@ -54,7 +67,6 @@ export function PagoCuentaMercadoPago({ pedidoId, cuotas }: { pedidoId: string; 
         <IconoSalida />
         <span>
           Lo llevamos a Mercado Pago para completar el pago. Al terminar, vuelve a esta página con su pedido.
-          {cuotas !== undefined && cuotas > 1 && ` Allá puede elegir hasta ${cuotas} cuotas.`}
         </span>
       </p>
       {error && <Alert tone="danger">{error}</Alert>}

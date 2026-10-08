@@ -66,6 +66,27 @@ describe("armarMailPedido", () => {
     expect(ok.html).toContain("Ver mis pedidos");
   });
 
+  it("pago recibido en cuotas con interés: el total del pedido a 1 pago y lo que pagó, informativo", () => {
+    const m = armarMailPedido({
+      ...base,
+      aviso: "pago_recibido",
+      lineas: [{ nombre: "Lámpara", cantidad: 1 }],
+      total: 50000,
+      pago: "Mercado Pago",
+      pagado: { total: 66000, cuotas: 6 },
+    });
+    const t = m.text.replace(/\s/g, " ");
+    expect(t).toMatch(/Total: \$ ?50\.000/);
+    expect(t).toMatch(/Pagado: \$ ?66\.000(,00)? en 6 cuotas/);
+    expect(m.html.replace(/\s/g, " ")).toMatch(/\$ ?66\.000(,00)? en 6 cuotas/);
+    expect(infracciones(m.text, REGISTRO)).toEqual([]);
+  });
+
+  it("sin interés o en 1 pago no agrega la fila de lo pagado", () => {
+    const m = armarMailPedido({ ...base, aviso: "pago_recibido", lineas: [{ nombre: "L", cantidad: 1 }], total: 54000 });
+    expect(m.text).not.toContain("Pagado:");
+  });
+
   it("pago rechazado: sin resumen, con enlace para reintentar el pago", () => {
     const mal = armarMailPedido({
       ...base,

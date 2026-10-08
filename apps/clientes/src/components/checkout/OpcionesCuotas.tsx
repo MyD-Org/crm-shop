@@ -11,7 +11,22 @@ export interface OpcionCuotas {
 }
 
 /**
- * Selector de cuotas del checkout: una fila del radio del DS por opción ("1 pago" / "N cuotas de $X",
+ * Sólo la meta compacta "Sume $X más y pague en N cuotas sin interés." (si falta para el próximo
+ * escalón). Con Mercado Pago las cuotas se eligen en el formulario de pago (`SelectorCuotas`).
+ */
+export function MetaCuotas({ progreso }: { progreso?: ProgresoCuotas | null }) {
+  const meta = metaCuotas(progreso);
+  if (!meta || meta.alcanzada) return null;
+  return (
+    <div className="mt-4">
+      <MetasCarrito metas={[meta]} compacta />
+    </div>
+  );
+}
+
+/**
+ * Selector de cuotas del checkout antes de crear el pedido (Payway, hasta que elija las cuotas en su
+ * formulario): una fila del radio del DS por opción ("1 pago" / "N cuotas de $X",
  * etiqueta "Sin interés" en las de más de un pago y el total debajo) y, si falta para el próximo
  * escalón, la meta compacta del carrito.
  */

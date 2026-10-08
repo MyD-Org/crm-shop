@@ -48,6 +48,11 @@ export interface DatosMailPedido {
   total?: number;
   entrega?: string;
   pago?: string;
+  /**
+   * "pago_recibido" en cuotas con interés del procesador: lo que pagó el comprador (informativo; el
+   * total del pedido y la factura quedan al precio de 1 pago).
+   */
+  pagado?: { total: number; cuotas: number };
   /** Sólo "recibido": el pedido es de una cuenta corriente y `pago` es el nombre de su medio. */
   pagoCuentaCorriente?: boolean;
   /**
@@ -159,6 +164,13 @@ const COPY: Record<AvisoPedidoShop, { asunto: string; titulo: string; bajada: (d
   },
 };
 
+/** "$66.000 en 6 cuotas": sólo si pagó en cuotas más que el total del pedido (interés del procesador). */
+function textoPagado(d: DatosMailPedido): string | undefined {
+  const p = d.pagado;
+  if (!p || p.cuotas < 2 || d.total === undefined || p.total <= d.total + 0.01) return undefined;
+  return `${moneda(p.total)} en ${p.cuotas} cuotas`;
+}
+
 function resumen(d: DatosMailPedido): string {
   const filas = (d.lineas ?? [])
     .map(
@@ -171,6 +183,7 @@ function resumen(d: DatosMailPedido): string {
     .join("");
   const datos: [string, string | undefined][] = [
     ["Total", d.total !== undefined ? moneda(d.total) : undefined],
+    ["Pagado", textoPagado(d)],
     ["Entrega", d.entrega],
     ["Pago", d.pago],
   ];
@@ -245,6 +258,7 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
         "",
         ...(d.lineas ?? []).map((l) => `- ${l.nombre} × ${cantidad(l.cantidad)}`),
         ...(d.total !== undefined ? [`Total: ${moneda(d.total)}`] : []),
+        ...(textoPagado(d) ? [`Pagado: ${textoPagado(d)}`] : []),
         ...(d.entrega ? [`Entrega: ${d.entrega}`] : []),
         ...(d.pago ? [`Pago: ${d.pago}`] : []),
       ]

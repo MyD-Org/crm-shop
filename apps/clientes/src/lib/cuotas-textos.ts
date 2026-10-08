@@ -3,14 +3,17 @@
  * revisión del contador/abogado (gate de la rebanada D), así que cambiar un texto no tiene que
  * obligar a recorrer componentes. Registro: usted / neutro, sin coloquialismos.
  *
- * Las cuotas son SIEMPRE sin interés (el costo financiero lo absorbe la tienda y ya está en el
- * precio de la lista): no hay recargo, ni CFT/TEA, ni "total con recargo".
+ * Las cuotas de la tienda son SIEMPRE sin interés (el costo financiero lo absorbe la tienda y ya está
+ * en el precio de la lista). Las con interés son del procesador (Mercado Pago), sobre el precio en 1
+ * pago: sólo se eligen dentro del formulario de pago, con el CFT/TEA que él informa (`formulario*`).
  *
  * Módulo puro: lo usan componentes de cliente y de servidor.
  */
 import { fmtPrecio, fmtPrecioCorto } from "./format";
 
 const cuotasDe = (n: number) => (n === 1 ? "1 cuota" : `${n} cuotas`);
+/** "a", "a y b", "a, b y c". */
+const enumerar = (xs: string[]) => (xs.length < 2 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`);
 
 export const TEXTOS_CUOTAS = {
   verMediosDePago: "Ver medios de pago",
@@ -81,6 +84,28 @@ export const TEXTOS_CUOTAS = {
   checkoutOpcion: (cuotas: number, montoCuota: number) =>
     cuotas === 1 ? "1 pago" : `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`,
   checkoutTotal: (total: number) => `Total ${fmtPrecio(total)}`,
+  // --- Formulario de pago (cuotas según la tarjeta cargada) ---
+  formularioTitulo: "Cuotas",
+  /** "Cuotas con su Visa". */
+  formularioTituloMarca: (marca: string) => `Cuotas con su ${marca}`,
+  /** Fila del desplegable: "1 pago de $50.000" / "6 cuotas de $11.000". */
+  formularioOpcion: (cuotas: number, montoCuota: number) =>
+    cuotas === 1 ? `1 pago de ${fmtPrecio(montoCuota)}` : `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`,
+  /** Sólo con una cuota con interés: quién la financia (el procesador del medio en uso). */
+  formularioFinancia: (procesador: string) => `Las cuotas con interés las financia ${procesador}.`,
+  /** "6 y 12 cuotas sin interés: sólo con Visa y Mastercard." (sólo con la tarjeta ya cargada). */
+  formularioRestringidas: (cuotas: number[], marcas: string[]) =>
+    `${enumerar(cuotas.map(String))} cuotas sin interés: sólo con ${enumerar(marcas)}.`,
+  pagar: (monto: number) => `Pagar ${fmtPrecio(monto)}`,
+  /** "Pagar en 6 cuotas de $11.000"; en el celular, "Pagar 6 × $11.000". */
+  pagarEnCuotas: (cuotas: number, montoCuota: number) => `Pagar en ${cuotas} cuotas de ${fmtPrecio(montoCuota)}`,
+  pagarEnCuotasCorto: (cuotas: number, montoCuota: number) => `Pagar ${cuotas} × ${fmtPrecio(montoCuota)}`,
+  /** Resumen lateral con cuotas con interés. */
+  precioUnPago: "Precio en 1 pago",
+  interesFinanciacion: "Interés de la financiación",
+  /** Resumen lateral con cuotas con interés: "6 cuotas de $11.000". */
+  cuotasDe: (cuotas: number, montoCuota: number) => `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`,
+
   /** Rechazos del servidor por la cantidad de cuotas. */
   cuotasNoCoinciden: "La cantidad de cuotas no coincide con la seleccionada. Vuelva a elegir su medio de pago.",
   cuotasNoDisponibles: "La cantidad de cuotas elegida ya no está disponible. Seleccione otra.",

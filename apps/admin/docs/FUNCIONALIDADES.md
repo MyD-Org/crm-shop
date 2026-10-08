@@ -1122,6 +1122,16 @@ Shop ofrece salen de esta tabla; ya no existen los flags `pagos` ni `pedido-a-co
   slug ni el cobro online. Un alta con ese identificador se rechaza.
 - **Credenciales**: el Shop sólo ofrece Mercado Pago si tiene `MP_ACCESS_TOKEN` y
   `NEXT_PUBLIC_MP_PUBLIC_KEY`; con el medio activo y sin credenciales no se muestra ni se acepta.
+- **Aviso de cuotas sin interés vs. Mercado Pago** (change `cuotas-en-el-formulario`, rebanada 6): con
+  Mercado Pago activo y cuotas sin interés configuradas, la columna "Precio" del medio avisa (sin
+  bloquear nada) si Mercado Pago cobra interés en esas cantidades con Visa, Mastercard, American
+  Express, Naranja o Cabal; en ese caso hay que marcarlas "sin interés a cargo del vendedor" en el
+  panel de Mercado Pago, o el cliente paga el interés encima. Consulta `/v1/payment_methods/installments`
+  con `MP_PUBLIC_KEY` (clave pública, env del admin; ver `docs/DEPLOY.md`), timeout de 3 s y caché de
+  5 min. Sin la variable, o si Mercado Pago no responde, no se muestra nada. Se compara a un monto de
+  referencia (el mayor mínimo configurado, con piso de $100.000): si una cantidad no se ofrece a ese
+  monto, tampoco se avisa. La cuenta sale de `clavesPublicasMP()` (hoy una sola), preparada para una
+  cuenta por sucursal.
 - **Sin medios aplicables** a la modalidad elegida, el pedido queda "a coordinar".
 - **Solo cuentas corrientes** (change `listas-cuenta-corriente`, rebanada B, migración `0069`):
   `medios_pago_shop.audiencia` (`publico` por defecto, o `cuenta_corriente`). Al editar un medio, el

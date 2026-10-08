@@ -1,6 +1,6 @@
 "use client";
 
-import { Field, Select } from "@myd-org/ui";
+import { Alert, Field, Select } from "@myd-org/ui";
 import type { CuotasRestringidas, OpcionCuotasPedido } from "@/lib/cuotas-pedido";
 import { avisoConInteres, filasSelectorCuotas, textoRestringidas, tituloCuotas } from "@/lib/cuotas-formulario";
 
@@ -8,7 +8,8 @@ import { avisoConInteres, filasSelectorCuotas, textoRestringidas, tituloCuotas }
  * Desplegable "Cuotas" dentro del formulario de pago: todas las cantidades en orden ("1 pago de $X",
  * "N cuotas de $X"), con el chip "Sin interés" en las de la tienda. Se recarga al cargar la tarjeta
  * ("Cuotas con su Visa"). Debajo, sólo con una cuota con interés, el CFT/TEA y quién la financia; y,
- * con la tarjeta cargada, qué cuotas sin interés son de otras tarjetas.
+ * con la tarjeta cargada, qué cuotas sin interés son de otras tarjetas y, si la elegida no está con esa
+ * tarjeta, el aviso de que quedó 1 pago (`noDisponible`, ver `avisoCuotasNoDisponibles`).
  */
 export function SelectorCuotas({
   opciones,
@@ -17,6 +18,7 @@ export function SelectorCuotas({
   marca,
   restringidas,
   procesador,
+  noDisponible,
   deshabilitado,
 }: {
   opciones: readonly OpcionCuotasPedido[];
@@ -27,6 +29,8 @@ export function SelectorCuotas({
   restringidas: readonly CuotasRestringidas[];
   /** Nombre del procesador del medio en uso ("Mercado Pago", "Payway"). */
   procesador: string;
+  /** La cantidad elegida no está con la tarjeta cargada: quedó 1 pago. */
+  noDisponible?: string | null;
   deshabilitado?: boolean;
 }) {
   const titulo = tituloCuotas(marca);
@@ -43,6 +47,7 @@ export function SelectorCuotas({
           options={filasSelectorCuotas(opciones)}
         />
       </Field>
+      {noDisponible && <Alert tone="warning">{noDisponible}</Alert>}
       {otrasTarjetas.map((t) => (
         <p key={t} className="text-xs text-muted">
           {t}

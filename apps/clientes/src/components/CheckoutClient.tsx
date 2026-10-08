@@ -1,6 +1,6 @@
 "use client";
 
-import { MetaCuotas, OpcionesCuotas } from "@/components/checkout/OpcionesCuotas";
+import { MetaCuotas } from "@/components/checkout/MetaCuotas";
 import { resumenCuotas, type EleccionCuotas } from "@/lib/cuotas-formulario";
 import { montoPorCuota } from "@/lib/cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
@@ -61,6 +61,7 @@ import { logosTarjetas, type TarjetasAceptadas } from "@/lib/pagos/tarjetas-acep
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import {
   SLUG_MERCADOPAGO,
+  SLUG_PAYWAY,
   procesadorDeMedio,
   esPagoEnLinea,
   medioElegido,
@@ -755,20 +756,14 @@ export function CheckoutClient({
   // Cuotas sin interés: el medio de cobro en línea con condiciones las pide al servidor, que sólo
   // devuelve opciones con el flag `cuotas-cobro` prendido. Sin opciones no hay selector ni cuotas.
   const pideCuotas = Boolean(medioSel?.cobroOnline && (medioSel.condicionesCuotas?.length ?? 0) > 0);
-  // Mercado Pago: las cuotas se eligen dentro del formulario de pago, según la tarjeta (`SelectorCuotas`).
-  // El pedido se crea en 1 pago y acá sólo queda la meta "Sume $X más…". Payway, hasta su rebanada, las
-  // sigue eligiendo antes de crear el pedido.
-  const cuotasEnFormulario = Boolean(medioSel && procesadorDeMedio(medioSel.slug) === "mercadopago");
+  // Las cuotas se eligen dentro del formulario de pago (Mercado Pago y Payway), según la tarjeta
+  // (`SelectorCuotas`). El pedido se crea en 1 pago y acá sólo queda la meta "Sume $X más…".
 
   // Transferencia: el servidor devuelve la cuenta que corresponde a la entrega, el local y el total.
   const conCuenta = pagoParaEnviar === SLUG_TRANSFERENCIA;
   // Los avisos del pedido por transferencia salen al irse de su pantalla (ver `useAvisarAlSalir`).
   const omitirAvisoAlSalir = useAvisarAlSalir(confirmado && !pagado && conCuenta ? confirmado.id : null);
   const localParaCuenta = sucursales && entrega === "retiro" && localRetiro ? localRetiro : undefined;
-
-  // La elección se valida contra las opciones vigentes (derivado en el render, sin efecto): si la
-  // cantidad elegida deja de existir se vuelve a un pago.
-  const [cuotasSel, setCuotasSel] = useState(1);
 
   const { cotizacion, estado, error, recotizar, ultimasCuotasOpciones } = useCotizacion({
     entregaTipo: entrega,
@@ -788,16 +783,15 @@ export function CheckoutClient({
       // refetch incluye la lista (o el medio, si no tiene lista de pago único).
       return pideCuotas && medioSel ? { listaKey: base.listaKey || medioSel.slug, pagoMetodo: medioSel.slug } : base;
     })(),
-    cuotas: pideCuotas && !cuotasEnFormulario ? cuotasSel : 1,
+    cuotas: 1,
     conCuotas: pideCuotas,
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
 
   const opcionesCuotas = pideCuotas ? (cotizacion?.cuotasOpciones ?? ultimasCuotasOpciones ?? []) : [];
-  const cuotasElegidas = !cuotasEnFormulario && opcionesCuotas.some((o) => o.cuotas === cuotasSel) ? cuotasSel : 1;
 
-  /** Lo elegido en el formulario de Mercado Pago (para el resumen); null fuera de él. */
+  /** Lo elegido en el formulario de pago (para el resumen); null fuera de él. */
   const [eleccionCuotas, setEleccionCuotas] = useState<EleccionCuotas | null>(null);
   /** El formulario pasó el pedido a otras cuotas antes de cobrar: total y cuotas nuevos. */
   const alActualizarPedido = useCallback((p: { cuotas: number | null; total: number }) => {
@@ -877,7 +871,7 @@ export function CheckoutClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pagoMetodo: pagoParaEnviar,
-          cuotas: pideCuotas && opcionesCuotas.length > 0 ? cuotasElegidas : undefined,
+          cuotas: pideCuotas && opcionesCuotas.length > 0 ? 1 : undefined,
           totalVisto: cotizacion?.total,
         }),
       });
@@ -963,7 +957,7 @@ export function CheckoutClient({
           entregaDireccion: aDomicilio ? direccionEntrega : undefined,
           pagoMetodo: pagoParaEnviar,
           // Sólo si el servidor ofreció cuotas: la cantidad elegida (1 = un pago). El monto no viaja.
-          cuotas: pideCuotas && opcionesCuotas.length > 0 ? cuotasElegidas : undefined,
+          cuotas: pideCuotas && opcionesCuotas.length > 0 ? 1 : undefined,
           notas,
           complementoFacturacion: complementoFacturacion ?? undefined,
           // Sólo con el flag `sucursales` (props presentes): local de retiro y provincia de entrega.
@@ -1182,7 +1176,10 @@ export function CheckoutClient({
               pedidoId={confirmado.id}
               numero={confirmado.numero}
               monto={confirmado.total}
-              cuotas={confirmado.cuotas ?? undefined}
+              pagoMetodo={confirmado.pagoMetodo ?? SLUG_PAYWAY}
+              cuotasPedido={confirmado.cuotas}
+              onEleccionCuotas={setEleccionCuotas}
+              onPedidoActualizado={alActualizarPedido}
               opcionesCobro={opcionesCobroDe(confirmado.procesador)}
               onCobroEnCurso={setCobroEnCurso}
               onConfirmacionAgotada={alAgotarConfirmacion}
@@ -1227,7 +1224,7 @@ export function CheckoutClient({
 
         <aside className="flex flex-col gap-4 rounded-[28px] border border-border bg-surface p-6 lg:sticky lg:top-24 lg:w-80 lg:shrink-0">
           <h2 className="font-display text-lg font-medium text-text">Resumen</h2>
-          <ResumenTotalPedido confirmado={confirmado} eleccion={confirmado.procesador === "mercadopago" ? eleccionCuotas : null} />
+          <ResumenTotalPedido confirmado={confirmado} eleccion={eleccionCuotas} />
           <div className="flex flex-col items-stretch gap-2 border-t border-border pt-4">
             {/* Sin cobro aprobado ni en vuelo se puede elegir otro medio o cuotas; el servidor lo vuelve a validar.
                 En vuelo cuenta también el envío y la validación del banco (`cobroEnCurso`). */}
@@ -1808,16 +1805,7 @@ export function CheckoutClient({
                 {medioSel.instrucciones.trim() && (
                   <p className="mt-3 whitespace-pre-line text-sm text-text">{medioSel.instrucciones.trim()}</p>
                 )}
-                {pagaEnLinea && cuotasEnFormulario && <MetaCuotas progreso={cotizacion?.progresoCuotas} />}
-                {pagaEnLinea && !cuotasEnFormulario && opcionesCuotas.length > 1 && (
-                  <OpcionesCuotas
-                    opciones={opcionesCuotas}
-                    elegida={cuotasElegidas}
-                    onElegir={setCuotasSel}
-                    deshabilitado={estado === "cargando"}
-                    progreso={cotizacion?.progresoCuotas}
-                  />
-                )}
+                {pagaEnLinea && <MetaCuotas progreso={cotizacion?.progresoCuotas} />}
               </>
             ) : (
               <>

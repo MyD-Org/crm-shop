@@ -74,6 +74,43 @@ export function eleccionVigente(opciones: readonly OpcionCuotasPedido[], clave: 
   return opciones.find((o) => o.clave === clave) ?? opciones.find((o) => o.tipo === "un_pago") ?? opciones[0];
 }
 
+/**
+ * Con la tarjeta cargada, la cantidad buscada (la elegida o la del pedido) ya no se ofrece: se avisa que
+ * quedó 1 pago. Sin tarjeta, sin elección o con 1 pago, nada.
+ */
+export function avisoCuotasNoDisponibles(
+  opciones: readonly OpcionCuotasPedido[],
+  clave: string | null,
+  marca: { id: string | null; nombre?: string } | null,
+): string | null {
+  if (!marca || !clave || opciones.some((o) => o.clave === clave)) return null;
+  const [tipo, n] = clave.split("-");
+  const cuotas = Number(n);
+  if (!Number.isInteger(cuotas) || cuotas < 2) return null;
+  return TEXTOS_CUOTAS.formularioNoDisponible(cuotas, tipo === "sin_interes", marca.nombre ?? null);
+}
+
+/** Payway: 1 pago y las sin interés de la tienda. Las con interés no se ofrecen (convenio). */
+export function opcionesCuotasPayway(opciones: readonly OpcionCuotasPedido[]): OpcionCuotasPedido[] {
+  return opciones.filter((o) => o.tipo !== "con_interes");
+}
+
+/**
+ * Lo que se cobra con Payway: en crédito, la elegida en el desplegable (sin elegir, las cuotas del pedido
+ * retomado si siguen; si no, 1 pago); en débito, sin desplegable y siempre 1 pago.
+ */
+export function eleccionPayway(a: {
+  modalidad: "credito" | "debito";
+  opciones: readonly OpcionCuotasPedido[];
+  clave: string | null;
+  cuotasPedido: number | null;
+}): { opcion: OpcionCuotasPedido; conSelector: boolean } {
+  const opciones = opcionesCuotasPayway(a.opciones);
+  const unPago = opciones.find((o) => o.tipo === "un_pago") ?? opciones[0];
+  if (a.modalidad === "debito") return { opcion: unPago, conSelector: false };
+  return { opcion: eleccionVigente(opciones, a.clave ?? claveDelPedido(a.cuotasPedido)) ?? unPago, conSelector: true };
+}
+
 /** Opción con la que arranca el desplegable: la que el pedido ya tiene congelada (N sin interés), o 1 pago. */
 export function claveDelPedido(cuotasDelPedido: number | null): string | null {
   return cuotasDelPedido !== null && cuotasDelPedido > 1 ? `sin_interes-${cuotasDelPedido}` : null;

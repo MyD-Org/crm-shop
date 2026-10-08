@@ -38,9 +38,6 @@ export const TEXTOS_CUOTAS = {
   hasta: (cuotas: number) => `Hasta ${cuotasDe(cuotas)} sin interés`,
 
   // --- Checkout ---
-  checkoutTitulo: "Cantidad de cuotas",
-  /** Aclaración del selector del checkout: las cuotas no aplican al débito. */
-  soloCredito: "En cuotas, sólo con tarjeta de crédito. Con débito, elija 1 pago.",
   /**
    * Barra y checkout, faltante: "Sume $790 más y pague en 6 cuotas sin interés." El monto va en
    * negrita: la vista parte el texto con `montoFaltante` (mismo formato, sin ,00).
@@ -80,10 +77,6 @@ export const TEXTOS_CUOTAS = {
   /** Fila atenuada del modal: "6 cuotas sin interés en compras desde $90.000" (sin ",00"). */
   filaNoAlcanzada: (cuotas: number, minimo: number) =>
     `${cuotasDe(cuotas)} sin interés en compras desde ${fmtPrecioCorto(minimo)}`,
-  /** Fila del selector del checkout: "1 pago" / "6 cuotas de $20.000" (el total va aparte). */
-  checkoutOpcion: (cuotas: number, montoCuota: number) =>
-    cuotas === 1 ? "1 pago" : `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`,
-  checkoutTotal: (total: number) => `Total ${fmtPrecio(total)}`,
   // --- Formulario de pago (cuotas según la tarjeta cargada) ---
   formularioTitulo: "Cuotas",
   /** "Cuotas con su Visa". */
@@ -96,6 +89,12 @@ export const TEXTOS_CUOTAS = {
   /** "6 y 12 cuotas sin interés: sólo con Visa y Mastercard." (sólo con la tarjeta ya cargada). */
   formularioRestringidas: (cuotas: number[], marcas: string[]) =>
     `${enumerar(cuotas.map(String))} cuotas sin interés: sólo con ${enumerar(marcas)}.`,
+  /**
+   * La cantidad elegida no está con la tarjeta cargada (otra marca): "6 cuotas sin interés no están
+   * disponibles con su Naranja. Quedó seleccionado 1 pago; puede elegir otra cantidad."
+   */
+  formularioNoDisponible: (cuotas: number, sinInteres: boolean, marca: string | null) =>
+    `${cuotas} cuotas${sinInteres ? " sin interés" : ""} no están disponibles con su ${marca ?? "tarjeta"}. Quedó seleccionado 1 pago; puede elegir otra cantidad.`,
   pagar: (monto: number) => `Pagar ${fmtPrecio(monto)}`,
   /** "Pagar en 6 cuotas de $11.000"; en el celular, "Pagar 6 × $11.000". */
   pagarEnCuotas: (cuotas: number, montoCuota: number) => `Pagar en ${cuotas} cuotas de ${fmtPrecio(montoCuota)}`,

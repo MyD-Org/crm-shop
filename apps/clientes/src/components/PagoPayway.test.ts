@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { modalidadesPaywayHabilitadas } from "./pago-opciones";
 
 /**
  * Guardas a nivel de código fuente (sin montar React; el proyecto de unit tests corre en `node`) del
@@ -59,5 +60,58 @@ describe("CheckoutClient", () => {
   it("monta PagoPayway para el procesador payway y conserva el de Mercado Pago", () => {
     expect(checkout).toMatch(/confirmado\.procesador === "payway"[\s\S]*<PagoPayway/);
     expect(checkout).toMatch(/confirmado\.procesador === "mercadopago"[\s\S]*<PagoMercadoPago/);
+  });
+});
+
+describe("PagoPayway: cuotas en el formulario (rebanada 5 de cuotas-en-el-formulario)", () => {
+  const sinComentarios = componente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+  it("las cuotas ya no son una prop congelada ni 'Elegidas en el carrito'", () => {
+    expect(sinComentarios).not.toMatch(/\bcuotas\s*=\s*1\s*,/);
+    expect(sinComentarios).not.toContain("Elegidas en el carrito");
+    expect(sinComentarios).not.toContain("Vuelva al carrito y elija 1 cuota");
+  });
+
+  it("pide las opciones al servidor con la marca detectada o elegida (no hay BIN antes de tokenizar)", () => {
+    expect(sinComentarios).toMatch(/useOpcionesCuotas\(\s*pedidoId,\s*\{\s*marca:/);
+  });
+
+  it("el desplegable es el mismo de Mercado Pago, sólo en crédito (débito: 1 pago, sin desplegable)", () => {
+    expect(sinComentarios).toMatch(/eleccionPayway\(/);
+    expect(sinComentarios).toMatch(/conSelector\s*&&[\s\S]*<SelectorCuotas/);
+    expect(sinComentarios).toContain('const PROCESADOR = "Payway"');
+  });
+
+  it("deja el pedido en las cuotas elegidas ANTES de tokenizar (el token es de un solo uso) y cobra esas", () => {
+    const i = sinComentarios.indexOf("asegurarCuotasDelPedido(");
+    const j = sinComentarios.indexOf("await tokenizar(");
+    expect(i).toBeGreaterThan(-1);
+    expect(j).toBeGreaterThan(i);
+    expect(sinComentarios).toMatch(/enviarCobro\(\{[^}]*cuotas: elegida\.cuotas/);
+  });
+
+  it("el botón usa el mismo texto que Mercado Pago ('Pagar en N cuotas de $X', corto en el celular)", () => {
+    expect(sinComentarios).toContain("textoBotonPagar(");
+    expect(sinComentarios).toContain("textoBoton.corto");
+    expect(sinComentarios).toContain("textoBoton.largo");
+  });
+
+  it("con débito deshabilitado en el admin, sólo crédito", () => {
+    expect(modalidadesPaywayHabilitadas(["credito"])).toEqual(["credito"]);
+    expect(modalidadesPaywayHabilitadas(undefined)).toEqual(["credito", "debito"]);
+  });
+});
+
+describe("CheckoutClient: sin elección de cuotas antes del pedido", () => {
+  it("retira el selector previo: las cuotas se eligen en el formulario de los dos procesadores", () => {
+    expect(checkout).not.toMatch(/\bOpcionesCuotas\b/);
+    expect(checkout).not.toContain("cuotasEnFormulario");
+    expect(checkout).not.toContain("cuotasSel");
+  });
+
+  it("Payway informa su elección al resumen lateral y el pedido actualizado, como Mercado Pago", () => {
+    expect(checkout).toMatch(/<PagoPayway[\s\S]*?onEleccionCuotas=\{setEleccionCuotas\}[\s\S]*?\/>/);
+    expect(checkout).toMatch(/<PagoPayway[\s\S]*?onPedidoActualizado=\{alActualizarPedido\}[\s\S]*?\/>/);
+    expect(checkout).toMatch(/<ResumenTotalPedido confirmado=\{confirmado\} eleccion=\{eleccionCuotas\} \/>/);
   });
 });

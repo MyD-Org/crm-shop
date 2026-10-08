@@ -83,7 +83,7 @@ describe("consultarOpcionesCuotas", () => {
     const datos = { opciones: [] };
     const fetcher = vi.fn().mockResolvedValue(respuesta(200, datos));
     const signal = new AbortController().signal;
-    expect(await consultarOpcionesCuotas("p1", "45071234", signal, fetcher)).toBe(datos);
+    expect(await consultarOpcionesCuotas("p1", { bin: "45071234" }, signal, fetcher)).toBe(datos);
     const [url, init] = fetcher.mock.calls[0];
     expect(url).toBe("/api/pedidos/p1/cuotas");
     expect(JSON.parse(init.body)).toEqual({ bin: "45071234" });
@@ -91,11 +91,16 @@ describe("consultarOpcionesCuotas", () => {
   });
   it("sin BIN: cuerpo vacío (planes de referencia)", async () => {
     const fetcher = vi.fn().mockResolvedValue(respuesta(200, {}));
-    await consultarOpcionesCuotas("p1", null, new AbortController().signal, fetcher);
+    await consultarOpcionesCuotas("p1", {}, new AbortController().signal, fetcher);
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({});
   });
+  it("Payway: la marca elegida o detectada viaja en el cuerpo (sin BIN)", async () => {
+    const fetcher = vi.fn().mockResolvedValue(respuesta(200, {}));
+    await consultarOpcionesCuotas("p1", { bin: null, marca: "naranja" }, new AbortController().signal, fetcher);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ marca: "naranja" });
+  });
   it("respuesta no OK o sin opciones: null", async () => {
-    expect(await consultarOpcionesCuotas("p1", null, new AbortController().signal, vi.fn().mockResolvedValue(respuesta(500, {})))).toBeNull();
-    expect(await consultarOpcionesCuotas("p1", null, new AbortController().signal, vi.fn().mockResolvedValue(respuesta(200, { x: 1 })))).toBeNull();
+    expect(await consultarOpcionesCuotas("p1", {}, new AbortController().signal, vi.fn().mockResolvedValue(respuesta(500, {})))).toBeNull();
+    expect(await consultarOpcionesCuotas("p1", {}, new AbortController().signal, vi.fn().mockResolvedValue(respuesta(200, { x: 1 })))).toBeNull();
   });
 });

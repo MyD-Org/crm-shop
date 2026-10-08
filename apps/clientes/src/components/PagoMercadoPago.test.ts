@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { customizacionBrick, textoCuotas } from "./pago-brick";
+import { customizacionBrick } from "./pago-brick";
 
 /**
  * Test de regresión a nivel de código fuente, sin montar React.
@@ -83,11 +83,6 @@ describe("customizacionBrick", () => {
     const c = customizacionBrick("credito", sinTema);
     expect(c.visual.hideFormTitle).toBe(true);
     expect(c.visual.hidePaymentButton).toBe(true);
-  });
-
-  it("textoCuotas", () => {
-    expect(textoCuotas(6)).toBe("6 cuotas sin interés");
-    expect(textoCuotas(1)).toBe("En un pago");
   });
 
   it("misma identidad para el mismo tipo (re-renders del padre, cambio de cuotas)", () => {

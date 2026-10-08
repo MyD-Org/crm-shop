@@ -383,9 +383,9 @@ de Mercado Pago, sync y cron, ya retirados).
 
 ### Formulario (rebanada 4: Mercado Pago)
 
-- **Antes del pedido** no se eligen cuotas con Mercado Pago: el pedido se crea en 1 pago y en el paso
-  Pago queda sólo la meta "Sume $X más…" (`MetaCuotas`). Payway sigue con el selector previo
-  (`OpcionesCuotas`) hasta su rebanada.
+- **Antes del pedido** no se eligen cuotas (Mercado Pago ni Payway): el pedido se crea en 1 pago y en
+  el paso Pago queda sólo la meta "Sume $X más…" (`MetaCuotas`). El selector previo se retiró en la
+  rebanada 5.
 - **En el formulario** (`PagoMercadoPago.tsx`): el Brick va en un pago (`customizacionBrick(tipo)`:
   crédito con `minInstallments = maxInstallments = 1`, su selector queda oculto) y las cuotas se eligen
   en `SelectorCuotas` (DS `Select` con `badge` "Sin interés"), debajo de la tarjeta. Las opciones las
@@ -408,3 +408,17 @@ de Mercado Pago, sync y cron, ya retirados).
 - **Mails "pago recibido" y aviso al local**: en cuotas, la fila del medio dice lo que cobró el
   procesador ("Mercado Pago, 12 cuotas de $X", de `pago_cuotas`/`pago_total_pagado`); con interés agrega
   "(total pagado $X)". El total del pedido sigue siendo el de 1 pago.
+
+### Formulario de Payway (rebanada 5)
+
+- `PagoPayway.tsx` usa el mismo `SelectorCuotas` y `useOpcionesCuotas`, pero la consulta va con la
+  **marca** (detectada por el prefijo del número o elegida a mano; los ids de `payway-tarjeta.ts` son los
+  canónicos de `pagos/marcas.ts`), no con el BIN: el BIN recién existe al tokenizar.
+- Sólo 1 pago y las sin interés de la tienda para esa marca (`opcionesCuotasPayway`, `eleccionPayway`):
+  Payway no ofrece cuotas con interés. Si la elegida no está con la marca cargada, vuelve a 1 pago con el
+  aviso "6 cuotas sin interés no están disponibles con su Naranja…" (`avisoCuotasNoDisponibles`, también
+  en Mercado Pago). Débito: sin desplegable y en 1 pago. Crédito/débito según `opciones_cobro`.
+- Al pagar: primero `asegurarCuotasDelPedido` (antes de tokenizar: el token es de un solo uso), después
+  token y cobro con las cuotas elegidas. El servidor deriva la marca de `metodoPagoId`
+  (`marcaDePayway`) y rechaza 422 una marca no permitida o cuotas que no son sin interés del admin.
+- Botón y resumen lateral con el mismo formato que Mercado Pago.

@@ -43,11 +43,6 @@ export interface CustomizacionBrick {
 
 const cache = new Map<string, CustomizacionBrick>();
 
-/** "En 6 cuotas sin interés" / "En un pago": lo que se muestra junto a "Tarjeta de crédito". */
-export function textoCuotas(cuotas: number): string {
-  return cuotas > 1 ? `${cuotas} cuotas sin interés` : "En un pago";
-}
-
 /**
  * Variables del Brick tomadas de los tokens del tema (`--color-*`, `--radius-*`), para que el
  * formulario de Mercado Pago use los colores y bordes de la tienda. Fuera del navegador, ninguna.

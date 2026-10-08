@@ -120,8 +120,15 @@ export interface RespuestaMercadoPago {
   three_ds_info?: { external_resource_url?: string; creq?: string };
   /** Cuotas con las que se cobró (las que eligió el comprador en el Brick). */
   installments?: number;
-  /** `total_paid_amount` incluye el interés de las cuotas. */
-  transaction_details?: { total_paid_amount?: number };
+  /** Monto del pago: el total del pedido, sin el interés que paga el comprador. */
+  transaction_amount?: number;
+  /**
+   * `total_paid_amount` incluye el interés de las cuotas. `net_received_amount` es lo que se le
+   * acredita al vendedor (MP informa 0 mientras el pago no se aprobó).
+   */
+  transaction_details?: { total_paid_amount?: number; net_received_amount?: number };
+  /** Cargos del pago. `fee_payer: "collector"` = los paga el vendedor (comisión, costo de financiación). */
+  fee_details?: { type?: string; amount?: number; fee_payer?: string }[] | null;
   /** 'credit_card' | 'debit_card' | 'prepaid_card' | 'account_money' | … */
   payment_type_id?: string;
   /** 'visa' | 'master' | 'debvisa' | 'account_money' | … */
@@ -244,5 +251,30 @@ export function infoDeMercadoPago(pago: RespuestaMercadoPago): { info?: InfoPago
   if (aprobadoEn && !Number.isNaN(Date.parse(aprobadoEn))) info.aprobadoEn = new Date(aprobadoEn).toISOString();
   const autorizacion = texto(pago.authorization_code);
   if (autorizacion) info.autorizacion = autorizacion;
+  Object.assign(info, cargosDeMercadoPago(pago));
   return Object.keys(info).length > 0 ? { info } : {};
+}
+
+const positivo = (v: unknown): number | undefined =>
+  typeof v === "number" && Number.isFinite(v) && v > 0 ? v : undefined;
+const centavos = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Cuánto le queda a la tienda y cuánto descontó Mercado Pago. Sin `net_received_amount` (pago sin
+ * aprobar: MP informa 0) no se guarda nada. El costo es monto − neto, así los dos cierran contra el
+ * pedido e incluye todo lo que MP descontó; si falta el monto, la suma de los cargos del vendedor.
+ */
+export function cargosDeMercadoPago(pago: RespuestaMercadoPago): Pick<InfoPago, "netoRecibido" | "costoProcesador"> {
+  const neto = positivo(pago.transaction_details?.net_received_amount);
+  if (neto == null) return {};
+  const bruto = positivo(pago.transaction_amount);
+  let costo: number | undefined;
+  if (bruto != null && bruto >= neto) {
+    costo = bruto - neto;
+  } else if (Array.isArray(pago.fee_details)) {
+    costo = pago.fee_details
+      .filter((f) => f?.fee_payer === "collector")
+      .reduce((s, f) => s + (positivo(f.amount) ?? 0), 0);
+  }
+  return { netoRecibido: centavos(neto), ...(costo != null ? { costoProcesador: centavos(costo) } : {}) };
 }

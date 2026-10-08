@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { parseInfoPago, textoMedioCobrado, type PagoEnLineaDto } from "./pago-en-linea"
 import { toPagoEnLineaDto } from "./pedidos-repo"
-import { datosCobroEnLinea } from "@/components/admin/pedidos/format"
+import { datosCobroEnLinea, fmtMoneda } from "@/components/admin/pedidos/format"
 
 // Datos inventados.
 
@@ -18,7 +18,15 @@ describe("parseInfoPago", () => {
       aprobadoEn: "2026-10-07T19:30:00.000Z",
       autorizacion: "123456",
       cupon: null,
+      netoRecibido: null,
+      costoProcesador: null,
     })
+    expect(parseInfoPago({ netoRecibido: 8790.35, costoProcesador: 1209.65 })).toEqual({
+      ...vacio,
+      netoRecibido: 8790.35,
+      costoProcesador: 1209.65,
+    })
+    expect(parseInfoPago({ netoRecibido: "8790", costoProcesador: -1 })).toEqual(vacio)
     expect(parseInfoPago({ tipo: "otro", ultimos4: "12", aprobadoEn: "ayer", marca: 3 })).toEqual(vacio)
     expect(parseInfoPago("x")).toEqual(vacio)
     expect(parseInfoPago([1])).toEqual(vacio)
@@ -88,6 +96,17 @@ describe("datosCobroEnLinea", () => {
       { label: "N° de operación de Mercado Pago", valor: "1234567890" },
     ])
     expect(datosCobroEnLinea(base, 1100).map((d) => d.label)).toContain("Total pagado por el cliente")
+  })
+  it("neto y cargos de Mercado Pago, debajo del total; sin neto no se muestra el costo", () => {
+    const conNeto: PagoEnLineaDto = { ...base, info: { ...base.info, netoRecibido: 8790.35, costoProcesador: 1209.65 } }
+    const datos = datosCobroEnLinea(conNeto, 1210)
+    expect(datos.slice(2, 4)).toEqual([
+      { label: "Recibe neto", valor: fmtMoneda(8790.35) },
+      { label: "Comisión y costos de Mercado Pago", valor: fmtMoneda(1209.65) },
+    ])
+    const soloCosto: PagoEnLineaDto = { ...base, info: { ...base.info, costoProcesador: 1209.65 } }
+    expect(datosCobroEnLinea(soloCosto, 1210).map((d) => d.label)).not.toContain("Comisión y costos de Mercado Pago")
+    expect(datosCobroEnLinea(base, 1210).map((d) => d.label)).not.toContain("Recibe neto")
   })
   it("Payway: cupón y autorización, sin el id interno", () => {
     const payway: PagoEnLineaDto = {

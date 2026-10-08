@@ -10,7 +10,7 @@ los dos proyectos (admin y Shop). El resto de las ramas no despliega (`git.deplo
 | Entorno de Vercel | Production | Preview (variables con rama `staging`) |
 | Base | Neon, branch principal | Neon, branch `staging` (copia de prod) |
 | Mercado Pago, Payway, Clerk | credenciales reales | credenciales de prueba |
-| URL | dominio propio | `*.vercel.app`, con Vercel Authentication |
+| URL | dominio propio | `*.vercel.app` (Shop con la puerta de usuario y clave; admin con su login) |
 
 Los crons de `apps/admin/vercel.json` corren solo en producción. El `ignoreCommand` nunca saltea `staging`: cada push o Redeploy de staging compila (en `main` sigue salteando la app que no cambió).
 
@@ -21,11 +21,15 @@ Los crons de `apps/admin/vercel.json` corren solo en producción. El `ignoreComm
 2. **Vercel, en cada proyecto:** Settings → Environment Variables → entorno **Preview**, rama
    `staging`. Cargar ahí los valores de staging de las variables de abajo. Las que no cambian
    pueden quedar compartidas con Production.
-3. **Vercel, Deployment Protection:** activar Vercel Authentication para Preview, así staging no
-   queda pública.
+3. **Vercel, Deployment Protection:** dejar Vercel Authentication **apagado**. Bloquea los
+   webhooks (Mercado Pago, Clerk) y las llamadas entre apps. Staging no queda pública: el Shop
+   tiene la puerta de `SITE_AUTH_USER`/`SITE_AUTH_PASSWORD` (`proxy.ts`, que deja pasar los
+   webhooks) y el admin su login.
 4. **Crear la rama:** `git push origin origin/main:refs/heads/staging`.
-5. **Webhooks de prueba:** en el panel de prueba de Mercado Pago y en Clerk (instancia de
-   desarrollo), apuntar los webhooks a la URL de staging del Shop.
+5. **Webhooks de prueba:** Mercado Pago no necesita nada (cada pago manda la `notification_url`
+   del entorno que lo creó). Clerk (instancia de desarrollo): webhook a
+   `<URL de staging del Shop>/api/webhooks/clerk` con `user.created`, `user.updated` y
+   `user.deleted`; su signing secret va en `CLERK_WEBHOOK_SIGNING_SECRET` (Preview, `staging`).
 6. Cuando staging ande, pasar Production a las credenciales reales.
 
 ### Variables que cambian en staging

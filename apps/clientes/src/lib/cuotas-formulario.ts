@@ -74,6 +74,11 @@ export function eleccionVigente(opciones: readonly OpcionCuotasPedido[], clave: 
   return opciones.find((o) => o.clave === clave) ?? opciones.find((o) => o.tipo === "un_pago") ?? opciones[0];
 }
 
+/** Opción con la que arranca el desplegable: la que el pedido ya tiene congelada (N sin interés), o 1 pago. */
+export function claveDelPedido(cuotasDelPedido: number | null): string | null {
+  return cuotasDelPedido !== null && cuotasDelPedido > 1 ? `sin_interes-${cuotasDelPedido}` : null;
+}
+
 /** Texto del botón: `largo` en pantallas anchas, `corto` en el celular (entra en una línea). */
 export function textoBotonPagar(o: OpcionCuotasPedido): { largo: string; corto: string } {
   if (o.cuotas < 2) {

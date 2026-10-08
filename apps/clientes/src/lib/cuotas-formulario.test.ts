@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { OpcionCuotasPedido } from "./cuotas-pedido";
 import {
   avisoConInteres,
+  claveDelPedido,
   eleccionVigente,
   etiquetaOpcion,
   filasSelectorCuotas,
@@ -95,6 +96,15 @@ describe("eleccionVigente", () => {
   });
   it("sin elección todavía: 1 pago", () => {
     expect(eleccionVigente([unPago, tres], null)).toBe(unPago);
+  });
+});
+
+describe("claveDelPedido (con qué opción arranca el desplegable)", () => {
+  it("el pedido retomado en N cuotas sin interés arranca en esas; si no, 1 pago", () => {
+    expect(claveDelPedido(6)).toBe("sin_interes-6");
+    expect(claveDelPedido(1)).toBeNull();
+    expect(claveDelPedido(null)).toBeNull();
+    expect(eleccionVigente([unPago, tres], claveDelPedido(3))).toBe(tres);
   });
 });
 

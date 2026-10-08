@@ -13,7 +13,7 @@ import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloC
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
 import type { TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import { asegurarCuotasDelPedido } from "@/lib/checkout-cuotas-cliente";
-import { eleccionVigente, opcionesDeRespaldo, textoBotonPagar, type EleccionCuotas } from "@/lib/cuotas-formulario";
+import { claveDelPedido, eleccionVigente, opcionesDeRespaldo, textoBotonPagar, type EleccionCuotas } from "@/lib/cuotas-formulario";
 import { SelectorCuotas } from "./checkout/SelectorCuotas";
 import { binValido } from "./checkout/consultor-cuotas";
 import { useOpcionesCuotas } from "./checkout/useOpcionesCuotas";
@@ -155,6 +155,11 @@ export function PagoMercadoPago({
    * queda lo que el pedido ya tiene congelado, que el cobro acepta tal cual.
    */
   const [bin, setBin] = useState<string | null>(null);
+  /** El Brick vuelve a montarse vacío (el token es de un solo uso): sin tarjeta, sin BIN. */
+  function remontarBrick() {
+    setIntento((n) => n + 1);
+    setBin(null);
+  }
   const cuotas = useOpcionesCuotas(pedidoId, opcion === "credito" ? bin : null, !faltaKey);
   const datosCuotas = cuotas.datos;
   const opcionesCuotas = useMemo(
@@ -168,7 +173,9 @@ export function PagoMercadoPago({
   );
   const [claveCuotas, setClaveCuotas] = useState<string | null>(null);
   // Si la elegida deja de ofrecerse (otra tarjeta), vuelve a 1 pago. Débito y cuenta: siempre 1 pago.
-  const eleccion = opcion === "credito" ? (eleccionVigente(opcionesCuotas, claveCuotas) ?? unPago) : unPago;
+  // Sin elegir todavía, arranca en lo que el pedido ya tiene congelado (un pedido retomado en N cuotas).
+  const eleccion =
+    opcion === "credito" ? (eleccionVigente(opcionesCuotas, claveCuotas ?? claveDelPedido(cuotasPedido)) ?? unPago) : unPago;
 
   useEffect(() => {
     onEleccionCuotas?.({ opcion: eleccion, precioUnPago });
@@ -270,7 +277,7 @@ export function PagoMercadoPago({
       const json = (await res.json()) as RespuestaPago;
 
       if (!res.ok) {
-        setIntento((n) => n + 1);
+        remontarBrick();
         setEstado({
           fase: "rechazado",
           mensaje: json?.error ?? "No pudimos procesar el pago.",
@@ -297,7 +304,7 @@ export function PagoMercadoPago({
       }
 
       if (json.estado === "fallido") {
-        setIntento((n) => n + 1);
+        remontarBrick();
         setEstado({
           fase: "rechazado",
           mensaje: json.mensaje ?? "No pudimos procesar el pago.",
@@ -309,7 +316,7 @@ export function PagoMercadoPago({
       setEstado({ fase: "pendiente" });
       onPendiente?.();
     } catch {
-      setIntento((n) => n + 1);
+      remontarBrick();
       setEstado({
         fase: "rechazado",
         mensaje: "No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.",
@@ -381,7 +388,7 @@ export function PagoMercadoPago({
 
   /** Remonta el Brick (`key`) y vuelve a cargar: el token de MP es de un solo uso. */
   function reintentar() {
-    setIntento((n) => n + 1);
+    remontarBrick();
     setEstado({ fase: "cargando" });
   }
 
@@ -407,12 +414,10 @@ export function PagoMercadoPago({
   function elegir(nueva: Opcion) {
     if (nueva === opcion || estado.fase === "procesando") return;
     setOpcion(nueva);
-    // El Brick nuevo arranca vacío: sin tarjeta, sin BIN.
-    setBin(null);
     if (nueva === "cuenta") {
       setEstado({ fase: "formulario" });
     } else {
-      setIntento((n) => n + 1);
+      remontarBrick();
       setEstado({ fase: "cargando" });
     }
   }
@@ -458,7 +463,7 @@ export function PagoMercadoPago({
             onPagado();
           }}
           onRechazado={(mensaje, cobrable) => {
-            setIntento((n) => n + 1);
+            remontarBrick();
             setEstado({ fase: "rechazado", mensaje, reintentable: true, noCobrable: !cobrable });
             onRechazado?.();
           }}
@@ -481,7 +486,7 @@ export function PagoMercadoPago({
         onRechazado={(mensaje, cobrable) => {
           // Se vuelve al formulario sobre el mismo pedido: remontar el brick (el token es de un solo uso).
           // Si el pedido ya no se puede pagar (vencido, cancelado), sin "Probar de nuevo".
-          setIntento((n) => n + 1);
+          remontarBrick();
           setEstado({ fase: "rechazado", mensaje, reintentable: true, noCobrable: !cobrable });
           onRechazado?.();
         }}

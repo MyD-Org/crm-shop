@@ -109,7 +109,7 @@ describe("fila fija mercadopago (migración 0057)", () => {
 
     const a = await listarMediosPago(A)
     expect(a.filter((m) => m.slug === "mercadopago")).toEqual([
-      { slug: "mercadopago", nombre: "Mercado Pago", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6, listaOnlineId: null, listaOnlineNombre: null, listaOnlineActiva: false, condicionesCuotas: [], destacarEnCatalogo: false, mostrarEnFicha: false, audiencia: "publico", chips: [] },
+      { slug: "mercadopago", nombre: "Mercado Pago", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6, listaOnlineId: null, listaOnlineNombre: null, listaOnlineActiva: false, condicionesCuotas: [], destacarEnCatalogo: false, mostrarEnFicha: false, audiencia: "publico", chips: [], opcionesCobro: ["credito", "debito", "cuenta_mp"] },
     ])
     expect((await listarMediosPago(B)).filter((m) => m.slug === "mercadopago")).toHaveLength(1)
   })
@@ -151,7 +151,7 @@ describe("fila fija payway (migración 0067)", () => {
 
     const a = await listarMediosPago(A)
     expect(a.filter((m) => m.slug === "payway")).toEqual([
-      { slug: "payway", nombre: "Tarjeta de crédito o débito - Payway", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6, listaOnlineId: null, listaOnlineNombre: null, listaOnlineActiva: false, condicionesCuotas: [], destacarEnCatalogo: false, mostrarEnFicha: false, audiencia: "publico", chips: [] },
+      { slug: "payway", nombre: "Tarjeta de crédito o débito - Payway", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6, listaOnlineId: null, listaOnlineNombre: null, listaOnlineActiva: false, condicionesCuotas: [], destacarEnCatalogo: false, mostrarEnFicha: false, audiencia: "publico", chips: [], opcionesCobro: ["credito", "debito", "cuenta_mp"] },
     ])
     expect((await listarMediosPago(B)).filter((m) => m.slug === "payway")).toHaveLength(1)
   })

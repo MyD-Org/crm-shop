@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { AlertTriangle, Check, Download, ExternalLink, MailWarning, RotateCw } from "lucide-react"
 import { Badge, Button, Dialog, Field, Input, Select, Spinner } from "@myd-org/ui"
 import type { AdminReceiptDto } from "@/lib/payment-receipts"
@@ -20,7 +21,7 @@ interface Props {
   soloLectura?: boolean
 }
 
-type ConfirmAction = "loaded" | "pending"
+type ConfirmAction = "loaded" | "pending" | "pago_pedido"
 
 // Contexto del formulario "Cargar en Alegra" (GET …/{id}/load-context).
 interface FacturaAbierta {
@@ -182,6 +183,37 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged, pedidoId, s
     }
   }
 
+  /**
+   * "Registrar pago del pedido": el mismo `POST /api/admin/pedidos/:id/pago` del detalle del pedido,
+   * con el monto y la fecha del comprobante y su id. En una transacción: el pedido queda pagado, el
+   * comprobante cargado y al cliente le llega "Pago acreditado". Después se relee el comprobante.
+   */
+  async function registrarPagoPedido() {
+    if (!receipt?.pedido) return
+    setAccionando(true)
+    setErrorAccion("")
+    try {
+      const res = await fetch(`/api/admin/pedidos/${receipt.pedido.id}/pago`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ monto: receipt.amount, fecha: receipt.paidOn, receiptId: receipt.id }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        setErrorAccion(body?.error ?? "No pudimos registrar el pago. Inténtelo nuevamente.")
+        setConfirm(null)
+        return
+      }
+      const fresco = await fetch(detalleUrl, { cache: "no-store" })
+      if (fresco.ok) actualizar((await fresco.json()) as AdminReceiptDto)
+      setConfirm(null)
+    } catch {
+      setErrorAccion("Error de conexión. Inténtelo nuevamente.")
+    } finally {
+      setAccionando(false)
+    }
+  }
+
   async function reenviarMail() {
     setAccionando(true)
     setErrorAccion("")
@@ -332,6 +364,14 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged, pedidoId, s
   const sinCuenta = !!receipt && receipt.codigocliente === null
   const puedeCargarEnAlegra =
     !!receipt && !sinCuenta && (receipt.status === "pending" || (receipt.status === "loaded" && !cargadoEnAlegra))
+  // Comprobante de un pedido de la tienda abierto desde Comprobantes: la acción es registrar el pago
+  // del pedido (desde el detalle del pedido ya está su propio "Registrar pago").
+  const pedidoAPagar =
+    !pedidoId && receipt?.pedido && receipt.status === "pending" && !receipt.pedido.pagado && !receipt.pedido.cancelado
+      ? receipt.pedido
+      : null
+  const montoCoincide =
+    receipt?.pedido?.total != null ? Math.round(Number(receipt.amount) * 100) === Math.round(Number(receipt.pedido.total) * 100) : null
 
   return (
     <>
@@ -403,7 +443,14 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged, pedidoId, s
                   <Check size={13} /> Cargar en Alegra
                 </Button>
               )}
-              {!soloLectura && receipt.status === "pending" && (
+              {!soloLectura && pedidoAPagar && (
+                <Button size="sm" onClick={() => { setErrorAccion(""); setConfirm("pago_pedido") }} disabled={accionando}>
+                  <Check size={13} /> Registrar pago del pedido
+                </Button>
+              )}
+              {/* Con un pedido sin pagar, "Ya lo cargué a mano" dejaba el pedido pendiente y al cliente sin
+                  aviso: ahí la acción es "Registrar pago del pedido". */}
+              {!soloLectura && receipt.status === "pending" && !pedidoAPagar && (
                 <Button variant="ghost" size="sm" onClick={() => { setErrorAccion(""); setConfirm("loaded") }} disabled={accionando}>
                   Ya lo cargué a mano
                 </Button>
@@ -430,8 +477,34 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged, pedidoId, s
               <Fila label="Cliente" value={receipt.razonsocial} />
               {receipt.cuit && <Fila label="CUIT" value={receipt.cuit} />}
               {sinCuenta && <Fila label="Cuenta" value="Sin cuenta vinculada" />}
-              {receipt.pedido && <Fila label="Pedido" value={receipt.pedido.numero ?? "Pedido de la tienda"} />}
-              <Fila label="Monto" value={<span className="font-semibold">{fmtMonto(receipt.amount)}</span>} />
+              {receipt.pedido && (
+                <Fila
+                  label="Pedido"
+                  value={
+                    <span className="flex flex-col gap-0.5">
+                      <Link href={`/admin/pedidos/${receipt.pedido.id}`} className="underline" style={{ color: "var(--accent)" }}>
+                        {receipt.pedido.numero ?? "Pedido de la tienda"}
+                      </Link>
+                      {receipt.pedido.total !== null && (
+                        <span className="text-xs" style={{ color: "var(--ink-faint)" }}>
+                          Total {fmtMonto(receipt.pedido.total)}
+                          {receipt.pedido.pagado ? " · ya pagado" : receipt.pedido.cancelado ? " · cancelado" : ""}
+                        </span>
+                      )}
+                    </span>
+                  }
+                />
+              )}
+              <Fila
+                label="Monto"
+                value={
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">{fmtMonto(receipt.amount)}</span>
+                    {montoCoincide === true && <Badge tone="success">Coincide con el pedido</Badge>}
+                    {montoCoincide === false && <Badge tone="warning">No coincide con el pedido</Badge>}
+                  </span>
+                }
+              />
               <Fila label="Fecha del pago" value={fmtFecha(receipt.paidOn)} />
               <Fila label="Medio" value={methodLabel(receipt.method, receipt.methodOther)} />
               <Fila label="Informado el" value={fmtFechaHora(receipt.submittedAt)} />
@@ -506,7 +579,7 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged, pedidoId, s
       <Dialog
         open={confirm !== null}
         onOpenChange={(open) => { if (!open) setConfirm(null) }}
-        title={confirm === "loaded" ? "Ya lo cargué a mano" : "Deshacer carga"}
+        title={confirm === "loaded" ? "Ya lo cargué a mano" : confirm === "pago_pedido" ? "Registrar pago del pedido" : "Deshacer carga"}
         headerBorder={false}
         footer={
           <div className="flex gap-2 justify-end">
@@ -514,9 +587,12 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged, pedidoId, s
             <Button
               variant={confirm === "pending" ? "danger" : "primary"}
               loading={accionando}
-              onClick={() => confirm && cambiarEstado(confirm)}
+              onClick={() => {
+                if (confirm === "pago_pedido") void registrarPagoPedido()
+                else if (confirm) void cambiarEstado(confirm)
+              }}
             >
-              {confirm === "loaded" ? "Sí, ya lo cargué" : "Sí, deshacer"}
+              {confirm === "loaded" ? "Sí, ya lo cargué" : confirm === "pago_pedido" ? "Registrar pago" : "Sí, deshacer"}
             </Button>
           </div>
         }
@@ -524,7 +600,9 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged, pedidoId, s
         <p className="text-sm" style={{ color: "var(--ink)" }}>
           {confirm === "loaded"
             ? "Usalo solo si cargaste el pago en Alegra por fuera de este panel: no se crea nada en Alegra, el comprobante queda marcado como cargado."
-            : "El comprobante vuelve a quedar pendiente de cargar en Alegra. ¿Confirmás?"}
+            : confirm === "pago_pedido" && receipt?.pedido
+              ? `Verifique en el banco que el dinero haya ingresado. Se registra el pago de ${fmtMonto(receipt.amount)} del ${fmtFecha(receipt.paidOn)} en el pedido ${receipt.pedido.numero ?? ""}: el pedido queda pagado, el comprobante cargado y al cliente le llega "Pago acreditado".`
+              : "El comprobante vuelve a quedar pendiente de cargar en Alegra. ¿Confirmás?"}
         </p>
       </Dialog>
 

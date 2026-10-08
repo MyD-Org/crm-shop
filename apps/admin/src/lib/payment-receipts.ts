@@ -477,8 +477,12 @@ export interface AdminReceiptDto {
   submittedAt: string
   /** null = comprador de la tienda sin cuenta corriente (0056): Alegra no aplica. */
   codigocliente: string | null
-  /** Pedido de la tienda al que corresponde; `numero` null si no se pudo resolver. */
-  pedido: { id: string; numero: string | null } | null
+  /**
+   * Pedido de la tienda al que corresponde; `numero` null si no se pudo resolver. `total` (null si
+   * no se pudo leer), `pagado` y `cancelado` sirven para "Registrar pago del pedido" desde
+   * Comprobantes y para mostrar si el monto informado coincide con el total.
+   */
+  pedido: { id: string; numero: string | null; total: string | null; pagado: boolean; cancelado: boolean } | null
   razonsocial: string
   cuit: string
   clientEmail: string | null
@@ -506,7 +510,20 @@ export interface AdminReceiptDto {
 
 /** Serializa una fila (pending/loaded) al DTO del backoffice. Sin file_key, file_sha256 ni
  *  URLs firmadas: el archivo se ve por la ruta /file (302), nunca por datos en el listado. */
-export function toAdminDto(row: PaymentReceiptRow, now: Date, pedidoNumero: string | null = null): AdminReceiptDto {
+/** Lo que el DTO muestra del pedido de un comprobante (ver `datosDePedidos`). */
+export interface DatosPedidoComprobante {
+  numero: string
+  total: string
+  pagado: boolean
+  cancelado: boolean
+}
+
+export function toAdminDto(
+  row: PaymentReceiptRow,
+  now: Date,
+  pedidoNumero: string | null = null,
+  datosPedido: DatosPedidoComprobante | null = null,
+): AdminReceiptDto {
   const submittedAt = row.submittedAt
   const stale =
     row.emailStatus === "pending" &&
@@ -516,7 +533,15 @@ export function toAdminDto(row: PaymentReceiptRow, now: Date, pedidoNumero: stri
     id: row.id,
     submittedAt: submittedAt ? submittedAt.toISOString() : "",
     codigocliente: row.codigocliente,
-    pedido: row.shopOrderId ? { id: row.shopOrderId, numero: pedidoNumero } : null,
+    pedido: row.shopOrderId
+      ? {
+          id: row.shopOrderId,
+          numero: datosPedido?.numero ?? pedidoNumero,
+          total: datosPedido?.total ?? null,
+          pagado: datosPedido?.pagado ?? false,
+          cancelado: datosPedido?.cancelado ?? false,
+        }
+      : null,
     razonsocial: row.razonsocial,
     cuit: row.cuit,
     clientEmail: row.clientEmail,
@@ -576,14 +601,47 @@ export async function numerosDePedidos(
   return new Map(filas.map((f) => [f.id, formatearNumeroPedido(f.numero)]))
 }
 
-/** DTO de varias filas con el número de su pedido (una sola consulta extra). */
+/**
+ * Número, total y estados de los pedidos de la tienda a los que apuntan estos comprobantes, en UNA
+ * consulta filtrada por tenant. Sólo lee: el esquema `shop` es del Shop.
+ */
+export async function datosDePedidos(
+  tenantId: string,
+  rows: readonly PaymentReceiptRow[],
+): Promise<Map<string, DatosPedidoComprobante>> {
+  const ids = [...new Set(rows.map((r) => r.shopOrderId).filter((v): v is string => v !== null))]
+  if (ids.length === 0) return new Map()
+  const filas = await getDb()
+    .select({
+      id: shopOrders.id,
+      numero: shopOrders.numero,
+      total: shopOrders.total,
+      pagoEstado: shopOrders.pagoEstado,
+      estado: shopOrders.estado,
+    })
+    .from(shopOrders)
+    .where(and(eq(shopOrders.tenantId, tenantId), inArray(shopOrders.id, ids)))
+  return new Map(
+    filas.map((f) => [
+      f.id,
+      {
+        numero: formatearNumeroPedido(f.numero),
+        total: f.total,
+        pagado: f.pagoEstado === "pagado",
+        cancelado: f.estado === "cancelado",
+      },
+    ]),
+  )
+}
+
+/** DTO de varias filas con los datos de su pedido (una sola consulta extra). */
 export async function toAdminDtos(
   tenantId: string,
   rows: readonly PaymentReceiptRow[],
   now: Date,
 ): Promise<AdminReceiptDto[]> {
-  const numeros = await numerosDePedidos(tenantId, rows)
-  return rows.map((r) => toAdminDto(r, now, r.shopOrderId ? (numeros.get(r.shopOrderId) ?? null) : null))
+  const pedidos = await datosDePedidos(tenantId, rows)
+  return rows.map((r) => toAdminDto(r, now, null, r.shopOrderId ? (pedidos.get(r.shopOrderId) ?? null) : null))
 }
 
 /** DTO de una fila con el número de su pedido. */

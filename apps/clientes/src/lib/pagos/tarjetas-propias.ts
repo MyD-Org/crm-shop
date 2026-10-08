@@ -5,30 +5,29 @@
  *
  * Los ids son los `payment_method_id` de Mercado Pago, para que `marcas.ts` los una por marca (así
  * `tarjetasPayway` saca de acá las cuatro marcas del convenio). Los archivos están en
- * `public/images/tarjetas/`: marcas simplificadas, propias del repo (sin hosts externos). Para usar el arte
- * oficial de una marca basta reemplazar su SVG con el mismo nombre. Módulo PURO.
+ * `public/images/tarjetas/`: los mismos logos que devuelve Mercado Pago (`secure_thumbnail`), guardados en el
+ * repo para no depender de su API ni de su host. Módulo PURO.
  */
 import { SIN_TARJETAS, type TarjetaAceptada, type TarjetasAceptadas } from "./tarjetas-aceptadas";
 
-const logo = (marca: string) => `/images/tarjetas/${marca}.svg`;
-const tarjeta = (id: string, nombre: string, marca: string): TarjetaAceptada => ({ id, nombre, logo: logo(marca) });
+const tarjeta = (id: string, nombre: string, archivo: string): TarjetaAceptada => ({ id, nombre, logo: `/images/tarjetas/${archivo}` });
 
 /** Mismas marcas y mismo orden que mostraba Mercado Pago; crédito y débito de una marca comparten archivo. */
 export const TARJETAS_PROPIAS: TarjetasAceptadas = {
   credito: [
-    tarjeta("visa", "Visa", "visa"),
-    tarjeta("master", "Mastercard", "mastercard"),
-    tarjeta("amex", "American Express", "amex"),
-    tarjeta("naranja", "Naranja", "naranja"),
-    tarjeta("cabal", "Cabal", "cabal"),
-    tarjeta("argencard", "Argencard", "argencard"),
-    tarjeta("diners", "Diners", "diners"),
+    tarjeta("visa", "Visa", "visa.png"),
+    tarjeta("master", "Mastercard", "mastercard.png"),
+    tarjeta("amex", "American Express", "amex.png"),
+    tarjeta("naranja", "Naranja", "naranja.svg"),
+    tarjeta("cabal", "Cabal", "cabal.png"),
+    tarjeta("argencard", "Argencard", "argencard.png"),
+    tarjeta("diners", "Diners", "diners.png"),
   ],
   debito: [
-    tarjeta("debvisa", "Visa Débito", "visa"),
-    tarjeta("debmaster", "Mastercard Débito", "mastercard"),
-    tarjeta("maestro", "Maestro", "maestro"),
-    tarjeta("debcabal", "Cabal Débito", "cabal"),
+    tarjeta("debvisa", "Visa Débito", "visa.png"),
+    tarjeta("debmaster", "Mastercard Débito", "mastercard.png"),
+    tarjeta("maestro", "Maestro", "maestro.png"),
+    tarjeta("debcabal", "Cabal Débito", "cabal.png"),
   ],
 };
 

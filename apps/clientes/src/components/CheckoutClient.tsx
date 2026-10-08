@@ -1167,7 +1167,7 @@ export function CheckoutClient({
     return (
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-10 lg:flex-row lg:items-start">
         <section className="min-w-0 flex-1 rounded-[28px] border border-border bg-surface p-5 sm:p-8">
-          <h1 className="font-display text-[clamp(28px,3vw,36px)] font-medium tracking-tight text-text">Pague su pedido</h1>
+          <h1 className="font-display text-[clamp(28px,3vw,36px)] font-medium tracking-tight text-text">Complete su compra</h1>
           <p className="mt-1 mb-6 text-sm text-muted">Pedido {confirmado.numero}</p>
 
           {/* Un componente de pago por procesador: sumar otro es un caso más acá. */}

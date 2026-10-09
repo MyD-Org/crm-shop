@@ -93,6 +93,8 @@ export interface Product {
   precioMedio?: PrecioMedio;
   /** Medios de la ficha, en orden. Vacío/undefined = ninguno califica. */
   preciosMedios?: PrecioMedio[];
+  /** Líneas por forma (débito/crédito) para el modal de medios de pago; independiente de la ficha. */
+  preciosFormaModal?: PrecioMedio[];
   /**
    * Cuotas sin interés del medio de cobro en línea (opciones ascendentes), con el total de la lista de
    * cada cantidad. Sólo con el flag `cuotas-cobro` y si hay condiciones (src/lib/cuotas-sin-interes.ts).

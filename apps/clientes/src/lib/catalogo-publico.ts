@@ -204,12 +204,14 @@ async function productoCacheado(
   ficha: readonly MedioPrecio[] = [],
   /** Cuotas sin interés de la ficha (flag `cuotas-cobro`): también parte de la clave. */
   cuotas: MedioCuotas[] | null = null,
+  /** Medios del modal (listas por forma, sin depender de la ficha): también parte de la clave. */
+  modal: readonly MedioPrecio[] = [],
 ): Promise<Product | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   cacheLife("catalogo");
   console.info("[cache] producto miss");
-  return leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas);
+  return leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas, modal);
 }
 
 function leerProducto(
@@ -219,12 +221,15 @@ function leerProducto(
   estructurados: boolean,
   ficha: readonly MedioPrecio[],
   cuotas: MedioCuotas[] | null,
+  modal: readonly MedioPrecio[] = [],
 ): Promise<Product | null> {
   return getProducto(id, {
     soloVisibles,
     disp,
     ...(estructurados ? { atributosEstructurados: true } : {}),
-    ...(ficha.length || cuotas?.length ? { mediosPrecio: { destacado: null, ficha: [...ficha], ...(cuotas?.length ? { cuotas } : {}) } } : {}),
+    ...(ficha.length || cuotas?.length || modal.length
+      ? { mediosPrecio: { destacado: null, ficha: [...ficha], ...(cuotas?.length ? { cuotas } : {}), ...(modal.length ? { modal: [...modal] } : {}) } }
+      : {}),
   });
 }
 
@@ -247,15 +252,17 @@ export function productoPublico(
   ficha: readonly MedioPrecio[] = [],
   /** Cuotas sin interés (`flagsPublicos().mediosPrecio.cuotas`): la ficha muestra la línea y el modal. */
   cuotas: MedioCuotas[] | null = null,
+  /** Medios del modal de medios de pago (`flagsPublicos().mediosPrecio.modal`). */
+  modal: readonly MedioPrecio[] = [],
 ): Promise<Product | null> {
   if (!esIdAlegra(id)) return Promise.resolve(null);
   const cacheada = () =>
-    ficha.length || cuotas?.length
-      ? productoCacheado(id, soloVisibles, disp, estructurados, ficha, cuotas)
+    ficha.length || cuotas?.length || modal.length
+      ? productoCacheado(id, soloVisibles, disp, estructurados, ficha, cuotas, modal)
       : estructurados
         ? productoCacheado(id, soloVisibles, disp, true)
         : productoCacheado(id, soloVisibles, disp);
-  return conRespaldoSinCache("producto", cacheada, () => leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas));
+  return conRespaldoSinCache("producto", cacheada, () => leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas, modal));
 }
 
 /**

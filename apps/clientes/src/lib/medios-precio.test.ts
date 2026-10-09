@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MedioPago } from "./medios-pago";
+import { preciosFormaDelModal } from "./precios-forma-modal";
 import { armarPreciosMedios, seleccionarMediosPrecio } from "./medios-precio";
 
 function medio(slug: string, extra: Partial<MedioPago> = {}): MedioPago {
@@ -315,6 +316,28 @@ describe("listas por forma de pago (change listas-por-forma-de-pago)", () => {
   it("otro medio que no es de Mercado Pago ni de Payway ignora las listas por forma", () => {
     const sel = seleccionarMediosPrecio([medio("transferencia", { destacarEnCatalogo: true, idListaPrecios: null, listasPorForma: { debito: "L5" } })], false);
     expect(sel.destacado).toBeNull();
+  });
+
+  it("modal: MP con débito distinto y mostrarEnFicha=false igual separa por forma", () => {
+    const sel = seleccionarMediosPrecio(
+      [mp({ idListaPrecios: "L1", listasPorForma: { debito: "L5" }, mostrarEnFicha: false, destacarEnCatalogo: false })],
+      false,
+    );
+    expect(sel.ficha).toHaveLength(0);
+    expect(sel.modal).toHaveLength(1);
+    const r = armarPreciosMedios(precios, 21, sel);
+    expect(r.preciosMedios).toEqual([]);
+    expect(r.preciosFormaModal?.map((x) => [x.forma, x.price])).toEqual([
+      ["credito", 90000],
+      ["debito", 80000],
+      ["cuenta_mp", 90000],
+    ]);
+    expect(preciosFormaDelModal(r.preciosFormaModal, 108900)).toEqual({ debito: 96800, credito: 108900 });
+  });
+
+  it("modal: sin listas por forma o medio sin cobro en línea no suma nada", () => {
+    expect(seleccionarMediosPrecio([mp({ idListaPrecios: "L1" })], false).modal).toBeUndefined();
+    expect(seleccionarMediosPrecio([mp({ cobroOnline: false, listasPorForma: { debito: "L5" } })], false).modal).toBeUndefined();
   });
 
   it("card: la lista del medio (forma NULL) gana aunque una forma sea más barata", () => {

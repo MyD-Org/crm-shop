@@ -1,7 +1,7 @@
 /**
  * Precios por forma de pago del modal "Ver medios de pago". Lógica PURA, sin base ni flags.
  *
- * Sale de los mismos `preciosMedios` que arma la ficha (`armarPreciosMedios`), que solo trae una
+ * Sale de `preciosFormaModal` (`armarPreciosMedios`, independiente de "Mostrar en ficha"), que solo trae una
  * línea por forma cuando los precios de las formas difieren. Una forma sin línea vale lo mismo que el
  * precio contado. Con más de un procesador con débito, se toma el menor precio de cada forma.
  */

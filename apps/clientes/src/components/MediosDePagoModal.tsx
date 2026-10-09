@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Dialog, PaymentLogos, type PaymentLogo } from "@myd-org/ui";
 import { MediosDePagoDetalle } from "@/components/MediosDePagoDetalle";
 import type { CuotasFichaCarrito } from "@/lib/ficha-cuotas-carrito";
-import type { PrecioMedio } from "@/data/products";
+import type { PrecioMedio, PrecioOffline } from "@/data/products";
 import { preciosFormaDelModal } from "@/lib/precios-forma-modal";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { filasNoAlcanzadas, opcionesCombinadas, type CuotasProducto } from "@/lib/cuotas-sin-interes";
@@ -23,6 +23,7 @@ export function MediosDePagoModal({
   conCarrito = null,
   logos = [],
   preciosMedios,
+  mediosOffline,
   className = "",
 }: {
   /** Precio contado del producto (1 pago), con IVA. */
@@ -34,6 +35,8 @@ export function MediosDePagoModal({
   logos?: PaymentLogo[];
   /** Precios por medio/forma de la ficha: con débito distinto al crédito el modal se divide en dos bloques. */
   preciosMedios?: PrecioMedio[];
+  /** Medios sin cobro en línea con su precio: un bloque por cada uno, debajo de las tarjetas. */
+  mediosOffline?: PrecioOffline[];
   className?: string;
 }) {
   const [abierto, setAbierto] = useState(false);
@@ -70,6 +73,7 @@ export function MediosDePagoModal({
             conCarrito={conCarrito}
             precioContado={precioFinal}
             preciosForma={preciosFormaDelModal(preciosMedios, precioFinal)}
+            mediosOffline={mediosOffline}
           />
         )}
         {abierto && logos.length > 0 && (

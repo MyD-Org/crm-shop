@@ -166,3 +166,27 @@ describe("MediosDePagoDetalle con débito a otro precio", () => {
     expect(texto(base)).toContain("Tarjeta de crédito o débito 1 pago Precio contado $ 121.000,00");
   });
 });
+
+describe("MediosDePagoDetalle con medios sin cobro en línea", () => {
+  const base = { precioContado: 121000, opciones: [opcion({ cuotas: 3, total: 100, montoCuota: 33.34 })] };
+
+  it("suma un bloque por medio (título y una fila 1 pago con su precio), sin subtítulo", () => {
+    const t = texto(
+      renderToStaticMarkup(
+        createElement(MediosDePagoDetalle, {
+          ...base,
+          mediosOffline: [{ slug: "transferencia", nombre: "Transferencia bancaria", precioFinal: 108900 }],
+        }),
+      ),
+    );
+    expect(t).toContain("Tarjeta de crédito o débito");
+    expect(t).toContain("Transferencia bancaria 1 pago $ 108.900");
+    expect(t).not.toContain("Transferencia bancaria 1 pago Precio");
+  });
+
+  it("sin medios offline queda igual que hoy", () => {
+    const a = renderToStaticMarkup(createElement(MediosDePagoDetalle, base));
+    const b = renderToStaticMarkup(createElement(MediosDePagoDetalle, { ...base, mediosOffline: [] }));
+    expect(b).toBe(a);
+  });
+});

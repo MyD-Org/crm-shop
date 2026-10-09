@@ -335,6 +335,7 @@ export function ProductoClient({
                     conCarrito={cuotasConCarrito}
                     logos={logosTarjetas}
                     preciosMedios={producto.preciosFormaModal}
+                    mediosOffline={producto.preciosOfflineModal}
                     className="mt-0.5 text-accent transition-colors hover:text-primary"
                   />
                 </div>

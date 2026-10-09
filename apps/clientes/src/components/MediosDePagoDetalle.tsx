@@ -1,6 +1,7 @@
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import type { CuotaNoAlcanzada, OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { fmtPrecio } from "@/lib/format";
+import type { PrecioOffline } from "@/data/products";
 import type { PreciosFormaModal } from "@/lib/precios-forma-modal";
 
 /**
@@ -16,6 +17,7 @@ export function MediosDePagoDetalle({
   noAlcanzadas = [],
   conCarrito = null,
   preciosForma = null,
+  mediosOffline = [],
 }: {
   opciones: OpcionCuotas[];
   precioContado: number;
@@ -31,6 +33,8 @@ export function MediosDePagoDetalle({
    * en un bloque de débito (1 pago) y otro de crédito (1 pago y cuotas). Ausente = un solo bloque.
    */
   preciosForma?: PreciosFormaModal | null;
+  /** Medios sin cobro en línea: un bloque por medio (título = nombre) con una fila "1 pago". */
+  mediosOffline?: PrecioOffline[];
 }) {
   // Mínimo de la cantidad que se alcanza con el carrito: la fila lo aclara ("En compras desde $X"),
   // sin mencionar el carrito.
@@ -97,6 +101,19 @@ export function MediosDePagoDetalle({
           ))}
         </ul>
       </section>
+      {mediosOffline.map((m) => (
+        <section key={m.slug} aria-labelledby={`medio-offline-${m.slug}`}>
+          <h3 id={`medio-offline-${m.slug}`} className="mb-2 text-sm font-bold text-text">
+            {m.nombre}
+          </h3>
+          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+            <li className="flex items-center justify-between gap-4 px-3 py-2.5">
+              <span className="text-sm text-text">{TEXTOS_CUOTAS.unPago}</span>
+              <span className="text-sm font-semibold text-text">{fmtPrecio(m.precioFinal)}</span>
+            </li>
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }

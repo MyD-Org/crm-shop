@@ -128,12 +128,12 @@ describe("precios online (0065): la lista del medio es un uuid de lista online",
   });
 
   it("medio con una lista mayor o igual a la referencia: sin descuento, sin línea", () => {
-    expect(armarPreciosMedios(precios, 21, sel(CARA))).toEqual({ preciosMedios: [] });
-    expect(armarPreciosMedios(precios, 21, sel(REF))).toEqual({ preciosMedios: [] });
+    expect(armarPreciosMedios(precios, 21, sel(CARA))).toMatchObject({ preciosMedios: [] });
+    expect(armarPreciosMedios(precios, 21, sel(REF))).toMatchObject({ preciosMedios: [] });
   });
 
   it("lista desactivada o inexistente (ya no viene en los precios): rige la referencia, sin línea", () => {
-    expect(armarPreciosMedios(precios, 21, sel("0f5d0c52-0000-4000-8000-0000000000ff"))).toEqual({ preciosMedios: [] });
+    expect(armarPreciosMedios(precios, 21, sel("0f5d0c52-0000-4000-8000-0000000000ff"))).toMatchObject({ preciosMedios: [] });
   });
 
   it("un producto sin precio online no muestra ninguna línea (nunca $0)", () => {
@@ -398,5 +398,54 @@ describe("listas por forma de pago (change listas-por-forma-de-pago)", () => {
 
   it("con el flag precio-especial-cuenta encendido no se exhibe nada, tampoco por forma", () => {
     expect(seleccionarMediosPrecio([mp({ listasPorForma: { debito: "L5" } })], true)).toEqual({ destacado: null, ficha: [] });
+  });
+});
+
+describe("medios sin cobro en línea en el modal", () => {
+  const precios = [
+    { idPriceList: "REF", name: "Ref", price: 100000, main: true },
+    { idPriceList: "TRF", name: "Transf", price: 90000 },
+    { idPriceList: "CARA", name: "Cara", price: 130000 },
+  ];
+  const transf = (extra: Partial<MedioPago> = {}) =>
+    medio("transferencia", { nombre: "Transferencia bancaria", idListaPrecios: "TRF", orden: 1, ...extra });
+
+  it("con transferencia: bloque con el precio de su lista, sin depender de mostrarEnFicha", () => {
+    const sel = seleccionarMediosPrecio([transf({ mostrarEnFicha: false, destacarEnCatalogo: false })], false);
+    expect(sel.ficha).toHaveLength(0);
+    const r = armarPreciosMedios(precios, 21, sel);
+    expect(r.preciosOfflineModal).toEqual([{ slug: "transferencia", nombre: "Transferencia bancaria", precioFinal: 108900 }]);
+  });
+
+  it("sin lista o con lista más cara que la de referencia: precio de referencia; respeta el orden", () => {
+    const sel = seleccionarMediosPrecio(
+      [medio("efectivo", { nombre: "Efectivo", idListaPrecios: null, orden: 2 }), transf({ idListaPrecios: "CARA", orden: 1 })],
+      false,
+    );
+    const r = armarPreciosMedios(precios, 21, sel);
+    expect(r.preciosOfflineModal?.map((x) => [x.slug, x.precioFinal])).toEqual([
+      ["transferencia", 121000],
+      ["efectivo", 121000],
+    ]);
+  });
+
+  it("cuenta corriente, inactivos, cobro en línea, reservados y sin retiro ni envío quedan afuera", () => {
+    const sel = seleccionarMediosPrecio(
+      [
+        transf({ audiencia: "cuenta_corriente" }),
+        medio("inactivo", { activo: false }),
+        medio("mercadopago", { cobroOnline: true }),
+        medio("a_coordinar"),
+        medio("nada", { aplicaRetiro: false, aplicaEnvio: false }),
+      ],
+      false,
+    );
+    expect(sel.offline).toBeUndefined();
+    expect(armarPreciosMedios(precios, 21, sel).preciosOfflineModal).toBeUndefined();
+  });
+
+  it("sin medios offline el resultado no suma el campo", () => {
+    const sel = seleccionarMediosPrecio([medio("mercadopago", { cobroOnline: true, listasPorForma: { debito: "L5" } })], false);
+    expect(sel.offline).toBeUndefined();
   });
 });

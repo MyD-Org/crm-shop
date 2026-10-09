@@ -17,8 +17,10 @@ import { destinoSeguro } from "@/lib/ingreso";
 import {
   disponible as calcularDisponible,
   mensajeError,
+  mensajeResultadoLote,
   reducirToggle,
   revertir,
+  type ResultadoLote,
 } from "@/lib/favoritos-cliente";
 
 /**
@@ -44,6 +46,12 @@ interface FavoritosValue {
   count: number;
   esFavorito: (id: string) => boolean;
   toggle: (id: string) => Promise<void>;
+  /**
+   * Guarda de una vez los `ids` (lista compartida). Anónimo: abre el ingreso y
+   * devuelve `null` sin llamar a la API. Con error avisa con un toast y también
+   * devuelve `null`; con éxito avisa el resultado y lo devuelve.
+   */
+  agregarTodos: (ids: readonly string[]) => Promise<ResultadoLote | null>;
 }
 
 const FavoritosContext = createContext<FavoritosValue | null>(null);
@@ -64,6 +72,7 @@ export function FavoritosProvider({ children }: { children: ReactNode }) {
   // estado viejo deja de valer sin tener que limpiarlo a mano.
   const [cargado, setCargado] = useState<{ usuario: string; ids: ReadonlySet<string> } | null>(null);
   const enVuelo = useRef(new Set<string>());
+  const enVueloLote = useRef(false);
 
   const usuario = isSignedIn && userId ? userId : null;
 
@@ -153,6 +162,60 @@ export function FavoritosProvider({ children }: { children: ReactNode }) {
     [ready, usuario, ids, abrirIngreso, actualizar, toast],
   );
 
+  const agregarTodos = useCallback(
+    async (idsAAgregar: readonly string[]): Promise<ResultadoLote | null> => {
+      if (!ready) return null;
+      if (!usuario) {
+        abrirIngreso();
+        return null;
+      }
+      // Un segundo clic mientras viaja el primero se ignora.
+      if (enVueloLote.current) return null;
+      enVueloLote.current = true;
+
+      let status = 0;
+      let body: (Partial<ResultadoLote> & { ids?: unknown; error?: unknown }) | null = null;
+      try {
+        const res = await fetch(`${API}/lote`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ alegraItemIds: idsAAgregar }),
+        });
+        status = res.status;
+        body = await res.json().catch(() => null);
+        if (res.ok && Array.isArray(body?.ids)) {
+          // La respuesta del servidor es la fuente de verdad: reemplaza el set.
+          const nuevos = new Set(body.ids.filter((x): x is string => typeof x === "string"));
+          setCargado((prev) => (prev && prev.usuario === usuario ? { usuario, ids: nuevos } : prev));
+          const resultado: ResultadoLote = {
+            agregados: Number(body.agregados ?? 0),
+            yaEstaban: Number(body.yaEstaban ?? 0),
+            sinLugar: Number(body.sinLugar ?? 0),
+            noDisponibles: Number(body.noDisponibles ?? 0),
+          };
+          toast({
+            title: mensajeResultadoLote(resultado),
+            tone: resultado.agregados > 0 ? "success" : "neutral",
+          });
+          return resultado;
+        }
+      } catch {
+        // Error de red: status 0.
+      } finally {
+        enVueloLote.current = false;
+      }
+
+      if (status === 401) {
+        abrirIngreso();
+        return null;
+      }
+      // Sin cambios de estado: puede reintentar.
+      toast({ title: mensajeError(status, body), tone: "danger" });
+      return null;
+    },
+    [ready, usuario, abrirIngreso, toast],
+  );
+
   const value = useMemo<FavoritosValue>(
     () => ({
       ready,
@@ -160,8 +223,9 @@ export function FavoritosProvider({ children }: { children: ReactNode }) {
       count: ids.size,
       esFavorito: (id: string) => ids.has(id),
       toggle,
+      agregarTodos,
     }),
-    [ready, disponible, ids, toggle],
+    [ready, disponible, ids, toggle, agregarTodos],
   );
 
   return (

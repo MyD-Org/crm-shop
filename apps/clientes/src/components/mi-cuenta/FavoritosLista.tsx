@@ -1,31 +1,23 @@
 "use client";
 
-import Image from "next/image";
-import { EmptyState, ProductCard } from "@myd-org/ui";
-import { AddToCartButton } from "@/components/AddToCartButton";
-import { BotonFavorito } from "@/components/BotonFavorito";
-import { CuotasCard } from "@/components/CuotasCard";
-import { PrecioMedioCard } from "@/components/PrecioMedio";
-import { linkNext } from "@/components/catalogo/link-next";
+import { EmptyState } from "@myd-org/ui";
+import { BotonCompartirLista } from "@/components/BotonCompartirLista";
+import { ProductoFavCard } from "@/components/favoritos/ProductoFavCard";
 import { useFavoritos } from "@/context/FavoritosContext";
 import type { Product } from "@/data/products";
-import { badgeProducto } from "@/components/badge-producto";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
-import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
-import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
-import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
-import { mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
+import { MENSAJE_FAVORITOS } from "@/lib/carrito-compartido";
 import { visiblesEnLista } from "@/lib/favoritos-cliente";
-import { nombreConMarca } from "@/lib/formato-nombre";
-import { formatMarca } from "@/lib/formato-rubro";
+import { hrefFavoritosCompartidos } from "@/lib/favoritos-compartidos";
+import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 import { BotonEnlace } from "./BotonEnlace";
-import { IconoLampara } from "./iconos";
 
 /**
  * Favoritos en cards compactas (`layout="list"`), con la misma regla de precio,
  * cuotas, stock e imagen que el catálogo. Quitar un favorito oculta su card al
  * instante; si la API no guarda, vuelve (el provider revierte). Si no queda
- * ninguno, el estado vacío.
+ * ninguno, el estado vacío. Arriba, "Compartir favoritos" con los ids de las
+ * cards que se ven.
  */
 export function FavoritosLista({ productos }: { productos: Product[] }) {
   const { ready, esFavorito } = useFavoritos();
@@ -46,83 +38,20 @@ export function FavoritosLista({ productos }: { productos: Product[] }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {visibles.map((p) => {
-        // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
-        const marca = p.brand ? formatMarca(p.brand) : undefined;
-        const { nombre: nombreParaMostrar, esCodigo } = nombreConMarca(p.name, marca);
-        if (p.precioCuenta === "pendiente") return <TarjetaPrecioPendiente key={p.id} layout="list" />;
-        if (p.precioCuenta === "consulte") {
-          return (
-            <TarjetaConsulte
-              key={p.id}
-              layout="list"
-              href={`/producto/${p.id}`}
-              nombre={nombreParaMostrar}
-              marca={marca}
-              imagen={
-                p.images?.[0] ? (
-                  <Image
-                    src={p.images[0].url}
-                    alt={p.images[0].alt ?? nombreParaMostrar}
-                    fill
-                    sizes="96px"
-                    className="object-contain p-2"
-                  />
-                ) : (
-                  <IconoLampara size={40} />
-                )
-              }
-            />
-          );
-        }
-        return (
-        <ProductCard
-          key={p.id}
-          variant="soft"
-          priceSize={p.precioMedio ? "sm" : "md"}
-          layout="list"
-          href={`/producto/${p.id}`}
-          renderLink={linkNext}
-          brand={marca}
-          name={nombreParaMostrar}
-          code={esCodigo ? undefined : p.sku}
-          stock={p.stock}
-          stockLabel={etiquetaStock(p)}
-          showStock={mostrarStockEnCard(p)}
-          // Final con IVA si se conoce; si no, el de siempre (igual que el catálogo).
-          price={p.precioFinal ?? p.price}
-          oldPrice={p.oldPrice}
-          badge={badgeProducto(p)}
-          image={
-            p.images?.[0] ? (
-              <Image
-                src={p.images[0].url}
-                alt={p.images[0].alt ?? nombreParaMostrar}
-                fill
-                sizes="(min-width: 640px) 160px, 128px"
-                className="object-contain p-2"
-              />
-            ) : (
-              <IconoLampara size={40} />
-            )
-          }
-          installments={
-            <>
-              <PrecioMedioCard medio={p.precioMedio} />
-              <CuotasCard opcion={mejorCuotaProducto(p.cuotasSinInteres)} />
-            </>
-          }
-          cornerAction={<BotonFavorito productId={p.id} size="sm" />}
-          action={
-            <AddToCartButton
-              disabled={p.stock === "out"}
-              max={maxCantidad(p)}
-              product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
-            />
-          }
+      <div className="flex justify-end">
+        <BotonCompartirLista
+          href={hrefFavoritosCompartidos(visibles.map((p) => p.id))}
+          label="Compartir favoritos"
+          mensaje={MENSAJE_FAVORITOS}
+          toast={{
+            title: "Enlace copiado",
+            description: "Ya puede pegarlo donde quiera compartir su lista de favoritos.",
+          }}
         />
-        );
-      })}
+      </div>
+      {visibles.map((p) => (
+        <ProductoFavCard key={p.id} p={p} />
+      ))}
     </div>
   );
 }

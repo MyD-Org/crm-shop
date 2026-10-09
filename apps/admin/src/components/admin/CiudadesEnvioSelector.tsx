@@ -140,8 +140,7 @@ export function CiudadesEnvioSelector({
           role="listbox"
           aria-label={`Localidades para ${label}`}
           hidden={!mostrarLista}
-          className="absolute left-0 right-0 z-10 mt-1 max-h-60 overflow-auto rounded-lg border p-1 shadow-md"
-          style={{ background: "var(--surface, #fff)", borderColor: "var(--line, #ddd)" }}
+          className="absolute left-0 right-0 z-10 mt-1 max-h-60 overflow-auto rounded-lg border border-border bg-elevated p-1 shadow-md"
         >
           {mostrarLista &&
             sugerencias.map((s, i) => (
@@ -157,8 +156,7 @@ export function CiudadesEnvioSelector({
                   agregar(s)
                 }}
                 onMouseEnter={() => setActiva(i)}
-                className="cursor-pointer rounded-md px-2 py-1.5 text-sm"
-                style={i === activa ? { background: "var(--accent-soft)" } : undefined}
+                className={`cursor-pointer rounded-md px-2 py-1.5 text-sm${i === activa ? " bg-accent-soft" : ""}`}
               >
                 {s.etiqueta}
                 {yaEsta(s.nombre) && " (ya agregada)"}

@@ -29,7 +29,7 @@ import {
 import { paywayConfigPublica } from "@/lib/pagos/payway";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
 import { procesadorDeMedio } from "@/lib/medios-pago";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { requierePlanesMP, validarCuotasPago, type EntradaValidacionCuotas } from "@/lib/pagos/cuotas-validacion";
 import { opcionDelCobro } from "@/lib/pagos/opciones-cobro";
 import { rechazoPorOpcionDeCobro } from "@/lib/pagos/opcion-cobro-guard";
@@ -122,7 +122,7 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
   }
 
   const clave = `pago:${clerkUserId ?? cliente?.codigocliente}`;
-  if (!permitir(clave, MAX_INTENTOS, VENTANA_MS)) {
+  if (!await permitirAsync(clave, MAX_INTENTOS, VENTANA_MS)) {
     return NextResponse.json(
       { error: "Demasiados intentos de pago. Espere unos minutos." },
       { status: 429 },

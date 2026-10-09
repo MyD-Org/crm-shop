@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { getPedidoParaPago, motivoNoCobrable, registrarCuentaRechazada } from "@/lib/pedidos";
 import { procesadorDeMedio } from "@/lib/medios-pago";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { cuentaParaCobrar } from "@/lib/pagos/cuentas-sucursales";
 import { configPublicaCobro, MENSAJE_INCONVENIENTE_TECNICO } from "@/lib/pagos/cobrar";
 import { publicKeyRechazada } from "@/lib/pagos/mercadopago";
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   if (!clerkUserId && !cliente) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401, headers: SIN_CACHE });
   }
-  if (!permitir(`cuenta-rechazada:${clerkUserId ?? cliente?.codigocliente}`, MAX_REPORTES, VENTANA_MS)) {
+  if (!await permitirAsync(`cuenta-rechazada:${clerkUserId ?? cliente?.codigocliente}`, MAX_REPORTES, VENTANA_MS)) {
     return NextResponse.json(
       { error: "Demasiados intentos. Espere unos minutos." },
       { status: 429, headers: SIN_CACHE },

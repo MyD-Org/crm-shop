@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { GeorefError, coordenadasValidas, ubicacionPorCoordenadas } from "@/lib/georef";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { TEXTOS_UBICACION, armarUbicacion } from "@/lib/ubicacion";
 import { demasiadasConsultas, errorUbicacion, ipDe, respuestaConUbicacion } from "@/lib/ubicacion-api";
 
@@ -12,7 +12,7 @@ import { demasiadasConsultas, errorUbicacion, ipDe, respuestaConUbicacion } from
 const MAX_POR_MINUTO = 10;
 
 export async function POST(req: Request) {
-  if (!permitir(`ubicacion-coord:${ipDe(req)}`, MAX_POR_MINUTO, 60_000)) return demasiadasConsultas();
+  if (!await permitirAsync(`ubicacion-coord:${ipDe(req)}`, MAX_POR_MINUTO, 60_000)) return demasiadasConsultas();
 
   const body: unknown = await req.json().catch(() => null);
   const { lat, lon } = (body && typeof body === "object" ? body : {}) as { lat?: unknown; lon?: unknown };

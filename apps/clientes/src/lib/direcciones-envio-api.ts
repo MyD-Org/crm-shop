@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { MAX_DIRECCIONES, validarDireccion, type DatosDireccion } from "./direcciones-envio";
-import { permitir } from "./rate-limit";
+import { permitirAsync } from "./rate-limit";
 
 /** Usos por minuto y por usuario, sumando todos los métodos y rutas. */
 const USOS_POR_MINUTO = 60;
@@ -31,7 +31,7 @@ export const direccionesLlenas = () =>
 export async function solicitante(): Promise<{ userId: string } | { error: NextResponse }> {
   const { userId } = await auth();
   if (!userId) return { error: json({ error: "No autorizado" }, 401) };
-  if (!permitir(`direcciones:clerk:${userId}`, USOS_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`direcciones:clerk:${userId}`, USOS_POR_MINUTO, 60_000)) {
     return {
       error: json({ error: "Demasiadas solicitudes. Inténtelo de nuevo en unos minutos." }, 429),
     };

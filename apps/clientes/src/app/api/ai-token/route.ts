@@ -12,7 +12,7 @@ import {
   sesionChat,
 } from "@/lib/chat-ia-sesion";
 import { jsonNoStore } from "@/lib/cuenta-corriente/guard";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { shopTenantId } from "@/lib/tenant";
 
 /**
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     : identidad.clerkUserId
       ? `clerk:${identidad.clerkUserId}`
       : `ip:${ipDe(req) ?? visitanteId}`;
-  if (!permitir(`ai-token:${quien}`, MAX_POR_VENTANA, VENTANA_MS)) {
+  if (!await permitirAsync(`ai-token:${quien}`, MAX_POR_VENTANA, VENTANA_MS)) {
     return jsonNoStore({ error: CHAT_DEMASIADOS }, { status: 429 });
   }
 

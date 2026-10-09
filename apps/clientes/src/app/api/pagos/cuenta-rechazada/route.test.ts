@@ -15,7 +15,7 @@ const registrarCuentaRechazada = vi.fn(async (_p: string, _proc: string, cuenta:
 });
 
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidadActual() }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...(a as [])) }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async (...a: unknown[]) => permitir(...(a as [])) }));
 vi.mock("@/lib/pedidos", async (original) => ({
   motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),

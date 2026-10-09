@@ -12,7 +12,7 @@ const getArbolCategorias = vi.fn();
 const permitir = vi.fn();
 vi.mock("@/lib/busqueda-v2/motor-servidor", () => ({ buscarEnShop: (...a: unknown[]) => buscarEnShop(...a) }));
 vi.mock("@/lib/catalog", () => ({ getArbolCategorias: () => getArbolCategorias() }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async (...a: unknown[]) => permitir(...a) }));
 const disponibles = vi.fn(async () => false);
 vi.mock("@/lib/catalogo-atributos-disponibles", () => ({ atributosEstructuradosDisponibles: () => disponibles() }));
 vi.mock("@/lib/flags-publicos", () => ({ flagsPublicos: async () => ({ soloVisibles: true, cuotas: false }) }));

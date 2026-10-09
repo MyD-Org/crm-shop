@@ -5,7 +5,7 @@ import { validarComplemento } from "@/lib/contacto-alegra";
 import { completarEnAlegra } from "@/lib/contacto-write-through";
 import { datosDelContacto } from "@/lib/datos-del-contacto";
 import { provinciaCanonica } from "@/lib/provincias";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import {
   PAIS_DEFAULT,
   PAIS_LABEL,
@@ -134,7 +134,7 @@ async function completarVinculado(
   body: Record<string, unknown>,
 ) {
   const clave = (await claveSolicitante()) ?? `cliente:${identidad.cliente?.codigocliente}`;
-  if (!permitir(`facturacion:${clave}`, COMPLETAR_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`facturacion:${clave}`, COMPLETAR_POR_MINUTO, 60_000)) {
     return NextResponse.json(
       { error: "Demasiados intentos. Inténtelo de nuevo en un minuto." },
       { status: 429 },

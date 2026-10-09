@@ -13,7 +13,7 @@ import { cuentaParaCobrar } from "@/lib/pagos/cuentas-sucursales";
 import { MARCAS_TARJETA, marcaDeMercadoPago, nombreDeMarca } from "@/lib/pagos/marcas";
 import { consultarPlanesMP, type PlanesMP } from "@/lib/pagos/mercadopago-planes";
 import { pedidoParaCambiarMedio } from "@/lib/pedidos";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 
 /** Respuesta: lo que el formulario de pago necesita para el desplegable "Cuotas". */
 export interface OpcionesCuotasPedido {
@@ -54,7 +54,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
-  if (!permitir(`pedido-cuotas:${quien}`, MAX_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`pedido-cuotas:${quien}`, MAX_POR_MINUTO, 60_000)) {
     return NextResponse.json(
       { error: "Hizo demasiados intentos. Espere un minuto e inténtelo de nuevo." },
       { status: 429, headers: { "Retry-After": "60" } },

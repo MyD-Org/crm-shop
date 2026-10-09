@@ -55,7 +55,7 @@ import { enmascararEmail, enviarEmail } from "./email";
 import { getPerfilFacturacion } from "./facturacion-db";
 import { urlSitioMail } from "./mail-layout";
 import { armarMailCodigoVinculacion, urlLogoMail } from "./vinculacion-mail";
-import { permitir } from "./rate-limit";
+import { permitirAsync } from "./rate-limit";
 
 /** Ventana de validez del código. */
 const VIGENCIA_MIN = 10;
@@ -364,7 +364,7 @@ export async function solicitarVinculacion(
    * capaz de agotar la cuota de la API y voltear catálogo y checkout.
    */
   if (
-    !permitir(
+    !await permitirAsync(
       `vinculacion:sondeo:${clerkUserId}`,
       MAX_SONDEOS,
       VENTANA_RATE_LIMIT_MIN * 60_000,

@@ -6,7 +6,7 @@ import { buscarEnShop } from "@/lib/busqueda-v2/motor-servidor";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { dispCatalogo } from "@/lib/zona-servidor";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 
 /**
  * Las llamadas llegan desde ai-api (la tool `buscar_productos`), así que casi
@@ -48,7 +48,7 @@ function ipDe(req: Request): string {
  */
 export async function GET(req: Request) {
   if (!(await chatIaHabilitado())) return json({ error: "No encontrado." }, 404);
-  if (!permitir(`chat-ia-buscar:${ipDe(req)}`, USOS_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`chat-ia-buscar:${ipDe(req)}`, USOS_POR_MINUTO, 60_000)) {
     return json({ error: "Demasiadas búsquedas. Reintentar en un momento." }, 429);
   }
 

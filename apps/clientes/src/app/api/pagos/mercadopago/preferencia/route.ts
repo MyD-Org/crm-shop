@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { VENTANA_PAGO_MS, getPedidoParaPago, motivoNoCobrable, registrarCuentaRechazada } from "@/lib/pedidos";
 import { procesadorDeMedio } from "@/lib/medios-pago";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { crearPreferencia } from "@/lib/pagos/mercadopago";
 import { procesadorConfigurado } from "@/lib/pagos";
 import { candidatasDelPedido } from "@/lib/pagos/cuentas-sucursales";
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     );
   if (!procesadorConfigurado("mercadopago")) return sinCuenta();
 
-  if (!permitir(`pago-pref:${clerkUserId ?? cliente?.codigocliente}`, MAX_PEDIDOS, VENTANA_MS)) {
+  if (!await permitirAsync(`pago-pref:${clerkUserId ?? cliente?.codigocliente}`, MAX_PEDIDOS, VENTANA_MS)) {
     return NextResponse.json({ error: "Demasiados intentos. Espere unos minutos." }, { status: 429 });
   }
 

@@ -4,7 +4,7 @@ import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { contextoUnion } from "@/lib/disponibilidad-contexto";
 import { contextoParaProvincia, disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
@@ -78,8 +78,8 @@ export async function POST(req: Request) {
 
   const quien = clerkUserId ?? cliente?.codigocliente;
   const permitido = quien
-    ? permitir(`cotizar:${quien}`, MAX_POR_MINUTO, 60_000)
-    : permitir(`cotizar:ip:${ipDe(req) ?? "desconocida"}`, MAX_POR_MINUTO_VISITANTE, 60_000);
+    ? await permitirAsync(`cotizar:${quien}`, MAX_POR_MINUTO, 60_000)
+    : await permitirAsync(`cotizar:ip:${ipDe(req) ?? "desconocida"}`, MAX_POR_MINUTO_VISITANTE, 60_000);
   if (!permitido) {
     return NextResponse.json(
       { error: "Está recalculando muy seguido. Espere unos segundos." },

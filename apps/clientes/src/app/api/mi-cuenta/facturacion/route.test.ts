@@ -18,7 +18,7 @@ vi.mock("@/lib/auth", () => ({
   claveSolicitante: async () => (identidad.clerkUserId ? `clerk:${identidad.clerkUserId}` : "crm:42"),
 }));
 const permitir = vi.fn();
-vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async (...a: unknown[]) => permitir(...a) }));
 
 let espejo: ContactoFacturacion | null = null;
 vi.mock("@/lib/contactos-espejo", () => ({

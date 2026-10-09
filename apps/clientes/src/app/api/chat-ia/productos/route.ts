@@ -10,7 +10,7 @@ import { precioPrivado } from "@/lib/precio-cuenta";
 import { preciosPrivados } from "@/lib/precios-privados-repo";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { dispCatalogo } from "@/lib/zona-servidor";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 
 /** Una por card del chat; el widget pide una vez por card. */
 const USOS_POR_MINUTO = 60;
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
 
   const identidad = await identidadActual();
   const quien = identidad.cliente?.codigocliente ?? identidad.clerkUserId ?? ipDe(req);
-  if (!permitir(`chat-ia-productos:${quien}`, USOS_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`chat-ia-productos:${quien}`, USOS_POR_MINUTO, 60_000)) {
     return json({ error: "Demasiadas consultas. Reintentar en un momento." }, 429);
   }
 

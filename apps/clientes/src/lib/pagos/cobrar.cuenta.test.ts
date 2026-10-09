@@ -24,7 +24,7 @@ vi.mock("@/lib/medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => 
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@cliente.example" }),
 }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => true }));
 vi.mock("@/lib/pedidos", async (original) => ({
   cuentasRechazadasDelPedido: async () => [...evidencia],
   detalleCredencialesRechazadas: (c: string) => `credenciales_rechazadas:${c}`,

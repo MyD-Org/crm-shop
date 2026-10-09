@@ -79,7 +79,7 @@ vi.mock("@/lib/busqueda-v2/servidor", () => ({ planParaPagina: (q: string, o: un
 vi.mock("@/lib/flags-publicos", () => ({ flagsPublicos: async () => ({ soloVisibles: await soloVisibles(), cuotas: false }) }));
 vi.mock("@/lib/zona-servidor", () => ({ dispCatalogo: () => dispCatalogo() }));
 vi.mock("@/lib/catalogo-atributos-disponibles", () => ({ atributosEstructuradosDisponibles: () => atributosDisponibles() }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => true }));
 
 import { GET } from "./route";
 

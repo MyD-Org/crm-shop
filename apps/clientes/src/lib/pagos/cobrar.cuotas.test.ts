@@ -22,7 +22,7 @@ vi.mock("./mercadopago-planes", () => ({ consultarPlanesMP: (...a: unknown[]) =>
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@cliente.example" }),
 }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => true }));
 vi.mock("@/lib/pedidos", async (original) => ({
   cuentasRechazadasDelPedido: async () => [],
   detalleCredencialesRechazadas: (c: string) => `credenciales_rechazadas:${c}`,

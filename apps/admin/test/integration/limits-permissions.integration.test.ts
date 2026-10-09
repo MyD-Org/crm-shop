@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { NextRequest } from "next/server"
 import { seedTenant, seedOperator, truncateAll } from "./helpers"
+import { invalidateTenantRegistry } from "@/lib/tenants"
 
 // Autorización de la ruta de TOPES de gasto. Es el control que evita que un operador (o un
 // admin del cliente) suba o baje el presupuesto de IA del tenant, así que el gate de
@@ -25,6 +26,8 @@ const { GET: getLimitsRoute, PATCH: patchLimitsRoute } = await import(
 )
 
 const TENANT = "test-tenant"
+// El guard resuelve el tenant por el host del request y lo compara con la cookie y la fila.
+const HOST = `${TENANT}.localhost`
 
 function loginAs(userId: string, role: "operator" | "admin" | "superadmin") {
   session = { userId, role, tenantId: TENANT, name: "Test", email: "t@x.com", save: async () => {} }
@@ -32,8 +35,9 @@ function loginAs(userId: string, role: "operator" | "admin" | "superadmin") {
 
 function patchLimits(body: unknown) {
   return patchLimitsRoute(
-    new NextRequest("http://localhost/api/admin/inbox/limits", {
+    new NextRequest(`http://${HOST}/api/admin/inbox/limits`, {
       method: "PATCH",
+      headers: { host: HOST },
       body: JSON.stringify(body),
     }),
   )
@@ -47,6 +51,7 @@ describe("permisos en la ruta de topes de gasto", () => {
   beforeEach(async () => {
     await truncateAll()
     await seedTenant(TENANT)
+    invalidateTenantRegistry()
     operador = await seedOperator(TENANT, { role: "operator" })
     admin = await seedOperator(TENANT, { role: "admin" })
     superadmin = await seedOperator(TENANT, { role: "superadmin" })
@@ -54,22 +59,22 @@ describe("permisos en la ruta de topes de gasto", () => {
 
   it("el operador no puede leer los topes", async () => {
     loginAs(operador, "operator")
-    expect((await getLimitsRoute()).status).toBe(403)
+    expect((await getLimitsRoute(new NextRequest(`http://${HOST}/api/admin/inbox/limits`, { headers: { host: HOST } }))).status).toBe(404)
   })
 
   it("el admin tampoco: el gasto es info de plataforma", async () => {
     loginAs(admin, "admin")
-    expect((await getLimitsRoute()).status).toBe(403)
+    expect((await getLimitsRoute(new NextRequest(`http://${HOST}/api/admin/inbox/limits`, { headers: { host: HOST } }))).status).toBe(404)
   })
 
   it("el operador NO puede cambiar los topes", async () => {
     loginAs(operador, "operator")
-    expect((await patchLimits({ tokens_per_month: 1 })).status).toBe(403)
+    expect((await patchLimits({ tokens_per_month: 1 })).status).toBe(404)
   })
 
   it("el admin NO puede cambiar los topes", async () => {
     loginAs(admin, "admin")
-    expect((await patchLimits({ tokens_per_month: 1 })).status).toBe(403)
+    expect((await patchLimits({ tokens_per_month: 1 })).status).toBe(404)
   })
 
   it("el superadmin sí puede cambiar los topes", async () => {

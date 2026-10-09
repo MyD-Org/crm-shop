@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { NextRequest } from "next/server"
+import { eq } from "drizzle-orm"
+import { getDb } from "@/db"
+import { adminUsers, tenants } from "@/db/schema"
+import { invalidateTenantRegistry } from "@/lib/tenants"
 import { seedTenant, seedOperator, truncateAll } from "./helpers"
 
 // Tests de las rutas del inbox. Son proxies finos a la ai-api (que tiene sus propios tests de
 // negocio), así que acá se verifica lo que es responsabilidad del CRM:
-//   - que exijan sesión (401),
+//   - que exijan sesión (401) y que la autorización sea la del guard (fila de admin_users +
+//     tenant del host, no la cookie),
 //   - que corten si el tenant no está configurado (503),
 //   - que validen el body (400),
 //   - y sobre todo que le pasen a la ai-api las credenciales del tenant DE LA SESIÓN, nunca
@@ -15,7 +20,10 @@ import { seedTenant, seedOperator, truncateAll } from "./helpers"
 
 let session: Record<string, unknown>
 
-vi.mock("next/headers", () => ({ cookies: async () => ({}) }))
+vi.mock("next/headers", () => ({
+  cookies: async () => ({}),
+  headers: async () => new Headers({ "x-tenant-id": "tenant-a" }),
+}))
 vi.mock("iron-session", () => ({ getIronSession: async () => session }))
 
 const api = {
@@ -52,7 +60,7 @@ const { GET: getContactMessagesRoute } = await import(
 )
 const { POST: assistRoute } = await import("@/app/api/admin/inbox/contacts/[endUserId]/assist/route")
 
-const TENANT = "test-tenant"
+const TENANT = "tenant-a"
 const AI_TENANT = `ai-${TENANT}`
 const AI_URL = "http://ai-api.test"
 const CONV = "conv-1"
@@ -64,9 +72,10 @@ function logout() {
   session = {}
 }
 
-const req = (url = "http://localhost/x") => new NextRequest(url)
+const HOST = `${TENANT}.localhost`
+const req = (path = "/x") => new NextRequest(`http://${HOST}${path}`, { headers: { host: HOST } })
 const jsonReq = (body: unknown) =>
-  new NextRequest("http://localhost/x", { method: "POST", body: JSON.stringify(body) })
+  new NextRequest(`http://${HOST}/x`, { method: "POST", body: JSON.stringify(body), headers: { host: HOST } })
 const convParams = { params: Promise.resolve({ id: CONV }) }
 const userParams = { params: Promise.resolve({ endUserId: "u1" }) }
 
@@ -77,6 +86,7 @@ describe("rutas del inbox", () => {
     vi.clearAllMocks()
     await truncateAll()
     await seedTenant(TENANT)
+    invalidateTenantRegistry()
     operador = await seedOperator(TENANT, { role: "operator", name: "Ana Operadora" })
     loginAs(operador)
   })
@@ -85,9 +95,9 @@ describe("rutas del inbox", () => {
     beforeEach(() => logout())
 
     it.each([
-      ["bot-status GET", () => getBotStatusRoute()],
+      ["bot-status GET", () => getBotStatusRoute(req())],
       ["bot-status POST", () => postBotStatusRoute(jsonReq({ enabled: false }))],
-      ["conversations", () => listConversationsRoute()],
+      ["conversations", () => listConversationsRoute(req())],
       ["messages", () => getMessagesRoute(req(), convParams)],
       ["reply", () => replyRoute(jsonReq({ text: "hola" }), convParams)],
       ["mode", () => modeRoute(jsonReq({ mode: "human" }), convParams)],
@@ -106,9 +116,23 @@ describe("rutas del inbox", () => {
     })
   })
 
+  describe("autorización contra la fila de admin_users (no la cookie)", () => {
+    it("un operador borrado después de loguearse → 401 y no llega a la ai-api", async () => {
+      await getDb().delete(adminUsers).where(eq(adminUsers.id, operador))
+      expect((await listConversationsRoute(req())).status).toBe(401)
+      expect(api.listConversations).not.toHaveBeenCalled()
+    })
+
+    it("una cookie de otro tenant → 401", async () => {
+      session = { ...session, tenantId: "tenant-b" }
+      expect((await listConversationsRoute(req())).status).toBe(401)
+      expect(api.listConversations).not.toHaveBeenCalled()
+    })
+  })
+
   describe("aislamiento por tenant", () => {
     it("usa las credenciales del tenant de la SESIÓN, no del request", async () => {
-      await listConversationsRoute()
+      await listConversationsRoute(req())
       expect(api.listConversations).toHaveBeenCalledWith(AI_URL, AI_TENANT)
     })
 
@@ -118,8 +142,9 @@ describe("rutas del inbox", () => {
     })
 
     it("si el tenant no está configurado corta con 503 y no llama a la ai-api", async () => {
-      await truncateAll() // deja el tenant sin fila → sin aiApiUrl
-      expect((await listConversationsRoute()).status).toBe(503)
+      // El tenant sigue existiendo (el guard lo resuelve por host) pero sin canal de ai-api.
+      await getDb().update(tenants).set({ aiTenantId: "", aiApiUrl: "" }).where(eq(tenants.id, TENANT))
+      expect((await listConversationsRoute(req())).status).toBe(503)
       expect(api.listConversations).not.toHaveBeenCalled()
     })
   })
@@ -221,7 +246,7 @@ describe("rutas del inbox", () => {
     })
 
     it("cualquiera puede consultar si el bot está activo", async () => {
-      const res = await getBotStatusRoute()
+      const res = await getBotStatusRoute(req())
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({ botEnabled: true })
     })

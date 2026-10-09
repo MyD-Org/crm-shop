@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 
 // Genera el link de Embedded Signup para conectar un número de WhatsApp.
 //
@@ -14,12 +12,13 @@ import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
 // poder enchufar un número en la cuenta de otro cliente.
 //
 // El link lo firma la ai-api, no el CRM: la clave de firma vive en un solo lado.
-async function requireSuperadmin() {
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  if (!session.userId) return { error: NextResponse.json({ error: "no autorizado" }, { status: 401 }) }
-  if (session.role !== "superadmin") return { error: NextResponse.json({ error: "forbidden" }, { status: 403 }) }
+async function requireSuperadmin(req: Request) {
+  const guard = await requireAdminPlus(req)
+  if (!guard.ok) return { error: guard.response }
+  // Solo superadmin; cualquier otro rol recibe el mismo 404 que el guard.
+  if (guard.user.role !== "superadmin") return { error: adminNotFoundResponse() }
 
-  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, session.tenantId))
+  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, guard.tenantId))
   if (!tenant?.aiApiUrl) {
     return { error: NextResponse.json({ error: "canal no configurado" }, { status: 503 }) }
   }
@@ -27,7 +26,7 @@ async function requireSuperadmin() {
 }
 
 export async function POST(req: NextRequest) {
-  const ctx = await requireSuperadmin()
+  const ctx = await requireSuperadmin(req)
   if ("error" in ctx) return ctx.error
 
   const body = (await req.json().catch(() => null)) as

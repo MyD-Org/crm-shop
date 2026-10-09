@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
+import { headersDeSeguridad } from "./src/lib/headers-seguridad";
 
 const nextConfig: NextConfig = {
+  // Headers de seguridad en todas las respuestas (nosniff, referrer, frame, HSTS). Sin CSP:
+  // ver src/lib/headers-seguridad.ts.
+  headers: async () => [{ source: "/:path*", headers: headersDeSeguridad() }],
   // sharp ya está en la lista automática de Next; heic-decode/libheif-js no: se excluyen del
   // bundling de Server Components para que carguen su wasm/binario con require nativo.
   serverExternalPackages: ["heic-decode", "libheif-js"],

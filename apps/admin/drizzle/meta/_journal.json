@@ -526,6 +526,13 @@
       "when": 1792842800000,
       "tag": "0074_cuotas_marcas",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1792929200000,
+      "tag": "0075_portal_otps_sesiones_admin",
+      "breakpoints": true
     }
   ]
 }

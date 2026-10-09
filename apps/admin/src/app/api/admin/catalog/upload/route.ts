@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { priceLists, catalogItems } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { parsePriceListExcel } from "@/lib/price-list-parser"
-
-async function getSession() {
-  return getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-}
 
 // POST /api/admin/catalog/upload
 // Body: multipart/form-data con campos: name, category, file (xlsx)
 export async function POST(req: NextRequest) {
-  const session = await getSession()
-  if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
+  const guard = await requireAdminPlus(req)
+  if (!guard.ok) return guard.response
 
   const formData = await req.formData()
   const name = String(formData.get("name") ?? "").trim()
@@ -42,12 +36,12 @@ export async function POST(req: NextRequest) {
   await db
     .update(priceLists)
     .set({ active: false })
-    .where(eq(priceLists.tenantId, session.tenantId))
+    .where(eq(priceLists.tenantId, guard.tenantId))
 
   const [list] = await db
     .insert(priceLists)
     .values({
-      tenantId: session.tenantId,
+      tenantId: guard.tenantId,
       name,
       category,
       priceColumns: columns,
@@ -62,7 +56,7 @@ export async function POST(req: NextRequest) {
   for (let i = 0; i < items.length; i += BATCH) {
     const batch = items.slice(i, i + BATCH).map((item) => ({
       priceListId: list.id,
-      tenantId: session.tenantId,
+      tenantId: guard.tenantId,
       code: item.code,
       description: item.description,
       prices: item.prices,

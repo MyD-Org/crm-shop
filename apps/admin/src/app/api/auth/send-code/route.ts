@@ -1,4 +1,3 @@
-import { randomInt } from "node:crypto"
 import { cookies } from "next/headers"
 import { getIronSession } from "iron-session"
 import { otpSessionOptions } from "@/lib/session"
@@ -8,58 +7,28 @@ import { normalizarDocumento } from "@/lib/documento-portal"
 import { AlegraRateLimitError } from "@/lib/alegra"
 import { sendEmail, maskEmail } from "@/lib/email"
 import { buildOtpEmail } from "@/lib/otp-email"
+import { emitirOtp } from "@/lib/portal-otp"
+import { ipDe, permitir } from "@/lib/rate-limit"
 import type { OtpSessionData } from "@/types"
 
 // Código de acceso al portal del cliente. Se entra SOLO con CUIT, CUIL o DNI: se resuelve
 // contra Alegra y el código se manda SIEMPRE al email que el contacto tiene cargado
 // ahí. El mail del ERP es el dato autoritativo; sin mail cargado no hay acceso hasta
 // que la sucursal lo cargue.
-
-const OTP_TTL_MS = 10 * 60 * 1000
+//
+// El código NO viaja en la cookie: se guarda como HMAC en `portal_otps` (0075) y la cookie
+// sellada lleva sólo el id. Ver src/lib/portal-otp.ts.
 
 // ── Límite de envíos ────────────────────────────────────────────────────────
 // Este endpoint es anónimo y dispara un mail: sin límite es un generador de spam
-// gratis contra los clientes del tenant. Ventana deslizante por (tenant, identificador),
-// mismo patrón que el login del admin.
-// CAVEAT (igual que allá): el Map es por proceso, no se comparte entre instancias de
-// Vercel y se reinicia con el deploy. Alcanza para el volumen del portal.
+// gratis contra los clientes del tenant. Ventana por (tenant, identificador) y, aparte, por IP:
+// el límite por identificador se esquiva tipeando un CUIT distinto en cada intento, y cada
+// búsqueda gasta cuota de Alegra (compartida con el bot y el checkout del Shop). 20 cada 15
+// minutos sobra para una oficina detrás de una sola IP.
+// CAVEAT: el contador es por proceso (ver src/lib/rate-limit.ts).
 const MAX_SENDS = 5
-const SEND_WINDOW_MS = 15 * 60 * 1000
-
-type SendBucket = { count: number; firstAt: number }
-const sendAttempts = new Map<string, SendBucket>()
-
-function sweep(now: number) {
-  for (const [key, b] of sendAttempts) {
-    if (now - b.firstAt > SEND_WINDOW_MS) sendAttempts.delete(key)
-  }
-}
-
-/**
- * Por IP, aparte del límite por identificador: ese se esquiva tipeando un CUIT distinto
- * en cada intento, y cada búsqueda gasta cuota de Alegra (compartida con el bot y el
- * checkout del Shop). 20 cada 15 minutos sobra para una oficina detrás de una sola IP.
- */
 const MAX_SENDS_POR_IP = 20
-
-/** Consume una unidad de cuota. `false` = límite alcanzado. */
-function takeSendSlot(key: string, now: number, max = MAX_SENDS): boolean {
-  let b = sendAttempts.get(key)
-  if (!b || now - b.firstAt > SEND_WINDOW_MS) b = { count: 0, firstAt: now }
-  if (b.count >= max) {
-    sendAttempts.set(key, b)
-    return false
-  }
-  b.count += 1
-  sendAttempts.set(key, b)
-  return true
-}
-
-/** IP del cliente. En Vercel `x-forwarded-for` lo arma la plataforma (no el navegador). */
-function ipDe(request: Request): string {
-  const xff = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-  return xff || request.headers.get("x-real-ip")?.trim() || "desconocida"
-}
+const SEND_WINDOW_MS = 15 * 60 * 1000
 
 export async function POST(request: Request) {
   try {
@@ -75,11 +44,9 @@ export async function POST(request: Request) {
       )
     }
 
-    const now = Date.now()
-    sweep(now)
     if (
-      !takeSendSlot(`${tenant.id}:ip:${ipDe(request)}`, now, MAX_SENDS_POR_IP) ||
-      !takeSendSlot(`${tenant.id}:${identifier}`, now)
+      !permitir(`send-code:${tenant.id}:ip:${ipDe(request)}`, MAX_SENDS_POR_IP, SEND_WINDOW_MS) ||
+      !permitir(`send-code:${tenant.id}:${identifier}`, MAX_SENDS, SEND_WINDOW_MS)
     ) {
       return Response.json(
         { error: "Pidió demasiados códigos. Espere unos minutos." },
@@ -109,16 +76,18 @@ export async function POST(request: Request) {
       )
     }
 
-    // Código robusto: RNG criptográfico (no Math.random), 6 dígitos con padding.
-    const otp = String(randomInt(0, 1_000_000)).padStart(6, "0")
+    // El código queda en la base (como HMAC) ANTES de mandarlo: si el envío falla, la fila
+    // sobra pero no hace daño (vence sola y el próximo pedido la reemplaza). Al revés —mandar
+    // y después fallar al guardar— dejaría al cliente con un código que no sirve.
+    const otp = await emitirOtp({ tenantId: tenant.id, identifier, codigocliente: cliente.codigocliente })
 
-    const { subject, html, text } = buildOtpEmail(tenant, cliente.razonsocial, otp)
+    const { subject, html, text } = buildOtpEmail(tenant, cliente.razonsocial, otp.code)
     let delivered: boolean
     try {
       delivered = await sendEmail(tenant, cliente.email, subject, html, text)
     } catch (err) {
-      // No se guarda la sesión OTP: un código que no llegó no debe dejar al usuario
-      // esperando en la pantalla de los 6 dígitos.
+      // No se sella la cookie: un código que no llegó no debe dejar al usuario esperando en
+      // la pantalla de los 6 dígitos.
       console.error("send-code: falló el envío del email:", err)
       return Response.json(
         { error: "No pudimos enviar el código. Intente nuevamente en unos minutos." },
@@ -126,19 +95,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const cookieStore = await cookies()
-    // `attempts` (contador de intentos de verificación) no está en OtpSessionData;
-    // lo extendemos localmente. Vive dentro de la cookie sellada de iron-session,
-    // así que el cliente no puede resetearlo ni falsificarlo.
-    const session = await getIronSession<OtpSessionData & { attempts?: number }>(
-      cookieStore,
-      otpSessionOptions,
-    )
-    session.identifier = identifier
-    session.codigocliente = cliente.codigocliente
-    session.otp = otp
-    session.otpExpiry = Date.now() + OTP_TTL_MS
-    session.attempts = 0 // reinicia el contador al emitir un código nuevo
+    const session = await getIronSession<OtpSessionData>(await cookies(), otpSessionOptions)
+    session.otpId = otp.id
     await session.save()
 
     // No logueamos el OTP en claro. Fuera de producción se devuelve como devCode para QA
@@ -149,7 +107,7 @@ export async function POST(request: Request) {
       success: true,
       message: "Código enviado",
       sentTo: maskEmail(cliente.email),
-      ...(isProd ? {} : { devCode: otp, delivered }),
+      ...(isProd ? {} : { devCode: otp.code, delivered }),
     })
   } catch (err) {
     // Alegra limita por requests/minuto. Es transitorio y no es culpa de quien escribió su

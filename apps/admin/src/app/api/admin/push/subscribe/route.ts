@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { getDb } from "@/db"
 import { pushSubscriptions } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { requireOperatorPlus } from "@/lib/admin-route-guard"
 
 // POST /api/admin/push/subscribe
 // Guarda (upsert por endpoint) la PushSubscription del navegador del operador logueado.
 // El endpoint es único: re-suscribirse desde el mismo browser actualiza claves y dueño.
 export async function POST(req: NextRequest) {
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
+  const guard = await requireOperatorPlus(req)
+  if (!guard.ok) return guard.response
 
   const body = await req.json().catch(() => null)
   const sub = body?.subscription
@@ -24,8 +22,8 @@ export async function POST(req: NextRequest) {
   await getDb()
     .insert(pushSubscriptions)
     .values({
-      tenantId: session.tenantId,
-      operatorId: session.userId,
+      tenantId: guard.tenantId,
+      operatorId: guard.user.id,
       endpoint,
       p256dh,
       auth,
@@ -33,7 +31,7 @@ export async function POST(req: NextRequest) {
     })
     .onConflictDoUpdate({
       target: pushSubscriptions.endpoint,
-      set: { tenantId: session.tenantId, operatorId: session.userId, p256dh, auth, lastUsedAt: new Date() },
+      set: { tenantId: guard.tenantId, operatorId: guard.user.id, p256dh, auth, lastUsedAt: new Date() },
     })
 
   return NextResponse.json({ ok: true })

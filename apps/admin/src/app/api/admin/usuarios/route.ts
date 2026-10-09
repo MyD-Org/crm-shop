@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, adminPasswordTokens, tenants } from "@/db/schema"
 import { generateToken } from "@/lib/admin-crypto"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { assignableRoles, canManageUsers, type AdminRole } from "@/lib/roles"
 import { sendEmail } from "@/lib/email"
 import { safeLogoUrl } from "@/lib/email-layout"
 import { buildInvitacionEmail } from "@/lib/invitacion-email"
 import { EMPTY_TENANT, tenantConfigFromRow, type TenantConfig } from "@/lib/tenants"
-
-async function getAdminSession() {
-  return getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-}
 
 // Intenta enviar el email de invitación. Devuelve { sent, errorMsg }.
 async function trySendInviteEmail({
@@ -45,10 +39,10 @@ async function trySendInviteEmail({
   }
 }
 
-export async function GET() {
-  const session = await getAdminSession()
-  if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
-  if (!canManageUsers(session.role)) return NextResponse.json({ error: "prohibido" }, { status: 403 })
+export async function GET(req: NextRequest) {
+  const guard = await requireOperatorPlus(req)
+  if (!guard.ok) return guard.response
+  if (!canManageUsers(guard.user.role)) return NextResponse.json({ error: "prohibido" }, { status: 403 })
 
   const db = getDb()
   const users = await db
@@ -68,14 +62,15 @@ export async function GET() {
       adminPasswordTokens,
       and(eq(adminPasswordTokens.userId, adminUsers.id), eq(adminPasswordTokens.type, "invite")),
     )
-    .where(eq(adminUsers.tenantId, session.tenantId))
+    .where(eq(adminUsers.tenantId, guard.tenantId))
 
   return NextResponse.json(users.map((u) => ({ ...u, hasPassword: !!u.hasPassword })))
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getAdminSession()
-  if (!session.userId || !canManageUsers(session.role)) {
+  const guard = await requireOperatorPlus(req)
+  if (!guard.ok) return guard.response
+  if (!canManageUsers(guard.user.role)) {
     return NextResponse.json({ error: "No tiene permisos de gestión de usuarios" }, { status: 403 })
   }
 
@@ -84,7 +79,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "email, name y role son requeridos" }, { status: 400 })
   }
   // El actor solo puede crear roles dentro de lo que puede otorgar (un admin: solo operadores).
-  if (!assignableRoles(session.role).includes(body.role as AdminRole)) {
+  if (!assignableRoles(guard.user.role).includes(body.role as AdminRole)) {
     return NextResponse.json({ error: "No puede asignar ese rol" }, { status: 403 })
   }
 
@@ -95,13 +90,13 @@ export async function POST(req: NextRequest) {
   const existing = await db
     .select({ id: adminUsers.id })
     .from(adminUsers)
-    .where(and(eq(adminUsers.email, body.email.toLowerCase()), eq(adminUsers.tenantId, session.tenantId)))
+    .where(and(eq(adminUsers.email, body.email.toLowerCase()), eq(adminUsers.tenantId, guard.tenantId)))
   if (existing.length) return NextResponse.json({ error: "El email ya está en uso" }, { status: 409 })
 
-  const [tenantRow] = await db.select().from(tenants).where(eq(tenants.id, session.tenantId))
+  const [tenantRow] = await db.select().from(tenants).where(eq(tenants.id, guard.tenantId))
   const tenant = tenantRow ? tenantConfigFromRow(tenantRow) : EMPTY_TENANT
   const [user] = await db.insert(adminUsers).values({
-    tenantId: session.tenantId,
+    tenantId: guard.tenantId,
     email: body.email.toLowerCase(),
     name: body.name,
     role: body.role,

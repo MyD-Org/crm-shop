@@ -50,6 +50,7 @@ openssl rand -hex 32      # ALEGRA_WEBHOOK_SECRET
 | `SESSION_SECRET` | Nuevo (firma sesiones y los `crm_token` del agente) |
 | `CRON_SECRET` | Nuevo (protege los endpoints de cron) |
 | `ALEGRA_WEBHOOK_SECRET` | Nuevo (deriva el token de las URLs de webhooks de contactos de Alegra; cambiarlo obliga a recrear las suscripciones con `scripts/alegra-webhooks-contactos.ts`) |
+| `OTP_SECRET` | Opcional. Clave del HMAC con el que se guardan los códigos de acceso al portal (`portal_otps`). Sin la var se usa `SESSION_SECRET`; cargar una propia permite rotarla aparte (`openssl rand -hex 32`) |
 
 ### Secretos — reutilizar los de `.env.local`
 `INTERNAL_SECRET` y `STAFF_TOKEN_SECRET` son **compartidos con ai-api**: si los cambiás,

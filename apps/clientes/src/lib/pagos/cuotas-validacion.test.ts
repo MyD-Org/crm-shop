@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  MONEDA_PEDIDO,
+  motivoNoAcreditable,
   requierePlanesMP,
   revisionDeCuotas,
   validarCuotasPago,
@@ -250,5 +252,43 @@ describe("revisionDeCuotas con la intención del intento (migración 0034)", () 
 
   it("datos que el procesador no informó no se acusan", () => {
     expect(revisionDeCuotas({ cuotas: 1, total: 50000 }, {}, conInteres(6, 50000))).toBeNull();
+  });
+});
+
+describe("motivoNoAcreditable (red de seguridad del cobro aprobado)", () => {
+  const pedido = { total: 50000 };
+
+  it("pagó MENOS que el total del pedido: monto_distinto", () => {
+    expect(motivoNoAcreditable(pedido, { totalPagado: 49000 })).toBe("monto_distinto");
+    expect(motivoNoAcreditable(pedido, { totalPagado: 1 })).toBe("monto_distinto");
+    expect(motivoNoAcreditable(pedido, { totalPagado: 0 })).toBe("monto_distinto");
+  });
+
+  it("pagó EXACTAMENTE el total: acredita", () => {
+    expect(motivoNoAcreditable(pedido, { totalPagado: 50000 })).toBeNull();
+    expect(motivoNoAcreditable(pedido, { totalPagado: 50000, cuotas: 1, moneda: "ARS" })).toBeNull();
+  });
+
+  it("pagó MÁS (interés de las cuotas del procesador): acredita", () => {
+    expect(motivoNoAcreditable(pedido, { totalPagado: 66070, cuotas: 6 })).toBeNull();
+  });
+
+  it("tolera el redondeo: un centavo en 1 pago, uno por cuota en cuotas", () => {
+    expect(motivoNoAcreditable(pedido, { totalPagado: 49999.99 })).toBeNull();
+    expect(motivoNoAcreditable(pedido, { totalPagado: 49999.98 })).toBe("monto_distinto");
+    expect(motivoNoAcreditable(pedido, { totalPagado: 49999.94, cuotas: 6 })).toBeNull();
+    expect(motivoNoAcreditable(pedido, { totalPagado: 49999.93, cuotas: 6 })).toBe("monto_distinto");
+  });
+
+  it("otra moneda que la del pedido no acredita, aunque el número coincida", () => {
+    expect(motivoNoAcreditable(pedido, { totalPagado: 50000, moneda: "USD" })).toBe("monto_distinto");
+    expect(motivoNoAcreditable(pedido, { totalPagado: 60000, moneda: "BRL" })).toBe("monto_distinto");
+    expect(MONEDA_PEDIDO).toBe("ARS");
+  });
+
+  it("lo que el procesador no informó no se acusa", () => {
+    expect(motivoNoAcreditable(pedido, {})).toBeNull();
+    expect(motivoNoAcreditable(pedido, { cuotas: 3 })).toBeNull();
+    expect(motivoNoAcreditable(pedido, { totalPagado: Number.NaN })).toBeNull();
   });
 });

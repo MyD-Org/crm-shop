@@ -104,6 +104,35 @@ export interface IntencionCobro {
   conInteres: boolean;
 }
 
+/** Moneda en la que se cotizan los pedidos. */
+export const MONEDA_PEDIDO = "ARS";
+
+/**
+ * Red de seguridad del cobro: ¿un pago APROBADO alcanza para acreditar el pedido?
+ *
+ * El monto lo fija el servidor al crear el pago, así que hoy no debería fallar nunca. Pero el webhook
+ * acepta cualquier pago aprobado cuyo `external_reference` sea el pedido, y si alguna vez llegara uno
+ * creado por otro camino (otro monto, otra moneda), no puede dejar el pedido `pagado`.
+ *
+ * - Lo que pagó el comprador MENOR que el total del pedido → `monto_distinto`. Mayor o igual acredita:
+ *   con cuotas con interés el comprador paga más, y eso es legítimo. Tolerancia de un centavo por cuota
+ *   (redondeo de cada cuota), como en `revisionDeCuotas`.
+ * - Moneda informada distinta de la del pedido → `monto_distinto` (mil de otra moneda no son mil pesos).
+ * - Lo que el procesador no informó no se acusa: sin total pagado ni moneda, acredita como siempre.
+ *
+ * Quien lo aplica (`registrarCobroTx`) deja el pedido sin acreditar y marcado para el CRM.
+ */
+export function motivoNoAcreditable(
+  pedido: { total: number },
+  cobro: { totalPagado?: number; cuotas?: number; moneda?: string },
+): RevisionDeCuotas | null {
+  if (cobro.moneda !== undefined && cobro.moneda !== MONEDA_PEDIDO) return "monto_distinto";
+  if (typeof cobro.totalPagado !== "number" || !Number.isFinite(cobro.totalPagado)) return null;
+  const cuotas = Number.isInteger(cobro.cuotas) && (cobro.cuotas as number) >= 1 ? (cobro.cuotas as number) : 1;
+  const tolerancia = Math.max(TOLERANCIA_MONTO, 0.01 * cuotas);
+  return cobro.totalPagado < pedido.total - tolerancia ? "monto_distinto" : null;
+}
+
 /**
  * Reconciliación: lo que informó el procesador contra lo esperado. Sólo se acusa lo que el procesador
  * informó.

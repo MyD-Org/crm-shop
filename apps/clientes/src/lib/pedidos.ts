@@ -25,7 +25,13 @@ import { vaciarCarritoTx } from "./carrito-db";
 import type { CartItem } from "./carrito-cliente";
 import { disponiblesEnTx, noVisiblesEnTx, ProductoNoDisponibleError, StockInsuficienteError } from "./stock-disponible";
 import type { Cotizacion } from "./cotizacion";
-import { revisionDeCuotas, type IntencionCobro, type RevisionDeCuotas } from "./pagos/cuotas-validacion";
+import {
+  MONEDA_PEDIDO,
+  motivoNoAcreditable,
+  revisionDeCuotas,
+  type IntencionCobro,
+  type RevisionDeCuotas,
+} from "./pagos/cuotas-validacion";
 import type { MotivoRevisionPedido } from "./motivo-revision";
 import type { InfoPago } from "./pagos/tipos";
 import {
@@ -933,6 +939,8 @@ export interface ResultadoCobro {
   cuotas?: number;
   /** Total pagado con interés, si el proveedor lo informó. */
   totalPagado?: number;
+  /** Moneda del pago (ISO 4217), si el proveedor la informó. Otra que `MONEDA_PEDIDO` no acredita. */
+  moneda?: string;
   /** Medio con el que se cobró (marca, tipo, últimos 4…), si el proveedor lo informó. */
   info?: InfoPago;
 }
@@ -1199,10 +1207,42 @@ async function registrarCobroTx(
       .orderBy(asc(pagoIntentos.createdAt));
 
     const actual = fila.estado as PagoEstado;
-    const nuevo = estadoDelPedido(intentos.map((i) => i.estado as PagoEstado)) ?? actual;
+
+    /**
+     * Red de seguridad del monto. Cada intento guarda lo que dijo el procesador (un pago aprobado es
+     * `pagado`, y así lo ve el CRM), pero un cobro aprobado por MENOS que el total del pedido, o en otra
+     * moneda, NO cuenta para acreditarlo: para el estado del pedido vale como `pendiente`, el pedido
+     * queda marcado `monto_distinto` y no sale el aviso de "pago recibido". Se decide sobre las
+     * columnas ya guardadas del intento (el update de arriba ya escribió este cobro), así la marca se
+     * recalcula igual en cada evento; la moneda sólo viene en el evento, así que se mira para éste.
+     */
+    const total = Number(fila.total);
+    const noAcredita = (i: (typeof intentos)[number]) =>
+      i.estado === "pagado" &&
+      motivoNoAcreditable(
+        { total },
+        {
+          totalPagado: i.totalPagado != null ? Number(i.totalPagado) : undefined,
+          cuotas: i.cuotas ?? undefined,
+          ...(i.id === intento.id && cobro.moneda !== undefined ? { moneda: cobro.moneda } : {}),
+        },
+      ) !== null;
+    const estadoEfectivo = (i: (typeof intentos)[number]): PagoEstado =>
+      noAcredita(i) ? "pendiente" : (i.estado as PagoEstado);
+
+    const nuevo = estadoDelPedido(intentos.map(estadoEfectivo)) ?? actual;
 
     const cobrados = intentos.filter((i) => i.estado === "pagado");
     const revision = revisionDelPago(cobrados.length, nuevo, fila.pedidoEstado as OrderEstado);
+    const revisionMonto: RevisionDeCuotas | null =
+      nuevo !== "pagado" && cobrados.some(noAcredita) ? "monto_distinto" : null;
+    if (revisionMonto) {
+      console.error(
+        `[pagos] ${revisionMonto}: pago aprobado que no cubre el pedido=${pedidoId} total=${fila.total}` +
+          ` referencias=${cobrados.filter(noAcredita).map((i) => `${i.referencia}:${i.totalPagado ?? "?"}`).join(",")}` +
+          (cobro.moneda && cobro.moneda !== MONEDA_PEDIDO ? ` moneda=${cobro.moneda}` : ""),
+      );
+    }
     if (revision) {
       // No debería pasar (la ruta no abre un intento con otro abierto, y la
       // cancelación no corre con un pago en curso), así que si pasa tiene que
@@ -1253,7 +1293,7 @@ async function registrarCobroTx(
             }
           : {}),
         ...(nuevo !== actual ? { pagoEstado: nuevo } : {}),
-        pagoRevision: revision ?? revisionCuotas,
+        pagoRevision: revision ?? revisionMonto ?? revisionCuotas,
         pagoActualizadoEn: new Date(),
         updatedAt: new Date(),
       })

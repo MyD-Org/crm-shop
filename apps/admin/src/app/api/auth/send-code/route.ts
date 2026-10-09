@@ -8,7 +8,7 @@ import { AlegraRateLimitError } from "@/lib/alegra"
 import { sendEmail, maskEmail } from "@/lib/email"
 import { buildOtpEmail } from "@/lib/otp-email"
 import { emitirOtp } from "@/lib/portal-otp"
-import { ipDe, permitir } from "@/lib/rate-limit"
+import { ipDe, permitirAsync } from "@/lib/rate-limit"
 import type { OtpSessionData } from "@/types"
 
 // Código de acceso al portal del cliente. Se entra SOLO con CUIT, CUIL o DNI: se resuelve
@@ -25,7 +25,7 @@ import type { OtpSessionData } from "@/types"
 // el límite por identificador se esquiva tipeando un CUIT distinto en cada intento, y cada
 // búsqueda gasta cuota de Alegra (compartida con el bot y el checkout del Shop). 20 cada 15
 // minutos sobra para una oficina detrás de una sola IP.
-// CAVEAT: el contador es por proceso (ver src/lib/rate-limit.ts).
+// Contador compartido en Redis si hay credenciales; si no, por proceso (ver src/lib/rate-limit.ts).
 const MAX_SENDS = 5
 const MAX_SENDS_POR_IP = 20
 const SEND_WINDOW_MS = 15 * 60 * 1000
@@ -45,8 +45,8 @@ export async function POST(request: Request) {
     }
 
     if (
-      !permitir(`send-code:${tenant.id}:ip:${ipDe(request)}`, MAX_SENDS_POR_IP, SEND_WINDOW_MS) ||
-      !permitir(`send-code:${tenant.id}:${identifier}`, MAX_SENDS, SEND_WINDOW_MS)
+      !await permitirAsync(`send-code:${tenant.id}:ip:${ipDe(request)}`, MAX_SENDS_POR_IP, SEND_WINDOW_MS) ||
+      !await permitirAsync(`send-code:${tenant.id}:${identifier}`, MAX_SENDS, SEND_WINDOW_MS)
     ) {
       return Response.json(
         { error: "Pidió demasiados códigos. Espere unos minutos." },

@@ -3,11 +3,12 @@ import { and, eq, gt, isNull } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, adminPasswordTokens } from "@/db/schema"
 import { hashPassword, hashToken } from "@/lib/admin-crypto"
-import { ipDe, permitir, respuestaLimite } from "@/lib/rate-limit"
+import { ipDe, permitirAsync, respuestaLimite } from "@/lib/rate-limit"
 
 // Endpoint anónimo que recibe tokens: se limita por IP para que no se pueda barrer el espacio
 // de tokens (son de 32 bytes aleatorios, así que esto es defensa en profundidad) ni usar el
-// POST para forzar escrituras. Contador por proceso (ver src/lib/rate-limit.ts).
+// POST para forzar escrituras. Contador compartido en Redis si hay
+// credenciales; si no, por proceso (ver src/lib/rate-limit.ts).
 const MAX_POR_IP = 20
 const VENTANA_MS = 15 * 60 * 1000
 
@@ -15,7 +16,7 @@ const VENTANA_MS = 15 * 60 * 1000
 // devuelve el email de la cuenta y el estado, para que la página muestre de qué cuenta
 // se trata y avise al instante si el link venció o ya fue usado.
 export async function GET(req: NextRequest) {
-  if (!permitir(`reset-password:ip:${ipDe(req)}`, MAX_POR_IP, VENTANA_MS)) return respuestaLimite()
+  if (!await permitirAsync(`reset-password:ip:${ipDe(req)}`, MAX_POR_IP, VENTANA_MS)) return respuestaLimite()
   const token = req.nextUrl.searchParams.get("token")
   if (!token) return NextResponse.json({ valid: false }, { status: 400 })
 
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!permitir(`reset-password:ip:${ipDe(req)}`, MAX_POR_IP, VENTANA_MS)) return respuestaLimite()
+  if (!await permitirAsync(`reset-password:ip:${ipDe(req)}`, MAX_POR_IP, VENTANA_MS)) return respuestaLimite()
   const body = await req.json().catch(() => null)
   if (!body?.token || !body?.password) {
     return NextResponse.json({ error: "token y contraseña requeridos" }, { status: 400 })

@@ -24,6 +24,8 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
 vi.mock("@/lib/pedidos", async (original) => ({
+  cuentasRechazadasDelPedido: async () => [],
+  detalleCredencialesRechazadas: (c: string) => `credenciales_rechazadas:${c}`,
   motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
   reservarIntento: (...a: unknown[]) => reservarIntento(...a),
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),
@@ -132,7 +134,7 @@ describe("cuotas sin interés congeladas: marca de la tarjeta", () => {
       cuotas: 6,
       totalEsperado: 50000,
       conInteres: false,
-    });
+    }, expect.objectContaining({ cuenta: expect.any(String) }));
     expect(crearPago).toHaveBeenCalledWith(expect.objectContaining({ monto: 50000, cuotas: 6 }));
   });
 
@@ -154,7 +156,7 @@ describe("cuotas con interés de Mercado Pago (pedido en 1 pago)", () => {
       cuotas: 6,
       totalEsperado: 50000,
       conInteres: true,
-    });
+    }, expect.objectContaining({ cuenta: expect.any(String) }));
     // El monto del body se ignora: siempre el total del pedido.
     expect(crearPago).toHaveBeenCalledWith(expect.objectContaining({ monto: 50000, cuotas: 6 }));
   });
@@ -184,7 +186,7 @@ describe("cuotas con interés de Mercado Pago (pedido en 1 pago)", () => {
       cuotas: 1,
       totalEsperado: 50000,
       conInteres: false,
-    });
+    }, expect.objectContaining({ cuenta: expect.any(String) }));
   });
 
   it("sin BIN (o inválido) en un cobro de más de 1 cuota → 422 sin consultar a MP", async () => {

@@ -12,6 +12,7 @@ vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null }),
 }));
 vi.mock("@/lib/pedidos", () => ({
+  cuentasRechazadasDelPedido: async () => [],
   pedidoPendienteMasReciente: (...a: unknown[]) => pendiente(...a),
   // Cuenta de cobro del pedido retomado: sucursal mdp.
   cuentaDelPedido: async () => ({ sucursal: "mdp", facturaSucursal: null }),

@@ -14,6 +14,7 @@ const proveedorPago = vi.fn();
 const registrarCobro = vi.fn(async () => true);
 
 vi.mock("@/lib/pedidos", () => ({
+  cuentasRechazadasDelPedido: async () => [],
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),
   intentoAbiertoDelPedido: (...a: unknown[]) => intentoAbiertoDelPedido(...a),
   motivoNoCobrable: (p: { estado: string }) => (p.estado === "cancelado" ? "cancelado" : null),
@@ -23,11 +24,27 @@ vi.mock("@/lib/pagos", async () => {
   const tipos = await import("./tipos");
   return { ...tipos, proveedorPago: (...a: unknown[]) => proveedorPago(...a) };
 });
+// Sucursales del CRM: igz (predeterminada) y mdp.
+vi.mock("@/lib/tenant", () => ({ shopTenantId: () => "tenant-ejemplo" }));
+vi.mock("@/db", () => ({
+  getDb: () => ({
+    select: () => ({
+      from: () => ({
+        where: async () => [
+          { slug: "igz", activa: true, predeterminada: true },
+          { slug: "mdp", activa: true, predeterminada: false },
+        ],
+      }),
+    }),
+  }),
+}));
 vi.mock("./conciliar-intento", () => ({
   conciliarIntento: (...a: unknown[]) => conciliarIntento(...a),
 }));
 
 import { estadoPagoDelPedido } from "./estado-pago-pedido";
+import { limpiarMemoCuentas } from "./cuentas-sucursales";
+import { ErrorProveedor } from "./tipos";
 
 const dueno = { clerkUserId: "user_1" };
 const pedido = (pagoEstado: string, extra: Record<string, unknown> = {}) => ({
@@ -45,6 +62,13 @@ const abierto = { id: "i1", proveedor: "payway", referencia: "ref1", creadoEn: n
 
 beforeEach(() => {
   vi.clearAllMocks();
+  limpiarMemoCuentas();
+  vi.unstubAllEnvs();
+  // Las dos cuentas de Mercado Pago configuradas (valores de prueba).
+  vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-token-mdp");
+  vi.stubEnv("MP_PUBLIC_KEY_MDP", "TEST-publica-mdp");
+  vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token-igz");
+  vi.stubEnv("MP_PUBLIC_KEY_IGZ", "TEST-publica-igz");
   proveedorPago.mockReturnValue(proveedor);
   intentoAbiertoDelPedido.mockResolvedValue(abierto);
   conciliarIntento.mockResolvedValue({ estado: { estado: "pendiente" }, cambio: false });
@@ -158,8 +182,68 @@ describe("estadoPagoDelPedido: sin cobro en curso y vuelta de Mercado Pago", () 
     const r = await estadoPagoDelPedido("p1", dueno, { pagoMercadoPagoId: "123" });
     expect(mp.consultarPago).toHaveBeenCalledWith("123");
     expect(proveedorPago).toHaveBeenCalledWith("mercadopago", "mdp");
-    expect(registrarCobro).toHaveBeenCalledWith("p1", expect.objectContaining({ proveedor: "mercadopago", referencia: "123", estado: "pagado" }));
+    expect(registrarCobro).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ proveedor: "mercadopago", referencia: "123", estado: "pagado", cuenta: "mdp", cuentaPrevista: "mdp" }),
+    );
     expect(r).toMatchObject({ estado: "pagado" });
+  });
+
+  it("la cuenta prevista no conoce el pago (404): se consulta con la otra y se registra con ESA cuenta", async () => {
+    const consultas: string[] = [];
+    proveedorPago.mockImplementation((id: string, cuenta: string) =>
+      id === "mercadopago"
+        ? {
+            id,
+            cuenta,
+            configurado: () => true,
+            consultarPago: vi.fn(async () => {
+              consultas.push(cuenta);
+              if (cuenta === "mdp") throw new ErrorProveedor("Mercado Pago respondió 404", 404);
+              return { estado: "pagado", detalle: "accredited", pedidoId: "p1" };
+            }),
+          }
+        : proveedor,
+    );
+    getPedidoParaPago
+      .mockResolvedValueOnce(pedido("pendiente", { pagoMetodo: "mercadopago" }))
+      .mockResolvedValue(pedido("pagado", { pagoMetodo: "mercadopago" }));
+    await estadoPagoDelPedido("p1", dueno, { pagoMercadoPagoId: "123" });
+    expect(consultas).toEqual(["mdp", "igz"]);
+    expect(registrarCobro).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ referencia: "123", cuenta: "igz", cuentaPrevista: "mdp" }),
+    );
+  });
+
+  it("un error que no es 404 corta: no prueba con otra cuenta ni registra", async () => {
+    const consultas: string[] = [];
+    proveedorPago.mockImplementation((id: string, cuenta: string) =>
+      id === "mercadopago"
+        ? {
+            id,
+            cuenta,
+            configurado: () => true,
+            consultarPago: vi.fn(async () => {
+              consultas.push(cuenta);
+              throw new ErrorProveedor("Mercado Pago respondió 500", 500);
+            }),
+          }
+        : proveedor,
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    getPedidoParaPago.mockResolvedValue(pedido("pendiente", { pagoMetodo: "mercadopago" }));
+    await estadoPagoDelPedido("p1", dueno, { pagoMercadoPagoId: "123" });
+    expect(consultas).toEqual(["mdp"]);
+    expect(registrarCobro).not.toHaveBeenCalled();
+  });
+
+  it("intento abierto con cuenta congelada: se consulta con ESA cuenta aunque el pedido hoy resuelva a otra", async () => {
+    getPedidoParaPago.mockResolvedValue(pedido("pendiente"));
+    intentoAbiertoDelPedido.mockResolvedValue({ ...abierto, cuenta: "igz" });
+    await estadoPagoDelPedido("p1", dueno);
+    expect(proveedorPago).toHaveBeenCalledWith("payway", "igz");
+    expect(proveedorPago).not.toHaveBeenCalledWith("payway", "mdp");
   });
 
   it("un payment_id de OTRO pedido no se registra", async () => {

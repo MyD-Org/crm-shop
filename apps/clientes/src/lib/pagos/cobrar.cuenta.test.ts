@@ -4,12 +4,21 @@ import type { PedidoParaPago } from "@/lib/pedidos";
 /**
  * Con qué cuenta cobra `cobrarPedido`: la de la sucursal del pedido (`facturaSucursal ?? sucursal ??
  * predeterminada`), con el proveedor REAL de Mercado Pago ligado a esa cuenta (sólo `fetch` simulado).
- * En esta rebanada no hay fallback: sin credenciales de la cuenta prevista, el medio falla cerrado.
+ * Fallback a la otra cuenta del mismo procesador SÓLO si la prevista no está configurada o el procesador
+ * rechazó sus credenciales (401/403); nunca por un rechazo del pago, un 4xx de datos, un 5xx o la red.
  */
 
 const reservarIntento = vi.fn(async (..._a: unknown[]) => ({ intentoId: "i1" }) as unknown);
 const getPedidoParaPago = vi.fn();
 const registrarCobro = vi.fn(async () => true);
+/**
+ * Evidencia de credenciales rechazadas, como en la base: `cerrarIntentoSinPago` con
+ * `credenciales_rechazadas:<cuenta>` la escribe y `cuentasRechazadasDelPedido` la lee.
+ */
+const evidencia = vi.hoisted(() => [] as string[]);
+const cerrarIntentoSinPago = vi.fn(async (_id: string, detalle: string) => {
+  if (detalle.startsWith("credenciales_rechazadas:")) evidencia.push(detalle.split(":")[1]);
+});
 
 vi.mock("@/lib/medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => [{ slug: "mercadopago" }] }));
 vi.mock("@/lib/auth", () => ({
@@ -17,6 +26,8 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
 vi.mock("@/lib/pedidos", async (original) => ({
+  cuentasRechazadasDelPedido: async () => [...evidencia],
+  detalleCredencialesRechazadas: (c: string) => `credenciales_rechazadas:${c}`,
   motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
   reservarIntento: (...a: unknown[]) => reservarIntento(...a),
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),
@@ -24,7 +35,7 @@ vi.mock("@/lib/pedidos", async (original) => ({
   registrarCobro: (...a: unknown[]) => registrarCobro(...(a as [])),
   registrarIntentoFallido: vi.fn(async () => {}),
   fijarReferenciaIntento: vi.fn(),
-  cerrarIntentoSinPago: vi.fn(),
+  cerrarIntentoSinPago: (...a: [string, string]) => cerrarIntentoSinPago(...a),
 }));
 vi.mock("./intento-abierto", () => ({ resolverIntentoAbierto: async () => "en_curso" }));
 // Sucursales del CRM: igz (predeterminada) y mdp.
@@ -86,6 +97,8 @@ afterEach(() => {
   fetchMock.mockReset();
   reservarIntento.mockClear();
   getPedidoParaPago.mockReset();
+  cerrarIntentoSinPago.mockClear();
+  evidencia.length = 0;
 });
 
 describe("cobrarPedido — cuenta del pedido", () => {
@@ -108,15 +121,23 @@ describe("cobrarPedido — cuenta del pedido", () => {
     expect(cuerpo.notification_url).toContain("cuenta=mdp");
   });
 
-  it("la cuenta prevista sin credenciales: 409 sin reservar ni llamar al procesador (sin cobrar con otra)", async () => {
+  it("la cuenta prevista sin credenciales: cobra con la otra configurada y congela las dos en el intento", async () => {
     vi.stubEnv("MP_ACCESS_TOKEN_MDP", "");
     const r = await pagar();
-    expect(r.status).toBe(409);
-    const j = await r.json();
-    expect(j).toMatchObject({ motivo: "mp_no_configurado" });
-    expect(j.error).toBe("Los pagos en línea no están disponibles en este momento. Un asesor coordinará el pago con usted.");
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(reservarIntento).not.toHaveBeenCalled();
+    expect(r.status).toBe(200);
+    expect(autorizaciones()).toEqual(["Bearer TEST-token-igz"]);
+    expect(reservarIntento).toHaveBeenCalledWith("p1", "mercadopago", "tarjeta", expect.anything(), {
+      cuenta: "igz",
+      cuentaPrevista: "mdp",
+    });
+  });
+
+  it("sin fallback: el intento congela la prevista como cuenta y prevista", async () => {
+    await pagar();
+    expect(reservarIntento).toHaveBeenCalledWith("p1", "mercadopago", "tarjeta", expect.anything(), {
+      cuenta: "mdp",
+      cuentaPrevista: "mdp",
+    });
   });
 
   it("sin NINGUNA cuenta configurada: 409 en usted, antes de leer el pedido", async () => {
@@ -162,10 +183,100 @@ describe("cobrarPedido — cuenta del pedido", () => {
     expect(autorizaciones()).toEqual(["Bearer TEST-token-mdp"]);
   });
 
-  it.each([401, 500])("un error %i del procesador no prueba otra cuenta", async (status) => {
+  it.each([400, 402, 404, 422, 500, 502, 504])("un error %i del procesador no prueba otra cuenta", async (status) => {
     responder(status, { message: "error" });
     const r = await pagar();
     expect(r.status).toBe(502);
+    const j = await r.json();
+    expect(j.motivo).not.toBe("cuenta_rechazada");
+    expect(j.config).toBeUndefined();
     expect(autorizaciones()).toEqual(["Bearer TEST-token-mdp"]);
+    expect(evidencia).toEqual([]);
+  });
+
+  it("sin respuesta (red / timeout) no prueba otra cuenta y la reserva queda abierta", async () => {
+    fetchMock.mockImplementation(async () => {
+      throw new TypeError("fetch failed");
+    });
+    const r = await pagar();
+    expect(r.status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(cerrarIntentoSinPago).not.toHaveBeenCalled();
+  });
+});
+
+describe("cobrarPedido — credenciales rechazadas (401/403)", () => {
+  it.each([401, 403])("%i: cierra el intento con la evidencia y responde 409 cuenta_rechazada con la config de la otra", async (status) => {
+    responder(status, { message: "invalid access token" });
+    const r = await pagar();
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({
+      error: "Hubo un inconveniente con el procesador de pagos. Vuelva a ingresar los datos de su tarjeta.",
+      motivo: "cuenta_rechazada",
+      reintentable: true,
+      config: { cuenta: "igz", publicKey: "TEST-publica-igz" },
+    });
+    // Una sola llamada, con la cuenta del pedido: el token de la tarjeta es de esa cuenta.
+    expect(autorizaciones()).toEqual(["Bearer TEST-token-mdp"]);
+    expect(cerrarIntentoSinPago).toHaveBeenCalledWith("i1", "credenciales_rechazadas:mdp");
+  });
+
+  it("el reintento del mismo pedido (otra instancia: evidencia en la base) cobra con la otra cuenta", async () => {
+    evidencia.push("mdp");
+    responder(201, { id: 10, status: "approved", status_detail: "accredited", external_reference: "p1" });
+    const r = await pagar({ cuenta: "igz" });
+    expect(r.status).toBe(200);
+    expect(autorizaciones()).toEqual(["Bearer TEST-token-igz"]);
+    expect(reservarIntento).toHaveBeenCalledWith("p1", "mercadopago", "tarjeta", expect.anything(), {
+      cuenta: "igz",
+      cuentaPrevista: "mdp",
+    });
+  });
+
+  it("un bundle viejo sin `cuenta` en el reintento: la que resuelve el servidor (la otra)", async () => {
+    evidencia.push("mdp");
+    expect((await pagar()).status).toBe(200);
+    expect(autorizaciones()).toEqual(["Bearer TEST-token-igz"]);
+  });
+
+  it("un pedido nuevo (sin evidencia) vuelve a intentar PRIMERO la prevista", async () => {
+    responder(401, { message: "invalid access token" });
+    await pagar();
+    evidencia.length = 0;
+    fetchMock.mockClear();
+    responder(201, { id: 11, status: "approved", status_detail: "accredited", external_reference: "p1" });
+    await pagar();
+    expect(autorizaciones()).toEqual(["Bearer TEST-token-mdp"]);
+  });
+
+  it("401 sin otra cuenta configurada: 502 con el mensaje de inconveniente técnico", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "");
+    responder(401, { message: "invalid access token" });
+    const r = await pagar();
+    expect(r.status).toBe(502);
+    expect(await r.json()).toEqual({
+      error:
+        "No pudimos procesar el pago por un inconveniente técnico. Inténtelo nuevamente en unos minutos o elija otro medio de pago.",
+      motivo: "cuentas_rechazadas",
+    });
+  });
+
+  it("las dos cuentas rechazan: 502 y no vuelve a llamar al procesador", async () => {
+    evidencia.push("mdp", "igz");
+    const r = await pagar();
+    expect(r.status).toBe(502);
+    expect((await r.json()).motivo).toBe("cuentas_rechazadas");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(reservarIntento).not.toHaveBeenCalled();
+  });
+
+  it("tras un rechazo de credenciales, declarar la cuenta vieja es cuenta_no_valida con la config de la otra", async () => {
+    evidencia.push("mdp");
+    const r = await pagar({ cuenta: "mdp" });
+    expect(r.status).toBe(409);
+    const j = await r.json();
+    expect(j.motivo).toBe("cuenta_no_valida");
+    expect(j.config).toEqual({ cuenta: "igz", publicKey: "TEST-publica-igz" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

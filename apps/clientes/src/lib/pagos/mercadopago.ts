@@ -359,3 +359,23 @@ export function crearMercadoPago(cuenta: string): ProveedorPago {
     },
   };
 }
+
+/**
+ * ¿Mercado Pago rechaza la public key de la cuenta? Corrobora del lado del servidor lo que informa el
+ * navegador cuando el formulario no arranca (`POST /api/pagos/cuenta-rechazada`): `GET /v1/payment_methods`
+ * con la public key y sin access token. `true` = 401/403 (rechazada), `false` = la acepta, `null` = no se
+ * pudo saber (sin respuesta u otro status): ahí no se da por rechazada.
+ */
+export async function publicKeyRechazada(cuenta: string): Promise<boolean | null> {
+  const { publicKey } = credencialesMercadoPago(cuenta);
+  if (!publicKey) return null;
+  try {
+    const res = await fetch(`https://api.mercadopago.com/v1/payment_methods?public_key=${encodeURIComponent(publicKey)}`, {
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (res.status === 401 || res.status === 403) return true;
+    return res.ok ? false : null;
+  } catch {
+    return null;
+  }
+}

@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let filas: { slug: string; activa: boolean; predeterminada: boolean }[] = [];
 const lecturas = vi.fn();
+// Evidencia de credenciales rechazadas en el pedido (filas cerradas de pago_intentos).
+const rechazadas = vi.fn<(...a: unknown[]) => Promise<string[]>>(async () => []);
+vi.mock("@/lib/pedidos", () => ({ cuentasRechazadasDelPedido: (...a: unknown[]) => rechazadas(...a) }));
 vi.mock("@/lib/tenant", () => ({ shopTenantId: () => "tenant-ejemplo" }));
 vi.mock("@/db", () => ({
   getDb: () => ({
@@ -89,8 +92,10 @@ describe("cuentaPrevistaDelPedido", () => {
   });
 });
 
-describe("cuentaParaCobrar (sólo la prevista en esta rebanada)", () => {
+describe("cuentaParaCobrar (prevista primero; otra cuenta sólo si la prevista no se puede usar)", () => {
   beforeEach(() => {
+    rechazadas.mockReset();
+    rechazadas.mockResolvedValue([]);
     vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-t-igz");
     vi.stubEnv("MP_PUBLIC_KEY_IGZ", "TEST-p-igz");
   });
@@ -104,7 +109,60 @@ describe("cuentaParaCobrar (sólo la prevista en esta rebanada)", () => {
     });
   });
 
-  it("prevista sin configurar: sin_cuenta aunque otra esté configurada (falla cerrado)", async () => {
+  it("prevista sin configurar: cobra con otra configurada del mismo procesador (fallback)", async () => {
+    expect(await cuentaParaCobrar("mercadopago", { sucursal: "mdp" })).toEqual({
+      ok: true,
+      cuenta: "igz",
+      prevista: "mdp",
+      fallback: true,
+    });
+  });
+
+  it("ninguna configurada: sin_cuenta", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "");
+    expect(await cuentaParaCobrar("mercadopago", { sucursal: "mdp" })).toEqual({ ok: false, motivo: "sin_cuenta" });
+  });
+
+  it("el procesador ya rechazó las credenciales de la prevista EN ESTE pedido: la otra", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-t-mdp");
+    vi.stubEnv("MP_PUBLIC_KEY_MDP", "TEST-p-mdp");
+    rechazadas.mockResolvedValue(["mdp"]);
+    expect(await cuentaParaCobrar("mercadopago", { id: "p1", sucursal: "mdp" })).toEqual({
+      ok: true,
+      cuenta: "igz",
+      prevista: "mdp",
+      fallback: true,
+    });
+    expect(rechazadas).toHaveBeenCalledWith("p1", "mercadopago");
+  });
+
+  it("otro pedido (sin evidencia) vuelve a la prevista", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-t-mdp");
+    vi.stubEnv("MP_PUBLIC_KEY_MDP", "TEST-p-mdp");
+    expect(await cuentaParaCobrar("mercadopago", { id: "p2", sucursal: "mdp" })).toMatchObject({ cuenta: "mdp", fallback: false });
+  });
+
+  it("sin id no se lee evidencia", async () => {
+    await cuentaParaCobrar("mercadopago", { sucursal: "igz" });
+    expect(rechazadas).not.toHaveBeenCalled();
+  });
+
+  it("las dos rechazadas: sin_cuenta", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-t-mdp");
+    vi.stubEnv("MP_PUBLIC_KEY_MDP", "TEST-p-mdp");
+    rechazadas.mockResolvedValue(["mdp", "igz"]);
+    expect(await cuentaParaCobrar("mercadopago", { id: "p1", sucursal: "mdp" })).toEqual({ ok: false, motivo: "sin_cuenta" });
+  });
+
+  it("la declarada es la alternativa cuando la prevista no se puede usar: válida", async () => {
+    expect(await cuentaParaCobrar("mercadopago", { sucursal: "mdp" }, "igz")).toMatchObject({ ok: true, cuenta: "igz" });
+  });
+
+  it("sin poder leer las sucursales: sólo la cuenta que el pedido define", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    lecturas.mockImplementationOnce(() => {
+      throw new Error("sin base");
+    });
     expect(await cuentaParaCobrar("mercadopago", { sucursal: "mdp" })).toEqual({ ok: false, motivo: "sin_cuenta" });
   });
 
@@ -117,7 +175,12 @@ describe("cuentaParaCobrar (sólo la prevista en esta rebanada)", () => {
 });
 
 describe("proveedorDeIntento", () => {
-  it("liga el proveedor a la cuenta derivada del pedido del intento", async () => {
+  it("la cuenta congelada en el intento manda sobre la del pedido", async () => {
+    const p = await proveedorDeIntento({ proveedor: "payway", cuenta: "igz", sucursal: "mdp", facturaSucursal: null });
+    expect(p?.cuenta).toBe("igz");
+  });
+
+  it("intento anterior a la 0035 (cuenta null): la derivada del pedido", async () => {
     const p = await proveedorDeIntento({ proveedor: "payway", sucursal: "igz", facturaSucursal: "mdp" });
     expect(p?.id).toBe("payway");
     expect(p?.cuenta).toBe("mdp");

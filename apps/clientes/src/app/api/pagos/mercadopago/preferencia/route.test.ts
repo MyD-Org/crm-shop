@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PedidoParaPago } from "@/lib/pedidos";
 
 const crearPreferencia = vi.fn();
+const registrarCuentaRechazada = vi.fn<(...a: unknown[]) => Promise<boolean>>(async () => true);
 let pedido: PedidoParaPago | null;
 let sesion = true;
 
@@ -14,9 +15,25 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
 vi.mock("@/lib/pedidos", async (original) => ({
+  cuentasRechazadasDelPedido: async () => [],
+  registrarCuentaRechazada: (...a: unknown[]) => registrarCuentaRechazada(...a),
   motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
   VENTANA_PAGO_MS: (await original<typeof import("@/lib/pedidos")>()).VENTANA_PAGO_MS,
   getPedidoParaPago: async () => pedido,
+}));
+// Sucursales del CRM: igz (predeterminada) y mdp.
+vi.mock("@/lib/tenant", () => ({ shopTenantId: () => "tenant-ejemplo" }));
+vi.mock("@/db", () => ({
+  getDb: () => ({
+    select: () => ({
+      from: () => ({
+        where: async () => [
+          { slug: "igz", activa: true, predeterminada: true },
+          { slug: "mdp", activa: true, predeterminada: false },
+        ],
+      }),
+    }),
+  }),
 }));
 vi.mock("@/lib/pagos/mercadopago", async (original) => ({
   ...(await original<typeof import("@/lib/pagos/mercadopago")>()),
@@ -24,6 +41,8 @@ vi.mock("@/lib/pagos/mercadopago", async (original) => ({
 }));
 
 import { POST } from "./route";
+import { limpiarMemoCuentas } from "@/lib/pagos/cuentas-sucursales";
+import { ErrorProveedor } from "@/lib/pagos/tipos";
 
 const pedir = (body: unknown = { pedidoId: "p1" }) =>
   POST(
@@ -34,6 +53,8 @@ const pedir = (body: unknown = { pedidoId: "p1" }) =>
   );
 
 beforeEach(() => {
+  limpiarMemoCuentas();
+  registrarCuentaRechazada.mockClear();
   medios = [{ slug: "mercadopago" }];
   sesion = true;
   // Cuentas de Mercado Pago de dos sucursales; el pedido es de mdp.
@@ -95,12 +116,42 @@ describe("POST /api/pagos/mercadopago/preferencia", () => {
     expect(crearPreferencia).not.toHaveBeenCalled();
   });
 
-  it("la cuenta del pedido sin credenciales: 409 sin crear la preferencia con otra cuenta", async () => {
+  it("la cuenta del pedido sin credenciales: la preferencia se crea con la otra cuenta configurada", async () => {
     vi.stubEnv("MP_ACCESS_TOKEN_MDP", "");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const r = await pedir();
-    expect(r.status).toBe(409);
-    expect((await r.json()).motivo).toBe("mp_no_configurado");
-    expect(crearPreferencia).not.toHaveBeenCalled();
+    expect(r.status).toBe(200);
+    expect(crearPreferencia.mock.calls.map((c) => c[0])).toEqual(["igz"]);
+  });
+
+  it.each([401, 403])("credenciales rechazadas (%i): prueba la otra cuenta en el mismo request y deja la evidencia", async (status) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    crearPreferencia.mockImplementation(async (cuenta: string) => {
+      if (cuenta === "mdp") throw new ErrorProveedor(`Mercado Pago respondió ${status}`, status);
+      return "https://mp.example/checkout/pref-igz";
+    });
+    const r = await pedir();
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ url: "https://mp.example/checkout/pref-igz" });
+    expect(crearPreferencia.mock.calls.map((c) => c[0])).toEqual(["mdp", "igz"]);
+    expect(crearPreferencia.mock.calls[1][1].notification_url).toContain("cuenta=igz");
+    expect(registrarCuentaRechazada).toHaveBeenCalledWith("p1", "mercadopago", "mdp", "mdp", "servidor");
+  });
+
+  it.each([400, 500, 502])("otro error (%i): no prueba otra cuenta", async (status) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    crearPreferencia.mockRejectedValue(new ErrorProveedor(`Mercado Pago respondió ${status}`, status));
+    expect((await pedir()).status).toBe(502);
+    expect(crearPreferencia).toHaveBeenCalledTimes(1);
+    expect(registrarCuentaRechazada).not.toHaveBeenCalled();
+  });
+
+  it("las dos cuentas rechazan sus credenciales: 502", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    crearPreferencia.mockRejectedValue(new ErrorProveedor("Mercado Pago respondió 401", 401));
+    expect((await pedir()).status).toBe(502);
+    expect(crearPreferencia.mock.calls.map((c) => c[0])).toEqual(["mdp", "igz"]);
   });
 
   it("pedido de igz: la preferencia se crea con la cuenta de igz", async () => {

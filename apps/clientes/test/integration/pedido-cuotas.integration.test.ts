@@ -182,7 +182,7 @@ describe("intención del intento (0034): cobro con interés elegido vs. no elegi
   }
 
   async function reservar(pedidoId: string, i?: { cuotas: number; totalEsperado: number; conInteres: boolean }) {
-    const r = await reservarIntento(pedidoId, "mercadopago", "tarjeta", i);
+    const r = await reservarIntento(pedidoId, "mercadopago", "tarjeta", i, { cuenta: "igz", cuentaPrevista: "igz" });
     if (!r || !("intentoId" in r)) throw new Error("no se reservó el intento");
     return r.intentoId;
   }

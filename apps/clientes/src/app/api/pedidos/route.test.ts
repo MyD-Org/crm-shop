@@ -39,6 +39,7 @@ vi.mock("@/lib/cotizacion", async (orig) => ({
   cotizar: (...a: unknown[]) => cotizar(...a),
 }));
 vi.mock("@/lib/pedidos", () => ({
+  cuentasRechazadasDelPedido: async () => [],
   // Cuenta de cobro del pedido creado (public key del Brick): sucursal igz.
   cuentaDelPedido: async () => ({ sucursal: "igz", facturaSucursal: null }),
   crearPedido: (...a: unknown[]) => crearPedido(...a),

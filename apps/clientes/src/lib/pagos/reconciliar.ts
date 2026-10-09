@@ -62,7 +62,8 @@ interface Opciones {
 
 /**
  * Recorre los pendientes vivos de cada proveedor registrado (o sólo del indicado) y le pregunta al
- * proveedor de cada intento, LIGADO A LA CUENTA DEL PEDIDO, cómo terminaron. Un proveedor que no está
+ * proveedor de cada intento, LIGADO A LA CUENTA DEL INTENTO (la congelada al reservarlo; la del pedido si es
+ * anterior a la 0035), cómo terminaron. Un proveedor que no está
  * en el registro se omite sin romper el lote. Devuelve el conteo para el log del cron.
  */
 export async function reconciliarPagosPendientes(
@@ -112,7 +113,8 @@ async function reconciliarProveedor(
    */
   for (const c of candidatos) {
     try {
-      // Con las credenciales de la cuenta del pedido (la misma con la que se cobró), nunca con otra.
+      // Con las credenciales de la cuenta del intento (la que lo cobró), nunca con otra, aunque la cuenta
+      // prevista del pedido hoy resolviera a otra o la del intento rechace sus credenciales.
       const proveedor = await proveedorDeIntento({ proveedor: procesadorId, ...c });
       if (!proveedor?.configurado()) {
         errores++;

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { ErrorProveedor, type EstadoPago, type ProveedorPago } from "./tipos";
-import { pedidoDelPago, registrarCobro } from "@/lib/pedidos";
+import { cuentaDelIntentoPorReferencia, cuentaDelPedido, pedidoDelPago, registrarCobro } from "@/lib/pedidos";
 import { proveedorPago, rasgosProcesador } from "./index";
 import { cuentasConSecreto } from "./credenciales";
-import { datosCuentas } from "./cuentas-sucursales";
+import { cuentaPrevistaDelPedido, datosCuentas } from "./cuentas-sucursales";
 
 /**
  * Confirmación de cobro de un procesador con webhook. Lo comparten
@@ -52,24 +52,37 @@ export async function procesarWebhook(procesadorId: string, req: Request): Promi
     return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
   }
 
+  /**
+   * Se prueban TODOS los secretos (N HMAC, N = cuentas con secreto, hoy 2), en el orden determinista de
+   * las sucursales. Normalmente valida uno solo: ésa es la cuenta. Si validan varios (el mismo secreto
+   * cargado en dos cuentas, error de carga), se prefiere la cuenta congelada en el intento de ese pago y,
+   * si no hay, la primera. La pista `?cuenta=` no decide nada: sólo va a los logs.
+   */
   const pista = new URL(req.url).searchParams.get("cuenta");
-  const orden = pista && conSecreto.includes(pista) ? [pista, ...conSecreto.filter((c) => c !== pista)] : conSecreto;
-  let proveedor: ProveedorPago | null = null;
-  let referencia: string | undefined;
-  for (const cuenta of orden) {
+  const validas: { proveedor: ProveedorPago; referencia?: string }[] = [];
+  for (const cuenta of conSecreto) {
     const candidato = proveedorPago(procesadorId, cuenta);
     const r = await candidato?.verificarWebhook?.(req, cuerpo);
-    if (candidato && r?.valido) {
-      proveedor = candidato;
-      referencia = r.referencia;
-      break;
-    }
+    if (candidato && r?.valido) validas.push({ proveedor: candidato, referencia: r.referencia });
   }
+  let elegida = validas[0];
+  if (validas.length > 1) {
+    const congelada = elegida.referencia
+      ? await cuentaDelIntentoPorReferencia(procesadorId, elegida.referencia).catch(() => null)
+      : null;
+    elegida = validas.find((v) => v.proveedor.cuenta === congelada) ?? elegida;
+    console.error(
+      `[webhook ${procesadorId}] la firma valida con ${validas.length} cuentas (${validas.map((v) => v.proveedor.cuenta).join(",")}):` +
+        ` secretos repetidos; se usa ${elegida.proveedor.cuenta}`,
+    );
+  }
+  const proveedor = elegida?.proveedor ?? null;
+  const referencia = elegida?.referencia;
   if (!proveedor) {
     // Un solo log, sin datos del payload. Sin detalle en la respuesta: decirle a quien golpea si
     // falló el timestamp o el HMAC le sirve para ajustar el intento.
     console.error(
-      `[webhook ${procesadorId}] firma inválida para las ${orden.length} cuentas con secreto` +
+      `[webhook ${procesadorId}] firma inválida para las ${conSecreto.length} cuentas con secreto` +
         ` (x-request-id=${req.headers.get("x-request-id") ?? "sin"})`,
     );
     return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
@@ -119,6 +132,15 @@ export async function procesarWebhook(procesadorId: string, req: Request): Promi
       return NextResponse.json({ ok: true, ignorado: "referencia desconocida" });
     }
 
+    // La cuenta que firmó es la que tiene el pago. Si el intento se había reservado con otra, se avisa
+    // (aplicación de MP mal registrada, o el secreto de una cuenta cargado en otra) y se sigue con ésta.
+    const congelada = await cuentaDelIntentoPorReferencia(proveedor.id, referencia);
+    if (congelada && congelada !== proveedor.cuenta) {
+      console.warn(
+        `[webhook ${proveedor.id}] pedido=${pedido.id}: el intento es de la cuenta ${congelada} y el aviso lo firmó ${proveedor.cuenta}`,
+      );
+    }
+
     const cambio = await registrarCobro(pedido.id, {
       proveedor: proveedor.id,
       referencia,
@@ -129,6 +151,9 @@ export async function procesarWebhook(procesadorId: string, req: Request): Promi
       totalPagado: estado.totalPagado,
       moneda: estado.moneda,
       ...(estado.info ? { info: estado.info } : {}),
+      // Sólo si el webhook crea la fila (un pago sin reserva): la cuenta que firmó y la prevista.
+      cuenta: proveedor.cuenta,
+      cuentaPrevista: await previstaDelPedido(pedido.id),
     });
 
     console.log(
@@ -145,5 +170,16 @@ export async function procesarWebhook(procesadorId: string, req: Request): Promi
      */
     console.error(`[webhook ${proveedor.id}] error procesando:`, err);
     return NextResponse.json({ error: "Error temporal" }, { status: 500 });
+  }
+}
+
+/** Cuenta prevista del pedido (para un intento que crea el webhook). null si no se puede saber. */
+async function previstaDelPedido(pedidoId: string): Promise<string | null> {
+  try {
+    const datos = await cuentaDelPedido(pedidoId);
+    return datos ? await cuentaPrevistaDelPedido(datos) : null;
+  } catch (err) {
+    console.error(`[webhook] pedido=${pedidoId}: no se pudo leer la cuenta prevista`, err);
+    return null;
   }
 }

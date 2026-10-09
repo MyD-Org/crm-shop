@@ -11,7 +11,8 @@ import { getDb } from "@/db";
 import { crmSucursales } from "@/db/crm";
 import { shopTenantId } from "@/lib/tenant";
 import { cuentaConfigurada } from "./credenciales";
-import { cuentaDeCobro, elegirCuenta, slugAVariable, type CuentaElegida } from "./cuenta-cobro";
+import { cuentaDeCobro, elegirCuenta, ordenarCandidatas, slugAVariable, type Candidata, type CuentaElegida } from "./cuenta-cobro";
+import { cuentasRechazadasDelPedido } from "@/lib/pedidos";
 import { proveedorPago } from "./index";
 import type { ProveedorPago } from "./tipos";
 
@@ -90,30 +91,67 @@ export async function cuentaPrevistaDelPedido(p: PedidoConCuenta): Promise<strin
   return cuentaDeCobro({ sucursal, facturaSucursal }, (await datosCuentas()).predeterminada);
 }
 
+/** Pedido con su id: sin id no se puede leer la evidencia de credenciales rechazadas (se toma ninguna). */
+export type PedidoParaCuenta = PedidoConCuenta & { id?: string };
+
 /**
- * Cuenta con la que se cobra el pedido. En esta rebanada SÓLO la prevista: si no está configurada, el
- * medio falla cerrado (el fallback a otra cuenta configurada y la evidencia de rechazo llegan con la
- * persistencia de la cuenta en el intento). `declarada` es la que dice el navegador que usó.
+ * Candidatas a cobrar el pedido, en orden (la prevista primero, después la predeterminada y el resto por
+ * slug), con si están configuradas y si el procesador ya rechazó sus credenciales en ESTE pedido. Si las
+ * sucursales no se pueden leer, queda sólo la prevista que el pedido define por sí mismo.
+ */
+export async function candidatasDelPedido(
+  procesadorId: string,
+  pedido: PedidoParaCuenta,
+): Promise<{ prevista: string | null; candidatas: Candidata[] }> {
+  let datos: DatosCuentas;
+  try {
+    datos = await datosCuentas();
+  } catch (err) {
+    console.error("[pagos] no se pudieron leer las sucursales; sólo se considera la cuenta del pedido:", err);
+    datos = { predeterminada: null, slugs: [] };
+  }
+  const prevista = cuentaDeCobro(
+    { sucursal: pedido.sucursal ?? null, facturaSucursal: pedido.facturaSucursal ?? null },
+    datos.predeterminada,
+  );
+  const rechazadas = new Set(pedido.id ? await cuentasRechazadasDelPedido(pedido.id, procesadorId) : []);
+  const orden = ordenarCandidatas(prevista ? [...datos.slugs, prevista] : datos.slugs, {
+    prevista,
+    predeterminada: datos.predeterminada,
+  });
+  return {
+    prevista,
+    candidatas: orden.map((cuenta) => ({
+      cuenta,
+      configurada: cuentaConfigurada(procesadorId, cuenta),
+      rechazada: rechazadas.has(cuenta),
+    })),
+  };
+}
+
+/**
+ * Cuenta con la que se cobra el pedido (`elegirCuenta`): la prevista si está configurada y el procesador
+ * no rechazó sus credenciales en este pedido; si no, la primera otra cuenta usable del MISMO procesador
+ * (fallback). `declarada` es la que dice el navegador que usó para tokenizar: se valida contra esta
+ * política, nunca la elige él.
  */
 export async function cuentaParaCobrar(
   procesadorId: string,
-  pedido: PedidoConCuenta,
+  pedido: PedidoParaCuenta,
   declarada?: string | null,
 ): Promise<CuentaElegida> {
-  const prevista = await cuentaPrevistaDelPedido(pedido);
-  const candidatas = prevista
-    ? [{ cuenta: prevista, configurada: cuentaConfigurada(procesadorId, prevista), rechazada: false }]
-    : [];
+  const { prevista, candidatas } = await candidatasDelPedido(procesadorId, pedido);
   return elegirCuenta({ prevista, candidatas, declarada });
 }
 
 /**
- * Proveedor ligado a la cuenta de un intento ya abierto. Sin columna de cuenta en el intento todavía, se
- * deriva del pedido (inmutable en sucursal y regla), que es la misma con la que se reservó.
+ * Proveedor ligado a la cuenta de un intento ya abierto: la congelada en el intento; si es anterior a la
+ * migración 0035 (sin cuenta), la derivada del pedido (inmutable en sucursal y regla), que es la misma con
+ * la que se reservó. Nunca otra: un intento se consulta y se cancela con la cuenta que lo cobró.
  */
 export async function proveedorDeIntento(
-  intento: { proveedor: string } & PedidoConCuenta,
+  intento: { proveedor: string; cuenta?: string | null } & PedidoConCuenta,
 ): Promise<ProveedorPago | null> {
-  const cuenta = await cuentaPrevistaDelPedido(intento);
+  const cuenta = intento.cuenta || (await cuentaPrevistaDelPedido(intento));
   return cuenta ? proveedorPago(intento.proveedor, cuenta) : null;
 }

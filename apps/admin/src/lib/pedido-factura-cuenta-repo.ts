@@ -2,9 +2,11 @@ import { and, asc, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { alegraCuentas, pedidoFacturaCuenta, sucursales, tenants } from "@/db/schema"
 import { escribirFacturaCruzadaShop } from "./factura-cruzada-shop"
+import { parseInfoPago } from "./pago-en-linea"
 import type { PedidoRow } from "./pedidos-repo"
 import {
   configParaCuenta,
+  cuentasAlegraRepetidas,
   esFacturaCruzada,
   resolverCuentaFactura,
   textoMotivoCuentaFactura,
@@ -29,7 +31,7 @@ export const MSG_SIN_CUENTA_FACTURA = "El pedido no tiene una cuenta de Alegra p
 
 export interface ContextoCuentaFactura {
   cuentas: CuentaRow[]
-  sucursales: (SucursalCuentaDato & { nombre: string })[]
+  sucursales: (SucursalCuentaDato & { nombre: string; activa?: boolean })[]
   principalId: string | null
   fila: FilaPfc | null
 }
@@ -59,7 +61,7 @@ export async function cargarContextoCuentaFactura(tenantId: string, orderId: str
   const [cuentas, suc, [fila]] = await Promise.all([
     db.select().from(alegraCuentas).where(eq(alegraCuentas.tenantId, tenantId)).orderBy(asc(alegraCuentas.principal), asc(alegraCuentas.slug)),
     db
-      .select({ slug: sucursales.slug, nombre: sucursales.nombre, cuentaAlegraId: sucursales.cuentaAlegraId })
+      .select({ slug: sucursales.slug, nombre: sucursales.nombre, cuentaAlegraId: sucursales.cuentaAlegraId, activa: sucursales.activa })
       .from(sucursales)
       .where(eq(sucursales.tenantId, tenantId))
       .orderBy(asc(sucursales.orden)),
@@ -68,11 +70,48 @@ export async function cargarContextoCuentaFactura(tenantId: string, orderId: str
       .from(pedidoFacturaCuenta)
       .where(and(eq(pedidoFacturaCuenta.tenantId, tenantId), eq(pedidoFacturaCuenta.orderId, orderId))),
   ])
+  // Invariante: una cuenta de Alegra por sucursal. Si se rompe, el aviso de cobro no distingue.
+  for (const r of cuentasAlegraRepetidas(suc)) {
+    console.error("[pedido-factura-cuenta] una cuenta de Alegra está asignada a más de una sucursal activa", { tenant: tenantId, ...r })
+  }
   return {
     cuentas,
     sucursales: suc,
     principalId: cuentas.find((c) => c.principal)?.id ?? null,
     fila: fila ?? null,
+  }
+}
+
+/** Campos del pedido que hacen falta para saber con qué cuenta se cobró en línea (todos opcionales). */
+export type PedidoConCobro = Pick<PedidoRow, "sucursal" | "sucursalRegla"> &
+  Partial<Pick<PedidoRow, "pagoEstado" | "pagoProveedor" | "pagoInfo">>
+
+export interface AvisoCobroDto {
+  /** Sucursal cuya cuenta del procesador (Mercado Pago / Payway) cobró el pago. */
+  cobradoCon: { slug: string; nombre: string }
+  /** Cuenta de Alegra con la que se va a facturar. */
+  facturaCon: { slug: string; nombre: string }
+}
+
+/**
+ * Aviso (NO bloqueante) cuando el pedido se cobró en línea con la cuenta de una sucursal y se va a
+ * facturar con una cuenta de Alegra que no es la de esa sucursal (mapeo 1 a 1:
+ * `sucursales.cuentaAlegraId`). Sin pago en línea aprobado, sin `cuentaCobro` (pagos anteriores),
+ * sin sucursal de cobro conocida o sin cuenta de Alegra en ella → null: no hay con qué comparar.
+ */
+export function avisoCobroDelPedido(
+  pedido: PedidoConCobro,
+  ctx: ContextoCuentaFactura,
+  cuentaFactura: Pick<CuentaRow, "id" | "slug" | "nombre"> | null,
+): AvisoCobroDto | null {
+  if (!cuentaFactura || pedido.pagoEstado !== "pagado" || pedido.pagoProveedor == null) return null
+  const slugCobro = parseInfoPago(pedido.pagoInfo).cuentaCobro
+  if (!slugCobro) return null
+  const sucursalCobro = ctx.sucursales.find((s) => s.slug === slugCobro)
+  if (!sucursalCobro?.cuentaAlegraId || sucursalCobro.cuentaAlegraId === cuentaFactura.id) return null
+  return {
+    cobradoCon: { slug: sucursalCobro.slug, nombre: sucursalCobro.nombre },
+    facturaCon: { slug: cuentaFactura.slug, nombre: cuentaFactura.nombre },
   }
 }
 
@@ -144,10 +183,15 @@ export interface CuentaFacturaDto {
   emitida: { slug: string; nombre: string; cruzada: boolean } | null
   /** false cuando la factura ya se emitió: la cuenta ya no se puede cambiar. */
   editable: boolean
+  /**
+   * Se cobró en línea con la cuenta de una sucursal y se va a facturar con otra: pide confirmación
+   * (no bloquea; por eso NO va en `avisos[]` del preview). Ausente/null = sin aviso.
+   */
+  avisoCobro?: AvisoCobroDto | null
 }
 
 export function armarCuentaFacturaDto(
-  pedido: Pick<PedidoRow, "sucursal" | "sucursalRegla">,
+  pedido: PedidoConCobro,
   ctx: ContextoCuentaFactura,
   facturado: boolean,
   /** Cuenta pedida en la request (vista previa), todavía sin guardar. */
@@ -182,6 +226,7 @@ export function armarCuentaFacturaDto(
       : null,
     emitida: emitidaCuenta ? { slug: emitidaCuenta.slug, nombre: emitidaCuenta.nombre, cruzada: f!.facturaCruzada } : null,
     editable: !facturado,
+    avisoCobro: facturado ? null : avisoCobroDelPedido(pedido, ctx, res.cuenta),
   }
 }
 

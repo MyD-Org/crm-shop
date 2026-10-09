@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { claveIdempotencia, crearPreferencia, interpretar, mercadoPagoConfigurado, modo3DS } from "./mercadopago";
+import { claveIdempotencia, crearMercadoPago, crearPreferencia, interpretar, modo3DS } from "./mercadopago";
 import type { DatosPago } from "./tipos";
 
 /**
@@ -204,11 +204,11 @@ describe("interpretar — pedido del pago (external_reference)", () => {
   });
 });
 
-import { mercadoPago } from "./mercadopago";
 import { ErrorProveedor } from "./tipos";
 
-describe("mercadoPago.cancelarPago / errores HTTP", () => {
+describe("proveedor ligado a una cuenta: llamadas HTTP", () => {
   const fetchMock = vi.fn();
+  const mdp = crearMercadoPago("mdp");
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -217,47 +217,74 @@ describe("mercadoPago.cancelarPago / errores HTTP", () => {
   });
 
   const conRespuesta = (status: number, cuerpo: unknown) => {
-    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
-    fetchMock.mockResolvedValue(new Response(JSON.stringify(cuerpo), { status }));
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-token-mdp");
+    vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token-igz");
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify(cuerpo), { status }));
     vi.stubGlobal("fetch", fetchMock);
   };
+  const autorizacion = (i = 0) => (fetchMock.mock.calls[i][1].headers as Record<string, string>).Authorization;
 
-  it("cancela con un PUT status=cancelled sobre el pago", async () => {
+  it("cobra con el access token de SU cuenta, nunca con el de otra", async () => {
+    conRespuesta(201, { id: 9, status: "approved", status_detail: "accredited" });
+    await mdp.crearPago({ ...base, token: "tok" });
+    expect(autorizacion()).toBe("Bearer TEST-token-mdp");
+    await crearMercadoPago("igz").crearPago({ ...base, token: "tok" });
+    expect(autorizacion(1)).toBe("Bearer TEST-token-igz");
+  });
+
+  it("consulta y cancela con la cuenta ligada", async () => {
     conRespuesta(200, { id: 7, status: "cancelled", status_detail: "by_collector" });
-    const r = await mercadoPago.cancelarPago("7");
+    await mdp.consultarPago("7");
+    const r = await mdp.cancelarPago("7");
+    expect(autorizacion(0)).toBe("Bearer TEST-token-mdp");
+    expect(autorizacion(1)).toBe("Bearer TEST-token-mdp");
     expect(r.estado).toBe("fallido");
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[1];
     expect(url).toBe("https://api.mercadopago.com/v1/payments/7");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(init.body)).toEqual({ status: "cancelled" });
   });
 
+  it("cuenta sin credenciales: error explícito SIN llamar a Mercado Pago (ni con otra cuenta)", async () => {
+    conRespuesta(201, {});
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "");
+    await expect(mdp.crearPago({ ...base, token: "tok" })).rejects.toThrow(/mdp/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("un error HTTP conserva el status, para distinguir un 404 de una caída", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     conRespuesta(404, { message: "not found" });
-    const err = await mercadoPago.consultarPago("123").catch((e: unknown) => e);
+    const err = await mdp.consultarPago("123").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ErrorProveedor);
     expect((err as ErrorProveedor).status).toBe(404);
   });
+
+  it("urlNotificacion del proveedor lleva la cuenta como pista", () => {
+    expect(mdp.urlNotificacion?.("https://tienda.example")).toBe(
+      "https://tienda.example/api/pagos/mercadopago/webhook?source_news=webhooks&cuenta=mdp",
+    );
+  });
 });
 
-describe("mercadoPagoConfigurado", () => {
+describe("configurado() por cuenta", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("exige el Access Token y la Public Key", () => {
-    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
-    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-key");
-    expect(mercadoPagoConfigurado()).toBe(true);
+  it("exige el Access Token y la Public Key de esa cuenta", () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-token");
+    vi.stubEnv("MP_PUBLIC_KEY_MDP", "TEST-key");
+    expect(crearMercadoPago("mdp").configurado()).toBe(true);
+    expect(crearMercadoPago("igz").configurado()).toBe(false);
   });
   it("sin Access Token no está configurado", () => {
-    vi.stubEnv("MP_ACCESS_TOKEN", "");
-    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-key");
-    expect(mercadoPagoConfigurado()).toBe(false);
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "");
+    vi.stubEnv("MP_PUBLIC_KEY_MDP", "TEST-key");
+    expect(crearMercadoPago("mdp").configurado()).toBe(false);
   });
   it("sin Public Key no está configurado", () => {
-    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
-    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "");
-    expect(mercadoPagoConfigurado()).toBe(false);
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-token");
+    vi.stubEnv("MP_PUBLIC_KEY_MDP", "");
+    expect(crearMercadoPago("mdp").configurado()).toBe(false);
   });
 });
 
@@ -274,22 +301,30 @@ describe("crearPreferencia", () => {
     payment_methods: { installments: 1, excluded_payment_methods: [{ id: "consumer_credits" }] },
   };
 
-  it("hace POST a /checkout/preferences con el Access Token y devuelve el link de pago (init_point)", async () => {
-    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
+  it("hace POST a /checkout/preferences con el Access Token de la cuenta y devuelve el link (init_point)", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-token-mdp");
+    vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token-igz");
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "pref-9", init_point: "https://x.example" }), { status: 201 }));
     vi.stubGlobal("fetch", fetchMock);
-    await expect(crearPreferencia(pref)).resolves.toBe("https://x.example");
+    await expect(crearPreferencia("mdp", pref)).resolves.toBe("https://x.example");
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://api.mercadopago.com/checkout/preferences");
     expect(init.method).toBe("POST");
-    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer TEST-token");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer TEST-token-mdp");
     expect(JSON.parse(init.body as string).purpose).toBe("wallet_purchase");
   });
 
   it("sin link de pago en la respuesta, falla", async () => {
-    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-token");
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 201 })));
-    await expect(crearPreferencia(pref)).rejects.toThrow();
+    await expect(crearPreferencia("mdp", pref)).rejects.toThrow();
+  });
+
+  it("cuenta sin access token: falla sin llamar a Mercado Pago", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(crearPreferencia("mdp", pref)).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

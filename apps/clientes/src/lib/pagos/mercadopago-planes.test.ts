@@ -121,7 +121,8 @@ describe("consultarPlanesMP", () => {
 
   beforeEach(() => {
     limpiarCachePlanesMP();
-    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token-de-prueba");
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-token-de-prueba");
+    vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token-otra-cuenta");
     fetchMock = vi.fn<typeof fetch>(async () => respuesta(binVisa));
   });
   afterEach(() => {
@@ -130,7 +131,7 @@ describe("consultarPlanesMP", () => {
   });
 
   it("consulta con el access token y el BIN, y devuelve los planes de esa tarjeta", async () => {
-    const r = await consultarPlanesMP({ amount: 50000, bin: "45099512" }, { fetch: fetchMock });
+    const r = await consultarPlanesMP({ cuenta: "mdp", amount: 50000, bin: "45099512" }, { fetch: fetchMock });
     expect(r).toMatchObject({ ok: true, entrada: { metodoPagoId: "visa" } });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://api.mercadopago.com/v1/payment_methods/installments?amount=50000&bin=45099512");
@@ -140,14 +141,14 @@ describe("consultarPlanesMP", () => {
 
   it("sin BIN, por método de pago (referencia): la entrada con más cuotas", async () => {
     fetchMock.mockResolvedValue(respuesta(referenciaVisa));
-    const r = await consultarPlanesMP({ amount: 50000, paymentMethodId: "visa" }, { fetch: fetchMock });
+    const r = await consultarPlanesMP({ cuenta: "mdp", amount: 50000, paymentMethodId: "visa" }, { fetch: fetchMock });
     expect(fetchMock.mock.calls[0][0]).toContain("payment_method_id=visa");
     expect(r.ok && r.entrada?.planes.length).toBe(7);
   });
 
   it("MP respondió sin planes de crédito (débito): ok con entrada null", async () => {
     fetchMock.mockResolvedValue(respuesta(debitoVisa));
-    expect(await consultarPlanesMP({ amount: 50000, bin: "40000000" }, { fetch: fetchMock })).toEqual({
+    expect(await consultarPlanesMP({ cuenta: "mdp", amount: 50000, bin: "40000000" }, { fetch: fetchMock })).toEqual({
       ok: true,
       entrada: null,
     });
@@ -159,24 +160,24 @@ describe("consultarPlanesMP", () => {
     ["JSON ilegible", () => respuesta("<html>")],
   ])("%s: { ok: false } sin lanzar", async (_n, crear) => {
     fetchMock.mockResolvedValue(crear());
-    expect(await consultarPlanesMP({ amount: 50000, bin: "450995" }, { fetch: fetchMock })).toEqual({ ok: false });
+    expect(await consultarPlanesMP({ cuenta: "mdp", amount: 50000, bin: "450995" }, { fetch: fetchMock })).toEqual({ ok: false });
   });
 
   it("timeout / red caída: { ok: false } sin lanzar", async () => {
     fetchMock.mockRejectedValue(new DOMException("timeout", "TimeoutError"));
-    expect(await consultarPlanesMP({ amount: 50000, bin: "450995" }, { fetch: fetchMock })).toEqual({ ok: false });
+    expect(await consultarPlanesMP({ cuenta: "mdp", amount: 50000, bin: "450995" }, { fetch: fetchMock })).toEqual({ ok: false });
   });
 
   it("el timeout es de 3 s", async () => {
     const espia = vi.spyOn(AbortSignal, "timeout");
-    await consultarPlanesMP({ amount: 50000, bin: "450995" }, { fetch: fetchMock });
+    await consultarPlanesMP({ cuenta: "mdp", amount: 50000, bin: "450995" }, { fetch: fetchMock });
     expect(espia).toHaveBeenCalledWith(3_000);
     espia.mockRestore();
   });
 
   it("sin access token no llama a MP: { ok: false }", async () => {
-    vi.stubEnv("MP_ACCESS_TOKEN", "");
-    expect(await consultarPlanesMP({ amount: 50000, bin: "450995" }, { fetch: fetchMock })).toEqual({ ok: false });
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "");
+    expect(await consultarPlanesMP({ cuenta: "mdp", amount: 50000, bin: "450995" }, { fetch: fetchMock })).toEqual({ ok: false });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -188,26 +189,41 @@ describe("consultarPlanesMP", () => {
     [{ amount: 50000 }],
     [{ amount: 50000, paymentMethodId: "visa&x" }],
   ])("entrada inválida %j: { ok: false } sin llamar", async (q) => {
-    expect(await consultarPlanesMP(q, { fetch: fetchMock })).toEqual({ ok: false });
+    expect(await consultarPlanesMP({ cuenta: "mdp", ...q }, { fetch: fetchMock })).toEqual({ ok: false });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("con el access token de la cuenta pedida; las variables sin sufijo no sirven", async () => {
+    await consultarPlanesMP({ cuenta: "igz", amount: 50000, bin: "450995" }, { fetch: fetchMock });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer TEST-token-otra-cuenta");
+    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token-viejo");
+    expect(await consultarPlanesMP({ cuenta: "otra", amount: 50000, bin: "450995" }, { fetch: fetchMock })).toEqual({ ok: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("la caché es por cuenta: la misma tarjeta en otra cuenta vuelve a consultar", async () => {
+    await consultarPlanesMP({ cuenta: "mdp", amount: 50000, bin: "450995" }, { fetch: fetchMock });
+    await consultarPlanesMP({ cuenta: "igz", amount: 50000, bin: "450995" }, { fetch: fetchMock });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("caché de 60 s por (cuenta, monto, BIN); los errores no se cachean", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    await consultarPlanesMP({ amount: 50000, bin: "450995" }, { fetch: fetchMock });
-    await consultarPlanesMP({ amount: 50000, bin: "450995" }, { fetch: fetchMock });
+    await consultarPlanesMP({ cuenta: "mdp", amount: 50000, bin: "450995" }, { fetch: fetchMock });
+    await consultarPlanesMP({ cuenta: "mdp", amount: 50000, bin: "450995" }, { fetch: fetchMock });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    await consultarPlanesMP({ amount: 60000, bin: "450995" }, { fetch: fetchMock });
-    await consultarPlanesMP({ amount: 50000, bin: "503175" }, { fetch: fetchMock });
+    await consultarPlanesMP({ cuenta: "mdp", amount: 60000, bin: "450995" }, { fetch: fetchMock });
+    await consultarPlanesMP({ cuenta: "mdp", amount: 50000, bin: "503175" }, { fetch: fetchMock });
     expect(fetchMock).toHaveBeenCalledTimes(3);
     vi.advanceTimersByTime(60_001);
-    await consultarPlanesMP({ amount: 50000, bin: "450995" }, { fetch: fetchMock });
+    await consultarPlanesMP({ cuenta: "mdp", amount: 50000, bin: "450995" }, { fetch: fetchMock });
     expect(fetchMock).toHaveBeenCalledTimes(4);
 
     fetchMock.mockResolvedValue(respuesta({}, 500));
-    await consultarPlanesMP({ amount: 70000, bin: "450995" }, { fetch: fetchMock });
+    await consultarPlanesMP({ cuenta: "mdp", amount: 70000, bin: "450995" }, { fetch: fetchMock });
     fetchMock.mockResolvedValue(respuesta(binVisa));
-    const r = await consultarPlanesMP({ amount: 70000, bin: "450995" }, { fetch: fetchMock });
+    const r = await consultarPlanesMP({ cuenta: "mdp", amount: 70000, bin: "450995" }, { fetch: fetchMock });
     expect(r.ok).toBe(true);
   });
 });

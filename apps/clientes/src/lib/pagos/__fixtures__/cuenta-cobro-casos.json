@@ -1,0 +1,7 @@
+[
+  { "nombre": "la zona fuerza la cuenta que factura", "sucursal": "igz", "facturaSucursal": "mdp", "predeterminada": "igz", "esperado": "mdp" },
+  { "nombre": "sin zona que fuerce, manda la sucursal del pedido", "sucursal": "mdp", "facturaSucursal": null, "predeterminada": "igz", "esperado": "mdp" },
+  { "nombre": "sin sucursal usa la predeterminada", "sucursal": null, "facturaSucursal": null, "predeterminada": "igz", "esperado": "igz" },
+  { "nombre": "retiro en local: la sucursal es el local elegido", "sucursal": "mdp", "facturaSucursal": null, "predeterminada": "igz", "esperado": "mdp" },
+  { "nombre": "sin sucursal ni predeterminada: no hay cuenta prevista", "sucursal": null, "facturaSucursal": null, "predeterminada": null, "esperado": null }
+]

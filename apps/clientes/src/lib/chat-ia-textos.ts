@@ -74,6 +74,13 @@ export const ETIQUETAS_CHAT = {
   peekResultsLabel: "Ver resultados",
 } as const;
 
+/** Preguntas sugeridas del chat vacío (registro neutro): cada una se envía al tocarla. */
+export const SUGERENCIAS_CHAT = [
+  "¿Qué lámpara conviene para un living?",
+  "Reflectores para exterior",
+  "Estado de un pedido",
+];
+
 /** Botón del header que abre y cierra el chat (BotonAsistente). */
 export const ETIQUETA_BOTON_ASISTENTE = "Asistente";
 

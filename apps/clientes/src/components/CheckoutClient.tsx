@@ -328,6 +328,7 @@ type PedidoRescatado = {
   /** Vino de `?pedido=`: se retoma siempre, sin compararlo con el carrito ni cancelarlo. */
   explicito?: boolean;
   mpPublicKey?: string;
+  mpCuenta?: string;
 };
 
 /**
@@ -566,8 +567,9 @@ export function CheckoutClient({
     procesador?: string | null;
     /** Medio de pago del pedido (slug). */
     pagoMetodo?: string;
-    /** Mercado Pago: public key de la cuenta del pedido (la manda el servidor). */
+    /** Mercado Pago: public key de la cuenta que cobra el pedido y esa cuenta (los manda el servidor). */
     mpPublicKey?: string;
+    mpCuenta?: string;
     /** Plazo y WhatsApp de la sucursal. */
     contacto?: ContactoPedidoVista | null;
     /** Cuenta congelada en el pedido (transferencia); null = sin cuenta aplicable. */
@@ -679,6 +681,7 @@ export function CheckoutClient({
       procesador: procesadorDeMedio(pedido.pagoMetodo ?? SLUG_MERCADOPAGO),
       pagoMetodo: pedido.pagoMetodo ?? SLUG_MERCADOPAGO,
       ...(pedido.mpPublicKey ? { mpPublicKey: pedido.mpPublicKey } : {}),
+      ...(pedido.mpCuenta ? { mpCuenta: pedido.mpCuenta } : {}),
     });
     setPagoEnConfirmacion(Boolean(pedido.pagoEnCurso) || (retornoMercadoPago && pedido.id === pedidoReintento));
     setCarritoDelPedido(false);
@@ -898,6 +901,7 @@ export function CheckoutClient({
           procesador: procesadorDeMedio(pagoParaEnviar),
           pagoMetodo: pagoParaEnviar,
           ...(typeof json.mpPublicKey === "string" ? { mpPublicKey: json.mpPublicKey } : {}),
+          ...(typeof json.mpCuenta === "string" ? { mpCuenta: json.mpCuenta } : {}),
           contacto: json.contacto ?? null,
           cuentaPago: json.cuentaPago ?? null,
         });
@@ -1023,6 +1027,7 @@ export function CheckoutClient({
         procesador: procesadorDeMedio(pagoParaEnviar),
         pagoMetodo: pagoParaEnviar,
         ...(typeof json.mpPublicKey === "string" ? { mpPublicKey: json.mpPublicKey } : {}),
+        ...(typeof json.mpCuenta === "string" ? { mpCuenta: json.mpCuenta } : {}),
         contacto: json.contacto ?? null,
         cuentaPago: json.cuentaPago ?? null,
       });
@@ -1204,6 +1209,7 @@ export function CheckoutClient({
               pagoMetodo={confirmado.pagoMetodo ?? SLUG_MERCADOPAGO}
               cuotasPedido={confirmado.cuotas}
               publicKey={confirmado.mpPublicKey}
+              cuenta={confirmado.mpCuenta}
               onEleccionCuotas={setEleccionCuotas}
               onPedidoActualizado={alActualizarPedido}
               opcionesCobro={opcionesCobroDe(confirmado.procesador)}

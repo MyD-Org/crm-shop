@@ -28,7 +28,7 @@ export function AvisoPagoRechazado({ mensaje }: { mensaje: string }) {
 export function AvisoSinConfigurar() {
   return (
     <Alert tone="danger">
-      El pago con Mercado Pago no está configurado. Elija transferencia o escríbanos.
+      No se pudo iniciar el formulario de pago. Recargue la página o elija otro medio de pago.
     </Alert>
   );
 }

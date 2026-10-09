@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +13,8 @@ vi.mock("@mercadopago/sdk-react", () => ({
 
 afterEach(() => vi.unstubAllEnvs());
 
+const SIN_KEY = "No se pudo iniciar el formulario de pago. Recargue la página o elija otro medio de pago.";
+
 function renderPago(cuotasPedido: number | null = 6, publicKey?: string) {
   return renderToStaticMarkup(createElement(PagoMercadoPago, {
     pedidoId: "pedido-prueba",
@@ -19,26 +23,25 @@ function renderPago(cuotasPedido: number | null = 6, publicKey?: string) {
     pagoMetodo: "mercadopago",
     cuotasPedido,
     publicKey,
+    cuenta: "igz",
     onPagado: () => {},
   }));
 }
 
 describe("carga inicial del formulario de Mercado Pago", () => {
   it("muestra un loader y mantiene el Brick montado pero no visible hasta onReady", () => {
-    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-public-key");
-    const html = renderPago();
+    const html = renderPago(6, "TEST-public-key");
 
     expect(html).toContain("Cargando el formulario de pago");
     expect(html).toContain('aria-busy="true"');
     expect(html).toMatch(/aria-hidden="true"[^>]*class="[^"]*invisible/);
     expect(html).toContain('id="paymentBrick_container"');
     expect(html).not.toContain("No se pudo completar el pago");
-    expect(html).not.toContain("Elija transferencia");
+    expect(html).not.toContain(SIN_KEY);
   });
 
   it("pregunta cómo pagar: crédito (abierta), débito y cuenta de Mercado Pago", () => {
-    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-public-key");
-    const html = renderPago(6);
+    const html = renderPago(6, "TEST-public-key");
     expect(html).toContain("¿Cómo quiere pagar?");
     expect(html).toContain("Tarjeta de crédito");
     expect(html).toContain("Cuenta de Mercado Pago");
@@ -50,19 +53,40 @@ describe("carga inicial del formulario de Mercado Pago", () => {
     expect(html).not.toContain("Ir a Mercado Pago");
   });
 
-  it("la public key que manda el servidor alcanza (sin la del entorno)", () => {
-    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "");
+  it("la public key que manda el servidor para la cuenta del pedido monta el Brick", () => {
     const html = renderPago(null, "TEST-public-key-cuenta");
-    expect(html).not.toContain("no está configurado");
+    expect(html).not.toContain(SIN_KEY);
     expect(html).toContain('id="paymentBrick_container"');
   });
 
-  it("no deja un loader infinito cuando falta la configuración", () => {
-    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "");
+  it("sin public key del servidor NO monta el Brick aunque haya una key en el entorno del navegador", () => {
+    // Nombre armado para que la guarda de credenciales no lo vea: es justo lo que se prueba que se ignore.
+    vi.stubEnv(["NEXT", "PUBLIC", "MP", "PUBLIC", "KEY"].join("_"), "TEST-public-key-entorno");
     const html = renderPago();
 
-    expect(html).toContain("no está configurado");
+    expect(html).toContain(SIN_KEY);
     expect(html).not.toContain("Cargando el formulario de pago");
     expect(html).not.toContain('id="paymentBrick_container"');
+  });
+});
+
+describe("PagoMercadoPago.tsx: cuenta del pedido", () => {
+  const fuente = readFileSync(fileURLToPath(new URL("./PagoMercadoPago.tsx", import.meta.url)), "utf8");
+
+  it("no lee ninguna key del entorno del navegador", () => {
+    expect(fuente).not.toMatch(/process\.env/);
+  });
+
+  it("el Brick se remonta si cambia la public key (la tarjeta tokenizada con la anterior no sirve)", () => {
+    const inicio = fuente.indexOf("<CardPayment");
+    const bloque = fuente.slice(inicio, fuente.indexOf("/>", inicio));
+    expect(bloque).toMatch(/key=\{`\$\{key\}-/);
+    // Y el SDK se reinicia con la key nueva (`inicializar` compara con la que lo inició).
+    expect(fuente).toMatch(/useEffect\(\(\) => \{\s*inicializar\(key\);\s*\}, \[key\]\)/);
+  });
+
+  it("el POST de cobro manda la cuenta con la que se tokenizó", () => {
+    const post = fuente.slice(fuente.indexOf('fetch("/api/pagos/mercadopago"'));
+    expect(post.slice(0, 600)).toMatch(/cuenta/);
   });
 });

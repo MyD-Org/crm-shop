@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import nextConfig from "../../next.config";
-import { headersDeSeguridad, hostFrontendClerk, politicaCsp } from "./headers-seguridad";
+import { headersDeSeguridad, hostFrontendClerk, politicaCsp, type EnvCsp } from "./headers-seguridad";
 
 const clave = (host: string) => `pk_live_${Buffer.from(`${host}$`).toString("base64")}`;
 
@@ -80,9 +80,15 @@ describe("politicaCsp", () => {
 });
 
 describe("Payway: connect-src sólo en las páginas de checkout", () => {
-  const env = { PAYWAY_API_PUBLIC_KEY: "clave-publica-de-prueba", PAYWAY_BASE_URL: "https://payway.example/api/v2" };
+  // Sólo con variables de una cuenta (sufijo _MDP): la CSP no lee las variables de Payway, las lee
+  // `paywayParaCsp` de credenciales.ts. Dobles de prueba: nunca valores reales.
+  const env = {
+    PAYWAY_API_PRIVATE_KEY_MDP: "clave-privada-de-prueba",
+    PAYWAY_API_PUBLIC_KEY_MDP: "clave-publica-de-prueba",
+    PAYWAY_BASE_URL: "https://payway.example/api/v2",
+  } as EnvCsp;
 
-  it("con key pública y base https, el checkout puede conectar con el host de Payway", () => {
+  it("con una cuenta Payway completa, el checkout puede conectar con el host de Payway", () => {
     const csp = politicaCsp(env, { checkout: true });
     expect(csp).toMatch(/connect-src [^;]*https:\/\/payway\.example(?:[ ;]|$)/);
     // El SDK oficial (decidir.js) se sirve desde el host de Payway; sin frame-src: no hay iframe.
@@ -92,9 +98,10 @@ describe("Payway: connect-src sólo en las páginas de checkout", () => {
     for (const d of ["script-src", "frame-src", "img-src", "connect-src"]) {
       expect(csp).toMatch(new RegExp(`${d} [^;]*https://h\\.online-metrix\\.net`));
     }
-    // Sólo el origen: ni ruta ni la key.
+    // Sólo el origen: ni ruta ni las keys.
     expect(csp).not.toContain("/api/v2");
     expect(csp).not.toContain("clave-publica-de-prueba");
+    expect(csp).not.toContain("clave-privada-de-prueba");
   });
 
   it("el resto del sitio no lo incluye", () => {
@@ -103,18 +110,28 @@ describe("Payway: connect-src sólo en las páginas de checkout", () => {
     expect(politicaCsp(env, { checkout: false })).not.toContain("payway");
   });
 
-  it("sin key pública, o sin base https válida, tampoco en el checkout", () => {
-    expect(politicaCsp({ PAYWAY_BASE_URL: env.PAYWAY_BASE_URL }, { checkout: true })).not.toContain("payway");
-    expect(politicaCsp({ PAYWAY_API_PUBLIC_KEY: "k", PAYWAY_BASE_URL: "http://payway.example" }, { checkout: true })).not.toContain(
-      "payway",
-    );
-    expect(politicaCsp({ PAYWAY_API_PUBLIC_KEY: "k" }, { checkout: true })).not.toContain("payway");
+  it("sin ninguna cuenta Payway completa, o sin base https válida, tampoco en el checkout", () => {
+    const sinCuenta = { PAYWAY_BASE_URL: "https://payway.example/api/v2" } as EnvCsp;
+    expect(politicaCsp(sinCuenta, { checkout: true })).not.toContain("payway");
+    const sinSufijo = {
+      PAYWAY_API_PRIVATE_KEY: "a",
+      PAYWAY_API_PUBLIC_KEY: "b",
+      PAYWAY_BASE_URL: "https://payway.example",
+    } as EnvCsp;
+    expect(politicaCsp(sinSufijo, { checkout: true })).not.toContain("payway");
+    const http = { ...env, PAYWAY_BASE_URL: "http://payway.example" } as EnvCsp;
+    expect(politicaCsp(http, { checkout: true })).not.toContain("payway");
+    expect(politicaCsp({ PAYWAY_API_PUBLIC_KEY_MDP: "k" } as EnvCsp, { checkout: true })).not.toContain("payway");
+  });
+
+  it("la opción `payway` explícita manda sobre el entorno", () => {
+    expect(politicaCsp({}, { checkout: true, payway: { origen: "https://otra.example" } })).toContain("https://otra.example");
+    expect(politicaCsp(env, { checkout: true, payway: null })).not.toContain("payway");
   });
 
   it("next.config: una regla propia para /checkout, posterior a la general (la última gana)", async () => {
     const prev = { ...process.env };
-    process.env.PAYWAY_API_PUBLIC_KEY = env.PAYWAY_API_PUBLIC_KEY;
-    process.env.PAYWAY_BASE_URL = env.PAYWAY_BASE_URL;
+    Object.assign(process.env, env);
     try {
       const reglas = await nextConfig.headers!();
       const iGeneral = reglas.findIndex((r) => r.source === "/:path*");

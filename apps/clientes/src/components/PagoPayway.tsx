@@ -157,10 +157,10 @@ export function PagoPayway({
   // registrarse ANTES de pagar y es la misma con la que se tokeniza.
   const sesionSdk = useRef(crearSesionSdk());
 
-  // La key pública sale del servidor (no hay variable NEXT_PUBLIC_*).
+  // La key pública de la cuenta que cobra ESTE pedido sale del servidor (no hay variable NEXT_PUBLIC_*).
   useEffect(() => {
     let cancelado = false;
-    fetch("/api/pagos/payway-config")
+    fetch(`/api/pagos/payway-config?pedido=${encodeURIComponent(pedidoId)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((c: ConfigPayway) => {
         if (!cancelado) setConfig(c);
@@ -171,7 +171,7 @@ export function PagoPayway({
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [pedidoId]);
 
   // Con la configuración a mano, se prepara el SDK mientras el comprador completa los datos.
   useEffect(() => {
@@ -295,7 +295,15 @@ export function PagoPayway({
     setPan("");
     setCvv("");
 
-    const r = await enviarCobro({ pedidoId, token: token.token, bin: token.bin, metodoPagoId, cuotas: elegida.cuotas });
+    const r = await enviarCobro({
+      pedidoId,
+      token: token.token,
+      bin: token.bin,
+      metodoPagoId,
+      cuotas: elegida.cuotas,
+      // La cuenta cuya key tokenizó la tarjeta.
+      ...(config.cuenta ? { cuenta: config.cuenta } : {}),
+    });
     if (r.fase === "pagado") {
       setEstado({ fase: "pagado" });
       onPagado();

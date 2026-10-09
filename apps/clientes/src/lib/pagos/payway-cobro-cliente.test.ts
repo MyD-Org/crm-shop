@@ -19,6 +19,10 @@ describe("cuerpoCobro", () => {
     });
     expect(Object.keys(c).sort()).toEqual(["bin", "cuotas", "medio", "metodoPagoId", "pedidoId", "token"]);
   });
+
+  it("con la cuenta con la que se tokenizó, la manda para que el servidor la valide", () => {
+    expect(cuerpoCobro({ ...PARAMS, cuenta: "mdp" })).toMatchObject({ cuenta: "mdp" });
+  });
 });
 
 describe("enviarCobro", () => {

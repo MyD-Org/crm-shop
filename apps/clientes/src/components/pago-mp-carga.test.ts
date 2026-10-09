@@ -128,10 +128,10 @@ describe("avisos con el Alert del DS", () => {
     expect(html).not.toContain("<button");
   });
 
-  it("falta de configuración", () => {
+  it("falta de configuración: no se pudo iniciar el formulario (en usted)", () => {
     const html = renderToStaticMarkup(createElement(AvisoSinConfigurar));
     expect(html).toContain('role="alert"');
-    expect(html).toContain("no está configurado");
+    expect(html).toContain("No se pudo iniciar el formulario de pago. Recargue la página o elija otro medio de pago.");
   });
 });
 
@@ -139,7 +139,7 @@ describe("PagoMercadoPago.tsx: cableado", () => {
   const fuente = leer("./PagoMercadoPago.tsx");
 
   it("Reintentar remonta el Brick (key) y vuelve a cargando", () => {
-    expect(fuente).toMatch(/<CardPayment\s+key=\{`\$\{tipoTarjeta\}-\$\{intento\}`\}/);
+    expect(fuente).toMatch(/<CardPayment\s+key=\{`\$\{key\}-\$\{tipoTarjeta\}-\$\{intento\}`\}/);
     const fn = fuente.slice(fuente.indexOf("function reintentar()"));
     const cuerpo = fn.slice(0, fn.indexOf("\n  }"));
     expect(cuerpo).toContain("remontarBrick()");

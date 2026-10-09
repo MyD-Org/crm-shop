@@ -145,11 +145,11 @@ export function MenuUsuario({
     }
   }
 
-  // Sin cabecera: el nombre ya está en el botón que abre el menú, a unos pocos
-  // píxeles, y el correo vive en Mis datos. Sin ella el menú es exactamente la
-  // misma lista que la barra lateral de Mi cuenta, flotando.
+  // El header muestra sólo el avatar: el nombre va como cabecera del menú. El
+  // correo vive en Mis datos.
   const entradas = esCuentaCorriente ? ENTRADAS_MENU_CC : ENTRADAS_MENU;
-  const items: DropdownMenuEntry[] = entradas.flatMap((entrada): DropdownMenuEntry[] => {
+  const cabecera: DropdownMenuEntry[] = nombreVisible ? [{ type: "label", label: nombreVisible }, { type: "separator" }] : [];
+  const items: DropdownMenuEntry[] = [...cabecera, ...entradas.flatMap((entrada): DropdownMenuEntry[] => {
     const item: DropdownMenuEntry = {
       label: entrada.label,
       icon: ICONOS[entrada.id],
@@ -158,7 +158,7 @@ export function MenuUsuario({
     };
     // Cerrar sesión va separado del resto.
     return entrada.id === "salir" ? [{ type: "separator" }, item] : [item];
-  });
+  })];
 
   return (
     <DropdownMenu items={items} align={alinear} className="min-w-[14rem] max-w-[18rem]">
@@ -174,7 +174,7 @@ export function MenuUsuario({
             <IconoPersona />
           </span>
         )}
-        <span className="hidden max-w-[14ch] truncate sm:inline">
+        <span className="sr-only">
           {nombreVisible ?? "Mi cuenta"}
         </span>
       </button>

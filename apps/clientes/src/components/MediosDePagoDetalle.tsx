@@ -42,11 +42,12 @@ export function MediosDePagoDetalle({
       ].sort((a, b) => a.cuotas - b.cuotas)
     : opciones;
   const atenuadas = conCarrito ? noAlcanzadas.filter((n) => n.cuotas !== conCarrito.cuotas) : noAlcanzadas;
-  const filaUnPago = (subtitulo: string, precio: number) => (
+  // Con débito y crédito separados el título del bloque ya dice la forma: la fila no lleva subtítulo.
+  const filaUnPago = (precio: number, subtitulo?: string) => (
     <li className="flex items-center justify-between gap-4 px-3 py-2.5">
       <span className="text-sm text-text">
         {TEXTOS_CUOTAS.unPago}
-        <span className="block text-xs text-muted">{subtitulo}</span>
+        {subtitulo && <span className="block text-xs text-muted">{subtitulo}</span>}
       </span>
       <span className="text-sm font-semibold text-text">{fmtPrecio(precio)}</span>
     </li>
@@ -59,7 +60,7 @@ export function MediosDePagoDetalle({
             {TEXTOS_CUOTAS.tituloDebito}
           </h3>
           <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-            {filaUnPago(TEXTOS_CUOTAS.precioConDebito, preciosForma.debito)}
+            {filaUnPago(preciosForma.debito)}
           </ul>
         </section>
       )}
@@ -69,8 +70,8 @@ export function MediosDePagoDetalle({
         </h3>
         <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
           {preciosForma
-            ? filaUnPago(TEXTOS_CUOTAS.precioConCredito, preciosForma.credito)
-            : filaUnPago(TEXTOS_CUOTAS.precioContado, precioContado)}
+            ? filaUnPago(preciosForma.credito)
+            : filaUnPago(precioContado, TEXTOS_CUOTAS.precioContado)}
           {filas.map((o) => (
             <li key={o.cuotas} className="flex items-start justify-between gap-4 px-3 py-2.5">
               <span className="text-sm text-text">

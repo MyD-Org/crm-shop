@@ -150,8 +150,8 @@ describe("MediosDePagoDetalle con débito a otro precio", () => {
     expect(html.match(/<section/g)).toHaveLength(2);
     expect(t).not.toContain("Tarjeta de crédito o débito");
     expect(t).not.toContain("Precio contado");
-    expect(t).toContain("Tarjeta de débito 1 pago Precio con débito $ 110.000,00");
-    expect(t).toContain("Tarjeta de crédito 1 pago Precio con crédito $ 121.000,00 6 cuotas de $ 20.000,00");
+    expect(t).toContain("Tarjeta de débito 1 pago $ 110.000,00");
+    expect(t).toContain("Tarjeta de crédito 1 pago $ 121.000,00 6 cuotas de $ 20.000,00");
     expect(t.indexOf("Tarjeta de débito")).toBeLessThan(t.indexOf("Tarjeta de crédito"));
   });
 

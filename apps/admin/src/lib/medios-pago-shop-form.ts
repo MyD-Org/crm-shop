@@ -144,7 +144,7 @@ function clave(marcas: readonly string[] | null | undefined): string {
 
 // --- Listas por forma de pago (0076, sólo Mercado Pago y Payway) ---
 
-/** Valor del selector de una forma para "Igual que la lista del medio" (hereda la fila de todas las formas). */
+/** Valor del selector de una forma que usa la lista del medio (hereda la fila de todas las formas). */
 export const LISTA_IGUAL_QUE_EL_MEDIO = "__igual__"
 
 /** Lista elegida por forma: el id de la lista o `LISTA_IGUAL_QUE_EL_MEDIO`. Una forma ausente = sin lista propia. */

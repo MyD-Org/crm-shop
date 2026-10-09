@@ -3,8 +3,9 @@ import { mintAgentToken } from "@/lib/agent-token"
 import { authAgentInternalRequest, authAgentTenantRequest } from "@/lib/agent-auth"
 
 // El crm_token del cliente llega al navegador (viaja dentro del JWT de sesión del widget), así
-// que las rutas que operan sobre cualquier contacto del tenant (contacts, quotes) sólo aceptan
-// INTERNAL_SECRET. Las de datos públicos del tenant (catálogo, precios) aceptan ambos.
+// que las rutas que operan sobre cualquier contacto del tenant (contacts, quotes) o exponen
+// configuración interna (sales-config) sólo aceptan INTERNAL_SECRET. Las de datos públicos del
+// tenant (catálogo, precios) aceptan ambos.
 
 const INTERNAL = "internal-secret-de-test-para-vitest-nada-real"
 const req = (auth?: string) =>
@@ -19,7 +20,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe("authAgentInternalRequest (contacts, quotes)", () => {
+describe("authAgentInternalRequest (contacts, quotes, sales-config)", () => {
   it("acepta INTERNAL_SECRET y responde 'internal'", () => {
     expect(authAgentInternalRequest(req(`Bearer ${INTERNAL}`))).toEqual({ codigocliente: "internal" })
   })
@@ -41,7 +42,7 @@ describe("authAgentInternalRequest (contacts, quotes)", () => {
   })
 })
 
-describe("authAgentTenantRequest (catalog, prices, payment-terms, sales-config)", () => {
+describe("authAgentTenantRequest (catalog, prices, payment-terms, payment-conditions)", () => {
   it("acepta INTERNAL_SECRET o un crm_token del mismo tenant; rechaza el de otro tenant", () => {
     expect(authAgentTenantRequest(req(`Bearer ${INTERNAL}`), "t1")).toEqual({ codigocliente: "internal" })
     expect(authAgentTenantRequest(req(`Bearer ${mintAgentToken("CLI-1", "t1")}`), "t1")).toEqual({ codigocliente: "CLI-1" })

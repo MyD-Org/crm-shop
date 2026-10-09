@@ -334,7 +334,7 @@ export function ProductoClient({
                     cuotas={cuotas}
                     conCarrito={cuotasConCarrito}
                     logos={logosTarjetas}
-                    preciosMedios={producto.preciosMedios}
+                    preciosMedios={producto.preciosFormaModal}
                     className="mt-0.5 text-accent transition-colors hover:text-primary"
                   />
                 </div>

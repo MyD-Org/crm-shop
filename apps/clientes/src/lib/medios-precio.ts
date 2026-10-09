@@ -40,6 +40,11 @@ export interface MediosPrecio {
    * elegibles y sus condiciones, en el orden del admin. Ausente = no hay cuotas que mostrar. Es parte de la clave de las cachés.
    */
   cuotas?: MedioCuotas[];
+  /**
+   * Medios con cobro en línea y listas por forma de pago, para el modal "Ver medios de pago": NO
+   * depende de `mostrarEnFicha` ni de `destacarEnCatalogo`. Ausente = ninguno. Parte de la clave de las cachés.
+   */
+  modal?: MedioPrecio[];
 }
 
 export const SIN_MEDIOS_PRECIO: MediosPrecio = { destacado: null, ficha: [] };
@@ -79,10 +84,12 @@ export function seleccionarMediosPrecio(
   };
   const destacado = elegibles.find((m) => m.destacarEnCatalogo);
   const cuotas = cuotasEncendido ? mediosCuotas(medios) : [];
+  const modal = elegibles.filter((m) => m.cobroOnline && listasDeLasFormas(m) !== null).map(aMedio);
   return {
     destacado: destacado ? aMedio(destacado) : null,
     ficha: elegibles.filter((m) => m.mostrarEnFicha).map(aMedio),
     ...(cuotas.length > 0 ? { cuotas } : {}),
+    ...(modal.length > 0 ? { modal } : {}),
   };
 }
 
@@ -167,10 +174,12 @@ export function armarPreciosMedios(
   prices: AlegraPrice[],
   iva: number | null,
   medios: MediosPrecio | undefined,
-): { precioMedio?: PrecioMedio; preciosMedios?: PrecioMedio[]; cuotasSinInteres?: CuotasProducto } {
+): { precioMedio?: PrecioMedio; preciosMedios?: PrecioMedio[]; preciosFormaModal?: PrecioMedio[]; cuotasSinInteres?: CuotasProducto } {
   if (!medios) return {};
   const precioMedio = medios.destacado ? precioDestacado(prices, iva, medios.destacado) : null;
   const preciosMedios = medios.ficha.flatMap((m) => preciosDeLaFicha(prices, iva, m));
+  // Líneas por forma para el modal: con la misma regla de precio que la ficha, pero de todos los medios con cobro en línea.
+  const preciosFormaModal = (medios.modal ?? []).flatMap((m) => preciosDeLaFicha(prices, iva, m)).filter((p) => p.forma);
   // Mínimos por medio: cada uno compara contra la lista del pago único del suyo.
   const cuotasMedios = (medios.cuotas ?? []).flatMap((m) => {
     const opciones = opcionesCuotas(prices, iva, m);
@@ -182,6 +191,7 @@ export function armarPreciosMedios(
   return {
     ...(precioMedio ? { precioMedio } : {}),
     preciosMedios,
+    ...(preciosFormaModal.length > 0 ? { preciosFormaModal } : {}),
     ...(cuotasMedios.length > 0 ? { cuotasSinInteres: { medios: cuotasMedios } } : {}),
   };
 }

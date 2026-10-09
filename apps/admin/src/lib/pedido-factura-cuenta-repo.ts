@@ -82,6 +82,18 @@ export async function cargarContextoCuentaFactura(tenantId: string, orderId: str
   }
 }
 
+/**
+ * Nombre con el que se muestra una cuenta de Alegra: el de la sucursal que la tiene asignada
+ * (`sucursales.cuentaAlegraId`, la activa primero) y, si ninguna, el de la cuenta.
+ */
+export function nombreVisibleCuenta(
+  ctx: Pick<ContextoCuentaFactura, "sucursales">,
+  cuenta: Pick<CuentaRow, "id" | "nombre">,
+): string {
+  const deCuenta = ctx.sucursales.filter((s) => s.cuentaAlegraId === cuenta.id)
+  return (deCuenta.find((s) => s.activa !== false) ?? deCuenta[0])?.nombre ?? cuenta.nombre
+}
+
 /** Campos del pedido que hacen falta para saber con qué cuenta se cobró en línea (todos opcionales). */
 export type PedidoConCobro = Pick<PedidoRow, "sucursal" | "sucursalRegla"> &
   Partial<Pick<PedidoRow, "pagoEstado" | "pagoProveedor" | "pagoInfo">>
@@ -111,7 +123,7 @@ export function avisoCobroDelPedido(
   if (!sucursalCobro?.cuentaAlegraId || sucursalCobro.cuentaAlegraId === cuentaFactura.id) return null
   return {
     cobradoCon: { slug: sucursalCobro.slug, nombre: sucursalCobro.nombre },
-    facturaCon: { slug: cuentaFactura.slug, nombre: cuentaFactura.nombre },
+    facturaCon: { slug: cuentaFactura.slug, nombre: nombreVisibleCuenta(ctx, cuentaFactura) },
   }
 }
 
@@ -200,18 +212,22 @@ export function armarCuentaFacturaDto(
   const activas = ctx.cuentas.filter((c) => c.activa)
   const res = resolverParaPedido(pedido, ctx, eleccionSlug)
   const provincia = nombreProvincia(pedido.sucursalRegla?.provincia ?? null)
-  const nombreCuenta = (id: string | null | undefined) => (id ? (ctx.cuentas.find((c) => c.id === id)?.nombre ?? null) : null)
+  const visible = (c: CuentaRow) => nombreVisibleCuenta(ctx, c)
+  const nombreCuenta = (id: string | null | undefined) => {
+    const c = id ? ctx.cuentas.find((x) => x.id === id) : undefined
+    return c ? visible(c) : null
+  }
   const cuentaDespachoId = pedido.sucursal
     ? (ctx.sucursales.find((s) => s.slug === pedido.sucursal)?.cuentaAlegraId ?? null)
     : ctx.principalId
   const f = ctx.fila
   const emitidaCuenta = f?.facturaCuentaId ? ctx.cuentas.find((c) => c.id === f.facturaCuentaId) : undefined
   return {
-    cuentas: activas.map((c) => ({ slug: c.slug, nombre: c.nombre, principal: c.principal })),
+    cuentas: activas.map((c) => ({ slug: c.slug, nombre: visible(c), principal: c.principal })),
     efectiva: res.cuenta
       ? {
           slug: res.cuenta.slug,
-          nombre: res.cuenta.nombre,
+          nombre: visible(res.cuenta),
           motivo: res.motivo,
           texto: textoMotivoCuentaFactura(res.motivo, provincia),
         }
@@ -224,7 +240,7 @@ export function armarCuentaFacturaDto(
     override: f?.cuentaOverrideId && f.overrideEn
       ? { por: f.overridePorNombre, en: f.overrideEn.toISOString(), anterior: nombreCuenta(f.overrideAnteriorId) }
       : null,
-    emitida: emitidaCuenta ? { slug: emitidaCuenta.slug, nombre: emitidaCuenta.nombre, cruzada: f!.facturaCruzada } : null,
+    emitida: emitidaCuenta ? { slug: emitidaCuenta.slug, nombre: visible(emitidaCuenta), cruzada: f!.facturaCruzada } : null,
     editable: !facturado,
     avisoCobro: facturado ? null : avisoCobroDelPedido(pedido, ctx, res.cuenta),
   }

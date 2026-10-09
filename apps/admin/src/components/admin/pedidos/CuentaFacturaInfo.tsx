@@ -13,7 +13,8 @@ import { fmtFechaPedido } from "./format"
 export function textoVentaEntreEmpresas(d: Pick<CuentaFacturaDto, "despacha" | "efectiva" | "emitida">): string {
   const factura = d.emitida?.nombre ?? d.efectiva?.nombre ?? "otra cuenta"
   const desde = d.despacha.sucursal ?? "la sucursal del pedido"
-  const cuentaDespacha = d.despacha.cuentaNombre ? ` (${d.despacha.cuentaNombre})` : ""
+  const cuentaDespacha =
+    d.despacha.cuentaNombre && d.despacha.cuentaNombre !== d.despacha.sucursal ? ` (${d.despacha.cuentaNombre})` : ""
   return (
     `La mercadería sale de ${desde}${cuentaDespacha}, pero se factura con la cuenta de ${factura}. ` +
     "El stock lo sigue descontando la sucursal que despacha: el ajuste entre las dos empresas se hace por fuera."

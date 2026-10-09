@@ -64,6 +64,14 @@ export const ORDENES: { label: string; value: OrdenCatalogo }[] = [
 ];
 
 /**
+ * ¿Es un orden de verdad? El Select (Radix) a veces avisa un cambio a "" al navegar fuera del
+ * catálogo; tomarlo como elección navegaba con el estado viejo (filtros anteriores + `orden=`).
+ */
+export function esOrden(v: string): v is OrdenCatalogo {
+  return ORDENES.some((o) => o.value === v);
+}
+
+/**
  * Órdenes que se ofrecen para un estado: "Relevancia" sólo con búsqueda y
  * "Destacados" sólo sin búsqueda, salvo que sea el orden vigente (con
  * `filtrosSinBusqueda` el panel recibe el estado sin `query`, y el Select no

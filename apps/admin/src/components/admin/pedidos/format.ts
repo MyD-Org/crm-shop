@@ -322,7 +322,7 @@ export function textoEvento(evento: EventoHistorialDto): string {
   }
 }
 
-const PROCESADOR: Readonly<Record<string, string>> = { mercadopago: "Mercado Pago", payway: "Payway" }
+export const PROCESADOR: Readonly<Record<string, string>> = { mercadopago: "Mercado Pago", payway: "Payway" }
 
 /**
  * Datos del cobro en línea para la tarjeta "Pago" del detalle: con qué pagó, cuotas, total con
@@ -330,10 +330,16 @@ const PROCESADOR: Readonly<Record<string, string>> = { mercadopago: "Mercado Pag
  * procesador (sólo Mercado Pago lo informa), fecha y los números para buscarlo en el proveedor.
  * Sólo los que hay: un pago anterior a `pago_info` muestra medio, cuotas y número de operación.
  */
-export function datosCobroEnLinea(p: PagoEnLineaDto, totalPedido: number): { label: string; valor: string }[] {
+export function datosCobroEnLinea(
+  p: PagoEnLineaDto,
+  totalPedido: number,
+  /** `slug -> nombre` de las sucursales, para mostrar la cuenta de cobro; sin nombre se ve el slug. */
+  nombresSucursal: Record<string, string> = {},
+): { label: string; valor: string }[] {
   const datos: { label: string; valor: string }[] = []
   const medio = textoMedioCobrado(p)
   if (medio) datos.push({ label: "Pagó con", valor: medio })
+  if (p.cuenta) datos.push({ label: "Cuenta de cobro", valor: nombresSucursal[p.cuenta.slug] ?? p.cuenta.slug })
   if (p.cuotas != null && p.cuotas >= 1) {
     datos.push({ label: "Cuotas", valor: p.cuotas === 1 ? "1 pago" : `${p.cuotas} cuotas` })
   }

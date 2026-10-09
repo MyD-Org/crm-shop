@@ -9,6 +9,7 @@ import { normalizarIdentificador } from "@/lib/identificador"
 import { PROVINCIAS, claveProvincia } from "@/lib/provincias"
 import { ReglasVentaCard } from "./ReglasVentaCard"
 import { ReceiptsEmailForm } from "./ReceiptsEmailForm"
+import { DESCRIPCION_CUENTA_ALEGRA, HINT_SUCURSAL_QUE_FACTURA, LEYENDA_COBRO_ZONAS } from "@/lib/sucursales-texto"
 import { validarSucursalCambios, validarSucursalNueva, validarZona } from "@/lib/sucursales-validacion"
 
 // Sucursales (parte A): ABM de sucursales y de zonas (provincia ->
@@ -504,8 +505,8 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
         title="Zonas de venta"
         description={
           predeterminada
-            ? `Cada provincia se asigna a una sucursal. Las provincias sin zona se asignan a ${predeterminada.nombre} (predeterminada).`
-            : "Cada provincia se asigna a una sucursal. Las provincias sin zona se asignan a la sucursal predeterminada."
+            ? `Cada provincia se asigna a una sucursal. Las provincias sin zona se asignan a ${predeterminada.nombre} (predeterminada).${LEYENDA_COBRO_ZONAS}`
+            : `Cada provincia se asigna a una sucursal. Las provincias sin zona se asignan a la sucursal predeterminada.${LEYENDA_COBRO_ZONAS}`
         }
       >
         <div className="flex flex-col gap-3">
@@ -698,7 +699,7 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
             </Field>
             <Field
               label="Sucursal que factura"
-              hint="Solo si factura una cuenta distinta de la que despacha."
+              hint={HINT_SUCURSAL_QUE_FACTURA}
               error={errores.facturaSucursal}
             >
               <Select
@@ -721,7 +722,7 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
           if (!open) setCuentaForm(null)
         }}
         title={cuentaForm ? `Cuenta de Alegra de ${cuentaForm.sucursal.nombre}` : "Cuenta de Alegra"}
-        description="La cuenta define de dónde se toma el stock de la sucursal y por cuál se factura. El token se guarda en el servidor y no se vuelve a mostrar."
+        description={DESCRIPCION_CUENTA_ALEGRA}
         footer={
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" onClick={() => setCuentaForm(null)}>Cancelar</Button>

@@ -108,6 +108,22 @@ export interface EntradaCuentaFactura {
   cuentaPrincipalId: string | null
 }
 
+/**
+ * Cuentas de Alegra asignadas a más de una sucursal ACTIVA. El sistema asume el mapeo 1 a 1
+ * (cada sucursal tiene su propia cuenta de Alegra y su CUIT): con una repetida, el aviso de
+ * "facturar con una cuenta distinta de la que cobró" no distingue entre esas sucursales.
+ */
+export function cuentasAlegraRepetidas(
+  sucursales: (SucursalCuentaDato & { activa?: boolean })[],
+): { cuentaAlegraId: string; slugs: string[] }[] {
+  const porCuenta = new Map<string, string[]>()
+  for (const s of sucursales) {
+    if (s.activa === false || !s.cuentaAlegraId) continue
+    porCuenta.set(s.cuentaAlegraId, [...(porCuenta.get(s.cuentaAlegraId) ?? []), s.slug])
+  }
+  return [...porCuenta].filter(([, slugs]) => slugs.length > 1).map(([cuentaAlegraId, slugs]) => ({ cuentaAlegraId, slugs }))
+}
+
 const cuentaDe = (slug: string, sucursales: SucursalCuentaDato[]) =>
   sucursales.find((s) => s.slug === slug)?.cuentaAlegraId ?? null
 

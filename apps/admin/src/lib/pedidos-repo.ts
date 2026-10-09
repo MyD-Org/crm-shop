@@ -19,7 +19,7 @@ import { estadoContacto, predicadoSinContactar } from "@/lib/pedidos-contacto-re
 import { reservaDePendiente, type ReservaPedido } from "@/lib/pedido-reserva"
 import type { ReglaAplicada } from "@/lib/sucursales-zona"
 import { VENTANA_PAGO_MS, motivosNoCancelable, type EntregaTipo, type EstadoPedido, type MotivoNoCancelable } from "@/lib/pedidos-transiciones"
-import { parseInfoPago, type PagoEnLineaDto } from "@/lib/pago-en-linea"
+import { cuentaDeCobroDto, parseInfoPago, type PagoEnLineaDto } from "@/lib/pago-en-linea"
 
 // Ejecutor de consultas: `getDb()` fuera de una transacción, o el `tx` que da `db.transaction`
 // dentro de una. Todas las escrituras de este archivo que insertan un evento van adentro de una
@@ -1510,13 +1510,15 @@ export function toPagoEnLineaDto(
   row: Pick<PedidoRow, "pagoProveedor" | "pagoReferencia" | "pagoMedio" | "pagoCuotas" | "pagoTotalPagado" | "pagoInfo">,
 ): PagoEnLineaDto | null {
   if (row.pagoProveedor == null) return null
+  const info = parseInfoPago(row.pagoInfo)
   return {
     proveedor: row.pagoProveedor,
     referencia: row.pagoReferencia,
     medio: row.pagoMedio,
     cuotas: row.pagoCuotas,
     totalPagado: row.pagoTotalPagado == null ? null : num(row.pagoTotalPagado),
-    info: parseInfoPago(row.pagoInfo),
+    info,
+    cuenta: cuentaDeCobroDto(info),
   }
 }
 

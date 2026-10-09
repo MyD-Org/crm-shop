@@ -131,6 +131,7 @@ export function PedidoDetalle({
               {[i.code, i.brand].filter(Boolean).join(" · ")}
             </div>
           )}
+          <DatosDelLocal item={i} esAdminPlus={esAdminPlus} />
         </>
       ),
     },
@@ -142,20 +143,6 @@ export function PedidoDetalle({
       render: (i) => <span style={{ color: "var(--ink)" }}>{fmtCantidad(i.qty)}</span>,
     },
     {
-      // Stock ACTUAL del espejo del catálogo, no el del momento del pedido. Sin dato (producto
-      // fuera del espejo) muestra una raya: que falte se tiene que notar.
-      key: "stock",
-      header: "Stock",
-      align: "right",
-      hideBelow: "sm",
-      className: "tabular-nums",
-      render: (i) => (
-        <span style={{ color: i.stockActual !== null && i.stockActual < i.qty ? "var(--red)" : "var(--ink-soft)" }}>
-          {i.stockActual === null ? "—" : fmtCantidad(i.stockActual)}
-        </span>
-      ),
-    },
-    {
       key: "precio",
       header: "Precio unit.",
       align: "right",
@@ -163,22 +150,6 @@ export function PedidoDetalle({
       className: "tabular-nums",
       render: (i) => <span style={{ color: "var(--ink-soft)" }}>{fmtMoneda(i.precioUnitario)}</span>,
     },
-    // Costo unitario cargado en Alegra: SÓLO admin+. El DTO no trae el campo para operator (ver
-    // `canSeeCosts`), así que la columna se oculta por rol y no por "vino null".
-    ...(esAdminPlus
-      ? [
-          {
-            key: "costo",
-            header: "Costo",
-            align: "right",
-            hideBelow: "md",
-            className: "tabular-nums",
-            render: (i) => (
-              <span style={{ color: "var(--ink-soft)" }}>{i.costoUnitario == null ? "—" : fmtMoneda(i.costoUnitario)}</span>
-            ),
-          } satisfies TableColumn<PedidoItemDto>,
-        ]
-      : []),
     {
       key: "iva",
       header: "IVA",
@@ -617,6 +588,27 @@ function EstadoAcciones({
           </div>
         }
       />
+    </div>
+  )
+}
+
+// Stock y costo son datos del local, no de lo que pidió el cliente: van en una línea aparte debajo
+// del producto, chica y en gris, para que no se lean como columnas del pedido.
+// Stock ACTUAL del espejo del catálogo, no el del momento del pedido; sin dato (producto fuera del
+// espejo) muestra una raya: que falte se tiene que notar.
+// Costo unitario cargado en Alegra: SÓLO admin+. El DTO no trae el campo para operator (ver
+// `canSeeCosts`), así que se oculta por rol y no por "vino null".
+function DatosDelLocal({ item, esAdminPlus }: { item: PedidoItemDto; esAdminPlus: boolean }) {
+  const falta = item.stockActual !== null && item.stockActual < item.qty ? item.qty - item.stockActual : 0
+  return (
+    <div className="mt-1 text-xs tabular-nums" style={{ color: "var(--ink-faint)" }}>
+      <span style={falta > 0 ? { color: "var(--red)" } : undefined}>
+        Stock {item.stockActual === null ? "—" : fmtCantidad(item.stockActual)}
+        {falta > 0 && ` (falta ${fmtCantidad(falta)})`}
+      </span>
+      {esAdminPlus && (
+        <> · Costo {item.costoUnitario == null ? "—" : fmtMoneda(item.costoUnitario)}</>
+      )}
     </div>
   )
 }

@@ -299,7 +299,8 @@ con las tools del agente consultando los datos reales del CRM.
   - El `crm_token` vuelve al navegador dentro del JWT de sesión del widget (ai-api lo firma,
     no lo cifra), así que sólo abre datos del propio cliente o datos públicos del tenant
     (catálogo, precios, condiciones). `/api/agent/contacts` y `/api/agent/quotes` operan
-    sobre cualquier contacto y exigen `INTERNAL_SECRET` (tools de ai-api con
+    sobre cualquier contacto, y `/api/agent/sales-config` expone vendedores, listas e
+    impuestos de la cuenta de Alegra: los tres exigen `INTERNAL_SECRET` (tools de ai-api con
     `{{auth.internal_secret}}`).
 - **CORS**: rewrite `/ai-api/*` → `ai-api` (configurado en `next.config.ts`).
 - **Badges de novedades** — los ítems del sidebar del backoffice llevan contador de items
@@ -1315,7 +1316,7 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | GET/POST | `/api/agent/contacts` | `INTERNAL_SECRET` | Busca clientes en el espejo de contactos (`?q=` o `?phone=`) / crea uno en Alegra. Sólo server-to-server: el `crm_token` no sirve (opera sobre cualquier contacto del tenant) |
 | POST | `/api/agent/quotes` | `INTERNAL_SECRET` | Crea una cotización en Alegra (ídem: `contact_id` arbitrario) |
 | GET | `/api/agent/quotes` | `INTERNAL_SECRET` | Cotizaciones de un contacto (`?contact_id=`) |
-| GET | `/api/agent/sales-config` | agent token o `INTERNAL_SECRET` | Listas de precio, condiciones de pago, vendedores, impuestos, monedas + link del shop |
+| GET | `/api/agent/sales-config` | `INTERNAL_SECRET` | Listas de precio, condiciones de pago, vendedores, impuestos, monedas + link del shop. Sólo server-to-server: el `crm_token` no sirve (expone vendedores y listas internas de la cuenta) |
 | POST | `/api/portal/comprobantes` | sesión portal | Informar pago: valida, rate limit y URL PUT prefirmada para R2 |
 | POST | `/api/portal/comprobantes/{id}/confirm` | sesión portal | Verifica el archivo en R2 (tipo/tamaño/sha256) y publica el comprobante |
 | GET | `/api/admin/comprobantes` | admin | Lista de comprobantes (status, paginado; sin URLs firmadas) |

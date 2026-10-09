@@ -23,6 +23,7 @@ const medio = (parcial: Partial<MedioPagoDto>): MedioPagoDto => ({
   audiencia: "publico",
   chips: [],
   opcionesCobro: ["credito", "debito", "cuenta_mp"],
+  listasPorForma: [],
   ...parcial,
 })
 

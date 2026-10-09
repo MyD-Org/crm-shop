@@ -7,6 +7,10 @@ import {
   LISTA_POR_DEFECTO,
   aplicarMedioGuardado,
   cambiosDeCuotas,
+  cambiosDeListasPorForma,
+  LISTA_IGUAL_QUE_EL_MEDIO,
+  listasPorFormaDesdeDto,
+  type ListasPorFormaForm,
   cuerpoDeOpciones,
   cuerpoDePrecios,
   validarFilasCuotas,
@@ -21,6 +25,7 @@ import {
   OPCIONES_COBRO,
   ROTULO_OPCION,
   errorDeOpcionesResultantes,
+  opcionesAplicables,
   opcionesDelMedio,
   type OpcionCobro,
 } from "@/lib/medios-pago-shop-opciones"
@@ -44,6 +49,8 @@ type Form = {
   listaOnlineId: string
   /** Cuotas sin interés (medio con cobro en línea): cantidad y lista de cada condición. */
   cuotasFilas: FilaCuotasForm[]
+  /** Lista por forma de pago (sólo Mercado Pago y Payway): id de lista o "igual que el medio". */
+  listasPorForma: ListasPorFormaForm
   destacarEnCatalogo: boolean
   mostrarEnFicha: boolean
   /** "Solo cuentas corrientes": el público no ve este medio (a lo sumo uno por tenant). */
@@ -67,6 +74,7 @@ const formVacio: Form = {
   activo: true,
   listaOnlineId: LISTA_POR_DEFECTO,
   cuotasFilas: [],
+  listasPorForma: {},
   destacarEnCatalogo: false,
   mostrarEnFicha: false,
   soloCuentaCorriente: false,
@@ -89,6 +97,7 @@ const desdeDto = (m: MedioPagoDto): Form => ({
     montoMinimo: c.montoMinimo === null ? "" : String(Number(c.montoMinimo)),
     marcas: c.marcas,
   })),
+  listasPorForma: listasPorFormaDesdeDto(m.listasPorForma ?? []),
   destacarEnCatalogo: m.destacarEnCatalogo,
   mostrarEnFicha: m.mostrarEnFicha,
   soloCuentaCorriente: m.audiencia === "cuenta_corriente",
@@ -119,6 +128,9 @@ const nombreDeLista = (m: MedioPagoDto) => m.listaOnlineNombre
  * tal como vienen de allá): en el admin sólo se elige la lista de precios del medio.
  */
 const cuotasEnElProcesador = (slug: string | null) => slug === "mercadopago"
+
+/** Sólo Mercado Pago y Payway pueden tener una lista distinta por forma de pago. */
+const admiteListasPorForma = (slug: string | null) => slug === "mercadopago" || slug === "payway"
 
 async function enviar(url: string, method: string, body?: unknown) {
   const res = await fetch(url, {
@@ -261,6 +273,11 @@ export function MediosPagoShopCard() {
       // Un solo cambio de precios (previa + aplicar + historial) con la lista del pago único y las cuotas.
       const cambiosPrecios: unknown[] = []
       if (cambioLista) cambiosPrecios.push({ op: "setCondicion", medioSlug: nuevo.slug, cuotas: null, listaId: listaElegida })
+      if (admiteListasPorForma(nuevo.slug) && nuevo.cobroOnline) {
+        cambiosPrecios.push(
+          ...cambiosDeListasPorForma(nuevo.slug, listasPorFormaDesdeDto(nuevo.listasPorForma ?? []), form.listasPorForma),
+        )
+      }
       if (cuotasDeseadas) {
         cambiosPrecios.push(
           ...cambiosDeCuotas(
@@ -586,6 +603,36 @@ export function MediosPagoShopCard() {
                   />
                 ))}
                 {errores.opcionesCobro && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.opcionesCobro}</p>}
+              </div>
+            )}
+            {form.editandoSlug && admiteListasPorForma(form.editandoSlug) && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline && (
+              <div className="flex flex-col gap-3">
+                {opcionesAplicables(form.editandoSlug, form.opcionesCobro).map((o) => {
+                  const elegida = form.listasPorForma[o] ?? LISTA_IGUAL_QUE_EL_MEDIO
+                  const guardada = medios?.find((m) => m.slug === form.editandoSlug)?.listasPorForma?.find((x) => x.forma === o)
+                  return (
+                    <Field key={o} label={`Lista de precios con ${ROTULO_OPCION[o]}`}>
+                      <Select
+                        aria-label={`Lista de precios con ${ROTULO_OPCION[o]}`}
+                        value={elegida}
+                        onValueChange={(v) => cambiar({ listasPorForma: { ...form.listasPorForma, [o]: v } })}
+                        options={[
+                          { value: LISTA_IGUAL_QUE_EL_MEDIO, label: "Igual que la lista del medio" },
+                          ...listas.map((l) => ({ value: l.id, label: l.nombre })),
+                          // Una lista desactivada se sigue viendo hasta que se elija otra.
+                          ...(elegida !== LISTA_IGUAL_QUE_EL_MEDIO && !listas.some((l) => l.id === elegida)
+                            ? [{ value: elegida, label: `${guardada?.listaNombre ?? "Lista"} (desactivada)` }]
+                            : []),
+                        ]}
+                      />
+                    </Field>
+                  )
+                })}
+                {opcionesAplicables(form.editandoSlug, form.opcionesCobro).length > 0 && (
+                  <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                    Si elige listas distintas, cada forma de pago se cobra con su propio precio.
+                  </p>
+                )}
               </div>
             )}
             {form.editandoSlug && cuotasEnElProcesador(form.editandoSlug) && form.cuotasFilas.length > 0 && (

@@ -5,6 +5,11 @@
 // el aplicar reciben el MISMO arreglo, así lo que se previsualizó es exactamente lo que se aplica.
 
 import { esMarcaValida, ordenarMarcas } from "./marcas-tarjeta"
+import { OPCIONES_COBRO, type OpcionCobro } from "./medios-pago-shop-opciones"
+
+/** Formas de pago de las condiciones por forma (0076): las mismas opciones de cobro del medio. */
+export const FORMAS_CONDICION = OPCIONES_COBRO
+export type FormaCondicion = OpcionCobro
 
 const SLUG_MEDIO_RE = /^[a-z0-9-]{2,30}$/
 // Cuenta de Alegra (slug de la cuenta) y id de la lista de Alegra: ids/slug simples, sin espacios.
@@ -57,6 +62,11 @@ export type CambioPrecios =
       listaId: string | null
       montoMinimo?: string | null
       marcas?: string[] | null
+      /**
+       * Forma de pago (0076, sólo pago único de Mercado Pago o Payway): ausente o null = todas las
+       * formas. Payway sólo admite credito y debito.
+       */
+      forma?: FormaCondicion | null
     }
   /**
    * Enlace "lista de Alegra del contacto -> lista online privada" por cuenta de Alegra (0068).
@@ -278,6 +288,20 @@ function validarUno(raw: unknown, i: number): { ok: true; cambio: CambioPrecios 
         cuotas = raw.cuotas
       }
       if (raw.listaId !== null && !esUuid(raw.listaId)) return invalido(`${campo}.listaId`, "Seleccione la lista de precios.")
+      let forma: FormaCondicion | null = null
+      if (raw.forma !== undefined && raw.forma !== null) {
+        if (typeof raw.forma !== "string" || !(FORMAS_CONDICION as readonly string[]).includes(raw.forma)) {
+          return invalido(`${campo}.forma`, "La forma de pago indicada no es válida.")
+        }
+        if (cuotas !== null) return invalido(`${campo}.forma`, "La forma de pago solo se elige para el pago único.")
+        if (raw.medioSlug !== "mercadopago" && raw.medioSlug !== "payway") {
+          return invalido(`${campo}.forma`, "Las listas por forma de pago solo aplican a Mercado Pago y Payway.")
+        }
+        if (raw.medioSlug === "payway" && raw.forma === "cuenta_mp") {
+          return invalido(`${campo}.forma`, "Payway no admite la forma Cuenta de Mercado Pago.")
+        }
+        forma = raw.forma as FormaCondicion
+      }
       let montoMinimo: string | null = null
       // Una baja no lleva mínimo: se ignora lo que venga.
       if (raw.listaId !== null && raw.montoMinimo !== undefined && raw.montoMinimo !== null) {
@@ -299,7 +323,16 @@ function validarUno(raw: unknown, i: number): { ok: true; cambio: CambioPrecios 
       }
       return {
         ok: true,
-        cambio: { op: "setCondicion", medioSlug: raw.medioSlug, cuotas, listaId: raw.listaId, montoMinimo, marcas },
+        cambio: {
+          op: "setCondicion",
+          medioSlug: raw.medioSlug,
+          cuotas,
+          listaId: raw.listaId,
+          montoMinimo,
+          marcas,
+          // Sólo se incluye con valor: un cambio sin forma queda idéntico al de antes de la 0076.
+          ...(forma !== null ? { forma } : {}),
+        },
       }
     }
     case "setMapeo": {

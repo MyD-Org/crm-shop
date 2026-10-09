@@ -57,6 +57,18 @@ export interface MedioPagoDto {
   chips: ChipMedio[]
   /** Formas de pago del cobro en línea habilitadas (orden canónico). Sólo tienen efecto con cobro en línea. */
   opcionesCobro: OpcionCobro[]
+  /**
+   * Listas por forma de pago (0076): una condición de pago único con forma, sólo en Mercado Pago y Payway.
+   * La forma sin fila hereda la lista del medio (`listaOnlineId`).
+   */
+  listasPorForma: ListaPorFormaDto[]
+}
+
+export interface ListaPorFormaDto {
+  forma: OpcionCobro
+  listaId: string
+  listaNombre: string
+  listaActiva: boolean
 }
 
 export interface CondicionCuotasDto {
@@ -82,6 +94,7 @@ export const toMedioPagoDto = (
   r: Fila,
   cond: CondicionMedio | null = null,
   condicionesCuotas: CondicionCuotasDto[] = [],
+  listasPorForma: ListaPorFormaDto[] = [],
 ): MedioPagoDto => ({
   slug: r.slug,
   nombre: r.nombre,
@@ -100,6 +113,7 @@ export const toMedioPagoDto = (
   audiencia: r.audiencia === AUDIENCIA_CUENTA_CORRIENTE ? AUDIENCIA_CUENTA_CORRIENTE : "publico",
   chips: leerChips(r.chips),
   opcionesCobro: OPCIONES_COBRO.filter((o) => r.opcionesCobro.includes(o)),
+  listasPorForma,
 })
 
 export type ResultadoMedio =
@@ -134,7 +148,8 @@ export async function listarMediosPago(tenantId: string): Promise<MedioPagoDto[]
     .orderBy(asc(mediosPagoShop.orden), asc(mediosPagoShop.nombre))
   const conds = await condicionesDePagoUnico(tenantId)
   const cuotas = await condicionesDeCuotas(tenantId)
-  return filas.map((f) => toMedioPagoDto(f, conds.get(f.slug) ?? null, cuotas.get(f.slug) ?? []))
+  const porForma = await condicionesPorForma(tenantId)
+  return filas.map((f) => toMedioPagoDto(f, conds.get(f.slug) ?? null, cuotas.get(f.slug) ?? [], porForma.get(f.slug) ?? []))
 }
 
 /** Condición de pago único (cuotas NULL) de cada medio: slug -> lista enlazada. */
@@ -157,6 +172,38 @@ async function condicionesDePagoUnico(tenantId: string, ej: Pick<ReturnType<type
       ),
     )
   return new Map<string, CondicionMedio>(filas.map((f) => [f.slug, f]))
+}
+
+/** Condiciones de pago único por forma de pago (0076) de cada medio: slug -> una por forma, en orden canónico. */
+async function condicionesPorForma(tenantId: string, ej: Pick<ReturnType<typeof getDb>, "select"> = getDb()) {
+  const filas = await ej
+    .select({
+      slug: listaPrecioCondiciones.medioSlug,
+      forma: listaPrecioCondiciones.forma,
+      listaId: listasPrecioOnline.id,
+      listaNombre: listasPrecioOnline.nombre,
+      listaActiva: listasPrecioOnline.activa,
+    })
+    .from(listaPrecioCondiciones)
+    .innerJoin(listasPrecioOnline, eq(listasPrecioOnline.id, listaPrecioCondiciones.listaId))
+    .where(
+      and(
+        eq(listaPrecioCondiciones.tenantId, tenantId),
+        sql`${listaPrecioCondiciones.cuotas} IS NULL`,
+        sql`${listaPrecioCondiciones.forma} IS NOT NULL`,
+      ),
+    )
+  const porMedio = new Map<string, ListaPorFormaDto[]>()
+  for (const f of filas) {
+    // Una forma desconocida (otra versión) se ignora.
+    const forma = OPCIONES_COBRO.find((o) => o === f.forma)
+    if (!forma) continue
+    const arr = porMedio.get(f.slug) ?? []
+    arr.push({ forma, listaId: f.listaId, listaNombre: f.listaNombre, listaActiva: f.listaActiva })
+    porMedio.set(f.slug, arr)
+  }
+  for (const arr of porMedio.values()) arr.sort((a, b) => OPCIONES_COBRO.indexOf(a.forma) - OPCIONES_COBRO.indexOf(b.forma))
+  return porMedio
 }
 
 /** Condiciones de cuotas (N >= 2) de cada medio: slug -> condiciones ascendentes. */
@@ -398,7 +445,8 @@ async function actualizarEnTx(
       .returning()
     const cond = (await condicionesDePagoUnico(tenantId, tx)).get(slug) ?? null
     const cuotas = (await condicionesDeCuotas(tenantId, tx)).get(slug) ?? []
-    return { kind: "ok", medio: toMedioPagoDto(fila, cond, cuotas) }
+    const porForma = (await condicionesPorForma(tenantId, tx)).get(slug) ?? []
+    return { kind: "ok", medio: toMedioPagoDto(fila, cond, cuotas, porForma) }
   })
 }
 

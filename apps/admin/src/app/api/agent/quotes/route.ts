@@ -1,10 +1,14 @@
-import { authAgentTenantRequest } from "@/lib/agent-auth"
+import { authAgentInternalRequest } from "@/lib/agent-auth"
 import { getTenantConfig } from "@/lib/tenant-context"
 import { createEstimate, listEstimatesByContact } from "@/lib/alegra"
 
 // Cotizaciones (estimates de Alegra) para el agente. Es la única escritura contra Alegra
 // que exponemos: una cotización no es documento fiscal y se puede borrar desde Alegra si
 // hizo falta. NO crear facturas/pagos desde el agente.
+//
+// Auth: sólo INTERNAL_SECRET (server-to-server). `contact_id` es arbitrario, así que el crm_token
+// del cliente logueado NO sirve acá: llega al navegador dentro del JWT del widget y con él
+// cualquier cliente podría cotizar a nombre de otro o leer sus cotizaciones. Ver lib/agent-auth.ts.
 //
 // POST /api/agent/quotes
 //   body: { contact_id, items: [{ id, quantity, price?, discount? }], due_date?, notes? }
@@ -50,9 +54,9 @@ function serializeQuote(e: Awaited<ReturnType<typeof createEstimate>>) {
 export async function POST(req: Request) {
   try {
     const tenant = await getTenantConfig()
-    const auth = authAgentTenantRequest(req, tenant.id)
+    const auth = authAgentInternalRequest(req)
     if (!auth) {
-      console.warn("[agent/quotes] 401 — request sin crm_token válido (Authorization Bearer)")
+      console.warn("[agent/quotes] 401 — request sin INTERNAL_SECRET válido (Authorization Bearer)")
       return Response.json({ error: "unauthorized" }, { status: 401 })
     }
 
@@ -100,7 +104,7 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     const tenant = await getTenantConfig()
-    const auth = authAgentTenantRequest(req, tenant.id)
+    const auth = authAgentInternalRequest(req)
     if (!auth) return Response.json({ error: "unauthorized" }, { status: 401 })
 
     const url = new URL(req.url)

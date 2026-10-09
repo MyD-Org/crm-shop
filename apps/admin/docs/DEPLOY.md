@@ -127,6 +127,9 @@ dominio ni certificado propio.
   (`npm.pkg.github.com`). Sin ella el build falla con `401 Unauthorized`. Usar un token
   **classic con solo el scope `read:packages`** (no un PAT amplio). No se usa en runtime.
 
+- La CSP (ver "CSP" al final) se arma en build a partir de `NEXT_PUBLIC_SENTRY_DSN`,
+  `R2_SHOP_MEDIA_PUBLIC_URL` y `CSP_REPORT_URI` (opcional): cambiarlas requiere redeploy.
+
 ### NO cargar en prod
 - `AI_CHAT_ENABLED` — flag de dev; en prod el chat se controla con Vercel Flags (`ai-chat-enabled`).
 
@@ -189,3 +192,28 @@ Editar (medio con cobro en línea). Se retiraron los escalones, los proveedores,
 Mercado Pago, el endpoint `/api/internal/shop/cuotas` y su contrato v2. Las tablas viejas
 (`payment_methods`, `installment_options`, `payment_config_versions`) quedan sin uso y sin borrar.
 El Shop cobra en cuotas sólo con el flag `cuotas-cobro` (Vercel Flags, apagado por defecto).
+
+## CSP
+
+Todas las respuestas llevan una **Content-Security-Policy en modo Report-Only**
+(`Content-Security-Policy-Report-Only`, armada en `src/lib/headers-seguridad.ts`): el navegador
+informa lo que bloquearía pero **no bloquea nada**. Los orígenes que admite salen de variables
+(Sentry, fotos del catálogo) y del inventario documentado en ese archivo; las páginas de
+`/admin/correo` admiten además `img-src https:` (los mensajes traen imágenes de cualquier host).
+
+Para pasarla a enforcing:
+
+1. Opcional: cargar `CSP_REPORT_URI` (endpoint que reciba los reportes) y redeployar; si no, los
+   reportes se ven sólo en la consola del navegador.
+2. Con el deploy en Preview (`staging`), recorrer con la consola abierta: login del backoffice,
+   **inbox** con una conversación con audio/imagen/documento, **correo** abriendo un mensaje con
+   imágenes remotas y pulsando "Mostrar imágenes", **catálogo** con fotos y subida de una foto y de
+   una imagen de categoría, **comprobantes** (imagen y PDF, "Abrir en pestaña nueva"), **portal**
+   con un PDF de factura y el **chat** del portal, y aceptar las notificaciones push.
+3. Cada línea `[Report Only] Refused to load…` es un origen que falta: sumarlo en
+   `politicaCsp` (por variable si depende del entorno, nunca un host de prod literal), con su
+   test en `headers-seguridad.test.ts`, y repetir el recorrido hasta que la consola quede limpia.
+4. Renombrar el header a `Content-Security-Policy` en `headersDeSeguridad` (y ajustar el test que
+   exige Report-Only), mergear a `staging`, repetir el recorrido en Preview y promover a `main`.
+
+Rollback: volver el header a `Content-Security-Policy-Report-Only` y redeployar.

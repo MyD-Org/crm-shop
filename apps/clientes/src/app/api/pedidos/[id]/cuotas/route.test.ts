@@ -57,7 +57,8 @@ const pedido = (extra: Record<string, unknown> = {}) => ({
   lineas: lineasDelPedido,
   cuotas: 1,
   total: 50_000,
-  sucursal: null,
+  sucursal: "mdp",
+  facturaSucursal: null,
   avisosEnviados: false,
   entrega: { local: null, ciudad: null, direccion: null },
   contacto: { nombre: "Ana", telefono: "1100000000" },
@@ -82,8 +83,11 @@ const llamar = (body: unknown = {}, id = "p1") =>
 afterEach(() => vi.unstubAllEnvs());
 
 beforeEach(() => {
-  vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token-de-prueba");
-  vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-clave-publica");
+  // Dos cuentas de Mercado Pago; el pedido es de mdp.
+  vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-token-de-prueba");
+  vi.stubEnv("MP_PUBLIC_KEY_MDP", "TEST-clave-publica");
+  vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token-otra-cuenta");
+  vi.stubEnv("MP_PUBLIC_KEY_IGZ", "TEST-clave-publica-otra-cuenta");
   permitido = true;
   cuotasFlag = true;
   medios = [medioMP];
@@ -139,7 +143,7 @@ describe("POST /api/pedidos/[id]/cuotas", () => {
   it("sin tarjeta: planes de referencia de Visa; con interés disponible; public key del resolver", async () => {
     consultarPlanesMP.mockResolvedValue(planes(6, 12));
     const json = await (await llamar()).json();
-    expect(consultarPlanesMP).toHaveBeenCalledWith(expect.objectContaining({ amount: 50_000, paymentMethodId: "visa" }));
+    expect(consultarPlanesMP).toHaveBeenCalledWith(expect.objectContaining({ amount: 50_000, paymentMethodId: "visa", cuenta: "mdp" }));
     expect(json.procesador).toEqual({ id: "mercadopago", nombre: "Mercado Pago" });
     expect(json.publicKey).toBe("TEST-clave-publica");
     expect(json.conInteres).toEqual({ disponible: true });
@@ -155,7 +159,7 @@ describe("POST /api/pedidos/[id]/cuotas", () => {
   it("con BIN: planes de la tarjeta y su marca", async () => {
     consultarPlanesMP.mockResolvedValue(planes(6));
     const json = await (await llamar({ bin: "45099512" })).json();
-    expect(consultarPlanesMP).toHaveBeenCalledWith(expect.objectContaining({ amount: 50_000, bin: "45099512" }));
+    expect(consultarPlanesMP).toHaveBeenCalledWith(expect.objectContaining({ amount: 50_000, bin: "45099512", cuenta: "mdp" }));
     expect(json.marca).toEqual({ id: "visa", nombre: "Visa", logo: "https://logos.example/visa.png" });
   });
 
@@ -177,6 +181,22 @@ describe("POST /api/pedidos/[id]/cuotas", () => {
     const json = await (await llamar({ bin: "450995" })).json();
     expect(json.conInteres).toEqual({ disponible: false });
     expect(json.opciones.map((o: { tipo: string }) => o.tipo)).toEqual(["un_pago", "sin_interes"]);
+  });
+
+  it("la zona que fuerza la factura manda: planes y public key de la cuenta que factura", async () => {
+    pedidoParaCambiarMedio.mockResolvedValue(pedido({ sucursal: "mdp", facturaSucursal: "igz" }));
+    consultarPlanesMP.mockResolvedValue(planes(3));
+    const json = await (await llamar()).json();
+    expect(consultarPlanesMP).toHaveBeenCalledWith(expect.objectContaining({ cuenta: "igz" }));
+    expect(json.publicKey).toBe("TEST-clave-publica-otra-cuenta");
+  });
+
+  it("la cuenta del pedido sin credenciales: sin planes con interés ni public key (no los de otra cuenta)", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "");
+    const json = await (await llamar()).json();
+    expect(consultarPlanesMP).not.toHaveBeenCalled();
+    expect(json.publicKey).toBeUndefined();
+    expect(json.conInteres).toEqual({ disponible: false });
   });
 
   it("Payway: sin planes de MP; la marca viene explícita", async () => {

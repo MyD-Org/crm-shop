@@ -9,8 +9,9 @@ import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
 
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
-vi.mock("./mercadopago", () => ({
-  mercadoPago: { id: "mercadopago", consultarPago: vi.fn() },
+vi.mock("./mercadopago", async (orig) => ({
+  ...(await orig<typeof import("./mercadopago")>()),
+  crearMercadoPago: (cuenta: string) => ({ id: "mercadopago", cuenta, configurado: () => true, consultarPago: vi.fn() }),
 }));
 
 import { reconciliarPagosPendientes } from "./reconciliar";
@@ -18,6 +19,8 @@ import { reconciliarPagosPendientes } from "./reconciliar";
 beforeEach(() => {
   grabadora = dbGrabadora();
   vi.stubEnv("SHOP_TENANT_ID", "tenant-a");
+  vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token");
+  vi.stubEnv("MP_PUBLIC_KEY_IGZ", "TEST-key");
 });
 
 afterEach(() => {
@@ -39,7 +42,9 @@ describe("reconciliarPagosPendientes", () => {
   it("recorre intentos, no pedidos: un intento viejo abierto también se consulta", async () => {
     await reconciliarPagosPendientes();
     const { sql } = grabadora.consultas[0];
-    expect(sql).not.toContain('"shop"."orders"');
+    // El pedido se une sólo para leer su cuenta de cobro (sucursal y regla); el filtro es del intento.
+    expect(sql).toMatch(/from "shop"\."pago_intentos" inner join "shop"\."orders"/);
+    expect(sql).toContain('"orders"."sucursal"');
     expect(sql).toContain('"pago_intentos"."estado" =');
     expect(sql).toContain('"pago_intentos"."proveedor" =');
     expect(sql).toContain('"pago_intentos"."referencia" is not null');

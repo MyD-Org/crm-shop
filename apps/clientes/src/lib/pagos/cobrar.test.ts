@@ -41,11 +41,43 @@ vi.mock("@/lib/pedidos", async (original) => ({
 }));
 vi.mock("./intento-abierto", () => ({ resolverIntentoAbierto: async () => "en_curso" }));
 
+/**
+ * Procesadores de prueba: `cobrarPedido` recibe el id y arma el proveedor ligado a la cuenta del pedido
+ * con `proveedorPago(id, cuenta)`. Acá esa fábrica devuelve el doble registrado con ese id. La elección
+ * de la cuenta se prueba aparte (cobrar.cuenta.test.ts): acá toda cuenta es "igz" y está configurada
+ * mientras `configurado` sea true.
+ */
+const falsos = vi.hoisted(() => new Map<string, import("./tipos").ProveedorPago>());
+const cuentas = vi.hoisted(() => ({ configurado: true }));
+vi.mock("@/lib/pagos", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos")>()),
+  proveedorPago: (id: string, cuenta: string) => {
+    const p = falsos.get(id);
+    return p ? { ...p, cuenta } : null;
+  },
+  rasgosProcesador: (id: string) => {
+    const p = falsos.get(id);
+    return p
+      ? { requiereBin: Boolean(p.requiereBin), requiereAntifraude: Boolean(p.requiereAntifraude), conWebhook: false }
+      : null;
+  },
+}));
+vi.mock("./credenciales", async (orig) => ({
+  ...(await orig<typeof import("./credenciales")>()),
+  hayCuentaConfigurada: () => cuentas.configurado,
+}));
+vi.mock("./cuentas-sucursales", () => ({
+  cuentaParaCobrar: async () =>
+    cuentas.configurado ? { ok: true, cuenta: "igz", prevista: "igz", fallback: false } : { ok: false, motivo: "sin_cuenta" },
+  proveedorDeIntento: async () => null,
+}));
+
 import { cobrarPedido } from "./cobrar";
 
 let configurado = true;
 const otro: ProveedorPago = {
   id: "otroprocesador",
+  cuenta: "igz",
   configurado: () => configurado,
   crearPago: (...a: unknown[]) => crearPago(...a),
   consultarPago: async () => {
@@ -56,9 +88,15 @@ const otro: ProveedorPago = {
   },
 };
 
+/** Registra el doble con su id y cobra con ese procesador (la ruta pasa el id, no el proveedor). */
+function procesador(p: ProveedorPago): string {
+  falsos.set(p.id, p);
+  return p.id;
+}
+
 const pagar = () =>
   cobrarPedido(
-    otro,
+    procesador(otro),
     new Request("https://tienda.example/api/pagos/otroprocesador", {
       method: "POST",
       body: JSON.stringify({ pedidoId: "p1", token: "tok", cuotas: 1 }),
@@ -75,6 +113,8 @@ const pedido = (pagoMetodo: string): PedidoParaPago => ({
 
 beforeEach(() => {
   configurado = true;
+  cuentas.configurado = true;
+  falsos.clear();
   for (const f of [registrarCobro, getPedidoParaPago, getItemsParaAntifraude, crearPago, fijarReferenciaIntento, cerrarIntentoSinPago, registrarIntentoFallido]) f.mockReset();
   orden.length = 0;
   medios.lista = null;
@@ -92,8 +132,9 @@ describe("cobrarPedido — procesador genérico", () => {
     expect(registrarCobro).not.toHaveBeenCalled();
   });
 
-  it("sin credenciales → 409 con motivo genérico (no mp_no_configurado)", async () => {
+  it("sin ninguna cuenta configurada → 409 con motivo genérico (no mp_no_configurado)", async () => {
     configurado = false;
+    cuentas.configurado = false;
     const r = await pagar();
     expect(r.status).toBe(409);
     expect((await r.json()).motivo).toBe("procesador_no_configurado");
@@ -113,7 +154,7 @@ const sinReferencia: ProveedorPago = { ...otro, id: "payway" };
 
 const pagarCon = (p: ProveedorPago, body: Record<string, unknown> = {}) =>
   cobrarPedido(
-    p,
+    procesador(p),
     new Request("https://tienda.example/api/pagos/otroprocesador", {
       method: "POST",
       body: JSON.stringify({ pedidoId: "p1", token: "tok", cuotas: 1, bin: "450799", ...body }),

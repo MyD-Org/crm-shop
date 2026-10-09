@@ -35,10 +35,26 @@ vi.mock("@/lib/pedidos", async (original) => ({
 }));
 vi.mock("./intento-abierto", () => ({ resolverIntentoAbierto: async () => "en_curso" }));
 
+// El proveedor ligado a la cuenta del pedido es el doble `mp` (la cuenta se prueba en cobrar.cuenta.test.ts).
+const doble = vi.hoisted(() => ({ mp: null as null | import("./tipos").ProveedorPago }));
+vi.mock("@/lib/pagos", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos")>()),
+  proveedorPago: (id: string, cuenta: string) => (id === "mercadopago" && doble.mp ? { ...doble.mp, cuenta } : null),
+}));
+vi.mock("./credenciales", async (orig) => ({
+  ...(await orig<typeof import("./credenciales")>()),
+  hayCuentaConfigurada: () => true,
+}));
+vi.mock("./cuentas-sucursales", () => ({
+  cuentaParaCobrar: async () => ({ ok: true, cuenta: "mdp", prevista: "mdp", fallback: false }),
+  proveedorDeIntento: async () => null,
+}));
+
 import { cobrarPedido } from "./cobrar";
 
 const mp: ProveedorPago = {
   id: "mercadopago",
+  cuenta: "mdp",
   configurado: () => true,
   crearPago: (...a: unknown[]) => crearPago(...a),
   consultarPago: async () => {
@@ -55,9 +71,11 @@ const pedido = (cuotas: number | null): PedidoParaPago => ({
   cuotas, estado: "pendiente", creadoEn: new Date(),
 });
 
+doble.mp = mp;
+
 const pagar = (body: Record<string, unknown>) =>
   cobrarPedido(
-    mp,
+    "mercadopago",
     new Request("https://tienda.example/api/pagos/mercadopago", {
       method: "POST",
       body: JSON.stringify({ pedidoId: "p1", token: "tok", metodoPagoId: "visa", ...body }),
@@ -131,7 +149,7 @@ describe("cuotas con interés de Mercado Pago (pedido en 1 pago)", () => {
     consultarPlanesMP.mockResolvedValue(planes(3, 6, 12));
     const r = await pagar({ cuotas: 6, bin: "45099512", monto: 1 });
     expect(r.status).toBe(200);
-    expect(consultarPlanesMP).toHaveBeenCalledWith(expect.objectContaining({ amount: 50000, bin: "45099512" }));
+    expect(consultarPlanesMP).toHaveBeenCalledWith(expect.objectContaining({ amount: 50000, bin: "45099512", cuenta: "mdp" }));
     expect(reservarIntento).toHaveBeenCalledWith("p1", "mercadopago", "tarjeta", {
       cuotas: 6,
       totalEsperado: 50000,

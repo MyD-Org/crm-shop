@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { cancelarPedidoPendiente, intentoAbiertoDelPedido, lineasDelPedidoParaCarrito } from "@/lib/pedidos";
-import { proveedorPago } from "@/lib/pagos";
+import { proveedorDeIntento } from "@/lib/pagos/cuentas-sucursales";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
 import { marcarStockCambiado } from "@/lib/cache-invalidar";
 
@@ -36,7 +36,8 @@ export async function POST(
 
   const abierto = await intentoAbiertoDelPedido(id, dueno);
   if (abierto) {
-    const proveedor = proveedorPago(abierto.proveedor);
+    // Se cancela con las credenciales de la cuenta del pedido (la misma con la que se cobró).
+    const proveedor = await proveedorDeIntento(abierto);
     const resolucion = proveedor
       ? await resolverIntentoAbierto(id, abierto, proveedor)
       : "en_curso";

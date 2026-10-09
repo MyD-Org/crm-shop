@@ -31,6 +31,8 @@ vi.mock("@/lib/cotizacion", async (orig) => ({
   }),
 }));
 vi.mock("@/lib/pedidos", () => ({
+  // Cuenta de cobro del pedido creado (public key del Brick): sucursal igz.
+  cuentaDelPedido: async () => ({ sucursal: "igz", facturaSucursal: null }),
   crearPedido: (...a: unknown[]) => crearPedido(...a),
   getPedidoPorClave: async () => null,
   listarPedidos: async () => [],
@@ -83,8 +85,8 @@ const post = (extra: Record<string, unknown> = {}) =>
   );
 
 const conCredenciales = () => {
-  vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
-  vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-key");
+  vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token");
+  vi.stubEnv("MP_PUBLIC_KEY_IGZ", "TEST-key");
 };
 
 beforeEach(() => {
@@ -210,29 +212,49 @@ describe("POST /api/pedidos — Mercado Pago", () => {
     expect(crearPedido).not.toHaveBeenCalled();
   });
 
-  it("activo pero sin MP_ACCESS_TOKEN: 400", async () => {
-    vi.stubEnv("MP_ACCESS_TOKEN", "");
+  it("activo pero sin el access token de ninguna cuenta: 409 en usted, sin crear", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "");
     medios = [medio("transferencia"), medio("mercadopago")];
-    expect((await post({ pagoMetodo: "mercadopago" })).status).toBe(400);
+    const r = await post({ pagoMetodo: "mercadopago" });
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({
+      error: "El medio de pago elegido no está disponible por el momento. Seleccione otro medio de pago.",
+      motivo: "procesador_no_configurado",
+    });
     expect(crearPedido).not.toHaveBeenCalled();
   });
 
-  it("activo pero sin NEXT_PUBLIC_MP_PUBLIC_KEY: 400", async () => {
-    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "");
+  it("activo pero sin la public key de ninguna cuenta: 409", async () => {
+    vi.stubEnv("MP_PUBLIC_KEY_IGZ", "");
     medios = [medio("transferencia"), medio("mercadopago")];
-    expect((await post({ pagoMetodo: "mercadopago" })).status).toBe(400);
+    expect((await post({ pagoMetodo: "mercadopago" })).status).toBe(409);
+  });
+
+  it("con una sola cuenta configurada (otra sucursal) se crea: la cuenta del pedido la decide el cobro", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "");
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-token");
+    vi.stubEnv("MP_PUBLIC_KEY_MDP", "TEST-key");
+    medios = [medio("transferencia"), medio("mercadopago")];
+    expect((await post({ pagoMetodo: "mercadopago" })).status).toBe(201);
+  });
+
+  it("las variables sin sufijo no cuentan: 409", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "");
+    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
+    medios = [medio("transferencia"), medio("mercadopago")];
+    expect((await post({ pagoMetodo: "mercadopago" })).status).toBe(409);
   });
 
   it("sin credenciales y otro medio activo: el otro entra", async () => {
-    vi.stubEnv("MP_ACCESS_TOKEN", "");
+    vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "");
     medios = [medio("transferencia"), medio("mercadopago")];
     expect((await post({ pagoMetodo: "transferencia" })).status).toBe(201);
   });
 
   it("sin credenciales y MP como único medio: sólo a_coordinar", async () => {
-    vi.stubEnv("MP_ACCESS_TOKEN", "");
+    vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "");
     medios = [medio("mercadopago")];
-    expect((await post({ pagoMetodo: "mercadopago" })).status).toBe(400);
+    expect((await post({ pagoMetodo: "mercadopago" })).status).toBe(409);
     expect((await post({ pagoMetodo: "a_coordinar" })).status).toBe(201);
   });
 

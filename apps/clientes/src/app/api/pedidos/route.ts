@@ -18,7 +18,7 @@ import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { esCompradorCuentaCorriente, pagoValidoConMedios } from "@/lib/medios-pago";
 import { procesadorConfigurado } from "@/lib/pagos";
-import { mpPublicKeyPara } from "@/lib/pagos/mp-public-key";
+import { configMpPara } from "@/lib/pagos/mp-public-key";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { motivoRevisionPedido } from "@/lib/motivo-revision";
@@ -239,6 +239,21 @@ export async function POST(req: Request) {
   };
   const pagoValido = pagoValidoConMedios(mediosCrm, entregaTipo, pagoMetodo, opcionesMedios);
   if (!pagoValido) {
+    // El medio aplica pero su procesador no tiene NINGUNA cuenta con credenciales en el Shop. (Que la
+    // cuenta de la sucursal del pedido no esté configurada no se decide acá: lo resuelve el cobro.)
+    const sinCuentas = pagoValidoConMedios(mediosCrm, entregaTipo, pagoMetodo, {
+      ...opcionesMedios,
+      procesadorDisponible: () => true,
+    });
+    if (sinCuentas) {
+      return NextResponse.json(
+        {
+          error: "El medio de pago elegido no está disponible por el momento. Seleccione otro medio de pago.",
+          motivo: "procesador_no_configurado",
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: "Ese medio de pago no está disponible para la entrega elegida." },
       { status: 400 },
@@ -548,7 +563,7 @@ export async function POST(req: Request) {
     const contacto = await contactoDelPedido(pedido.id, pedido.numero);
 
     return NextResponse.json(
-      { ...pedido, cotizacion, ...(contacto ? { contacto } : {}), ...mpPublicKeyPara(pagoMetodo) },
+      { ...pedido, cotizacion, ...(contacto ? { contacto } : {}), ...(await configMpPara(pedido.id, pagoMetodo)) },
       { status: pedido.repetido ? 200 : 201 },
     );
   } catch (err) {

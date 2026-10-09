@@ -3,7 +3,9 @@ import { identidadActual } from "@/lib/auth";
 import { VENTANA_PAGO_MS, getPedidoParaPago, motivoNoCobrable } from "@/lib/pedidos";
 import { procesadorDeMedio } from "@/lib/medios-pago";
 import { permitir } from "@/lib/rate-limit";
-import { crearPreferencia, mercadoPagoConfigurado } from "@/lib/pagos/mercadopago";
+import { crearPreferencia } from "@/lib/pagos/mercadopago";
+import { procesadorConfigurado } from "@/lib/pagos";
+import { cuentaParaCobrar } from "@/lib/pagos/cuentas-sucursales";
 import { armarPreferencia } from "@/lib/pagos/mercadopago-preferencia";
 import { rechazoPorOpcionDeCobro } from "@/lib/pagos/opcion-cobro-guard";
 
@@ -16,7 +18,8 @@ const VENTANA_MS = 5 * 60_000;
  *
  * No cobra nada: el comprador paga en el flujo de Mercado Pago, vuelve a `/checkout?pedido=<id>` y el
  * webhook (o la consulta del sondeo) registra el cobro por `registrarCobro`, por `external_reference`.
- * Monto y referencia salen SIEMPRE del pedido persistido, nunca del body.
+ * Monto y referencia salen SIEMPRE del pedido persistido, nunca del body. La preferencia se crea con
+ * la cuenta de Mercado Pago del pedido (la de su sucursal); el webhook identifica esa cuenta por su firma.
  */
 export async function POST(req: Request) {
   const { clerkUserId, cliente, email } = await identidadActual();
@@ -24,12 +27,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  if (!mercadoPagoConfigurado()) {
-    return NextResponse.json(
+  const sinCuenta = () =>
+    NextResponse.json(
       { error: "Los pagos en línea no están disponibles en este momento.", motivo: "mp_no_configurado" },
       { status: 409 },
     );
-  }
+  if (!procesadorConfigurado("mercadopago")) return sinCuenta();
 
   if (!permitir(`pago-pref:${clerkUserId ?? cliente?.codigocliente}`, MAX_PEDIDOS, VENTANA_MS)) {
     return NextResponse.json({ error: "Demasiados intentos. Espere unos minutos." }, { status: 429 });
@@ -63,9 +66,14 @@ export async function POST(req: Request) {
   // La cuenta de Mercado Pago puede estar deshabilitada para el medio en el admin (migración 0073).
   const rechazoOpcion = await rechazoPorOpcionDeCobro(pedido.pagoMetodo, "mercadopago", "cuenta_mp");
   if (rechazoOpcion) return rechazoOpcion;
+  // Sólo la cuenta del pedido: sin credenciales, falla cerrado (no se cobra con la de otra sucursal).
+  const elegida = await cuentaParaCobrar("mercadopago", pedido);
+  if (!elegida.ok) return sinCuenta();
   try {
     const url = await crearPreferencia(
+      elegida.cuenta,
       armarPreferencia({
+        cuenta: elegida.cuenta,
         pedidoId: pedido.id,
         numero: pedido.numero,
         total: pedido.total,

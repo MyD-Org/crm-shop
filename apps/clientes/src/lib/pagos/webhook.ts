@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { ErrorProveedor, type EstadoPago, type ProveedorPago } from "./tipos";
 import { pedidoDelPago, registrarCobro } from "@/lib/pedidos";
+import { proveedorPago, rasgosProcesador } from "./index";
+import { cuentasConSecreto } from "./credenciales";
+import { datosCuentas } from "./cuentas-sucursales";
 
 /**
  * Confirmación de cobro de un procesador con webhook. Lo comparten
  * `POST /api/pagos/mercadopago/webhook` (URL registrada en MP) y `POST /api/pagos/[proveedor]/webhook`.
- * El proveedor tiene que implementar `verificarWebhook` (quien llama ya filtró el que no).
+ * El procesador tiene que avisar por webhook (`verificarWebhook`); si no, 404.
+ *
+ * **Cuenta**: una sola URL registrada en la aplicación de Mercado Pago de CADA sucursal, cada una con su
+ * propio secreto (ver credenciales.ts). Se prueba el secreto de cada cuenta: la que valida la firma es
+ * la cuenta del aviso, y el pago se consulta con SUS credenciales. La pista
+ * `?cuenta=` de la URL sólo ordena la prueba y va a los logs: nunca es autoridad.
  *
  * **Esta ruta es la única fuente de verdad del estado de pago.** La URL de
  * retorno del comprador se puede escribir a mano en la barra del navegador; una
@@ -21,19 +29,53 @@ import { pedidoDelPago, registrarCobro } from "@/lib/pedidos";
  * es nuestro— es ruido infinito. El 401 se reserva para la firma inválida, que
  * es lo único que amerita que MP deje de intentarlo.
  */
-export async function procesarWebhook(
-  proveedor: ProveedorPago,
-  req: Request,
-): Promise<Response> {
+export async function procesarWebhook(procesadorId: string, req: Request): Promise<Response> {
   const cuerpo = await req.text();
 
-  const verificar = proveedor.verificarWebhook?.bind(proveedor);
-  if (!verificar) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-  const { valido, referencia } = await verificar(req, cuerpo);
-  if (!valido) {
-    // Sin detalle en la respuesta: decirle a quien golpea si falló el timestamp
-    // o el HMAC le sirve para ajustar el intento.
+  if (!rasgosProcesador(procesadorId)?.conWebhook) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  }
+
+  let slugs: string[];
+  try {
+    slugs = (await datosCuentas()).slugs;
+  } catch (err) {
+    // Sin saber qué cuentas hay no se puede validar: que el procesador reintente.
+    console.error(`[webhook ${procesadorId}] no se pudieron leer las cuentas:`, err);
+    return NextResponse.json({ error: "Error temporal" }, { status: 500 });
+  }
+  const conSecreto = procesadorId === "mercadopago" ? cuentasConSecreto("mercadopago", slugs) : [];
+  if (conSecreto.length === 0) {
+    // 401 como una firma inválida: el procesador lo muestra como entrega fallida y reintenta, que es
+    // lo que hace visible un secreto sin cargar.
+    console.error(`[webhook ${procesadorId}] ninguna cuenta tiene cargado el secreto del webhook`);
     return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
+  }
+
+  const pista = new URL(req.url).searchParams.get("cuenta");
+  const orden = pista && conSecreto.includes(pista) ? [pista, ...conSecreto.filter((c) => c !== pista)] : conSecreto;
+  let proveedor: ProveedorPago | null = null;
+  let referencia: string | undefined;
+  for (const cuenta of orden) {
+    const candidato = proveedorPago(procesadorId, cuenta);
+    const r = await candidato?.verificarWebhook?.(req, cuerpo);
+    if (candidato && r?.valido) {
+      proveedor = candidato;
+      referencia = r.referencia;
+      break;
+    }
+  }
+  if (!proveedor) {
+    // Un solo log, sin datos del payload. Sin detalle en la respuesta: decirle a quien golpea si
+    // falló el timestamp o el HMAC le sirve para ajustar el intento.
+    console.error(
+      `[webhook ${procesadorId}] firma inválida para las ${orden.length} cuentas con secreto` +
+        ` (x-request-id=${req.headers.get("x-request-id") ?? "sin"})`,
+    );
+    return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
+  }
+  if (pista && pista !== proveedor.cuenta) {
+    console.warn(`[webhook ${procesadorId}] la pista cuenta=${pista} no coincide con la cuenta que firmó (${proveedor.cuenta})`);
   }
 
   if (!referencia) {
@@ -44,7 +86,7 @@ export async function procesarWebhook(
     let pedido = await pedidoDelPago(proveedor.id, referencia);
 
     // El payload solo dijo QUÉ mirar. El estado real se le pregunta a MP con
-    // nuestro Access Token.
+    // el Access Token de la cuenta que firmó el aviso.
     let estado: EstadoPago;
     try {
       estado = await proveedor.consultarPago(referencia);
@@ -55,7 +97,7 @@ export async function procesarWebhook(
        * cualquier otro error sí conviene que MP reintente (cae al 500).
        */
       if (err instanceof ErrorProveedor && err.status === 404 && !pedido) {
-        console.warn(`[webhook ${proveedor.id}] referencia inexistente en MP: ${referencia}`);
+        console.warn(`[webhook ${proveedor.id}] cuenta=${proveedor.cuenta} referencia inexistente en MP: ${referencia}`);
         return NextResponse.json({ ok: true, ignorado: "referencia desconocida" });
       }
       throw err;
@@ -89,7 +131,7 @@ export async function procesarWebhook(
     });
 
     console.log(
-      `[webhook ${proveedor.id}] pedido=${pedido.id} ${pedido.pagoEstado} -> ${estado.estado}` +
+      `[webhook ${proveedor.id}] cuenta=${proveedor.cuenta} pedido=${pedido.id} ${pedido.pagoEstado} -> ${estado.estado}` +
         ` (${estado.detalle || "sin detalle"}) ${cambio ? "APLICADO" : "sin cambio"}`,
     );
 

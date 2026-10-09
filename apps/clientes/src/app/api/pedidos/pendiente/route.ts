@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { procesadorConfigurado } from "@/lib/pagos";
-import { mpPublicKeyPara } from "@/lib/pagos/mp-public-key";
+import { configMpPara } from "@/lib/pagos/mp-public-key";
 import { procesadorDeMedio, slugsPagoEnLinea } from "@/lib/medios-pago";
 import { identidadActual } from "@/lib/auth";
 import { pedidoParaReintentarPago, pedidoPendienteMasReciente } from "@/lib/pedidos";
@@ -25,7 +25,7 @@ export async function GET(request?: Request) {
   const idReintento = request ? new URL(request.url).searchParams.get("pedido") : null;
   if (idReintento) {
     const r = await pedidoParaReintentarPago({ clerkUserId, clienteCodigo: cliente?.codigocliente }, idReintento);
-    if (r.ok) return NextResponse.json({ pedido: { ...r.pedido, ...mpPublicKeyPara(r.pedido.pagoMetodo) } });
+    if (r.ok) return NextResponse.json({ pedido: { ...r.pedido, ...(await configMpPara(r.pedido.id, r.pedido.pagoMetodo)) } });
     if (r.motivo === "no_existe") {
       return NextResponse.json({ error: "No encontramos el pedido." }, { status: 404 });
     }
@@ -59,6 +59,6 @@ export async function GET(request?: Request) {
 
   // `cuotas` es lo congelado al crear el pedido (null = sin cuotas elegidas): el formulario de pago se
   // limita a esa cantidad, igual con el flag apagado después.
-  // `mpPublicKey`: la public key del Brick para ESTE pedido (resolver de credenciales).
-  return NextResponse.json({ pedido: pedido ? { ...pedido, ...mpPublicKeyPara(pedido.pagoMetodo) } : null });
+  // `mpPublicKey` / `mpCuenta`: la public key del Brick de la cuenta que cobra ESTE pedido.
+  return NextResponse.json({ pedido: pedido ? { ...pedido, ...(await configMpPara(pedido.id, pedido.pagoMetodo)) } : null });
 }

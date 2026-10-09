@@ -781,6 +781,32 @@ export interface PedidoParaPago {
   entregaCiudad?: string | null;
   entregaDireccion?: string | null;
   facturacionDomicilio?: string | null;
+  /**
+   * Cuenta de cobro (opcionales en el tipo por los dobles de prueba): `orders.sucursal` y la sucursal que
+   * factura si la zona lo fuerza (`sucursal_regla.facturaSucursal`). Inmutables tras crear el pedido.
+   */
+  sucursal?: string | null;
+  facturaSucursal?: string | null;
+}
+
+/** `sucursal_regla.facturaSucursal` del snapshot congelado (null si no hay regla o no fuerza). */
+function facturaSucursalDe(regla: { facturaSucursal?: string | null } | null | undefined): string | null {
+  return regla?.facturaSucursal ?? null;
+}
+
+/**
+ * Lo que hace falta de un pedido para saber con qué cuenta se cobra (`cuentaPrevistaDelPedido`). Sin
+ * filtro de dueño: sólo lo usan rutas que ya validaron el pedido. null si no existe en este tenant.
+ */
+export async function cuentaDelPedido(
+  id: string,
+): Promise<{ sucursal: string | null; facturaSucursal: string | null } | null> {
+  const [fila] = await getDb()
+    .select({ sucursal: orders.sucursal, sucursalRegla: orders.sucursalRegla })
+    .from(orders)
+    .where(and(eq(orders.id, id), esDeEsteTenant()))
+    .limit(1);
+  return fila ? { sucursal: fila.sucursal ?? null, facturaSucursal: facturaSucursalDe(fila.sucursalRegla) } : null;
 }
 
 /**
@@ -847,6 +873,8 @@ export async function getPedidoParaPago(
     entregaCiudad: fila.entregaCiudad,
     entregaDireccion: fila.entregaDireccion,
     facturacionDomicilio: fila.facturacionDomicilio,
+    sucursal: fila.sucursal ?? null,
+    facturaSucursal: facturaSucursalDe(fila.sucursalRegla),
   };
 }
 
@@ -1304,6 +1332,12 @@ export interface IntentoAbierto {
   proveedor: string;
   referencia: string | null;
   creadoEn: Date;
+  /**
+   * Cuenta de cobro del pedido (para ligar el proveedor que lo consulta o cancela). La traen
+   * `intentoAbiertoDelPedido`; `reservarIntento` no (la ruta de cobro ya tiene el pedido).
+   */
+  sucursal?: string | null;
+  facturaSucursal?: string | null;
 }
 
 /**
@@ -1726,8 +1760,9 @@ export async function pedidoParaCambiarMedio(
   /** Cuotas y total congelados hoy (el formulario de pago los compara con la opción elegida). */
   cuotas: number | null;
   total: number;
-  /** Sucursal del pedido (credenciales del procesador por sucursal, a futuro). */
+  /** Sucursal del pedido y la que factura si la zona lo fuerza: definen la cuenta de cobro. */
   sucursal: string | null;
+  facturaSucursal: string | null;
   /** Si ya salieron "Recibimos su pedido" y "Nuevo pedido" (pedido sin cobro en línea). */
   avisosEnviados: boolean;
   /** Lo que el checkout precarga al volver al paso Pago con un pedido retomado. */
@@ -1742,6 +1777,7 @@ export async function pedidoParaCambiarMedio(
       cuotas: orders.cuotas,
       total: orders.total,
       sucursal: orders.sucursal,
+      sucursalRegla: orders.sucursalRegla,
       entregaCiudad: orders.entregaCiudad,
       entregaDireccion: orders.entregaDireccion,
       contactoNombre: orders.contactoNombre,
@@ -1764,6 +1800,7 @@ export async function pedidoParaCambiarMedio(
     cuotas: p.cuotas,
     total: Number(p.total),
     sucursal: p.sucursal ?? null,
+    facturaSucursal: facturaSucursalDe(p.sucursalRegla),
     avisosEnviados: p.avisosEnviadosEn !== null,
     entrega: {
       // Con retiro, la sucursal del pedido es el local elegido.
@@ -1954,6 +1991,8 @@ export async function intentoAbiertoDelPedido(
       proveedor: pagoIntentos.proveedor,
       referencia: pagoIntentos.referencia,
       creadoEn: pagoIntentos.createdAt,
+      sucursal: orders.sucursal,
+      sucursalRegla: orders.sucursalRegla,
     })
     .from(pagoIntentos)
     .innerJoin(orders, eq(orders.id, pagoIntentos.orderId))
@@ -1967,7 +2006,9 @@ export async function intentoAbiertoDelPedido(
     )
     .orderBy(asc(pagoIntentos.createdAt))
     .limit(1);
-  return fila ?? null;
+  if (!fila) return null;
+  const { sucursalRegla, ...resto } = fila;
+  return { ...resto, sucursal: resto.sucursal ?? null, facturaSucursal: facturaSucursalDe(sucursalRegla) };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -2049,10 +2090,20 @@ export async function intentosPendientesDeReconciliar(opciones: {
    * no los conocía, pero si los aprueba tarde quedaban cobrados sin registrar (Payway).
    */
   noLlegoDesde?: Date;
-}): Promise<{ orderId: string; referencia: string; creadoEn: Date }[]> {
+}): Promise<
+  { orderId: string; referencia: string; creadoEn: Date; sucursal: string | null; facturaSucursal: string | null }[]
+> {
   const filas = await getDb()
-    .select({ orderId: pagoIntentos.orderId, referencia: pagoIntentos.referencia, creadoEn: pagoIntentos.createdAt })
+    .select({
+      orderId: pagoIntentos.orderId,
+      referencia: pagoIntentos.referencia,
+      creadoEn: pagoIntentos.createdAt,
+      // Cuenta de cobro del pedido: la conciliación consulta con las credenciales de esa cuenta.
+      sucursal: orders.sucursal,
+      sucursalRegla: orders.sucursalRegla,
+    })
     .from(pagoIntentos)
+    .innerJoin(orders, eq(orders.id, pagoIntentos.orderId))
     .where(
       and(
         // La base es compartida con el CRM y acá no hay comprador que acote la
@@ -2076,7 +2127,11 @@ export async function intentosPendientesDeReconciliar(opciones: {
     )
     .orderBy(asc(pagoIntentos.createdAt))
     .limit(opciones.limite);
-  return filas.filter((f): f is { orderId: string; referencia: string; creadoEn: Date } => f.referencia != null);
+  return filas.flatMap(({ sucursalRegla, referencia, ...f }) =>
+    referencia != null
+      ? [{ ...f, referencia, sucursal: f.sucursal ?? null, facturaSucursal: facturaSucursalDe(sucursalRegla) }]
+      : [],
+  );
 }
 
 /**

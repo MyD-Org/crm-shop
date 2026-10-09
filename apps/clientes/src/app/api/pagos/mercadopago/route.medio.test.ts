@@ -35,10 +35,32 @@ vi.mock("@/lib/pedidos", async (original) => ({
 vi.mock("@/lib/pagos/intento-abierto", () => ({
   resolverIntentoAbierto: async () => "en_curso",
 }));
-vi.mock("@/lib/pagos/mercadopago", () => ({
-  mercadoPago: { id: "mercadopago", configurado: () => configurado, crearPago: (...a: unknown[]) => crearPago(...a) },
-  urlNotificacion: () => undefined,
-  mercadoPagoConfigurado: () => configurado,
+// Proveedor de Mercado Pago ligado a la cuenta del pedido: un doble. La elección de la cuenta se prueba
+// en lib/pagos/cobrar.cuenta.test.ts; acá la cuenta es "igz" y está configurada según el test.
+vi.mock("@/lib/pagos/mercadopago", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos/mercadopago")>()),
+  crearMercadoPago: (cuenta: string) => ({
+    id: "mercadopago",
+    cuenta,
+    configurado: () => configurado,
+    urlNotificacion: () => undefined,
+    crearPago: (...a: unknown[]) => crearPago(...a),
+    consultarPago: async () => {
+      throw new Error("no se usa");
+    },
+    cancelarPago: async () => {
+      throw new Error("no se usa");
+    },
+  }),
+}));
+vi.mock("@/lib/pagos/credenciales", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos/credenciales")>()),
+  hayCuentaConfigurada: () => configurado,
+}));
+vi.mock("@/lib/pagos/cuentas-sucursales", () => ({
+  cuentaParaCobrar: async () =>
+    (() => configurado)() ? { ok: true, cuenta: "igz", prevista: "igz", fallback: false } : { ok: false, motivo: "sin_cuenta" },
+  proveedorDeIntento: async () => null,
 }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => true }));
 
@@ -104,7 +126,7 @@ describe("POST /api/pagos/mercadopago — método del pedido", () => {
   });
 });
 
-describe("POST /api/pagos/mercadopago — sin credenciales", () => {
+describe("POST /api/pagos/mercadopago — sin ninguna cuenta con credenciales", () => {
   beforeEach(() => {
     configurado = false;
   });
@@ -113,7 +135,8 @@ describe("POST /api/pagos/mercadopago — sin credenciales", () => {
     const r = await pagar();
     expect(r.status).toBe(409);
     expect(await r.json()).toEqual({
-      error: "Los pagos en línea no están disponibles en este momento. Un asesor coordinará el pago con usted.",
+      error:
+        "El medio de pago no está disponible por el momento. Seleccione otro medio de pago o inténtelo nuevamente más tarde.",
       motivo: "mp_no_configurado",
     });
     nadaSeCobro();

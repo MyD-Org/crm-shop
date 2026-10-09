@@ -66,6 +66,8 @@ export type MotivoRechazo =
   | "cuotas_distintas"
   /** La forma de pago (crédito, débito, cuenta de Mercado Pago) está deshabilitada para el medio en el admin. */
   | "opcion_no_habilitada"
+  /** La forma del cobro no es la congelada en el pedido (listas de precio por forma de pago). */
+  | "forma_distinta"
   /** La cuota sin interés elegida no vale para la marca de la tarjeta (restricción del admin). */
   | "marca_no_permitida"
   /** Mercado Pago no respondió la consulta de cuotas con interés: no se cobra lo que no se pudo confirmar. */
@@ -111,6 +113,8 @@ export const MENSAJE_RECHAZO: Record<MotivoRechazo, string> = {
     "La cantidad de cuotas no coincide con la seleccionada. Vuelva a elegir su medio de pago.",
   opcion_no_habilitada:
     "Esa forma de pago no está disponible para este medio. Elija otra forma de pago u otro medio de pago.",
+  forma_distinta:
+    "La forma de pago elegida no coincide con la de su pedido. Vuelva a seleccionarla e inténtelo nuevamente.",
   marca_no_permitida:
     "Esa cantidad de cuotas sin interés no está disponible con esta tarjeta. Elija otra cantidad de cuotas u otra tarjeta.",
   planes_no_disponibles:

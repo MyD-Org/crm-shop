@@ -35,6 +35,7 @@ import {
 import type { MotivoRevisionPedido } from "./motivo-revision";
 import type { InfoPago, PagoInfoOrden } from "./pagos/tipos";
 import type { OpcionCobro } from "./pagos/opciones-cobro";
+import { motivoFormaDistinta } from "./pagos/forma-cobro";
 import {
   etiquetaEntrega,
   PAGO_LABEL,
@@ -857,10 +858,13 @@ export const VENTANA_PAGO_MS = 24 * 60 * 60_000;
  * dueño, método y "ya pagado".
  */
 export function motivoNoCobrable(
-  pedido: Pick<PedidoParaPago, "estado" | "creadoEn">,
+  pedido: Pick<PedidoParaPago, "estado" | "creadoEn"> & Partial<Pick<PedidoParaPago, "pagoRevision">>,
   ahora = Date.now(),
-): "cancelado" | "en_curso" | "vencido" | null {
+): "cancelado" | "en_curso" | "vencido" | "en_revision" | null {
   if (pedido.estado === "cancelado") return "cancelado";
+  // Un pago ya cobrado quedó marcado para revisión (`forma_distinta`, `monto_distinto`...): no se vuelve
+  // a cobrar hasta que un operador lo resuelva.
+  if (pedido.pagoRevision) return "en_revision";
   // Confirmado, en preparación, etc.: un operador ya lo está manejando y el
   // pago se coordina con él.
   if (pedido.estado !== "pendiente") return "en_curso";
@@ -1183,7 +1187,7 @@ export function estadoDelPedido(estados: PagoEstado[]): PagoEstado | null {
 }
 
 /** Motivo por el que un operador tiene que revisar el pago. Ver `orders.pago_revision`. */
-export type PagoRevision = "cobro_duplicado" | "pagado_cancelado" | RevisionDeCuotas;
+export type PagoRevision = "cobro_duplicado" | "pagado_cancelado" | RevisionDeCuotas | "forma_distinta";
 
 /**
  * ¿Hay que revisar este pago? Se recalcula en cada evento, así que una
@@ -1258,6 +1262,8 @@ async function registrarCobroTx(
         cuotas: orders.cuotas,
         total: orders.total,
         clerkUserId: orders.clerkUserId,
+        // Último: los dobles de prueba responden filas posicionales.
+        formaCobro: orders.formaCobro,
       })
       .from(orders)
       .where(and(eq(orders.id, pedidoId), esDeEsteTenant()))
@@ -1318,7 +1324,7 @@ async function registrarCobroTx(
      * recalcula igual en cada evento; la moneda sólo viene en el evento, así que se mira para éste.
      */
     const total = Number(fila.total);
-    const noAcredita = (i: (typeof intentos)[number]) =>
+    const montoMal = (i: (typeof intentos)[number]) =>
       i.estado === "pagado" &&
       motivoNoAcreditable(
         { total },
@@ -1328,6 +1334,18 @@ async function registrarCobroTx(
           ...(i.id === intento.id && cobro.moneda !== undefined ? { moneda: cobro.moneda } : {}),
         },
       ) !== null;
+    /**
+     * Red de seguridad de la forma (listas de precio por forma de pago). Con `forma_cobro` congelada, un
+     * pago aprobado cuyo tipo REAL (lo que devolvió el procesador: MP `payment_type_id`, Payway
+     * `payment_method_id` de la respuesta) no es esa forma tampoco acredita: el precio cobrado no
+     * corresponde. Prepaga cuenta como débito; un tipo ausente o no mapeable no se acusa; sin
+     * `forma_cobro` (pedido viejo o sin precios por forma) nunca se acusa. Se calcula sobre las columnas
+     * guardadas, así que es idempotente y vale igual para cobro directo, webhook y reconciliación.
+     */
+    const formaMal = (i: (typeof intentos)[number]) =>
+      i.estado === "pagado" &&
+      motivoFormaDistinta(fila.formaCobro, (i.info as InfoPago | null | undefined)?.tipo) !== null;
+    const noAcredita = (i: (typeof intentos)[number]) => montoMal(i) || formaMal(i);
     const estadoEfectivo = (i: (typeof intentos)[number]): PagoEstado =>
       noAcredita(i) ? "pendiente" : (i.estado as PagoEstado);
 
@@ -1336,11 +1354,19 @@ async function registrarCobroTx(
     const cobrados = intentos.filter((i) => i.estado === "pagado");
     const revision = revisionDelPago(cobrados.length, nuevo, fila.pedidoEstado as OrderEstado);
     const revisionMonto: RevisionDeCuotas | null =
-      nuevo !== "pagado" && cobrados.some(noAcredita) ? "monto_distinto" : null;
+      nuevo !== "pagado" && cobrados.some(montoMal) ? "monto_distinto" : null;
+    const revisionForma: "forma_distinta" | null =
+      nuevo !== "pagado" && cobrados.some(formaMal) ? "forma_distinta" : null;
+    if (revisionForma) {
+      console.error(
+        `[pagos] forma_distinta pedido=${pedidoId} esperada=${fila.formaCobro}` +
+          ` tipo=${cobrados.filter(formaMal).map((i) => `${i.referencia}:${(i.info as InfoPago | null)?.tipo ?? "?"}`).join(",")}`,
+      );
+    }
     if (revisionMonto) {
       console.error(
         `[pagos] ${revisionMonto}: pago aprobado que no cubre el pedido=${pedidoId} total=${fila.total}` +
-          ` referencias=${cobrados.filter(noAcredita).map((i) => `${i.referencia}:${i.totalPagado ?? "?"}`).join(",")}` +
+          ` referencias=${cobrados.filter(montoMal).map((i) => `${i.referencia}:${i.totalPagado ?? "?"}`).join(",")}` +
           (cobro.moneda && cobro.moneda !== MONEDA_PEDIDO ? ` moneda=${cobro.moneda}` : ""),
       );
     }
@@ -1397,7 +1423,7 @@ async function registrarCobroTx(
             }
           : {}),
         ...(nuevo !== actual ? { pagoEstado: nuevo } : {}),
-        pagoRevision: revision ?? revisionMonto ?? revisionCuotas,
+        pagoRevision: revision ?? revisionMonto ?? revisionForma ?? revisionCuotas,
         pagoActualizadoEn: new Date(),
         updatedAt: new Date(),
       })

@@ -12,6 +12,7 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
 import {
   agregarFavorito,
+  agregarFavoritosLote,
   contarFavoritos,
   FavoritosLlenosError,
   idsFavoritos,
@@ -161,5 +162,51 @@ describe("listarFavoritos", () => {
   it("sin favoritos no consulta el espejo", async () => {
     expect(await listarFavoritos("u1")).toEqual([]);
     expect(grabadora.consultas).toHaveLength(1);
+  });
+});
+
+describe("agregarFavoritosLote", () => {
+  const filas = (n: number, desde = 1) => Array.from({ length: n }, (_, i) => [String(desde + i)]);
+  const respuesta = (existentes: string[][]) => (c: ConsultaGrabada) =>
+    c.sql.startsWith("select") && c.sql.includes("alegra_item_id") ? existentes : undefined;
+
+  it("toma el lock del usuario, lee los existentes del dueño e inserta en un solo statement", async () => {
+    grabadora = dbGrabadora(respuesta(filas(3)));
+    const r = await agregarFavoritosLote("u1", ["1", "50", "51"]);
+    expect(r.agregados).toEqual(["50", "51"]);
+    expect(r.yaEstaban).toBe(1);
+    expect(r.sinLugar).toBe(0);
+    expect(r.ids).toEqual(["50", "51", "1", "2", "3"]);
+
+    const sqls = grabadora.consultas.map((c) => c.sql);
+    expect(sqls[0]).toContain("pg_advisory_xact_lock");
+    expect(grabadora.consultas[0].params).toEqual(["favoritos:tenant-a:u1"]);
+    const lectura = grabadora.consultas.find((c) => c.sql.includes('from "shop"."favorites"'))!;
+    esperaDueno(lectura);
+    const inserts = grabadora.consultas.filter((c) => c.sql.startsWith("insert"));
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].sql).toMatch(/on conflict \("tenant_id","clerk_user_id","alegra_item_id"\) do nothing/);
+    expect(inserts[0].params).toEqual(expect.arrayContaining(["tenant-a", "u1", "50", "51"]));
+  });
+
+  it(`con ${MAX_FAVORITOS - 1} guardados, 3 nuevos: entra 1 y no falla`, async () => {
+    grabadora = dbGrabadora(respuesta(filas(MAX_FAVORITOS - 1)));
+    const r = await agregarFavoritosLote("u1", ["9001", "9002", "9003"]);
+    expect(r.agregados).toEqual(["9001"]);
+    expect(r.sinLugar).toBe(2);
+  });
+
+  it("todos ya guardados: no inserta", async () => {
+    grabadora = dbGrabadora(respuesta(filas(3)));
+    const r = await agregarFavoritosLote("u1", ["1", "2"]);
+    expect(r).toMatchObject({ agregados: [], yaEstaban: 2, sinLugar: 0 });
+    expect(grabadora.consultas.some((c) => c.sql.startsWith("insert"))).toBe(false);
+  });
+
+  it("otro tenant: el lock y la lectura llevan ese tenant", async () => {
+    vi.stubEnv("SHOP_TENANT_ID", "tenant-b");
+    await agregarFavoritosLote("u2", ["1"]);
+    expect(grabadora.consultas[0].params).toEqual(["favoritos:tenant-b:u2"]);
+    esperaDueno(grabadora.consultas[1], "u2", "tenant-b");
   });
 });

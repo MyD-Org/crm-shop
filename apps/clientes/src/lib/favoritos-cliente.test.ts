@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   disponible,
   mensajeError,
+  mensajeResultadoLote,
   reducirToggle,
   revertir,
   visiblesEnLista,
@@ -91,5 +92,29 @@ describe("visiblesEnLista", () => {
       "42",
       "9",
     ]);
+  });
+});
+
+describe("mensajeResultadoLote", () => {
+  const base = { agregados: 0, yaEstaban: 0, sinLugar: 0, noDisponibles: 0 };
+
+  it("agregó varios", () => {
+    expect(mensajeResultadoLote({ ...base, agregados: 5 })).toBe("Se agregaron 5 productos a sus favoritos.");
+  });
+  it("agregó uno", () => {
+    expect(mensajeResultadoLote({ ...base, agregados: 1 })).toBe("Se agregaron 1 producto a sus favoritos.");
+  });
+  it("ya estaban todos", () => {
+    expect(mensajeResultadoLote({ ...base, yaEstaban: 3 })).toBe("Ya los tenía todos en sus favoritos.");
+  });
+  it("tope parcial", () => {
+    expect(mensajeResultadoLote({ ...base, agregados: 2, sinLugar: 3 })).toBe(
+      "Se agregaron 2. No hubo lugar para 3: alcanzó el máximo de 200 favoritos.",
+    );
+  });
+  it("0 agregados por el tope", () => {
+    expect(mensajeResultadoLote({ ...base, sinLugar: 4 })).toBe(
+      "No se agregó ninguno: alcanzó el máximo de 200 favoritos.",
+    );
   });
 });

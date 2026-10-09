@@ -45,7 +45,7 @@ describe("AlertaCobroOtraCuenta", () => {
   })
 
   it("un slug que ya no existe se muestra tal cual", () => {
-    expect(textoCobroConOtraCuenta({ slug: "igz", prevista: "viejo", fallback: true }, "mercadopago", nombres)).toContain(
+    expect(textoCobroConOtraCuenta({ slug: "igz", prevista: "viejo" }, "mercadopago", nombres)).toContain(
       "en lugar de la de viejo. Revise las credenciales de viejo en Mercado Pago",
     )
   })

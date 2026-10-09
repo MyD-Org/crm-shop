@@ -47,6 +47,91 @@ function Dato({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
+function SubTitulo({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--ink-soft)" }}>
+      {children}
+    </h3>
+  )
+}
+
+/**
+ * Resumen del pago. Con cobro en línea: "Pagó con", cuotas y fecha a la vista, los dos importes
+ * destacados y el resto de `datosCobroEnLinea` detrás de "Ver detalle del cobro". Sin cobro en
+ * línea: medio y estado como siempre.
+ */
+function ResumenPago({
+  pedido,
+  medioNombre,
+  nombresSucursal,
+}: {
+  pedido: PedidoDetalleDto
+  medioNombre: string
+  nombresSucursal: NombresSucursal
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const pago = pedido.pagoEnLinea
+  if (!pago) {
+    return (
+      <dl className="mb-2 flex flex-col gap-1">
+        <Dato label="Medio de pago">{medioNombre}</Dato>
+      </dl>
+    )
+  }
+  const datos = datosCobroEnLinea(pago, pedido.total, nombresSucursal)
+  const RESUMEN = ["Pagó con", "Cuotas", "Fecha del pago"]
+  const resumen = datos.filter((d) => RESUMEN.includes(d.label))
+  const neto = datos.find((d) => d.label === "Recibe neto")
+  const detalle = datos.filter((d) => !RESUMEN.includes(d.label) && d.label !== "Recibe neto")
+  return (
+    <div className="mb-2 flex flex-col gap-3">
+      <dl className="flex flex-col gap-1">
+        <Dato label="Medio de pago">{medioNombre}</Dato>
+        {resumen.map((d) => (
+          <Dato key={d.label} label={d.label}>{d.valor}</Dato>
+        ))}
+      </dl>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="min-w-0">
+          <div className="text-xs" style={{ color: "var(--ink-faint)" }}>Cobrado</div>
+          <div className="text-base font-semibold tabular-nums" style={{ color: "var(--ink)" }}>
+            {fmtMoneda(pago.totalPagado ?? pedido.total)}
+          </div>
+        </div>
+        {neto && (
+          <div className="min-w-0">
+            <div className="text-xs" style={{ color: "var(--ink-faint)" }}>{neto.label}</div>
+            <div className="text-base font-semibold tabular-nums" style={{ color: "var(--ink)" }}>{neto.valor}</div>
+          </div>
+        )}
+      </div>
+      {detalle.length > 0 && (
+        <>
+          <Button
+            variant="link"
+            size="sm"
+            className="self-start"
+            aria-expanded={abierto}
+            onClick={() => setAbierto((v) => !v)}
+          >
+            {abierto ? "Ocultar detalle" : "Ver detalle del cobro"}
+          </Button>
+          {abierto && (
+            <dl className="flex flex-col gap-1 border-t pt-2" style={{ borderColor: "var(--border)" }}>
+              {detalle.map((d) => (
+                <div key={d.label} className="flex justify-between gap-3 text-sm">
+                  <dt style={{ color: "var(--ink-soft)" }}>{d.label}</dt>
+                  <dd className="text-right break-words" style={{ color: "var(--ink)" }}>{d.valor}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <Card title={titulo} className="p-4">
@@ -99,6 +184,7 @@ export function PedidoDetalle({
   const esEnvio = pedido.entrega.tipo === "envio"
   // Envío sin ciudad ni dirección: el Shop lo ofrece como "Envío a coordinar" (lo acuerda un asesor).
   const envioACoordinar = esEnvio && !pedido.entrega.ciudad?.trim() && !pedido.entrega.direccion?.trim()
+  const sinStock = pedido.items.filter((i) => i.stockActual !== null && i.stockActual < i.qty)
   const lineasATraer = pedido.items.filter((i) => i.aTraerDe)
   const whatsappRaw = pedido.sucursal ? whatsappsSucursal[pedido.sucursal] : undefined
   const whatsappHref = whatsappLink(whatsappRaw)
@@ -194,10 +280,21 @@ export function PedidoDetalle({
           )}
         </div>
         <p className="text-sm mt-0.5" style={{ color: "var(--ink-soft)" }}>
-          Realizado el {fmtFechaPedido(pedido.creadoEn)}
+          Realizado el {fmtFechaPedido(pedido.creadoEn)} · {pedido.items.length} {pedido.items.length === 1 ? "producto" : "productos"} · {fmtMoneda(pedido.total)}
         </p>
       </div>
 
+      {sinStock.length > 0 && (
+        <Alert tone="warning" title={`Falta stock en ${sinStock.length} ${sinStock.length === 1 ? "producto" : "productos"}.`}>
+          <ul className="flex flex-col gap-0.5">
+            {sinStock.map((i) => (
+              <li key={i.id}>
+                {i.name}: se {i.qty === 1 ? "pide" : "piden"} {fmtCantidad(i.qty)} y hay {fmtCantidad(i.stockActual ?? 0)}.
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
       {revision && (
         <Alert tone="warning" title={revision.titulo}>
           {/* Lo marca el Shop con el motivo más importante (`motivo_revision`). */}
@@ -229,54 +326,64 @@ export function PedidoDetalle({
             </dl>
           </Seccion>
 
-          <Seccion titulo="Aclaraciones del cliente">
-            <p className="text-sm whitespace-pre-wrap break-words" style={{ color: pedido.notas ? "var(--ink)" : "var(--ink-faint)" }}>
-              {pedido.notas || "El cliente no dejó aclaraciones."}
-            </p>
-          </Seccion>
-
-          <Seccion titulo="Cliente y facturación">
-            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Dato label="Nombre">{pedido.contacto.nombre}</Dato>
-              <Dato label="Teléfono">{pedido.contacto.telefono}</Dato>
-              <Dato label="Email">{pedido.cliente.email}</Dato>
-              <Dato label="Cliente">
-                {[pedido.cliente.razonSocial, pedido.cliente.codigo && `Cód. ${pedido.cliente.codigo}`]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </Dato>
-              <Dato label="Razón social (facturación)">{pedido.facturacion.razonSocial}</Dato>
-              <Dato label="Documento">{documento}</Dato>
-              <Dato label="Condición de IVA">{condicionIvaLabel(pedido.facturacion.condicionIva)}</Dato>
-              <Dato label="Domicilio">{pedido.facturacion.domicilio}</Dato>
-            </dl>
-          </Seccion>
-
-          <Seccion titulo="Entrega">
-            {lineasATraer.length > 0 && (
-              <div className="mb-3">
-                <Alert tone="warning" title="Hay productos a traer de otra sucursal">
-                  {lineasATraer.length === 1 ? "Un producto de este pedido no sale" : `${lineasATraer.length} productos de este pedido no salen`}{" "}
-                  de la sucursal que despacha: hay que trasladarlos antes de entregar.
-                </Alert>
+          <Seccion titulo="Cliente, facturación y entrega">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="min-w-0">
+                <SubTitulo>Cliente</SubTitulo>
+                <dl className="flex flex-col gap-3">
+                  <Dato label="Nombre">{pedido.contacto.nombre}</Dato>
+                  <Dato label="Teléfono">{pedido.contacto.telefono}</Dato>
+                  <Dato label="Email">{pedido.cliente.email}</Dato>
+                  <Dato label="Cliente">
+                    {[pedido.cliente.razonSocial, pedido.cliente.codigo && `Cód. ${pedido.cliente.codigo}`]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </Dato>
+                </dl>
               </div>
-            )}
-            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Dato label="Tipo">{envioACoordinar ? "Envío a coordinar" : entregaLabel(pedido.entrega.tipo)}</Dato>
-              {esEnvio && (pedido.envioGratis !== null || envioACoordinar) && (
-                <Dato label="Costo de envío">{pedido.envioGratis ? "Gratis" : "A coordinar con el cliente"}</Dato>
-              )}
-              {((esEnvio && !envioACoordinar) || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
-              {((esEnvio && !envioACoordinar) || pedido.entrega.direccion) && <Dato label="Dirección">{pedido.entrega.direccion}</Dato>}
-              <Dato label="Sucursal">{reglaATexto(pedido.sucursal, pedido.sucursalRegla, nombresSucursal)}</Dato>
-              {whatsappSucursal && (
-                <Dato label="WhatsApp de la sucursal">
-                  <a href={whatsappSucursal.href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "var(--blue)" }}>
-                    {whatsappSucursal.texto}
-                  </a>
-                </Dato>
-              )}
-            </dl>
+              <div className="min-w-0">
+                <SubTitulo>Facturación</SubTitulo>
+                <dl className="flex flex-col gap-3">
+                  <Dato label="Razón social (facturación)">{pedido.facturacion.razonSocial}</Dato>
+                  <Dato label="Documento">{documento}</Dato>
+                  <Dato label="Condición de IVA">{condicionIvaLabel(pedido.facturacion.condicionIva)}</Dato>
+                  <Dato label="Domicilio">{pedido.facturacion.domicilio}</Dato>
+                </dl>
+              </div>
+              <div className="min-w-0">
+                <SubTitulo>Entrega</SubTitulo>
+                {lineasATraer.length > 0 && (
+                  <div className="mb-3">
+                    <Alert tone="warning" title="Hay productos a traer de otra sucursal">
+                      {lineasATraer.length === 1 ? "Un producto de este pedido no sale" : `${lineasATraer.length} productos de este pedido no salen`}{" "}
+                      de la sucursal que despacha: hay que trasladarlos antes de entregar.
+                    </Alert>
+                  </div>
+                )}
+                <dl className="flex flex-col gap-3">
+                  <Dato label="Tipo">{envioACoordinar ? "Envío a coordinar" : entregaLabel(pedido.entrega.tipo)}</Dato>
+                  {esEnvio && (pedido.envioGratis !== null || envioACoordinar) && (
+                    <Dato label="Costo de envío">{pedido.envioGratis ? "Gratis" : "A coordinar con el cliente"}</Dato>
+                  )}
+                  {((esEnvio && !envioACoordinar) || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
+                  {((esEnvio && !envioACoordinar) || pedido.entrega.direccion) && <Dato label="Dirección">{pedido.entrega.direccion}</Dato>}
+                  <Dato label="Sucursal">{reglaATexto(pedido.sucursal, pedido.sucursalRegla, nombresSucursal)}</Dato>
+                  {whatsappSucursal && (
+                    <Dato label="WhatsApp de la sucursal">
+                      <a href={whatsappSucursal.href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "var(--blue)" }}>
+                        {whatsappSucursal.texto}
+                      </a>
+                    </Dato>
+                  )}
+                </dl>
+              </div>
+            </div>
+            <div className="mt-4 rounded-md p-3" style={{ background: "var(--bg)" }}>
+              <div className="text-xs" style={{ color: "var(--ink-faint)" }}>Aclaraciones del cliente</div>
+              <p className="text-sm whitespace-pre-wrap break-words" style={{ color: pedido.notas ? "var(--ink)" : "var(--ink-faint)" }}>
+                {pedido.notas || "El cliente no dejó aclaraciones."}
+              </p>
+            </div>
           </Seccion>
 
           <PagosComprobantes
@@ -288,7 +395,17 @@ export function PedidoDetalle({
             onChanged={() => void recargar(false)}
           />
 
-          <Seccion titulo="Historial">
+          <Seccion titulo="Actividad y notas">
+            <dl className="mb-3 grid grid-cols-1 gap-3">
+              {pedido.estado === "cancelado" && (
+                <Dato label="Motivo de la cancelación">
+                  <span className="whitespace-pre-wrap">{pedido.cancelacionMotivo}</span>
+                </Dato>
+              )}
+              <Dato label="Último cambio de estado">
+                {ultimoCambio ?? "Este pedido todavía no tuvo cambios de estado."}
+              </Dato>
+            </dl>
             {pedido.historial.length === 0 ? (
               <p className="text-sm" style={{ color: "var(--ink-faint)" }}>Este pedido todavía no tiene movimientos.</p>
             ) : (
@@ -301,7 +418,7 @@ export function PedidoDetalle({
                 ))}
               </ul>
             )}
-            <p className="mt-1 text-xs" style={{ color: "var(--ink-faint)" }}>El cliente no ve el historial.</p>
+            <p className="mt-3 text-xs" style={{ color: "var(--ink-faint)" }}>El cliente no ve esta sección.</p>
           </Seccion>
         </div>
 
@@ -318,78 +435,70 @@ export function PedidoDetalle({
           </Card>
 
           <Card title="Pago" className="p-4">
-            <dl className="mb-2 flex flex-col gap-1">
-              <Dato label="Medio de pago">{Object.hasOwn(mediosPago, pedido.pagoMetodo) ? mediosPago[pedido.pagoMetodo] : pagoMetodoLabel(pedido.pagoMetodo)}</Dato>
-              <Dato label="Estado del pago">{pagoEstadoLabel(pedido.pagoEstado)}</Dato>
-              {pedido.pagoEnLinea &&
-                datosCobroEnLinea(pedido.pagoEnLinea, pedido.total, nombresSucursal).map((d) => (
-                  <Dato key={d.label} label={d.label}>{d.valor}</Dato>
-                ))}
-              {pedido.pagoManual && pedido.pagoRegistradoPorNombre && (
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs" style={{ color: "var(--ink-faint)" }}>Estado del pago</span>
+              <Badge tone={pedido.pagoEstado === "pagado" ? "success" : "warning"}>{pagoEstadoLabel(pedido.pagoEstado)}</Badge>
+            </div>
+            <AlertaCobroOtraCuenta pago={pedido.pagoEnLinea} nombresSucursal={nombresSucursal} />
+            <ResumenPago
+              pedido={pedido}
+              medioNombre={Object.hasOwn(mediosPago, pedido.pagoMetodo) ? mediosPago[pedido.pagoMetodo] : pagoMetodoLabel(pedido.pagoMetodo)}
+              nombresSucursal={nombresSucursal}
+            />
+            {pedido.pagoManual && pedido.pagoRegistradoPorNombre && (
+              <dl className="mb-2">
                 <Dato label={pedido.pagoEstado === "pagado" ? "Pago registrado" : "Pago anulado"}>
                   {textoUltimoCambio(pedido.pagoRegistradoPorNombre, pedido.pagoActualizadoEn)}
                 </Dato>
-              )}
-            </dl>
-            <AlertaCobroOtraCuenta pago={pedido.pagoEnLinea} nombresSucursal={nombresSucursal} />
+              </dl>
+            )}
             <RegistrarPagoControl pedido={pedido} onChanged={setPedido} />
           </Card>
 
-          <Card title="Factura" className="p-4">
-            <CuentaFacturaInfo pedido={pedido} />
-            {pedido.emisionReserva === "vigente" ? (
-              <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
-                Emisión en curso… Actualice la página en unos segundos.
-              </p>
-            ) : (
-              <>
-                {pedido.emisionReserva === "vencida" && (
-                  <Alert tone="warning" title="Una emisión anterior no terminó">
-                    Revise en Alegra si la factura se creó antes de volver a emitir. Si existe, use &ldquo;Vincular
-                    factura&rdquo;.
-                  </Alert>
+          <Card title="Factura y remito" className="p-4">
+            <div className="flex flex-col gap-4">
+              <div>
+                <SubTitulo>Factura</SubTitulo>
+                <CuentaFacturaInfo pedido={pedido} />
+                {pedido.emisionReserva === "vigente" ? (
+                  <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
+                    Emisión en curso… Actualice la página en unos segundos.
+                  </p>
+                ) : (
+                  <>
+                    {pedido.emisionReserva === "vencida" && (
+                      <Alert tone="warning" title="Una emisión anterior no terminó">
+                        Revise en Alegra si la factura se creó antes de volver a emitir. Si existe, use &ldquo;Vincular
+                        factura&rdquo;.
+                      </Alert>
+                    )}
+                    <VincularFacturaControl pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
+                    {!pedido.factura && pedido.estado !== "cancelado" && (
+                      <EmitirFacturaControl
+                        pedido={pedido}
+                        onChanged={setPedido}
+                        onConflicto={() => void recargar(true)}
+                        esAdminPlus={esAdminPlus}
+                      />
+                    )}
+                  </>
                 )}
-                <VincularFacturaControl pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
-                {!pedido.factura && pedido.estado !== "cancelado" && (
-                  <EmitirFacturaControl
+              </div>
+              {esAdminPlus && (
+                <div className="border-t pt-4" style={{ borderColor: "var(--border)" }}>
+                  <SubTitulo>Remito</SubTitulo>
+                  <RemitoControl
                     pedido={pedido}
                     onChanged={setPedido}
                     onConflicto={() => void recargar(true)}
                     esAdminPlus={esAdminPlus}
                   />
-                )}
-              </>
-            )}
+                </div>
+              )}
+            </div>
           </Card>
-
-          {esAdminPlus && (
-            <Card title="Remito" className="p-4">
-              <RemitoControl
-                pedido={pedido}
-                onChanged={setPedido}
-                onConflicto={() => void recargar(true)}
-                esAdminPlus={esAdminPlus}
-              />
-            </Card>
-          )}
         </aside>
       </div>
-
-      <Seccion titulo="Notas internas">
-        <dl className="grid grid-cols-1 gap-3">
-          {pedido.estado === "cancelado" && (
-            <Dato label="Motivo de la cancelación">
-              <span className="whitespace-pre-wrap">{pedido.cancelacionMotivo}</span>
-            </Dato>
-          )}
-          <Dato label="Último cambio de estado">
-            {ultimoCambio ?? "Este pedido todavía no tuvo cambios de estado."}
-          </Dato>
-        </dl>
-        <p className="mt-3 text-xs" style={{ color: "var(--ink-faint)" }}>
-          El cliente no ve estas notas.
-        </p>
-      </Seccion>
     </div>
   )
 }

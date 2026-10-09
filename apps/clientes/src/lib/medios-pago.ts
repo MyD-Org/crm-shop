@@ -34,6 +34,12 @@ export interface MedioPago {
    * cuyo precio se divide en N. Sólo se usa en el medio de cobro en línea. Ausente = sin cuotas.
    */
   condicionesCuotas?: CondicionCuotas[];
+  /**
+   * Lista del pago único según la forma de pago (migración 0076 del CRM): forma -> uuid de la lista
+   * online. Ausente = sin precios por forma (rige `idListaPrecios` para todas). Una forma sin entrada
+   * hereda `idListaPrecios`.
+   */
+  listasPorForma?: Partial<Record<OpcionCobro, string>>;
   /** El catálogo muestra "$X con <Medio>" bajo el precio (a lo sumo un medio por tenant). */
   destacarEnCatalogo: boolean;
   /** La ficha del producto muestra una línea "$X con <Medio>" (cualquier cantidad de medios). */

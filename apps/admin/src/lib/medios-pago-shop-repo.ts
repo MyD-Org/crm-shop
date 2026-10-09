@@ -148,7 +148,14 @@ async function condicionesDePagoUnico(tenantId: string, ej: Pick<ReturnType<type
     })
     .from(listaPrecioCondiciones)
     .innerJoin(listasPrecioOnline, eq(listasPrecioOnline.id, listaPrecioCondiciones.listaId))
-    .where(and(eq(listaPrecioCondiciones.tenantId, tenantId), sql`${listaPrecioCondiciones.cuotas} IS NULL`))
+    .where(
+      and(
+        eq(listaPrecioCondiciones.tenantId, tenantId),
+        sql`${listaPrecioCondiciones.cuotas} IS NULL`,
+        // Las filas por forma de pago (0076) no son la lista del medio.
+        sql`${listaPrecioCondiciones.forma} IS NULL`,
+      ),
+    )
   return new Map<string, CondicionMedio>(filas.map((f) => [f.slug, f]))
 }
 

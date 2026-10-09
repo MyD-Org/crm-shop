@@ -87,11 +87,15 @@ export function separarDisponibles(items: CartItem[]): {
  * es copy de la tienda (ese va en usted, ver CLAUDE.md raíz), y por eso vive
  * acá y no en los componentes que revisa `carrito-checkout-sin-voseo.test.ts`.
  */
-export function mensajeCompartido(url: string): string {
-  return `Te comparto mi carrito: ${url}`;
+export const MENSAJE_CARRITO = "Te comparto mi carrito";
+export const MENSAJE_PEDIDO = "Te comparto mi pedido";
+export const MENSAJE_FAVORITOS = "Te comparto mi lista de favoritos";
+
+export function mensajeCompartido(url: string, texto: string = MENSAJE_CARRITO): string {
+  return `${texto}: ${url}`;
 }
 
 /** WhatsApp sin destinatario: el usuario elige el contacto en la app. */
-export function hrefWhatsApp(url: string): string {
-  return `https://wa.me/?text=${encodeURIComponent(mensajeCompartido(url))}`;
+export function hrefWhatsApp(url: string, texto?: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(mensajeCompartido(url, texto))}`;
 }

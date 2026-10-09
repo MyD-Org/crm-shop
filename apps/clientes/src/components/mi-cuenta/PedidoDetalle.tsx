@@ -133,6 +133,7 @@ export function PedidoDetalle({
           facturaNumero={pedido.facturaNumero}
           mostrarDetalle={false}
           alPie
+          compartir
           extra={puedeCancelarPedido(pedido) ? <CancelarPedido pedidoId={pedido.id} numero={pedido.numero} /> : undefined}
         />
       </Card>

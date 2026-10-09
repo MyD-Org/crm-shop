@@ -82,11 +82,18 @@ function ResumenPago({
   const RESUMEN = ["Pagó con", "Cuotas", "Fecha del pago"]
   const resumen = datos.filter((d) => RESUMEN.includes(d.label))
   const neto = datos.find((d) => d.label === "Recibe neto")
-  const detalle = datos.filter((d) => !RESUMEN.includes(d.label) && d.label !== "Recibe neto")
+  // Con qué credenciales se cobró (la cuenta de MP/Payway de cada sucursal): va junto al medio,
+  // a la vista, y no en el detalle plegado.
+  const cuentaCobro = datos.find((d) => d.label === "Cuenta de cobro")
+  const detalle = datos.filter(
+    (d) => !RESUMEN.includes(d.label) && d.label !== "Recibe neto" && d.label !== "Cuenta de cobro",
+  )
   return (
     <div className="mb-2 flex flex-col gap-3">
       <dl className="flex flex-col gap-1">
-        <Dato label="Medio de pago">{medioNombre}</Dato>
+        <Dato label="Medio de pago">
+          {cuentaCobro ? `${medioNombre} · cuenta de ${cuentaCobro.valor}` : medioNombre}
+        </Dato>
         {resumen.map((d) => (
           <Dato key={d.label} label={d.label}>{d.valor}</Dato>
         ))}

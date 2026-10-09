@@ -43,15 +43,12 @@ export function CuentaFacturaInfo({ pedido }: { pedido: PedidoDetalleDto }) {
   return (
     <div className="mb-3 flex flex-col gap-2 border-b pb-3" style={{ borderColor: "var(--border)" }}>
       <div>
-        <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
-          {dto.emitida ? "Facturada con la cuenta de" : "Cuenta que factura"}
-        </p>
+        {dto.emitida && (
+          <p className="text-xs" style={{ color: "var(--ink-faint)" }}>Facturada con la cuenta de</p>
+        )}
         <p className="text-sm" style={{ color: "var(--ink)" }}>
           {cuenta ? cuenta.nombre : "Sin cuenta asignada"}
         </p>
-        {!dto.emitida && dto.efectiva && (
-          <p className="text-xs" style={{ color: "var(--ink-soft)" }}>{dto.efectiva.texto}</p>
-        )}
         {dto.override && (
           <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
             Elegida por {dto.override.por ?? "un operador"} el {fmtFechaPedido(dto.override.en)}

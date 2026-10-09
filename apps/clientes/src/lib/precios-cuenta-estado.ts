@@ -58,6 +58,7 @@ export function aplicarEstadoPrecio(p: Product, estado: EstadoPrecioCuenta | und
     precioMedio: undefined,
     preciosMedios: undefined,
     preciosFormaModal: undefined,
+    preciosOfflineModal: undefined,
     cuotasSinInteres: undefined,
     oldPrice: undefined,
     discount: undefined,

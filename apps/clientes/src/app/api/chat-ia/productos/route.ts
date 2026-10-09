@@ -80,6 +80,7 @@ export async function GET(req: Request) {
           precioMedio: undefined,
           preciosMedios: undefined,
           preciosFormaModal: undefined,
+          preciosOfflineModal: undefined,
           cuotasSinInteres: undefined,
         }),
       ];

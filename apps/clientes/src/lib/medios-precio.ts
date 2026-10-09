@@ -8,7 +8,7 @@
  * cotización: `precioDeLista`), así lo que se exhibe coincide con lo que cotiza el checkout.
  */
 import { precioDeLista, precioGeneral, type AlegraPrice } from "./alegra";
-import type { PrecioMedio } from "@/data/products";
+import type { PrecioMedio, PrecioOffline } from "@/data/products";
 import { cuotasNoAlcanzadas, opcionesCuotas, type CuotasProducto, type MedioCuotas } from "./cuotas-sin-interes";
 import { formasDelMedio } from "./lista-medio";
 import type { OpcionCobro } from "./pagos/opciones-cobro";
@@ -45,6 +45,13 @@ export interface MediosPrecio {
    * depende de `mostrarEnFicha` ni de `destacarEnCatalogo`. Ausente = ninguno. Parte de la clave de las cachés.
    */
   modal?: MedioPrecio[];
+  /**
+   * Medios SIN cobro en línea (transferencia, efectivo en el local…), activos, públicos y que aplican a
+   * retiro o envío, para el modal "Ver medios de pago": un bloque por medio con su precio en 1 pago. NO
+   * depende de `mostrarEnFicha` ni de `destacarEnCatalogo`, y entran aunque no tengan lista. Ausente =
+   * ninguno. Parte de la clave de las cachés.
+   */
+  offline?: MedioPrecio[];
 }
 
 export const SIN_MEDIOS_PRECIO: MediosPrecio = { destacado: null, ficha: [] };
@@ -85,11 +92,23 @@ export function seleccionarMediosPrecio(
   const destacado = elegibles.find((m) => m.destacarEnCatalogo);
   const cuotas = cuotasEncendido ? mediosCuotas(medios) : [];
   const modal = elegibles.filter((m) => m.cobroOnline && listasDeLasFormas(m) !== null).map(aMedio);
+  const offline = medios
+    .filter(
+      (m) =>
+        m.activo &&
+        !m.cobroOnline &&
+        (m.aplicaRetiro || m.aplicaEnvio) &&
+        !SLUGS_RESERVADOS.includes(m.slug) &&
+        !esMedioCuentaCorriente(m),
+    )
+    .sort(porOrden)
+    .map(aMedio);
   return {
     destacado: destacado ? aMedio(destacado) : null,
     ficha: elegibles.filter((m) => m.mostrarEnFicha).map(aMedio),
     ...(cuotas.length > 0 ? { cuotas } : {}),
     ...(modal.length > 0 ? { modal } : {}),
+    ...(offline.length > 0 ? { offline } : {}),
   };
 }
 
@@ -174,12 +193,19 @@ export function armarPreciosMedios(
   prices: AlegraPrice[],
   iva: number | null,
   medios: MediosPrecio | undefined,
-): { precioMedio?: PrecioMedio; preciosMedios?: PrecioMedio[]; preciosFormaModal?: PrecioMedio[]; cuotasSinInteres?: CuotasProducto } {
+): { precioMedio?: PrecioMedio; preciosMedios?: PrecioMedio[]; preciosFormaModal?: PrecioMedio[]; preciosOfflineModal?: PrecioOffline[]; cuotasSinInteres?: CuotasProducto } {
   if (!medios) return {};
   const precioMedio = medios.destacado ? precioDestacado(prices, iva, medios.destacado) : null;
   const preciosMedios = medios.ficha.flatMap((m) => preciosDeLaFicha(prices, iva, m));
   // Líneas por forma para el modal: con la misma regla de precio que la ficha, pero de todos los medios con cobro en línea.
   const preciosFormaModal = (medios.modal ?? []).flatMap((m) => preciosDeLaFicha(prices, iva, m)).filter((p) => p.forma);
+  // Medios sin cobro en línea para el modal: precio de su lista con la regla de la ficha (`precioDeLista`:
+  // una lista más cara que la de referencia, o ninguna, da el precio de referencia).
+  const preciosOfflineModal = (medios.offline ?? []).flatMap((m): PrecioOffline[] => {
+    const price = precioDeLista(prices, m.idListaPrecios || undefined);
+    const final = precioFinal(price, iva);
+    return final != null ? [{ slug: m.slug, nombre: m.nombre, precioFinal: final }] : [];
+  });
   // Mínimos por medio: cada uno compara contra la lista del pago único del suyo.
   const cuotasMedios = (medios.cuotas ?? []).flatMap((m) => {
     const opciones = opcionesCuotas(prices, iva, m);
@@ -192,6 +218,7 @@ export function armarPreciosMedios(
     ...(precioMedio ? { precioMedio } : {}),
     preciosMedios,
     ...(preciosFormaModal.length > 0 ? { preciosFormaModal } : {}),
+    ...(preciosOfflineModal.length > 0 ? { preciosOfflineModal } : {}),
     ...(cuotasMedios.length > 0 ? { cuotasSinInteres: { medios: cuotasMedios } } : {}),
   };
 }

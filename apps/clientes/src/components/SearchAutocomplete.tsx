@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Skeleton } from "@myd-org/ui";
 import type { Product } from "@/data/products";
@@ -45,7 +45,7 @@ function useDebounced<T>(value: T, delay = 150): T {
  * ejemplos y búsquedas frecuentes (ver GuiaBusqueda). Sin el flag, el de
  * siempre.
  */
-export function SearchAutocomplete({ busquedaIa = false }: { busquedaIa?: boolean }) {
+export function SearchAutocomplete({ busquedaIa = false, extra }: { busquedaIa?: boolean; extra?: ReactNode }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -192,6 +192,13 @@ export function SearchAutocomplete({ busquedaIa = false }: { busquedaIa?: boolea
         >
           <SearchIcon />
         </button>
+        {/* Acción extra dentro del campo (el botón del asistente), tras un separador. */}
+        {extra ? (
+          <>
+            <span aria-hidden className="my-2 w-px shrink-0 bg-border" />
+            {extra}
+          </>
+        ) : null}
       </div>
 
       {guiaAbierta && (

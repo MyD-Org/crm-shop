@@ -48,6 +48,18 @@ body {
 :root {
   --aichat-dock-width: 400px;
 }
+/* Tema del chat con los tokens del DS (el widget se reskinnea por sus custom
+   properties de .aichat-root; `:root` delante para ganarle en especificidad):
+   fondo liso de superficie en vez del degradé del widget y las fuentes del
+   sitio. La barra minimizada (peek) va debajo de los diálogos del DS (z-50):
+   si no, tapa, p. ej., "Aplicar" de la hoja de filtros. */
+:root .aichat-root {
+  --aichat-bg: var(--color-surface);
+  --aichat-ambient: none;
+  --aichat-font: var(--font-sans);
+  --aichat-font-display: var(--font-display);
+  --aichat-peek-z-index: 40;
+}
 html[data-chat-dock="abierto"] body {
   padding-right: calc(var(--aichat-dock-width) + env(safe-area-inset-right, 0px));
 }

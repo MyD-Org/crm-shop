@@ -610,6 +610,14 @@ export function MediosPagoShopCard() {
                 {opcionesAplicables(form.editandoSlug, form.opcionesCobro).map((o) => {
                   const elegida = form.listasPorForma[o] ?? LISTA_IGUAL_QUE_EL_MEDIO
                   const guardada = medios?.find((m) => m.slug === form.editandoSlug)?.listasPorForma?.find((x) => x.forma === o)
+                  // La opción por defecto lleva el nombre de la lista que usa el medio (la de arriba o la de referencia).
+                  const idListaDelMedio = form.listaOnlineId === LISTA_POR_DEFECTO ? listaReferencia?.id : form.listaOnlineId
+                  const nombreListaDelMedio =
+                    form.listaOnlineId === LISTA_POR_DEFECTO
+                      ? nombreReferencia
+                      : (listas.find((l) => l.id === form.listaOnlineId)?.nombre ??
+                        medios?.find((m) => m.slug === form.editandoSlug)?.listaOnlineNombre ??
+                        "Lista del medio")
                   return (
                     <Field key={o} label={`Lista de precios con ${ROTULO_OPCION[o]}`}>
                       <Select
@@ -617,8 +625,11 @@ export function MediosPagoShopCard() {
                         value={elegida}
                         onValueChange={(v) => cambiar({ listasPorForma: { ...form.listasPorForma, [o]: v } })}
                         options={[
-                          { value: LISTA_IGUAL_QUE_EL_MEDIO, label: "Igual que la lista del medio" },
-                          ...listas.map((l) => ({ value: l.id, label: l.nombre })),
+                          { value: LISTA_IGUAL_QUE_EL_MEDIO, label: nombreListaDelMedio },
+                          // La del medio ya es la opción por defecto: no se repite, salvo que esté elegida.
+                          ...listas
+                            .filter((l) => l.id !== idListaDelMedio || l.id === elegida)
+                            .map((l) => ({ value: l.id, label: l.nombre })),
                           // Una lista desactivada se sigue viendo hasta que se elija otra.
                           ...(elegida !== LISTA_IGUAL_QUE_EL_MEDIO && !listas.some((l) => l.id === elegida)
                             ? [{ value: elegida, label: `${guardada?.listaNombre ?? "Lista"} (desactivada)` }]

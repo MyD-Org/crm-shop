@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseInfoPago, textoMedioCobrado, type PagoEnLineaDto } from "./pago-en-linea"
+import { cuentaDeCobroDto, parseInfoPago, textoMedioCobrado, type PagoEnLineaDto } from "./pago-en-linea"
 import { toPagoEnLineaDto } from "./pedidos-repo"
 import { datosCobroEnLinea, fmtMoneda } from "@/components/admin/pedidos/format"
 
@@ -20,6 +20,8 @@ describe("parseInfoPago", () => {
       cupon: null,
       netoRecibido: null,
       costoProcesador: null,
+      cuentaCobro: null,
+      cuentaCobroPrevista: null,
     })
     expect(parseInfoPago({ netoRecibido: 8790.35, costoProcesador: 1209.65 })).toEqual({
       ...vacio,
@@ -30,6 +32,43 @@ describe("parseInfoPago", () => {
     expect(parseInfoPago({ tipo: "otro", ultimos4: "12", aprobadoEn: "ayer", marca: 3 })).toEqual(vacio)
     expect(parseInfoPago("x")).toEqual(vacio)
     expect(parseInfoPago([1])).toEqual(vacio)
+  })
+})
+
+describe("parseInfoPago: cuenta de cobro", () => {
+  it("lee cuentaCobro y cuentaCobroPrevista (slugs de sucursal)", () => {
+    const info = parseInfoPago({ cuentaCobro: "igz", cuentaCobroPrevista: "mdp" })
+    expect(info.cuentaCobro).toBe("igz")
+    expect(info.cuentaCobroPrevista).toBe("mdp")
+    expect(parseInfoPago({ cuentaCobro: "mar-del-plata" }).cuentaCobro).toBe("mar-del-plata")
+  })
+  it("descarta lo que no es un slug válido", () => {
+    for (const malo of ["", "x", "IGZ", "con espacio", "a".repeat(21), "mdp;drop", 7, null, {}]) {
+      const info = parseInfoPago({ cuentaCobro: malo, cuentaCobroPrevista: malo })
+      expect(info.cuentaCobro).toBeNull()
+      expect(info.cuentaCobroPrevista).toBeNull()
+    }
+  })
+  it("pago anterior a la cuenta de cobro: ambos null y el resto igual", () => {
+    const info = parseInfoPago({ tipo: "credito", marca: "Visa" })
+    expect(info).toEqual({ ...vacio, tipo: "credito", marca: "Visa" })
+    expect(info.cuentaCobro).toBeNull()
+    expect(info.cuentaCobroPrevista).toBeNull()
+  })
+})
+
+describe("cuentaDeCobroDto", () => {
+  const info = (cuentaCobro: string | null, cuentaCobroPrevista: string | null) => ({ ...vacio, cuentaCobro, cuentaCobroPrevista })
+  it("sin cuentaCobro → null (pago viejo)", () => {
+    expect(cuentaDeCobroDto(info(null, null))).toBeNull()
+    expect(cuentaDeCobroDto(info(null, "mdp"))).toBeNull()
+  })
+  it("sin prevista distinta → no es fallback", () => {
+    expect(cuentaDeCobroDto(info("mdp", null))).toEqual({ slug: "mdp", prevista: null, fallback: false })
+    expect(cuentaDeCobroDto(info("mdp", "mdp"))).toEqual({ slug: "mdp", prevista: null, fallback: false })
+  })
+  it("prevista distinta → fallback", () => {
+    expect(cuentaDeCobroDto(info("igz", "mdp"))).toEqual({ slug: "igz", prevista: "mdp", fallback: true })
   })
 })
 
@@ -75,7 +114,13 @@ describe("toPagoEnLineaDto", () => {
       cuotas: 6,
       totalPagado: 1210,
       info: { ...vacio, tipo: "credito", marca: "Visa" },
+      cuenta: null,
     })
+  })
+  it("expone la cuenta de cobro y el fallback", () => {
+    const dto = toPagoEnLineaDto({ ...fila, pagoInfo: { cuentaCobro: "igz", cuentaCobroPrevista: "mdp" } })
+    expect(dto?.cuenta).toEqual({ slug: "igz", prevista: "mdp", fallback: true })
+    expect(toPagoEnLineaDto({ ...fila, pagoInfo: { cuentaCobro: "mdp" } })?.cuenta).toEqual({ slug: "mdp", prevista: null, fallback: false })
   })
 })
 
@@ -87,6 +132,7 @@ describe("datosCobroEnLinea", () => {
     cuotas: 6,
     totalPagado: 1210,
     info: { ...vacio, tipo: "credito", marca: "Mastercard", ultimos4: "4623", aprobadoEn: "2026-10-07T19:30:00.000Z" },
+    cuenta: null,
   }
   it("Mercado Pago: medio, cuotas, fecha y número de operación; total sólo si difiere", () => {
     expect(datosCobroEnLinea(base, 1210)).toEqual([

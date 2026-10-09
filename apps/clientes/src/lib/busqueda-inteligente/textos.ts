@@ -36,12 +36,6 @@ export const TEXTOS_SIN_RESULTADOS = {
   verSinStock: "Ver también los productos sin stock",
 } as const;
 
-/** Aviso de que el filtro "Con stock en <local>" se aplicó solo, por el local recordado (cookie). */
-export const TEXTOS_LOCAL_RECORDADO = {
-  aviso: (local: string) => `Mostrando productos con stock en ${local} (lo eligió antes).`,
-  accion: "Ver todos los locales",
-} as const;
-
 /**
  * Ejemplos del placeholder que rota cada ~4 s: un código, una necesidad y un
  * uso. Cortos: el campo del header es angosto (el resto se desvanece).

@@ -24,8 +24,6 @@ export const TEXTOS_CUOTAS = {
   /** Títulos de los dos bloques cuando la tarjeta de débito tiene un precio distinto. */
   tituloDebito: "Tarjeta de débito",
   tituloCredito: "Tarjeta de crédito",
-  precioConDebito: "Precio con débito",
-  precioConCredito: "Precio con crédito",
   unPago: "1 pago",
   precioContado: "Precio contado",
   total: "Total",

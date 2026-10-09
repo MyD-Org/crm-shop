@@ -141,3 +141,40 @@ export function cambiosDeCuotas(
 function clave(marcas: readonly string[] | null | undefined): string {
   return marcas ? `:${ordenarMarcas(marcas).join(",")}` : ""
 }
+
+// --- Listas por forma de pago (0076, sólo Mercado Pago y Payway) ---
+
+/** Valor del selector de una forma para "Igual que la lista del medio" (hereda la fila de todas las formas). */
+export const LISTA_IGUAL_QUE_EL_MEDIO = "__igual__"
+
+/** Lista elegida por forma: el id de la lista o `LISTA_IGUAL_QUE_EL_MEDIO`. Una forma ausente = sin lista propia. */
+export type ListasPorFormaForm = Partial<Record<OpcionCobro, string>>
+
+/** Estado inicial del editor a partir de lo guardado en el medio. */
+export function listasPorFormaDesdeDto(guardadas: readonly { forma: OpcionCobro; listaId: string }[]): ListasPorFormaForm {
+  return Object.fromEntries(guardadas.map((g) => [g.forma, g.listaId]))
+}
+
+/**
+ * Cambios de precios (`setCondicion` con forma) que llevan las listas por forma actuales a las deseadas:
+ * altas y cambios primero, bajas (`listaId: null`) al final. Lo que no cambia no genera nada. Una forma
+ * ausente o en `LISTA_IGUAL_QUE_EL_MEDIO` es "sin fila propia".
+ */
+export function cambiosDeListasPorForma(
+  medioSlug: string,
+  actuales: ListasPorFormaForm,
+  deseadas: ListasPorFormaForm,
+) {
+  const propia = (v: string | undefined) => (v && v !== LISTA_IGUAL_QUE_EL_MEDIO ? v : null)
+  const altas: { op: "setCondicion"; medioSlug: string; cuotas: null; forma: OpcionCobro; listaId: string | null }[] = []
+  const bajas: typeof altas = []
+  for (const forma of OPCIONES_COBRO) {
+    const antes = propia(actuales[forma])
+    const despues = propia(deseadas[forma])
+    if (antes === despues) continue
+    const cambio = { op: "setCondicion" as const, medioSlug, cuotas: null, forma, listaId: despues }
+    if (despues === null) bajas.push(cambio)
+    else altas.push(cambio)
+  }
+  return [...altas, ...bajas]
+}

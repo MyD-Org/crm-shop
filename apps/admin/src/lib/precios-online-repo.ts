@@ -17,7 +17,8 @@ import { avisarShop } from "./aviso-shop"
 import { combinarListasAlegra, leerListasDeAlegra, type ListaAlegraSelector } from "./listas-alegra-selector"
 import { getTenantByIdFromDb } from "./tenants"
 import { pingShopRevalidarSucursales } from "./shop-revalidar"
-import { normalizarMarca, type CambioPrecios } from "./precios-online-cambios"
+import { FORMAS_CONDICION, normalizarMarca, type CambioPrecios, type FormaCondicion } from "./precios-online-cambios"
+import { opcionesAplicables } from "./medios-pago-shop-opciones"
 import { ordenarMarcas } from "./marcas-tarjeta"
 
 // Capa de aplicación de las listas de precio online (change `listas-precio-online`, rebanada B).
@@ -353,6 +354,11 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
     }
     case "setCondicion": {
       const { medioSlug, cuotas, listaId } = c
+      // Ausente = todas las formas (fila de siempre). Sólo existe en el pago único (CHECK de la 0076).
+      const forma = c.forma ?? null
+      if (forma !== null && cuotas !== null) {
+        throw new PreciosOnlineError(422, "forma_invalida", "La forma de pago solo se elige para el pago único.")
+      }
       // Ausente = sin mínimo. Sólo las filas de cuotas pueden tenerlo (CHECK de la migración 0066).
       const montoMinimo = c.montoMinimo ?? null
       if (montoMinimo !== null && cuotas === null) {
@@ -364,10 +370,26 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
         throw new PreciosOnlineError(422, "marcas_invalidas", "Las tarjetas sólo se eligen para las cuotas.")
       }
       const [medio] = await tx
-        .select({ slug: mediosPagoShop.slug })
+        .select({ slug: mediosPagoShop.slug, opcionesCobro: mediosPagoShop.opcionesCobro })
         .from(mediosPagoShop)
         .where(and(eq(mediosPagoShop.tenantId, tenantId), eq(mediosPagoShop.slug, medioSlug)))
       if (!medio) throw new PreciosOnlineError(404, "medio_no_existe", "El medio de pago indicado no existe.")
+      if (forma !== null) {
+        if (medioSlug !== "mercadopago" && medioSlug !== "payway") {
+          throw new PreciosOnlineError(422, "forma_invalida", "Las listas por forma de pago solo aplican a Mercado Pago y Payway.")
+        }
+        // Dar de alta o cambiar exige la forma habilitada (y que el procesador la cobre: Payway no cobra
+        // con cuenta de Mercado Pago). Quitar la lista de una forma deshabilitada siempre se permite.
+        if (listaId !== null && !opcionesAplicables(medioSlug, medio.opcionesCobro).includes(forma)) {
+          throw new PreciosOnlineError(
+            422,
+            "forma_no_habilitada",
+            medioSlug === "payway" && forma === "cuenta_mp"
+              ? "Payway no admite la forma Cuenta de Mercado Pago."
+              : "Habilite esa forma de pago en el medio antes de asignarle una lista.",
+          )
+        }
+      }
       if (listaId !== null) {
         const destino = await cargarLista(tx, tenantId, listaId)
         if (destino.privada) throw new PreciosOnlineError(422, "lista_privada", MSG_PRIVADA_A_MEDIO)
@@ -380,15 +402,18 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
             eq(listaPrecioCondiciones.tenantId, tenantId),
             eq(listaPrecioCondiciones.medioSlug, medioSlug),
             cuotas === null ? sql`${listaPrecioCondiciones.cuotas} IS NULL` : eq(listaPrecioCondiciones.cuotas, cuotas),
-            // Sólo la fila de todas las formas (0076): las filas por forma no se tocan acá.
-            sql`${listaPrecioCondiciones.forma} IS NULL`,
+            // Una fila por forma (0076) o, sin forma, la de todas las formas.
+            forma === null ? sql`${listaPrecioCondiciones.forma} IS NULL` : eq(listaPrecioCondiciones.forma, forma),
           ),
         )
-      const objeto = `condicion:${medioSlug}:${cuotas ?? 0}`
+      // Entradas viejas (sin forma) conservan su clave.
+      const objeto = `condicion:${medioSlug}:${cuotas ?? 0}${forma ? `:${forma}` : ""}`
+      // `forma` sólo viaja cuando hay una: el historial de siempre queda idéntico.
+      const conForma = forma ? { forma } : {}
       const snap = (x: typeof previo | undefined) =>
         x
-          ? { medioSlug: x.medioSlug, cuotas: x.cuotas, listaId: x.listaId, montoMinimo: x.montoMinimo, marcas: x.marcas }
-          : { medioSlug: medioSlug, cuotas: cuotas, listaId: null, montoMinimo: null, marcas: null }
+          ? { medioSlug: x.medioSlug, cuotas: x.cuotas, listaId: x.listaId, montoMinimo: x.montoMinimo, marcas: x.marcas, ...conForma }
+          : { medioSlug: medioSlug, cuotas: cuotas, listaId: null, montoMinimo: null, marcas: null, ...conForma }
       if (listaId === null) {
         if (!previo) throw new PreciosOnlineError(422, "sin_cambios", "Ese medio de pago no tiene una lista enlazada.")
         await tx.delete(listaPrecioCondiciones).where(eq(listaPrecioCondiciones.id, previo.id))
@@ -412,7 +437,7 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
       } else {
         await tx
           .insert(listaPrecioCondiciones)
-          .values({ tenantId, listaId: listaId, medioSlug: medioSlug, cuotas: cuotas, montoMinimo: montoMinimo, marcas: marcas })
+          .values({ tenantId, listaId: listaId, medioSlug: medioSlug, cuotas: cuotas, montoMinimo: montoMinimo, marcas: marcas, forma })
       }
       return [
         {
@@ -420,7 +445,7 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
           objeto,
           listaId: listaId,
           antes: snap(previo),
-          despues: { medioSlug: medioSlug, cuotas: cuotas, listaId: listaId, montoMinimo: montoMinimo, marcas: marcas },
+          despues: { medioSlug: medioSlug, cuotas: cuotas, listaId: listaId, montoMinimo: montoMinimo, marcas: marcas, ...conForma },
         },
       ]
     }
@@ -954,6 +979,8 @@ async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Pro
           montoMinimo: a.montoMinimo === null || a.montoMinimo === undefined ? null : String(a.montoMinimo),
           // Entradas anteriores a la 0074 no guardaron las marcas: restauran "todas las tarjetas".
           marcas: Array.isArray(a.marcas) && a.marcas.length > 0 ? a.marcas.map(String) : null,
+          // Entradas anteriores a la 0076 no guardaron la forma: restauran la fila de todas las formas.
+          forma: typeof a.forma === "string" && (FORMAS_CONDICION as readonly string[]).includes(a.forma) ? (a.forma as FormaCondicion) : null,
         },
       ]
       break

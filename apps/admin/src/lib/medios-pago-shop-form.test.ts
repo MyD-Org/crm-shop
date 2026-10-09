@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest"
 import type { MedioPagoConAvisos } from "@/lib/medios-pago-shop-repo"
-import { aplicarMedioGuardado, cambiosDeCuotas, cuerpoDeOpciones, cuerpoDePrecios, validarFilasCuotas } from "@/lib/medios-pago-shop-form"
+import {
+  aplicarMedioGuardado,
+  cambiosDeCuotas,
+  cambiosDeListasPorForma,
+  LISTA_IGUAL_QUE_EL_MEDIO,
+  listasPorFormaDesdeDto,
+  cuerpoDeOpciones,
+  cuerpoDePrecios,
+  validarFilasCuotas,
+} from "@/lib/medios-pago-shop-form"
 
 const medio = (slug: string, extra: Partial<MedioPagoConAvisos> = {}): MedioPagoConAvisos => ({
   slug,
@@ -20,6 +29,7 @@ const medio = (slug: string, extra: Partial<MedioPagoConAvisos> = {}): MedioPago
   audiencia: "publico",
   chips: [],
   opcionesCobro: ["credito", "debito", "cuenta_mp"],
+  listasPorForma: [],
   avisos: [],
   ...extra,
 })
@@ -202,5 +212,27 @@ describe("cuerpoDeOpciones", () => {
       opcionesCobro: ["credito", "cuenta_mp"],
     })
     expect(cuerpoDeOpciones([], ["debito"])).toEqual({ opcionesCobro: [] })
+  })
+})
+
+describe("cambiosDeListasPorForma", () => {
+  const B = "00000000-0000-4000-8000-00000000000b"
+  const C = "00000000-0000-4000-8000-00000000000c"
+
+  it("sin cambios no genera nada, y 'igual que el medio' equivale a ausente", () => {
+    expect(cambiosDeListasPorForma("mercadopago", { debito: B }, { debito: B })).toEqual([])
+    expect(cambiosDeListasPorForma("mercadopago", {}, { debito: LISTA_IGUAL_QUE_EL_MEDIO })).toEqual([])
+  })
+
+  it("alta y cambio llevan la forma y cuotas null; la baja va al final con listaId null", () => {
+    const cambios = cambiosDeListasPorForma("payway", { credito: B, debito: B }, { credito: LISTA_IGUAL_QUE_EL_MEDIO, debito: C })
+    expect(cambios).toEqual([
+      { op: "setCondicion", medioSlug: "payway", cuotas: null, forma: "debito", listaId: C },
+      { op: "setCondicion", medioSlug: "payway", cuotas: null, forma: "credito", listaId: null },
+    ])
+  })
+
+  it("listasPorFormaDesdeDto arma el estado inicial", () => {
+    expect(listasPorFormaDesdeDto([{ forma: "debito", listaId: B }])).toEqual({ debito: B })
   })
 })

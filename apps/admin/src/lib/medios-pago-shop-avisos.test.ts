@@ -182,3 +182,11 @@ describe("avisosDeMedio: cantidades con las mismas marcas", () => {
     expect(a[0]).toContain("3 y 6 cuotas tienen interés con Visa.")
   })
 })
+
+describe("avisosDeMedio: listas por forma de pago (0076)", () => {
+  it("una lista sólo por forma no cuenta como lista del medio: sigue 'sin lista propia'", () => {
+    // El DTO trae `listasPorForma`; los avisos sólo miran la lista del medio (la fila de todas las formas).
+    const medio = { ...base, destacarEnCatalogo: true, listasPorForma: [{ forma: "debito", listaId: "l2" }] }
+    expect(avisosDeMedio(medio, ctx())).toEqual(avisosDeMedio({ ...base, destacarEnCatalogo: true }, ctx()))
+  })
+})

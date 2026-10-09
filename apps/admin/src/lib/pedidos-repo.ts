@@ -19,7 +19,7 @@ import { estadoContacto, predicadoSinContactar } from "@/lib/pedidos-contacto-re
 import { reservaDePendiente, type ReservaPedido } from "@/lib/pedido-reserva"
 import type { ReglaAplicada } from "@/lib/sucursales-zona"
 import { VENTANA_PAGO_MS, motivosNoCancelable, type EntregaTipo, type EstadoPedido, type MotivoNoCancelable } from "@/lib/pedidos-transiciones"
-import { cuentaDeCobroDto, parseInfoPago, type PagoEnLineaDto } from "@/lib/pago-en-linea"
+import { cuentaDeCobroDto, parseInfoPago, type FormaElegida, type PagoEnLineaDto } from "@/lib/pago-en-linea"
 
 // Ejecutor de consultas: `getDb()` fuera de una transacción, o el `tx` que da `db.transaction`
 // dentro de una. Todas las escrituras de este archivo que insertan un evento van adentro de una
@@ -1433,10 +1433,22 @@ export function formatearNumeroPedido(numero: number): string {
 }
 
 // `cuotas_distintas` y `monto_distinto`: el cobro en cuotas no coincide con lo congelado en el pedido
-// (change `listas-precio-online`, rebanada D). Los escribe el Shop al registrar el cobro.
-export type PagoRevision = "cobro_duplicado" | "pagado_cancelado" | "cuotas_distintas" | "monto_distinto"
+// (change `listas-precio-online`, rebanada D). `forma_distinta`: el pago aprobado no es de la forma
+// congelada en el pedido (change `listas-por-forma-de-pago`). Los escribe el Shop al registrar el cobro.
+export type PagoRevision =
+  | "cobro_duplicado"
+  | "pagado_cancelado"
+  | "cuotas_distintas"
+  | "monto_distinto"
+  | "forma_distinta"
 
-const PAGO_REVISION: readonly string[] = ["cobro_duplicado", "pagado_cancelado", "cuotas_distintas", "monto_distinto"]
+const PAGO_REVISION: readonly string[] = [
+  "cobro_duplicado",
+  "pagado_cancelado",
+  "cuotas_distintas",
+  "monto_distinto",
+  "forma_distinta",
+]
 const esPagoRevision = (v: string | null): v is PagoRevision => v !== null && PAGO_REVISION.includes(v)
 
 export interface PedidoListaDto {
@@ -1505,9 +1517,15 @@ export interface CuentaPagoDto {
   cuit: string
 }
 
+/** Lectura tolerante de `forma_cobro`: algo desconocido es "sin forma". */
+function formaElegida(v: string | null | undefined): FormaElegida | null {
+  return v === "credito" || v === "debito" || v === "cuenta_mp" ? v : null
+}
+
 /** Datos del cobro en línea, o null en un pago offline (sin proveedor). */
 export function toPagoEnLineaDto(
-  row: Pick<PedidoRow, "pagoProveedor" | "pagoReferencia" | "pagoMedio" | "pagoCuotas" | "pagoTotalPagado" | "pagoInfo">,
+  row: Pick<PedidoRow, "pagoProveedor" | "pagoReferencia" | "pagoMedio" | "pagoCuotas" | "pagoTotalPagado" | "pagoInfo"> &
+    Partial<Pick<PedidoRow, "formaCobro">>,
 ): PagoEnLineaDto | null {
   if (row.pagoProveedor == null) return null
   const info = parseInfoPago(row.pagoInfo)
@@ -1519,6 +1537,7 @@ export function toPagoEnLineaDto(
     totalPagado: row.pagoTotalPagado == null ? null : num(row.pagoTotalPagado),
     info,
     cuenta: cuentaDeCobroDto(info),
+    ...(formaElegida(row.formaCobro) ? { formaElegida: formaElegida(row.formaCobro)! } : {}),
   }
 }
 

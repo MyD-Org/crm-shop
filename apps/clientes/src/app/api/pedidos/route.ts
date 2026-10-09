@@ -88,6 +88,8 @@ interface BodyPedido {
   totalVisto?: unknown;
   /** Cuotas sin interés elegidas (flag `cuotas-cobro`); ausente = un pago. Sólo cobro en línea. */
   cuotas?: unknown;
+  /** Forma de pago (`credito`, `debito`, `cuenta_mp`): solo cuenta con un medio de Mercado Pago o Payway con precios por forma. */
+  forma?: unknown;
 }
 
 /**
@@ -371,6 +373,7 @@ export async function POST(req: Request) {
       entregaTipo,
       pagoMetodo,
       cuotasPedidas: body.cuotas,
+      formaPedida: body.forma,
       mediosCrm,
       opcionesMedios,
       idListaPrivada,
@@ -378,12 +381,18 @@ export async function POST(req: Request) {
       soloVisibles,
     });
     if (!resuelto.ok) {
+      if (resuelto.motivo === "forma_no_disponible") {
+        return NextResponse.json(
+          { error: "Esa forma de pago no está disponible para este medio.", motivo: "forma_no_disponible" },
+          { status: 400 },
+        );
+      }
       return NextResponse.json(
         { error: TEXTOS_CUOTAS.cuotasNoDisponibles, motivo: "cuotas_no_disponibles" },
         { status: 422 },
       );
     }
-    const { cuotasPedido, idListaMedio, opcionesCotizar, cotizacion } = resuelto;
+    const { cuotasPedido, idListaMedio, formaCobro, opcionesCotizar, cotizacion } = resuelto;
 
     // Nada se persiste si hay una sola línea con problema: se devuelve la
     // cotización entera para que el checkout marque exactamente cuál falla.
@@ -470,6 +479,7 @@ export async function POST(req: Request) {
           envioGratis,
           pagoMetodo,
           cuotas: cuotasPedido,
+          formaCobro,
           notas: texto(body.notas, 500) || undefined,
           // Congelado desde la lectura única: la condición real (exento, o el
           // valor de Alegra si no mapea) y el documento tal como está.

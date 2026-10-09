@@ -75,8 +75,11 @@ export const shopOrders = shop.table("orders", {
   // Operador que registró/anuló el último pago offline (0017 del Shop). Sin FK, como estadoActualizado*.
   pagoRegistradoPor: uuid("pago_registrado_por"),
   pagoRegistradoPorNombre: text("pago_registrado_por_nombre"),
-  // 'cobro_duplicado' | 'pagado_cancelado' | 'cuotas_distintas' | 'monto_distinto' | null. Lo escribe el Shop al registrar cada cobro.
+  // 'cobro_duplicado' | 'pagado_cancelado' | 'cuotas_distintas' | 'monto_distinto' | 'forma_distinta' | null. Lo escribe el Shop al registrar cada cobro.
   pagoRevision: text("pago_revision"),
+  // Forma de pago con la que el Shop congeló el total (0036 del Shop, change `listas-por-forma-de-pago`):
+  // 'credito' | 'debito' | 'cuenta_mp'. NULL = pedido anterior o medio sin precios por forma. Solo lectura.
+  formaCobro: text("forma_cobro"),
   // Datos del cobro en línea, los escribe el Shop al registrar cada cobro (`registrarCobroTx`). El CRM
   // sólo los muestra. `pago_info` (0033 del Shop): marca, tipo, últimos 4, fecha, autorización, cupón.
   pagoReferencia: text("pago_referencia"),

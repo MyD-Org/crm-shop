@@ -127,6 +127,33 @@ describe("POST /api/pedidos/[id]/cuotas", () => {
     expect((await llamar({ marca: "tarjeta-x" })).status).toBe(400);
   });
 
+  it("forma congelada débito: 400 en usted, sin cotizar ni consultar a Mercado Pago", async () => {
+    pedidoParaCambiarMedio.mockResolvedValue(pedido({ formaCobro: "debito" }));
+    const r = await llamar();
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toBe("Las cuotas solo están disponibles pagando con tarjeta de crédito.");
+    expect(cotizar).not.toHaveBeenCalled();
+    expect(consultarPlanesMP).not.toHaveBeenCalled();
+  });
+
+  it("forma congelada cuenta_mp: 400", async () => {
+    pedidoParaCambiarMedio.mockResolvedValue(pedido({ formaCobro: "cuenta_mp" }));
+    expect((await llamar()).status).toBe(400);
+  });
+
+  it("forma congelada crédito: el 1 pago se cotiza con la lista de la forma", async () => {
+    medios = [{ ...medioMP, listasPorForma: { credito: "l3" } }];
+    pedidoParaCambiarMedio.mockResolvedValue(pedido({ formaCobro: "credito" }));
+    const json = await (await llamar()).json();
+    expect(json.precioUnPago).toBe(TOTALES.l3);
+  });
+
+  it("forma NULL (pedido viejo o sin precios por forma): como siempre, con la lista del medio", async () => {
+    medios = [{ ...medioMP, listasPorForma: { credito: "l3" } }];
+    pedidoParaCambiarMedio.mockResolvedValue(pedido({ formaCobro: null }));
+    expect((await (await llamar()).json()).precioUnPago).toBe(TOTALES.l1);
+  });
+
   it("pedido retomado: cotiza las líneas del PEDIDO; sin efectos sobre el pedido", async () => {
     await llamar();
     expect(cotizar).toHaveBeenCalled();

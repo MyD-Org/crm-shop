@@ -117,6 +117,13 @@ describe("toPagoEnLineaDto", () => {
       cuenta: null,
     })
   })
+  it("expone la forma de pago elegida solo si el Shop la congeló", () => {
+    expect(toPagoEnLineaDto({ ...fila, formaCobro: "debito" })?.formaElegida).toBe("debito")
+    expect(toPagoEnLineaDto({ ...fila, formaCobro: "cuenta_mp" })?.formaElegida).toBe("cuenta_mp")
+    // NULL (pedido anterior o sin precios por forma) o un valor desconocido: sin la clave.
+    expect(toPagoEnLineaDto({ ...fila, formaCobro: null })).not.toHaveProperty("formaElegida")
+    expect(toPagoEnLineaDto({ ...fila, formaCobro: "efectivo" })).not.toHaveProperty("formaElegida")
+  })
   it("expone la cuenta de cobro y el fallback", () => {
     const dto = toPagoEnLineaDto({ ...fila, pagoInfo: { cuentaCobro: "igz", cuentaCobroPrevista: "mdp" } })
     expect(dto?.cuenta).toEqual({ slug: "igz", prevista: "mdp", fallback: true })
@@ -134,6 +141,13 @@ describe("datosCobroEnLinea", () => {
     info: { ...vacio, tipo: "credito", marca: "Mastercard", ultimos4: "4623", aprobadoEn: "2026-10-07T19:30:00.000Z" },
     cuenta: null,
   }
+  it("muestra la forma de pago elegida, antes de la cuenta de cobro", () => {
+    const d = datosCobroEnLinea({ ...base, formaElegida: "debito", cuenta: { slug: "mdp", prevista: null, fallback: false } }, 1210)
+    expect(d.map((x) => x.label).slice(0, 3)).toEqual(["Pagó con", "Forma de pago elegida", "Cuenta de cobro"])
+    expect(d[1].valor).toBe("Tarjeta de débito")
+    expect(datosCobroEnLinea({ ...base, formaElegida: "cuenta_mp" }, 1210)[1].valor).toBe("Cuenta de Mercado Pago")
+    expect(datosCobroEnLinea(base, 1210).map((x) => x.label)).not.toContain("Forma de pago elegida")
+  })
   it("Mercado Pago: medio, cuotas, fecha y número de operación; total sólo si difiere", () => {
     expect(datosCobroEnLinea(base, 1210)).toEqual([
       { label: "Pagó con", valor: "Mastercard crédito •••• 4623" },

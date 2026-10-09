@@ -92,6 +92,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
     }
 
+    // Las cuotas sin interés son de crédito: con una forma congelada que no lo es, no hay cuotas.
+    if (pedido.formaCobro && pedido.formaCobro !== "credito") {
+      return NextResponse.json(
+        { error: "Las cuotas solo están disponibles pagando con tarjeta de crédito.", motivo: "forma_sin_cuotas" },
+        { status: 400 },
+      );
+    }
+
     // Sin caché: rige lo último del admin (condiciones, mínimos, marcas).
     const medios = await leerMediosPagoTolerante();
     const medio = medios.find((m) => m.slug === pedido.pagoMetodo);
@@ -108,7 +116,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const { opciones: cotizadas } = await opcionesCuotasDePedido({
       lineas: pedido.lineas,
       medio: { condicionesCuotas: conSinInteres ? (medio.condicionesCuotas ?? []) : [] },
-      idListaUnPago: idListaDelMedio(medios, pedido.entregaTipo, pedido.pagoMetodo, undefined, 1),
+      // El pago único a la lista de la forma congelada (null = la del medio).
+      idListaUnPago: idListaDelMedio(medios, pedido.entregaTipo, pedido.pagoMetodo, undefined, 1, pedido.formaCobro),
       opcionesCotizar: { entregaTipo: pedido.entregaTipo, idListaPrivada, soloVisibles: await catalogoSoloVisibles() },
       // El pedido ya reserva sus unidades.
       ignorarStock: true,

@@ -5,7 +5,8 @@
 import { cotizar, ignorarProblemasDeStock, type Cotizacion, type LineaPedida } from "./cotizacion";
 import { cuotasElegidas } from "./cuotas-sin-interes";
 import { cuotasHabilitadas } from "./cuotas-flag";
-import { idListaDelMedio } from "./lista-medio";
+import { idListaDelMedio, resolverForma } from "./lista-medio";
+import type { OpcionCobro } from "./pagos/opciones-cobro";
 import { mediosParaModalidad, type MedioPago, type OpcionesMedios } from "./medios-pago";
 import type { EntregaTipo } from "./envio";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
@@ -23,10 +24,12 @@ export type ResultadoMedio =
       ok: true;
       cuotasPedido: number | null;
       idListaMedio: string | undefined;
+      /** Forma de pago congelada; null = el medio no tiene precios distintos por forma (o no aplica). */
+      formaCobro: OpcionCobro | null;
       opcionesCotizar: OpcionesCotizarMedio;
       cotizacion: Cotizacion;
     }
-  | { ok: false; motivo: "cuotas_no_disponibles" };
+  | { ok: false; motivo: "cuotas_no_disponibles" | "forma_no_disponible" };
 
 /**
  * Cuotas sin interés (flag `cuotas-cobro`, sólo cobro en línea y sin lista privada) y lista del medio,
@@ -38,6 +41,8 @@ export async function cotizarConMedio(a: {
   entregaTipo: EntregaTipo;
   pagoMetodo: string;
   cuotasPedidas: unknown;
+  /** Forma de pago pedida (`credito`, `debito`, `cuenta_mp`); solo cuenta con un medio de Mercado Pago o Payway. */
+  formaPedida?: unknown;
   mediosCrm: readonly MedioPago[];
   opcionesMedios: OpcionesMedios;
   idListaPrivada: string | null;
@@ -57,6 +62,17 @@ export async function cotizarConMedio(a: {
   const medioDelPedido = mediosParaModalidad(mediosCrm, entregaTipo, a.opcionesMedios).find(
     (m) => m.slug === pagoMetodo,
   );
+  // Forma de pago: solo con un medio de cobro en línea y sin lista privada (el precio no depende del medio).
+  let formaCobro: OpcionCobro | null = null;
+  if (conMedio && medioDelPedido?.cobroOnline) {
+    const f = resolverForma(medioDelPedido, a.formaPedida);
+    if (!f.ok) return { ok: false, motivo: "forma_no_disponible" };
+    formaCobro = f.forma;
+    // Las cuotas sin interés son de crédito: con otra forma pedida no hay cuotas.
+    if (typeof a.cuotasPedidas === "number" && a.cuotasPedidas >= 2 && f.pedida && f.pedida !== "credito") {
+      return { ok: false, motivo: "cuotas_no_disponibles" };
+    }
+  }
   let cuotasPedido: number | null = null;
   if (conMedio && medioDelPedido?.cobroOnline && (await cuotasHabilitadas())) {
     // Monto mínimo por cantidad de cuotas: la base es el total con impuestos a la lista del PAGO ÚNICO
@@ -65,7 +81,7 @@ export async function cotizarConMedio(a: {
     let totalBase: number | undefined;
     if (hayMinimos && typeof a.cuotasPedidas === "number" && a.cuotasPedidas >= 2) {
       const cotBase = await cotizarEstas({
-        idListaMedio: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1),
+        idListaMedio: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1, formaCobro ? "credito" : null),
         entregaTipo,
         disp: a.disp,
         soloVisibles: a.soloVisibles,
@@ -78,8 +94,9 @@ export async function cotizarConMedio(a: {
     const elegidas = cuotasElegidas(a.cuotasPedidas, medioDelPedido.condicionesCuotas, totalBase);
     if (!elegidas.ok) return { ok: false, motivo: "cuotas_no_disponibles" };
     cuotasPedido = elegidas.cuotas;
+    if (formaCobro && formaCobro !== "credito" && cuotasPedido >= 2) return { ok: false, motivo: "cuotas_no_disponibles" };
   }
-  const idListaMedio = conMedio ? idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotasPedido) : undefined;
+  const idListaMedio = conMedio ? idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotasPedido, formaCobro) : undefined;
   const opcionesCotizar = {
     idListaPrivada: a.idListaPrivada,
     idListaMedio,
@@ -88,5 +105,5 @@ export async function cotizarConMedio(a: {
     soloVisibles: a.soloVisibles,
   };
   const cotizacion = await cotizarEstas(opcionesCotizar);
-  return { ok: true, cuotasPedido, idListaMedio, opcionesCotizar, cotizacion };
+  return { ok: true, cuotasPedido, idListaMedio, formaCobro, opcionesCotizar, cotizacion };
 }

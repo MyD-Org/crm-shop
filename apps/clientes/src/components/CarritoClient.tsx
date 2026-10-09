@@ -18,7 +18,8 @@ import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
-import { BotonCompartirCarrito } from "@/components/carrito/BotonCompartirCarrito";
+import { BotonCompartirLista } from "@/components/BotonCompartirLista";
+import { hrefCompartido, MENSAJE_CARRITO } from "@/lib/carrito-compartido";
 import { useChatIa } from "@/hooks/useChatIa";
 import { MENSAJES_AL_CHAT, TEXTOS_CARRITO_ASESOR } from "@/lib/iniciativa/textos";
 
@@ -289,7 +290,15 @@ export function CarritoClient({
             </span>
           </div>
           <div className="ml-auto">
-            <BotonCompartirCarrito items={items} />
+            <BotonCompartirLista
+              href={hrefCompartido(items)}
+              label="Compartir carrito"
+              mensaje={MENSAJE_CARRITO}
+              toast={{
+                title: "Enlace copiado",
+                description: "Ya puede pegarlo donde quiera compartir su carrito.",
+              }}
+            />
           </div>
         </div>
 

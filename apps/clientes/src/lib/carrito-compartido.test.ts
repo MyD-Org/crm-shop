@@ -5,6 +5,9 @@ import {
   hrefCompartido,
   hrefWhatsApp,
   mensajeCompartido,
+  MENSAJE_CARRITO,
+  MENSAJE_FAVORITOS,
+  MENSAJE_PEDIDO,
   parsearCompartido,
   separarDisponibles,
 } from "./carrito-compartido";
@@ -138,5 +141,27 @@ describe("mensaje y WhatsApp", () => {
     // `?`, `=`, `:` y `,` del link van escapados: si no, WhatsApp corta el texto.
     expect(href).not.toContain("?i=");
     expect(decodeURIComponent(href.slice("https://wa.me/?text=".length))).toBe(mensajeCompartido(url));
+  });
+});
+
+describe("texto variable del mensaje", () => {
+  const url = "https://tienda.example/carrito/compartido?i=12:3";
+
+  it("las constantes tienen los encabezados acordados", () => {
+    expect(MENSAJE_CARRITO).toBe("Te comparto mi carrito");
+    expect(MENSAJE_PEDIDO).toBe("Te comparto mi pedido");
+    expect(MENSAJE_FAVORITOS).toBe("Te comparto mi lista de favoritos");
+  });
+
+  it("acepta un texto de encabezado", () => {
+    expect(mensajeCompartido(url, MENSAJE_PEDIDO)).toBe(`Te comparto mi pedido: ${url}`);
+  });
+
+  it("hrefWhatsApp codifica el texto elegido y mantiene el default", () => {
+    const base = "https://wa.me/?text=";
+    expect(decodeURIComponent(hrefWhatsApp(url, MENSAJE_PEDIDO).slice(base.length))).toBe(
+      `Te comparto mi pedido: ${url}`,
+    );
+    expect(hrefWhatsApp(url)).toBe(hrefWhatsApp(url, MENSAJE_CARRITO));
   });
 });

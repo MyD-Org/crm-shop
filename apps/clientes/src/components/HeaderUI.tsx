@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { SignInButton, useAuth } from "@clerk/nextjs";
 import { SiteHeader, type VisibleOn } from "@myd-org/ui";
@@ -14,6 +15,8 @@ import { CartPreview } from "./CartPreview";
 import { linkNext } from "./catalogo/link-next";
 import { MenuUsuario } from "./MenuUsuario";
 import { BotonAsistente } from "./chat/BotonAsistente";
+import logoCompleto from "@/assets/central-led-logo.png";
+import logoMarca from "@/assets/central-led-logo-marca.png";
 
 function UserIcon() {
   return (
@@ -181,6 +184,15 @@ function HeaderVista({
         brandName="Central"
         brandAccent="Led"
         brandSub="Iluminación · Electricidad"
+        // Logo en imagen: completo desde lg y sin el descriptor debajo (a ese
+        // tamaño no se lee). La barra compacta sólo se ve desde lg.
+        brandLogo={
+          <>
+            <Image src={logoCompleto} alt="Central Led" priority className="h-11 w-auto max-lg:hidden" />
+            <Image src={logoMarca} alt="Central Led" priority className="h-[22px] w-auto lg:hidden" />
+          </>
+        }
+        compactBrandLogo={<Image src={logoMarca} alt="Central Led" className="h-6 w-auto" />}
         // En mobile (la búsqueda ocupa su propia fila) el "Enviar a" va en una línea debajo.
         // La barra compacta lleva sólo el buscador.
         search={

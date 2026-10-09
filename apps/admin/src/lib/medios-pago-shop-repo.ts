@@ -246,12 +246,28 @@ export async function conAvisos(tenantId: string, medios: MedioPagoDto[]): Promi
   return medios.map((m) => ({ ...m, avisos: avisosDeMedio(m, ctx) }))
 }
 
-export async function listarMediosPagoConAvisos(
-  tenantId: string,
-): Promise<{ medios: MedioPagoConAvisos[]; listas: { id: string; nombre: string }[] }> {
+/** La lista de referencia del tenant (la que rige en un medio sin lista), o null si no hay. */
+export async function listaDeReferencia(tenantId: string): Promise<{ id: string; nombre: string } | null> {
+  const [fila] = await getDb()
+    .select({ id: listasPrecioOnline.id, nombre: listasPrecioOnline.nombre })
+    .from(listasPrecioOnline)
+    .where(and(eq(listasPrecioOnline.tenantId, tenantId), eq(listasPrecioOnline.esReferencia, true)))
+    .limit(1)
+  return fila ?? null
+}
+
+export async function listarMediosPagoConAvisos(tenantId: string): Promise<{
+  medios: MedioPagoConAvisos[]
+  listas: { id: string; nombre: string }[]
+  listaReferencia: { id: string; nombre: string } | null
+}> {
   const medios = await listarMediosPago(tenantId)
-  const [listas, conAv] = await Promise.all([listasDisponiblesParaMedios(tenantId), conAvisos(tenantId, medios)])
-  return { medios: conAv, listas }
+  const [listas, listaReferencia, conAv] = await Promise.all([
+    listasDisponiblesParaMedios(tenantId),
+    listaDeReferencia(tenantId),
+    conAvisos(tenantId, medios),
+  ])
+  return { medios: conAv, listas, listaReferencia }
 }
 
 /** `slug -> nombre` de los medios del tenant (activos o no), para mostrar el elegido en un pedido. */

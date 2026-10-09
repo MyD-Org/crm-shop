@@ -114,6 +114,12 @@ const porOrden = (a: MedioPagoDto, b: MedioPagoDto) => a.orden - b.orden || a.no
 /** Nombre a mostrar de la lista enlazada (sin enlace rige la lista de referencia). */
 const nombreDeLista = (m: MedioPagoDto) => m.listaOnlineNombre
 
+/**
+ * Mercado Pago define las cuotas y quién paga el interés en su propia cuenta (el Brick las muestra
+ * tal como vienen de allá): en el admin sólo se elige la lista de precios del medio.
+ */
+const cuotasEnElProcesador = (slug: string | null) => slug === "mercadopago"
+
 async function enviar(url: string, method: string, body?: unknown) {
   const res = await fetch(url, {
     method,
@@ -144,12 +150,14 @@ function CheckboxLabel(props: { id: string; checked: boolean; onChange: (v: bool
 export function MediosPagoShopCard() {
   const [medios, setMedios] = useState<MedioPagoDto[] | null>(null)
   const [listas, setListas] = useState<Lista[]>([])
+  const [listaReferencia, setListaReferencia] = useState<Lista | null>(null)
   const [errorCarga, setErrorCarga] = useState(false)
   const [form, setForm] = useState<Form | null>(null)
   const [borrar, setBorrar] = useState<MedioPagoDto | null>(null)
   const [errores, setErrores] = useState<Errores>({})
   const [guardando, setGuardando] = useState(false)
   const { toast } = useToast()
+  const nombreReferencia = listaReferencia?.nombre ?? "Lista de referencia"
 
   useEffect(() => {
     let vivo = true
@@ -160,6 +168,7 @@ export function MediosPagoShopCard() {
         else {
           setMedios((json.medios as MedioPagoDto[]).slice().sort(porOrden))
           setListas(Array.isArray(json.listas) ? (json.listas as Lista[]) : [])
+          setListaReferencia((json.listaReferencia as Lista | null | undefined) ?? null)
         }
       })
       .catch(() => vivo && setErrorCarga(true))
@@ -406,7 +415,7 @@ export function MediosPagoShopCard() {
                   const lista = nombreDeLista(m)
                   return (
                     <div className="flex flex-col gap-0.5">
-                      <span>{lista ?? "Lista de referencia"}</span>
+                      <span>{lista ?? nombreReferencia}</span>
                       {m.destacarEnCatalogo && <Badge tone="info">Destacado en catálogo</Badge>}
                       {m.mostrarEnFicha && <span className="text-xs" style={{ color: "var(--ink-soft)" }}>Se muestra en la ficha</span>}
                       {m.avisos.map((a) => (
@@ -512,7 +521,7 @@ export function MediosPagoShopCard() {
               <div className="flex flex-col gap-3">
                 <Field
                   label="Lista de precios"
-                  hint="Si el cliente elige este medio, se le cobra el precio de esta lista de precios online cuando es menor que el de la lista de referencia. Sin lista rige la de referencia. El cambio queda en el historial de Precios online."
+                  hint={`Si el cliente elige este medio, se le cobra el precio de esta lista cuando es menor que el de «${nombreReferencia}», la lista de referencia, que es la que rige si no elige otra. El cambio queda en el historial de Precios online.`}
                   error={errores.listaOnlineId}
                 >
                   <Select
@@ -523,8 +532,11 @@ export function MediosPagoShopCard() {
                       cambiar(v === LISTA_POR_DEFECTO ? { listaOnlineId: v, destacarEnCatalogo: false, mostrarEnFicha: false } : { listaOnlineId: v })
                     }}
                     options={[
-                      { value: LISTA_POR_DEFECTO, label: "Lista de referencia" },
-                      ...listas.map((l) => ({ value: l.id, label: l.nombre })),
+                      { value: LISTA_POR_DEFECTO, label: nombreReferencia },
+                      // La de referencia ya es la opción por defecto: no se repite, salvo que esté enlazada.
+                      ...listas
+                        .filter((l) => l.id !== listaReferencia?.id || l.id === form.listaOnlineId)
+                        .map((l) => ({ value: l.id, label: l.nombre })),
                       // Una lista desactivada se sigue viendo hasta que se elija otra.
                       ...(form.listaOnlineId !== LISTA_POR_DEFECTO && !listas.some((l) => l.id === form.listaOnlineId)
                         ? [{ value: form.listaOnlineId, label: `${medios?.find((m) => m.slug === form.editandoSlug)?.listaOnlineNombre ?? "Lista"} (desactivada)` }]
@@ -576,7 +588,21 @@ export function MediosPagoShopCard() {
                 {errores.opcionesCobro && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.opcionesCobro}</p>}
               </div>
             )}
-            {form.editandoSlug && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline && (
+            {form.editandoSlug && cuotasEnElProcesador(form.editandoSlug) && form.cuotasFilas.length > 0 && (
+              <div className="flex flex-col gap-2" role="note">
+                <p className="text-sm" style={{ color: "var(--ink)" }}>
+                  Las cuotas de Mercado Pago se configuran en su cuenta de Mercado Pago. Este medio tiene{" "}
+                  {form.cuotasFilas.length === 1 ? "una condición de cuotas cargada" : `${form.cuotasFilas.length} condiciones de cuotas cargadas`}{" "}
+                  en el admin que siguen aplicando en la tienda.
+                </p>
+                <div>
+                  <Button size="sm" variant="secondary" onClick={() => cambiar({ cuotasFilas: [] })}>
+                    Quitar las cuotas del admin
+                  </Button>
+                </div>
+              </div>
+            )}
+            {form.editandoSlug && !cuotasEnElProcesador(form.editandoSlug) && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline && (
               <div className="flex flex-col gap-2">
                 <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>Cuotas sin interés</p>
                 <p className="text-xs" style={{ color: "var(--ink-soft)" }}>

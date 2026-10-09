@@ -105,6 +105,16 @@ que revisar: `cobro_duplicado` (más de un intento aprobado) o
 limpia sola. El CRM la muestra como etiqueta en la lista y el detalle de
 Pedidos.
 
+**Red de seguridad del monto.** El webhook acepta cualquier pago aprobado cuyo
+`external_reference` sea el pedido. El monto lo fija el servidor al crear el
+pago, pero si alguna vez llegara uno aprobado por **menos** que `orders.total`
+(tolerancia de un centavo por cuota) o en otra moneda que ARS
+(`motivoNoAcreditable`, `lib/pagos/cuotas-validacion.ts`), el intento se guarda
+`pagado` tal como lo informó MP, pero el pedido **no** pasa a `pagado`: sigue
+como estaba, con `pago_revision = monto_distinto` y apuntando a ese pago, sin
+vaciar el carrito ni mandar "pago recibido". Un pago por un monto mayor o igual
+acredita como siempre (con cuotas con interés el comprador paga más).
+
 La cancelación por parte del cliente (`POST /api/pedidos/:id/cancelar`) no
 corre con un intento abierto: primero intenta cancelarlo en MP, igual que antes
 de un reintento de cobro. Si ya se aprobó o no se puede cerrar, responde 409.

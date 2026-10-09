@@ -191,6 +191,11 @@ export interface EstadoPago {
   cuotasPagadas?: number;
   /** Total que paga el comprador, con interés. Nunca reemplaza el total del pedido. */
   totalPagado?: number;
+  /**
+   * Moneda del pago (ISO 4217), si el proveedor la informa. Un pago aprobado en otra moneda que la
+   * del pedido no lo acredita (ver `motivoNoAcreditable`).
+   */
+  moneda?: string;
   /** Medio con el que se cobró (marca, últimos 4, etc.), si el proveedor lo informó. */
   info?: InfoPago;
   /**

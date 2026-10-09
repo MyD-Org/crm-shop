@@ -29,6 +29,7 @@ export async function conciliarIntento(
     reversion: estado.reversion,
     cuotas: estado.cuotasPagadas,
     totalPagado: estado.totalPagado,
+    moneda: estado.moneda,
     ...(estado.info ? { info: estado.info } : {}),
   });
   return { estado, cambio };

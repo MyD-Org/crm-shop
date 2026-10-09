@@ -190,6 +190,13 @@ describe("interpretar — cuotas reales (L9)", () => {
     expect(r.cuotasPagadas).toBeUndefined();
     expect(r.totalPagado).toBeUndefined();
   });
+
+  it("expone currency_id como moneda (la red de seguridad del cobro la compara con la del pedido)", () => {
+    expect(interpretar({ id: 2004, status: "approved", currency_id: "ARS" }).moneda).toBe("ARS");
+    expect(interpretar({ id: 2005, status: "approved", currency_id: "USD" }).moneda).toBe("USD");
+    expect(interpretar({ id: 2006, status: "approved" }).moneda).toBeUndefined();
+    expect(interpretar({ id: 2007, status: "approved", currency_id: "" }).moneda).toBeUndefined();
+  });
 });
 
 describe("interpretar — pedido del pago (external_reference)", () => {

@@ -4,6 +4,7 @@ import { catalogProducts, catalogStockSucursal, sucursales } from "@/db/schema"
 import {
   buscarItemsPorCodigo,
   createItem,
+  ItemCampoObligatorioError,
   listTaxes,
   type AlegraItemCreateInput,
   type AlegraProduct,
@@ -71,6 +72,7 @@ interface FilaCatalogo {
   alegraIdCuenta: string | null
   code: string | null
   name: string
+  brand: string | null
 }
 
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0]
@@ -93,6 +95,7 @@ async function filasCatalogo(tenantId: string, ids: string[], ej: Ejecutor = get
       alegraIdCuenta: catalogProducts.alegraIdCuenta,
       code: catalogProducts.code,
       name: catalogProducts.name,
+      brand: catalogProducts.brand,
     })
     .from(catalogProducts)
     .where(and(eq(catalogProducts.tenantId, tenantId), inArray(catalogProducts.alegraId, ids)))
@@ -239,12 +242,19 @@ export async function asegurarItemsEnCuenta(
       const impuesto = elegirImpuestoParaLinea(taxes, linea.ivaPorcentaje)
       if (!impuesto && linea.ivaPorcentaje > 0) return { ok: false, error: msgSinImpuesto(nombre, linea.ivaPorcentaje, cuenta) }
 
-      const creadoEnAlegra = await deps.crearItem(config, {
-        name: nombre,
-        code: codigo,
-        price: linea.precioUnitario,
-        taxId: impuesto?.alegraId ?? null,
-      })
+      let creadoEnAlegra: AlegraProduct
+      try {
+        creadoEnAlegra = await deps.crearItem(config, {
+          name: nombre,
+          code: codigo,
+          price: linea.precioUnitario,
+          taxId: impuesto?.alegraId ?? null,
+          brand: fila.brand,
+        })
+      } catch (err) {
+        if (err instanceof ItemCampoObligatorioError) return { ok: false, error: err.message }
+        throw err
+      }
       await guardarPareo(tx, tenantId, slugs, linea.alegraItemId, creadoEnAlegra.alegraId)
       return { ok: true, id: creadoEnAlegra.alegraId, creado: true }
     })

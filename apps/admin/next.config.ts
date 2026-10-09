@@ -5,11 +5,12 @@ const nextConfig: NextConfig = {
   // Headers de seguridad en todas las respuestas (nosniff, referrer, frame, HSTS y CSP en modo
   // Report-Only: ver src/lib/headers-seguridad.ts). Se evalúa en build: cambiar las variables
   // que alimentan la CSP (Sentry, fotos, report-uri) requiere redeploy.
-  // El correo lleva además `img-src https:` (los mensajes traen imágenes de cualquier host y el
-  // iframe srcdoc hereda esta CSP). Con dos reglas que coinciden, el último header gana.
+  // Mensajes (/admin/inbox, donde vive el correo como solapas) lleva además `img-src https:`:
+  // los mensajes traen imágenes de cualquier host y el iframe srcdoc hereda esta CSP. Con dos
+  // reglas que coinciden, el último header gana.
   headers: async () => [
     { source: "/:path*", headers: headersDeSeguridad() },
-    { source: "/admin/correo/:path*", headers: headersDeSeguridad(undefined, { correo: true }) },
+    { source: "/admin/inbox/:path*", headers: headersDeSeguridad(undefined, { correo: true }) },
   ],
   // sharp ya está en la lista automática de Next; heic-decode/libheif-js no: se excluyen del
   // bundling de Server Components para que carguen su wasm/binario con require nativo.

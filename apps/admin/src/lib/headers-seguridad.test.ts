@@ -20,10 +20,11 @@ describe("headersDeSeguridad", () => {
     expect(h["Content-Security-Policy-Report-Only"]).toContain("default-src 'self'")
   })
 
-  it("next.config: la regla general cubre todas las rutas y la del correo viene después (la última gana)", async () => {
+  it("next.config: la regla general cubre todas las rutas y la de Mensajes (correo) viene después (la última gana)", async () => {
     const reglas = await nextConfig.headers!()
     const iGeneral = reglas.findIndex((r) => r.source === "/:path*")
-    const iCorreo = reglas.findIndex((r) => r.source === "/admin/correo/:path*")
+    // El correo vive como solapas de /admin/inbox: /admin/correo sólo redirige ahí.
+    const iCorreo = reglas.findIndex((r) => r.source === "/admin/inbox/:path*")
     expect(iGeneral).toBeGreaterThanOrEqual(0)
     expect(iCorreo).toBeGreaterThan(iGeneral)
     const csp = (i: number) => reglas[i].headers.find((h) => h.key === "Content-Security-Policy-Report-Only")!.value
@@ -95,6 +96,17 @@ describe("politicaCsp", () => {
     const dev = politicaCsp({ NODE_ENV: "development" })
     expect(directiva(dev, "script-src")).toContain("'unsafe-eval'")
     expect(directiva(dev, "connect-src")).toContain("ws:")
+  })
+
+  it("Toolbar de Vercel (vercel.live) sólo en los deploys de Preview", () => {
+    for (const env of [{}, { VERCEL_ENV: "production" }, { NODE_ENV: "development" }]) {
+      expect(politicaCsp(env)).not.toContain("vercel.live")
+    }
+    const preview = politicaCsp({ VERCEL_ENV: "preview" })
+    for (const d of ["script-src", "frame-src", "connect-src"]) {
+      expect(directiva(preview, d)).toContain("https://vercel.live")
+    }
+    expect(directiva(preview, "img-src")).not.toContain("vercel.live")
   })
 
   it("report-uri sólo si está CSP_REPORT_URI", () => {

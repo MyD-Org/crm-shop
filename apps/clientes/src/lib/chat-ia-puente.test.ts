@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { leerEstado } from "./catalogo-url";
 import {
   LARGO_MAX_PEDIDO,
+  alternarChatIa,
   contextoParaChat,
   conversar,
   fijarCatalogoParaChat,
   estadoChatIa,
   estadoChatIaServidor,
+  fijarChatAbierto,
   pedidoChatIa,
   registrarChatIa,
   reiniciarChatIa,
@@ -17,7 +19,7 @@ beforeEach(() => reiniciarChatIa());
 
 describe("puente con el chat", () => {
   it("sin chat registrado no está disponible y conversar no hace nada", () => {
-    expect(estadoChatIa()).toEqual({ disponible: false, pedido: null, teaser: null });
+    expect(estadoChatIa()).toEqual({ disponible: false, abierto: false, orden: null, pedido: null, teaser: null });
     expect(conversar("luz para el patio")).toBe(false);
     expect(pedidoChatIa()).toBeNull();
   });
@@ -49,12 +51,36 @@ describe("puente con el chat", () => {
     baja1();
     expect(estadoChatIa().disponible).toBe(true);
     baja2();
-    expect(estadoChatIa()).toEqual({ disponible: false, pedido: null, teaser: null });
+    expect(estadoChatIa()).toEqual({ disponible: false, abierto: false, orden: null, pedido: null, teaser: null });
+  });
+
+  it("alternar: sin chat no hace nada; con chat ordena abrir o cerrar según lo que avisó el widget", () => {
+    expect(alternarChatIa()).toBe(false);
+    expect(estadoChatIa().orden).toBeNull();
+    registrarChatIa();
+    expect(alternarChatIa()).toBe(true);
+    const abrir = estadoChatIa().orden;
+    expect(abrir).toEqual({ id: expect.any(String), abrir: true });
+    fijarChatAbierto(true);
+    expect(estadoChatIa().abierto).toBe(true);
+    alternarChatIa();
+    expect(estadoChatIa().orden).toEqual({ id: expect.any(String), abrir: false });
+    expect(estadoChatIa().orden!.id).not.toBe(abrir!.id);
+  });
+
+  it("fijarChatAbierto publica sólo cuando cambia", () => {
+    registrarChatIa();
+    const oyente = vi.fn();
+    suscribirChatIa(oyente);
+    fijarChatAbierto(false);
+    expect(oyente).not.toHaveBeenCalled();
+    fijarChatAbierto(true);
+    expect(oyente).toHaveBeenCalledTimes(1);
   });
 
   it("en el servidor nunca hay chat", () => {
     registrarChatIa();
-    expect(estadoChatIaServidor()).toEqual({ disponible: false, pedido: null, teaser: null });
+    expect(estadoChatIaServidor()).toEqual({ disponible: false, abierto: false, orden: null, pedido: null, teaser: null });
   });
 });
 

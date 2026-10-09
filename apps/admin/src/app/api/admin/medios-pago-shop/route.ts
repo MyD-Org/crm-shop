@@ -1,3 +1,4 @@
+import { slugReservadoEnAlta } from "@/lib/medios-pago-shop-validacion"
 import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { conAvisos, crearMedioPago, listarMediosPagoConAvisos } from "@/lib/medios-pago-shop-repo"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
@@ -23,6 +24,8 @@ export async function POST(req: Request) {
   if (!guard.ok) return guard.response
 
   const body = await req.json().catch(() => null)
+  const reservado = slugReservadoEnAlta(body)
+  if (reservado) return errorDeMedio({ kind: "invalid", campo: reservado.campo, error: reservado.error })
   const r = await crearMedioPago(guard.tenantId, body)
   if (r.kind !== "ok") return errorDeMedio(r)
 

@@ -48,6 +48,13 @@ beforeEach(() => {
 })
 
 describe("/api/admin/medios-pago-shop", () => {
+  it("POST rechaza con 400 un identificador de medio del sistema", async () => {
+    const { POST } = await import("@/app/api/admin/medios-pago-shop/route")
+    const res = await POST(req("POST", { slug: "transferencia", nombre: "Otra" }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: "Ese identificador está reservado.", campo: "slug" })
+  })
+
   it("sin sesión → 401 y sin aviso", async () => {
     state.guarded = { ok: false, reason: "no-session" }
     const { GET, POST } = await import("@/app/api/admin/medios-pago-shop/route")
@@ -69,7 +76,7 @@ describe("/api/admin/medios-pago-shop", () => {
 
   it("alta → 201 y avisa al Shop", async () => {
     const { POST } = await import("@/app/api/admin/medios-pago-shop/route")
-    const res = await POST(req("POST", { slug: "efectivo", nombre: "Efectivo" }))
+    const res = await POST(req("POST", { slug: "propio", nombre: "Propio" }))
     expect(res.status).toBe(201)
     expect(await res.json()).toMatchObject({ ok: true, propagado: true })
     expect(state.ping).toBe(1)
@@ -78,7 +85,7 @@ describe("/api/admin/medios-pago-shop", () => {
   it("slug duplicado → 409; inválido → 400; sin aviso", async () => {
     const { POST } = await import("@/app/api/admin/medios-pago-shop/route")
     state.resultado = { kind: "conflict", campo: "slug", error: "Ya existe un medio de pago con ese identificador." }
-    const dup = await POST(req("POST", { slug: "efectivo", nombre: "x" }))
+    const dup = await POST(req("POST", { slug: "propio", nombre: "x" }))
     expect(dup.status).toBe(409)
     expect(await dup.json()).toMatchObject({ code: "conflict", campo: "slug" })
     state.resultado = { kind: "invalid", campo: "nombre", error: "Ingrese el nombre." }

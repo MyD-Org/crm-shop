@@ -15,6 +15,7 @@ import {
   SLUG_MERCADOPAGO,
   type AudienciaMedio,
   esSlugCobro,
+  esMedioDelSistema,
   validarMedioPagoCambios,
   validarMedioPagoNuevo,
   type CambiosMedioPago,
@@ -467,7 +468,7 @@ async function pedidosUsanMedio(tx: Tx, tenantId: string, slug: string): Promise
 }
 
 export async function eliminarMedioPago(tenantId: string, slug: string): Promise<ResultadoBorradoMedio> {
-  if (esSlugCobro(slug)) {
+  if (esMedioDelSistema(slug)) {
     return { kind: "conflict", error: "Este medio de pago no se puede eliminar; desactívelo." }
   }
   return getDb().transaction(async (tx): Promise<ResultadoBorradoMedio> => {

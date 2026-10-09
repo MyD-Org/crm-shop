@@ -75,7 +75,7 @@ export function firmaValida(d: DatosFirma): ResultadoFirma {
   if (!d.secreto) {
     // Falla cerrado: sin secreto configurado no se puede validar nada, y dar
     // por buena una notificación sin validar sería peor que rechazarla.
-    return { valido: false, motivo: "falta MP_WEBHOOK_SECRET" };
+    return { valido: false, motivo: "falta el secreto del webhook de la cuenta" };
   }
   if (!d.signature) return { valido: false, motivo: "sin header x-signature" };
   if (!d.requestId) return { valido: false, motivo: "sin header x-request-id" };

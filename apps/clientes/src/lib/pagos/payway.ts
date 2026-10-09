@@ -16,7 +16,8 @@
  *   hace una persona. `cancelarPago` sólo consulta.
  *
  * La traducción de estados, motivos y montos vive en `payway-estados.ts` (puro). Acá está la
- * plomería HTTP. La fábrica `crearPayway` recibe `fetch` y la pausa para poder probarlo sin red.
+ * plomería HTTP. La fábrica `crearPayway` LIGA el proveedor a una cuenta (slug de la sucursal: sus keys)
+ * y recibe `fetch` y la pausa para poder probarlo sin red.
  */
 
 import {
@@ -25,7 +26,7 @@ import {
   type EstadoPago,
   type ProveedorPago,
 } from "./tipos";
-import { credencialesPayway } from "./credenciales";
+import { credencialesPayway, cuentaConfigurada, paywayBaseUrl } from "./credenciales";
 import { armarFraudDetection } from "./payway-antifraude";
 import {
   centavos,
@@ -48,43 +49,21 @@ const TIMEOUT_CONSULTA_MS = 15_000;
 const CONSULTAS_TRAS_TIMEOUT = 3;
 const PAUSA_MS = 3_000;
 
-/** Base de la API (sin barra final ni `/api/v2`), o null si falta o no es https. */
-function baseUrl(): string | null {
-  const crudo = credencialesPayway().baseUrl;
-  if (!crudo) return null;
-  let url: URL;
-  try {
-    url = new URL(crudo);
-  } catch {
-    return null;
-  }
-  if (url.protocol !== "https:") return null;
-  return `${url.origin}${url.pathname.replace(/\/+$/, "").replace(/\/api\/v2$/, "")}`;
-}
-
 /**
- * ¿Hay credenciales para cobrar? Key privada (servidor), key pública (el formulario del navegador) y
- * la URL base de la API. Sin alguna, el medio `payway` no se ofrece ni se acepta aunque esté activo.
+ * Lo que el navegador necesita para tokenizar la tarjeta con la cuenta del pedido: la key PÚBLICA de
+ * esa cuenta (sirve sólo para `POST /tokens`) y la base de la API. Sale del servidor en runtime, así no
+ * hace falta una variable `NEXT_PUBLIC_*` (que además se hornea en el build). null si la cuenta no está
+ * configurada. La key privada NUNCA sale de acá.
  */
-export function paywayConfigurado(): boolean {
-  const { privateKey, publicKey } = credencialesPayway();
-  return Boolean(privateKey) && Boolean(publicKey) && baseUrl() !== null;
-}
-
-/**
- * Lo que el navegador necesita para tokenizar la tarjeta: la key PÚBLICA (sirve sólo para
- * `POST /tokens`) y la base de la API. Sale del servidor en runtime, así no hace falta una variable
- * `NEXT_PUBLIC_*` aparte (que además se hornea en el build). null si el medio no está configurado.
- * La key privada NUNCA sale de acá.
- */
-export function paywayConfigPublica(): { publicKey: string; baseUrl: string } | null {
-  const baseUrlOk = baseUrl();
-  const publicKey = credencialesPayway().publicKey;
-  if (!paywayConfigurado() || !baseUrlOk || !publicKey) return null;
-  return { publicKey, baseUrl: baseUrlOk };
+export function paywayConfigPublica(cuenta: string): { cuenta: string; publicKey: string; baseUrl: string } | null {
+  const { publicKey, baseUrl } = credencialesPayway(cuenta);
+  if (!cuentaConfigurada("payway", cuenta) || !baseUrl || !publicKey) return null;
+  return { cuenta, publicKey, baseUrl };
 }
 
 interface Deps {
+  /** Cuenta (slug de la sucursal) cuyas keys usa el proveedor. */
+  cuenta: string;
   fetch?: typeof fetch;
   pausa?: (ms: number) => Promise<void>;
   timeoutMs?: number;
@@ -99,7 +78,8 @@ const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const sinPago = (mensaje: string) => new ErrorProveedor(mensaje, 400);
 
-export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: true; requiereAntifraude: true } {
+export function crearPayway(deps: Deps): ProveedorPago & { requiereBin: true; requiereAntifraude: true } {
+  const { cuenta } = deps;
   // Se resuelve en cada llamada: así un `fetch` global reemplazado después (tests) también se respeta.
   const doFetch: typeof fetch = (...a) => (deps.fetch ?? fetch)(...a);
   const pausa = deps.pausa ?? dormir;
@@ -108,9 +88,10 @@ export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: tru
 
   /** Request a la API. Tira `ErrorProveedor(504)` si no hay respuesta (timeout o red). */
   async function pedir(ruta: string, init: { method: "GET" | "POST"; body?: unknown }): Promise<Respuesta> {
-    const base = baseUrl();
-    const key = credencialesPayway().privateKey;
-    if (!base || !key) throw new Error("Falta la configuración de Payway (PAYWAY_API_PRIVATE_KEY, PAYWAY_BASE_URL).");
+    const base = paywayBaseUrl();
+    const key = credencialesPayway(cuenta).privateKey;
+    // Antes de cualquier request: nunca se cae a las keys de otra cuenta.
+    if (!base || !key) throw new Error(`Payway: la cuenta ${cuenta} no tiene key privada o falta la base de la API.`);
 
     let res: Response;
     try {
@@ -135,7 +116,7 @@ export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: tru
    */
   function errorHttp(r: Respuesta, donde: string): ErrorProveedor {
     const c = (r.cuerpo ?? {}) as { error_type?: string; message?: string };
-    console.error(`[payway] ${donde} respondió ${r.status}`, c.error_type ?? c.message ?? "");
+    console.error(`[payway] cuenta=${cuenta} ${donde} respondió ${r.status}`, c.error_type ?? c.message ?? "");
     if (r.status === 401 || r.status === 403) {
       console.error("[payway] error de credenciales o de habilitación del site: revisar las keys y las habilitaciones.");
     }
@@ -229,9 +210,10 @@ export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: tru
 
   return {
     id: "payway",
+    cuenta,
     requiereBin: true,
     requiereAntifraude: true,
-    configurado: paywayConfigurado,
+    configurado: () => cuentaConfigurada("payway", cuenta),
     referenciaDeIntento,
 
     async crearPago(datos: DatosPago): Promise<EstadoPago> {
@@ -290,4 +272,3 @@ export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: tru
   };
 }
 
-export const payway = crearPayway();

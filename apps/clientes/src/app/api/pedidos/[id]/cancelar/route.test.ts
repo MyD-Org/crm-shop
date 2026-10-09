@@ -21,8 +21,12 @@ vi.mock("@/lib/pedidos", () => ({
   lineasDelPedidoParaCarrito: async () => LINEAS,
 }));
 const LINEAS = [{ id: "12", name: "Lámpara", brand: "Marca", price: 1210, qty: 2 }];
-vi.mock("@/lib/pagos", () => ({
-  proveedorPago: (id: string) => (id === "mercadopago" ? { id } : null),
+// El intento se cancela con el proveedor ligado a la cuenta del pedido (la del intento abierto).
+const proveedorDeIntento = vi.fn(async (i: { proveedor: string }) =>
+  i.proveedor === "mercadopago" ? { id: i.proveedor, cuenta: "mdp" } : null,
+);
+vi.mock("@/lib/pagos/cuentas-sucursales", () => ({
+  proveedorDeIntento: (i: { proveedor: string }) => proveedorDeIntento(i),
 }));
 vi.mock("@/lib/pagos/intento-abierto", () => ({
   resolverIntentoAbierto: (...a: unknown[]) => resolverIntentoAbierto(...a),
@@ -56,6 +60,9 @@ describe("POST /api/pedidos/:id/cancelar", () => {
     resolverIntentoAbierto.mockResolvedValue("libre");
     expect((await cancelar()).status).toBe(200);
     expect(cancelarPedidoPendiente).toHaveBeenCalledTimes(1);
+    // Se cancela con las credenciales de la cuenta del pedido del intento.
+    expect(proveedorDeIntento).toHaveBeenCalledWith(abierto);
+    expect(resolverIntentoAbierto.mock.calls[0][2]).toMatchObject({ id: "mercadopago", cuenta: "mdp" });
   });
 
   it("con un pago que sigue en curso: 409 y el pedido no se toca", async () => {

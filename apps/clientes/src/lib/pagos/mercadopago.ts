@@ -33,7 +33,7 @@ import {
   statusEfectivo,
   type RespuestaMercadoPago,
 } from "./mercadopago-estados";
-import { credencialesMercadoPago } from "./credenciales";
+import { credencialesMercadoPago, cuentaConfigurada } from "./credenciales";
 import { firmaValida } from "./mercadopago-firma";
 import type { Preferencia } from "./mercadopago-preferencia";
 
@@ -42,21 +42,12 @@ const API_PREFERENCIAS = "https://api.mercadopago.com/checkout/preferences";
 const TIMEOUT_MS = 15_000;
 
 /**
- * ¿Hay credenciales para cobrar? Access Token (servidor) y Public Key (el Brick del navegador). Si
- * falta alguna, el medio `mercadopago` no se ofrece ni se acepta aunque esté activo en el CRM.
+ * Access Token de la cuenta. Falla ruidoso y ANTES de cualquier request: sin token no hay cobro posible
+ * (seguir devolvería un "pendiente" que nadie resuelve), y nunca se cae a las credenciales de otra cuenta.
  */
-export function mercadoPagoConfigurado(): boolean {
-  const { accessToken, publicKey } = credencialesMercadoPago();
-  return Boolean(accessToken) && Boolean(publicKey);
-}
-
-function accessToken(): string {
-  const token = credencialesMercadoPago().accessToken;
-  if (!token) {
-    // Falla ruidoso: sin token no hay cobro posible, y seguir devolvería un
-    // "pendiente" que nadie va a resolver nunca.
-    throw new Error("Falta MP_ACCESS_TOKEN en el entorno.");
-  }
+function accessToken(cuenta: string): string {
+  const token = credencialesMercadoPago(cuenta).accessToken;
+  if (!token) throw new Error(`Mercado Pago: la cuenta ${cuenta} no tiene access token configurado.`);
   return token;
 }
 
@@ -93,7 +84,7 @@ function accessToken(): string {
  * - `source_news=webhooks` pide el formato Webhooks (firmado, con x-signature),
  *   no el IPN viejo sin firma que el handler rechazaría.
  */
-export function urlNotificacion(origen: string | null | undefined): string | undefined {
+export function urlNotificacion(origen: string | null | undefined, cuenta?: string): string | undefined {
   if (!origen) return undefined;
   let url: URL;
   try {
@@ -104,7 +95,10 @@ export function urlNotificacion(origen: string | null | undefined): string | und
   if (url.protocol !== "https:") return undefined;
   const host = url.hostname;
   if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".local")) return undefined;
-  return `${url.origin}/api/pagos/mercadopago/webhook?source_news=webhooks`;
+  // `cuenta`: pista para los logs del webhook. NUNCA autoridad: la cuenta la identifica el secreto que
+  // valida la firma (ver `procesarWebhook`).
+  const pista = cuenta ? `&cuenta=${encodeURIComponent(cuenta)}` : "";
+  return `${url.origin}/api/pagos/mercadopago/webhook?source_news=webhooks${pista}`;
 }
 
 export function claveIdempotencia(datos: DatosPago): string {
@@ -150,15 +144,17 @@ export function interpretar(pago: RespuestaMercadoPago): EstadoPago {
 }
 
 async function pedir(
+  cuenta: string,
   url: string,
   init: RequestInit & { idempotencyKey?: string },
 ): Promise<RespuestaMercadoPago> {
   const { idempotencyKey, ...resto } = init;
+  const token = accessToken(cuenta);
 
   const res = await fetch(url, {
     ...resto,
     headers: {
-      Authorization: `Bearer ${accessToken()}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       // Sin esto, un reintento sobre un POST que ya llegó cobra dos veces.
       ...(idempotencyKey ? { "X-Idempotency-Key": idempotencyKey } : {}),
@@ -175,7 +171,7 @@ async function pedir(
   if (!res.ok) {
     // El detalle va al log, nunca al comprador: los mensajes de MP filtran
     // información de la cuenta y del antifraude.
-    console.error(`[mercadopago] ${res.status}:`, cuerpo?.message ?? cuerpo, cuerpo?.cause);
+    console.error(`[mercadopago] cuenta=${cuenta} ${res.status}:`, cuerpo?.message ?? cuerpo, cuerpo?.cause);
 
     /**
      * Qué campos llevaba el request. Solo los NOMBRES, nunca los valores: acá
@@ -207,14 +203,12 @@ async function pedir(
 }
 
 /**
- * Crea la preferencia con la que el Payment Brick ofrece dinero en cuenta (`initialization.preferenceId`).
- * Devuelve sólo el id: lo demás de la respuesta (init_point, etc.) no se usa ni sale al navegador.
- * Idempotencia: cada llamada es una preferencia nueva e inofensiva (no cobra nada hasta que el comprador
- * paga en Mercado Pago), así que no lleva clave.
+ * Crea la preferencia (cuenta de Mercado Pago) con las credenciales de `cuenta` y devuelve la URL de
+ * Mercado Pago a la que se lleva al comprador (`init_point`). Idempotencia: cada llamada es una
+ * preferencia nueva e inofensiva (no cobra nada hasta que el comprador paga), así que no lleva clave.
  */
-/** Crea la preferencia y devuelve la URL de Mercado Pago a la que se lleva al comprador (`init_point`). */
-export async function crearPreferencia(preferencia: Preferencia): Promise<string> {
-  const r = await pedir(API_PREFERENCIAS, { method: "POST", body: JSON.stringify(preferencia) });
+export async function crearPreferencia(cuenta: string, preferencia: Preferencia): Promise<string> {
+  const r = await pedir(cuenta, API_PREFERENCIAS, { method: "POST", body: JSON.stringify(preferencia) });
   const initPoint = (r as { init_point?: unknown }).init_point;
   const url = typeof initPoint === "string" ? initPoint : "";
   if (!url) throw new ErrorProveedor("Mercado Pago no devolvió el link de pago de la preferencia", 502);
@@ -234,129 +228,134 @@ export function modo3DS(monto: number): "mandatory" | "optional" {
   return monto > MONTO_3DS_OBLIGATORIO ? "mandatory" : "optional";
 }
 
-export const mercadoPago: ProveedorPago = {
-  id: "mercadopago",
+/**
+ * Proveedor Mercado Pago LIGADO a una cuenta (slug de la sucursal): todas sus llamadas usan las
+ * credenciales de esa cuenta. Se arma con `proveedorPago("mercadopago", cuenta)` (index.ts).
+ */
+export function crearMercadoPago(cuenta: string): ProveedorPago {
+  return {
+    id: "mercadopago",
 
-  configurado: mercadoPagoConfigurado,
+    cuenta,
 
-  urlNotificacion,
+    configurado: () => cuentaConfigurada("mercadopago", cuenta),
 
-  /**
-   * Crea el pago. El `monto` YA viene del pedido persistido — quien llama es
-   * responsable de no tomarlo del browser (ver §2 del doc).
-   *
-   * A diferencia de Orders API, Payments API acepta el monto como NÚMERO y
-   * expone los campos planos en el root. Es lo mismo que hace la mayoría de
-   * ejemplos oficiales de MP.
-   */
-  async crearPago(datos: DatosPago): Promise<EstadoPago> {
-    const cuerpo: Record<string, unknown> = {
-      transaction_amount: datos.monto,
-      description: datos.descripcion,
-      // Referencia nuestra: permite reconciliar un pago con su pedido sin
-      // depender de que MP nos devuelva la metadata.
-      external_reference: datos.pedidoId,
-      ...(datos.urlNotificacion ? { notification_url: datos.urlNotificacion } : {}),
-      // Desafío 3DS (el brick lo renderiza con Status Screen): obligatorio desde un monto, opcional abajo.
-      three_d_secure_mode: modo3DS(datos.monto),
-    };
+    urlNotificacion: (origen) => urlNotificacion(origen, cuenta),
 
-    if (datos.medio === "cuenta_mp") {
-      // Dinero en cuenta: MP identifica al comprador por el email del payer, no
-      // hace falta token de tarjeta.
-      cuerpo.payment_method_id = "account_money";
-    } else {
-      // Tarjeta: el token viene del brick y es de un solo uso; installments y
-      // payment_method_id (marca de la tarjeta) también.
-      cuerpo.token = datos.token;
-      cuerpo.installments = datos.cuotas ?? 1;
-      if (datos.metodoPagoId) cuerpo.payment_method_id = datos.metodoPagoId;
-    }
-
-    if (datos.emailComprador || datos.numeroDocumento) {
-      cuerpo.payer = {
-        ...(datos.emailComprador ? { email: datos.emailComprador } : {}),
-        ...(datos.tipoDocumento && datos.numeroDocumento
-          ? {
-              identification: {
-                type: datos.tipoDocumento,
-                number: datos.numeroDocumento,
-              },
-            }
-          : {}),
+    /**
+     * Crea el pago. El `monto` YA viene del pedido persistido — quien llama es
+     * responsable de no tomarlo del browser (ver §2 del doc).
+     *
+     * A diferencia de Orders API, Payments API acepta el monto como NÚMERO y
+     * expone los campos planos en el root. Es lo mismo que hace la mayoría de
+     * ejemplos oficiales de MP.
+     */
+    async crearPago(datos: DatosPago): Promise<EstadoPago> {
+      const cuerpo: Record<string, unknown> = {
+        transaction_amount: datos.monto,
+        description: datos.descripcion,
+        // Referencia nuestra: permite reconciliar un pago con su pedido sin
+        // depender de que MP nos devuelva la metadata.
+        external_reference: datos.pedidoId,
+        ...(datos.urlNotificacion ? { notification_url: datos.urlNotificacion } : {}),
+        // Desafío 3DS (el brick lo renderiza con Status Screen): obligatorio desde un monto, opcional abajo.
+        three_d_secure_mode: modo3DS(datos.monto),
       };
-    }
 
-    return interpretar(
-      await pedir(API, {
-        method: "POST",
-        body: JSON.stringify(cuerpo),
-        idempotencyKey: claveIdempotencia(datos),
-      }),
-    );
-  },
-
-  /**
-   * Relee el estado real desde MP. Es lo que usa el webhook: el payload de la
-   * notificación solo dice QUÉ id mirar, nunca en qué estado está.
-   */
-  async consultarPago(referencia: string): Promise<EstadoPago> {
-    return interpretar(await pedir(`${API}/${encodeURIComponent(referencia)}`, {
-      method: "GET",
-    }));
-  },
-
-  /**
-   * MP solo deja cancelar pagos `pending`, `in_process` o `authorized`. Si el
-   * pago ya se resolvió responde 400: quien llama lo trata como "no se pudo" y
-   * vuelve a consultar.
-   */
-  async cancelarPago(referencia: string): Promise<EstadoPago> {
-    return interpretar(await pedir(`${API}/${encodeURIComponent(referencia)}`, {
-      method: "PUT",
-      body: JSON.stringify({ status: "cancelled" }),
-    }));
-  },
-
-  /**
-   * Valida la firma y devuelve el id a consultar.
-   *
-   * `data.id` se busca primero en la query —que es de donde MP lo toma para
-   * firmar— y recién después en el cuerpo. Firmar contra el del cuerpo haría
-   * que la validación falle contra las notificaciones reales.
-   *
-   * El topic que nos interesa es `payment`, que es el que emite Payments API.
-   * El handler igual ignora con 200 lo que no reconoce: MP manda eventos a los
-   * que uno no se suscribió, y devolver error haría que reintente para siempre.
-   */
-  async verificarWebhook(req: Request, cuerpo: string) {
-    const url = new URL(req.url);
-    let dataId = url.searchParams.get("data.id") ?? url.searchParams.get("id");
-
-    if (!dataId && cuerpo) {
-      try {
-        const json = JSON.parse(cuerpo) as { data?: { id?: unknown }; id?: unknown };
-        const crudo = json?.data?.id ?? json?.id;
-        if (crudo != null) dataId = String(crudo);
-      } catch {
-        // Cuerpo ilegible: se cae por falta de data.id más abajo.
+      if (datos.medio === "cuenta_mp") {
+        // Dinero en cuenta: MP identifica al comprador por el email del payer, no
+        // hace falta token de tarjeta.
+        cuerpo.payment_method_id = "account_money";
+      } else {
+        // Tarjeta: el token viene del brick y es de un solo uso; installments y
+        // payment_method_id (marca de la tarjeta) también.
+        cuerpo.token = datos.token;
+        cuerpo.installments = datos.cuotas ?? 1;
+        if (datos.metodoPagoId) cuerpo.payment_method_id = datos.metodoPagoId;
       }
-    }
 
-    const resultado = firmaValida({
-      signature: req.headers.get("x-signature"),
-      requestId: req.headers.get("x-request-id"),
-      dataId,
-      secreto: credencialesMercadoPago().webhookSecret ?? "",
-    });
+      if (datos.emailComprador || datos.numeroDocumento) {
+        cuerpo.payer = {
+          ...(datos.emailComprador ? { email: datos.emailComprador } : {}),
+          ...(datos.tipoDocumento && datos.numeroDocumento
+            ? {
+                identification: {
+                  type: datos.tipoDocumento,
+                  number: datos.numeroDocumento,
+                },
+              }
+            : {}),
+        };
+      }
 
-    if (!resultado.valido) {
-      // El motivo se loguea pero NO se le responde a quien llama: decirle si
-      // falló el timestamp o el HMAC le sirve para ajustar el intento.
-      console.error("[mercadopago] webhook rechazado:", resultado.motivo);
-      return { valido: false };
-    }
+      return interpretar(
+        await pedir(cuenta, API, {
+          method: "POST",
+          body: JSON.stringify(cuerpo),
+          idempotencyKey: claveIdempotencia(datos),
+        }),
+      );
+    },
 
-    return { valido: true, referencia: dataId ?? undefined };
-  },
-};
+    /**
+     * Relee el estado real desde MP. Es lo que usa el webhook: el payload de la
+     * notificación solo dice QUÉ id mirar, nunca en qué estado está.
+     */
+    async consultarPago(referencia: string): Promise<EstadoPago> {
+      return interpretar(await pedir(cuenta, `${API}/${encodeURIComponent(referencia)}`, {
+        method: "GET",
+      }));
+    },
+
+    /**
+     * MP solo deja cancelar pagos `pending`, `in_process` o `authorized`. Si el
+     * pago ya se resolvió responde 400: quien llama lo trata como "no se pudo" y
+     * vuelve a consultar.
+     */
+    async cancelarPago(referencia: string): Promise<EstadoPago> {
+      return interpretar(await pedir(cuenta, `${API}/${encodeURIComponent(referencia)}`, {
+        method: "PUT",
+        body: JSON.stringify({ status: "cancelled" }),
+      }));
+    },
+
+    /**
+     * Valida la firma y devuelve el id a consultar.
+     *
+     * `data.id` se busca primero en la query —que es de donde MP lo toma para
+     * firmar— y recién después en el cuerpo. Firmar contra el del cuerpo haría
+     * que la validación falle contra las notificaciones reales.
+     *
+     * El topic que nos interesa es `payment`, que es el que emite Payments API.
+     * El handler igual ignora con 200 lo que no reconoce: MP manda eventos a los
+     * que uno no se suscribió, y devolver error haría que reintente para siempre.
+     */
+    async verificarWebhook(req: Request, cuerpo: string) {
+      const url = new URL(req.url);
+      let dataId = url.searchParams.get("data.id") ?? url.searchParams.get("id");
+
+      if (!dataId && cuerpo) {
+        try {
+          const json = JSON.parse(cuerpo) as { data?: { id?: unknown }; id?: unknown };
+          const crudo = json?.data?.id ?? json?.id;
+          if (crudo != null) dataId = String(crudo);
+        } catch {
+          // Cuerpo ilegible: se cae por falta de data.id más abajo.
+        }
+      }
+
+      const resultado = firmaValida({
+        signature: req.headers.get("x-signature"),
+        requestId: req.headers.get("x-request-id"),
+        dataId,
+        secreto: credencialesMercadoPago(cuenta).webhookSecret ?? "",
+      });
+
+      // Sin log acá: `procesarWebhook` prueba el secreto de cada cuenta y loguea una sola vez si no
+      // valida ninguno. Nunca se le dice a quien llama qué falló (timestamp o HMAC).
+      if (!resultado.valido) return { valido: false };
+
+      return { valido: true, referencia: dataId ?? undefined };
+    },
+  };
+}

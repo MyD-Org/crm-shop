@@ -22,6 +22,7 @@ import {
 } from "@/lib/pedidos";
 import { proveedorPago } from "@/lib/pagos";
 import { conciliarIntento } from "./conciliar-intento";
+import { cuentaPrevistaDelPedido, proveedorDeIntento } from "./cuentas-sucursales";
 import { MENSAJE_RECHAZO } from "./tipos";
 
 export interface EstadoPagoPedido {
@@ -57,7 +58,9 @@ export async function estadoPagoDelPedido(
   let sinCobro = false;
 
   if (enLinea && pedido.pagoEstado !== "pagado" && opciones.pagoMercadoPagoId) {
-    const mp = proveedorPago("mercadopago");
+    // Con la cuenta del pedido, que es con la que se creó la preferencia.
+    const cuenta = await cuentaPrevistaDelPedido(pedido);
+    const mp = cuenta ? proveedorPago("mercadopago", cuenta) : null;
     if (mp?.configurado()) {
       try {
         const estado = await mp.consultarPago(opciones.pagoMercadoPagoId);
@@ -87,7 +90,14 @@ export async function estadoPagoDelPedido(
   if (enLinea && pedido.pagoEstado === "pendiente") {
     const abierto = await intentoAbiertoDelPedido(id, dueno);
     sinCobro = abierto === null;
-    const proveedor = abierto?.referencia ? proveedorPago(abierto.proveedor) : null;
+    // Con la cuenta del pedido (la del intento).
+    const proveedor = abierto?.referencia
+      ? await proveedorDeIntento({
+          proveedor: abierto.proveedor,
+          sucursal: pedido.sucursal,
+          facturaSucursal: pedido.facturaSucursal,
+        })
+      : null;
     if (abierto?.referencia && proveedor && proveedor.configurado()) {
       try {
         const { estado } = await conciliarIntento(proveedor, {

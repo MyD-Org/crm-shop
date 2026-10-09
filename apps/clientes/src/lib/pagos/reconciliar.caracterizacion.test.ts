@@ -9,8 +9,15 @@ const consultarPago = vi.fn();
 const intentosPendientesDeReconciliar = vi.fn();
 const registrarCobro = vi.fn();
 
-vi.mock("./mercadopago", () => ({
-  mercadoPago: { id: "mercadopago", consultarPago: (...a: unknown[]) => consultarPago(...a) },
+vi.mock("./mercadopago", async (orig) => ({
+  ...(await orig<typeof import("./mercadopago")>()),
+  // Proveedor ligado a la cuenta del pedido: un doble que recuerda su cuenta.
+  crearMercadoPago: (cuenta: string) => ({
+    id: "mercadopago",
+    cuenta,
+    configurado: () => cuenta !== "sin-credenciales",
+    consultarPago: (...a: unknown[]) => consultarPago(...a),
+  }),
 }));
 vi.mock("@/lib/pedidos", () => ({
   intentosPendientesDeReconciliar: (...a: unknown[]) => intentosPendientesDeReconciliar(...a),
@@ -20,6 +27,8 @@ vi.mock("@/lib/pedidos", () => ({
 import { reconciliarPagosPendientes } from "./reconciliar";
 
 beforeEach(() => {
+  vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token");
+  vi.stubEnv("MP_PUBLIC_KEY_IGZ", "TEST-key");
   for (const f of [consultarPago, intentosPendientesDeReconciliar, registrarCobro]) f.mockReset();
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -38,8 +47,8 @@ describe("reconciliarPagosPendientes — caracterización", () => {
 
   it("consulta cada intento y registra el cobro con lo que informa el proveedor", async () => {
     intentosPendientesDeReconciliar.mockResolvedValue([
-      { orderId: "p1", referencia: "r1" },
-      { orderId: "p2", referencia: "r2" },
+      { orderId: "p1", referencia: "r1", sucursal: "igz", facturaSucursal: null },
+      { orderId: "p2", referencia: "r2", sucursal: "igz", facturaSucursal: null },
     ]);
     consultarPago.mockResolvedValue({
       estado: "pagado",
@@ -67,8 +76,8 @@ describe("reconciliarPagosPendientes — caracterización", () => {
 
   it("un error en un intento se cuenta y el lote sigue", async () => {
     intentosPendientesDeReconciliar.mockResolvedValue([
-      { orderId: "p1", referencia: "r1" },
-      { orderId: "p2", referencia: "r2" },
+      { orderId: "p1", referencia: "r1", sucursal: "igz", facturaSucursal: null },
+      { orderId: "p2", referencia: "r2", sucursal: "igz", facturaSucursal: null },
     ]);
     consultarPago
       .mockRejectedValueOnce(new Error("MP caído"))

@@ -77,8 +77,13 @@ interface Props {
   pagoMetodo: string;
   /** Cuotas congeladas hoy en el pedido (null = sin elegir, cuenta como 1 pago). */
   cuotasPedido: number | null;
-  /** Public key de la cuenta del pedido (la manda el servidor); sin ella, la del entorno. */
+  /**
+   * Public key de la cuenta que cobra el pedido (la manda el servidor). Sin ella no se monta el
+   * formulario: nunca se tokeniza con una key supuesta (sería la cuenta de otra sucursal).
+   */
   publicKey?: string;
+  /** Esa cuenta (slug de la sucursal): va en el POST de cobro para que el servidor la valide. */
+  cuenta?: string;
   /** Lo elegido en el desplegable, para el resumen lateral (null al salir del formulario). Estable. */
   onEleccionCuotas?: (e: EleccionCuotas | null) => void;
   /** El pedido pasó a otras cuotas (y otro total) antes de cobrar. */
@@ -126,6 +131,7 @@ export function PagoMercadoPago({
   pagoMetodo,
   cuotasPedido,
   publicKey,
+  cuenta,
   onEleccionCuotas,
   onPedidoActualizado,
   opcionesCobro,
@@ -150,7 +156,9 @@ export function PagoMercadoPago({
     onCobroEnCurso?.(cobroEnCurso);
   }, [cobroEnCurso, onCobroEnCurso]);
 
-  const key = publicKey || process.env.NEXT_PUBLIC_MP_PUBLIC_KEY;
+  // Sólo la key del servidor para ESTE pedido. Si cambia (otra cuenta), se reinicia el SDK y el Brick
+  // se remonta (su `key` la incluye).
+  const key = publicKey || undefined;
   useEffect(() => {
     inicializar(key);
   }, [key]);
@@ -281,6 +289,8 @@ export function PagoMercadoPago({
           cuotas: elegida.cuotas,
           metodoPagoId: datos?.payment_method_id,
           ...(bin ? { bin } : {}),
+          // La cuenta con la que se tokenizó: el servidor la valida contra la del pedido.
+          ...(cuenta ? { cuenta } : {}),
         }),
       });
 
@@ -530,7 +540,7 @@ export function PagoMercadoPago({
         className={estado.fase === "cargando" ? "invisible" : procesando ? "opacity-60" : undefined}
       >
         <CardPayment
-          key={`${tipoTarjeta}-${intento}`}
+          key={`${key}-${tipoTarjeta}-${intento}`}
           initialization={initialization}
           customization={customization}
           onSubmit={onSubmit}

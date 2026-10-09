@@ -4,13 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const cobrarPedido = vi.fn();
 const procesarWebhook = vi.fn();
-const sinWebhook = { id: "sinwebhook", configurado: () => true };
-const conWebhook = { id: "conwebhook", configurado: () => true, verificarWebhook: async () => ({ valido: true }) };
+const rasgos: Record<string, { requiereBin: boolean; requiereAntifraude: boolean; conWebhook: boolean }> = {
+  sinwebhook: { requiereBin: false, requiereAntifraude: false, conWebhook: false },
+  conwebhook: { requiereBin: false, requiereAntifraude: false, conWebhook: true },
+};
 
 vi.mock("@/lib/pagos/cobrar", () => ({ cobrarPedido: (...a: unknown[]) => cobrarPedido(...a) }));
 vi.mock("@/lib/pagos/webhook", () => ({ procesarWebhook: (...a: unknown[]) => procesarWebhook(...a) }));
 vi.mock("@/lib/pagos", () => ({
-  proveedorPago: (id: string) => ({ sinwebhook: sinWebhook, conwebhook: conWebhook })[id] ?? null,
+  rasgosProcesador: (id: string) => rasgos[id] ?? null,
 }));
 
 import { POST as cobrar, maxDuration } from "./route";
@@ -31,10 +33,10 @@ describe("POST /api/pagos/[proveedor]", () => {
     expect(maxDuration).toBeGreaterThanOrEqual(90);
   });
 
-  it("delega en cobrarPedido con el proveedor de la URL", async () => {
+  it("delega en cobrarPedido con el procesador de la URL (la cuenta la decide el pedido, no la URL)", async () => {
     const r = await cobrar(req("/api/pagos/conwebhook"), ctx("conwebhook"));
     expect(await r.text()).toBe("cobro");
-    expect(cobrarPedido).toHaveBeenCalledWith(conWebhook, expect.any(Request));
+    expect(cobrarPedido).toHaveBeenCalledWith("conwebhook", expect.any(Request));
   });
 
   it("procesador desconocido → 404 en usted, sin cobrar", async () => {
@@ -49,7 +51,7 @@ describe("POST /api/pagos/[proveedor]/webhook", () => {
   it("delega en procesarWebhook cuando el proveedor sabe verificar", async () => {
     const r = await webhook(req("/api/pagos/conwebhook/webhook"), ctx("conwebhook"));
     expect(await r.text()).toBe("hook");
-    expect(procesarWebhook).toHaveBeenCalledWith(conWebhook, expect.any(Request));
+    expect(procesarWebhook).toHaveBeenCalledWith("conwebhook", expect.any(Request));
   });
 
   it("proveedor sin verificarWebhook (se concilia por cron) → 404", async () => {

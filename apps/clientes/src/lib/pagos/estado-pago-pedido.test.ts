@@ -36,6 +36,9 @@ const pedido = (pagoEstado: string, extra: Record<string, unknown> = {}) => ({
   pagoMetodo: "payway",
   estado: "pendiente",
   creadoEn: new Date(),
+  // Cuenta de cobro del pedido: mdp.
+  sucursal: "mdp",
+  facturaSucursal: null,
   ...extra,
 });
 const abierto = { id: "i1", proveedor: "payway", referencia: "ref1", creadoEn: new Date() };
@@ -79,6 +82,8 @@ describe("estadoPagoDelPedido", () => {
     });
     expect(proveedor.cancelarPago).not.toHaveBeenCalled();
     expect(r).toMatchObject({ estado: "pagado" });
+    // Con el proveedor ligado a la cuenta del pedido.
+    expect(proveedorPago).toHaveBeenCalledWith("payway", "mdp");
   });
 
   it("rechazo: devuelve el mensaje traducido, nunca el detalle crudo", async () => {
@@ -152,6 +157,7 @@ describe("estadoPagoDelPedido: sin cobro en curso y vuelta de Mercado Pago", () 
       .mockResolvedValue(pedido("pagado", { pagoMetodo: "mercadopago" }));
     const r = await estadoPagoDelPedido("p1", dueno, { pagoMercadoPagoId: "123" });
     expect(mp.consultarPago).toHaveBeenCalledWith("123");
+    expect(proveedorPago).toHaveBeenCalledWith("mercadopago", "mdp");
     expect(registrarCobro).toHaveBeenCalledWith("p1", expect.objectContaining({ proveedor: "mercadopago", referencia: "123", estado: "pagado" }));
     expect(r).toMatchObject({ estado: "pagado" });
   });

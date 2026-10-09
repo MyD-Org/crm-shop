@@ -39,6 +39,8 @@ vi.mock("@/lib/cotizacion", async (orig) => ({
   cotizar: (...a: unknown[]) => cotizar(...a),
 }));
 vi.mock("@/lib/pedidos", () => ({
+  // Cuenta de cobro del pedido creado (public key del Brick): sucursal igz.
+  cuentaDelPedido: async () => ({ sucursal: "igz", facturaSucursal: null }),
   crearPedido: (...a: unknown[]) => crearPedido(...a),
   getPedidoPorClave: (...a: unknown[]) => getPedidoPorClave(...a),
   listarPedidos: async () => [],
@@ -96,8 +98,8 @@ const datosGuardados = () => crearPedido.mock.calls[0][1] as { cuotas?: number |
 const listaCotizada = () => (cotizar.mock.calls[0][1] as { idListaMedio?: string }).idListaMedio;
 
 beforeEach(() => {
-  vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
-  vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-key");
+  vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token");
+  vi.stubEnv("MP_PUBLIC_KEY_IGZ", "TEST-key");
   flag = true;
   pais = "AR";
   telefonoPerfil = null;
@@ -124,7 +126,7 @@ describe("POST /api/pedidos — cuotas sin interés congeladas", () => {
   });
 
   it("pedido de Mercado Pago: la respuesta trae la public key del Brick; con otro medio, no", async () => {
-    expect((await (await post({})).json()).mpPublicKey).toBe("TEST-key");
+    expect(await (await post({})).json()).toMatchObject({ mpPublicKey: "TEST-key", mpCuenta: "igz" });
     expect((await (await post({ pagoMetodo: "transferencia" })).json()).mpPublicKey).toBeUndefined();
   });
 

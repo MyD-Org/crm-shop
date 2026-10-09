@@ -23,6 +23,8 @@ export interface DatosPreferencia {
    * Pago no deja pagar: antes el link servía siempre y se podía pagar un pedido ya vencido o cancelado.
    */
   venceEn?: Date;
+  /** Cuenta de Mercado Pago (slug de la sucursal) con la que se crea: pista en la URL del aviso. */
+  cuenta?: string;
 }
 
 export interface Preferencia {
@@ -58,7 +60,8 @@ export function urlRetorno(origen: string | null | undefined, pedidoId: string):
 
 export function armarPreferencia(d: DatosPreferencia): Preferencia {
   const retorno = urlRetorno(d.origen, d.pedidoId);
-  const webhook = urlNotificacion(d.origen);
+  // La cuenta va como pista en la URL del aviso (sólo logs; la identifica el secreto que firma).
+  const webhook = urlNotificacion(d.origen, d.cuenta);
   const cuotas = cuotasPreferencia(d.cuotas);
   return {
     items: [

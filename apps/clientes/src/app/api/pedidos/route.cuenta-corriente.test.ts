@@ -28,6 +28,8 @@ vi.mock("@/lib/cotizacion", async (orig) => ({
   cotizar: (...a: unknown[]) => cotizar(...a),
 }));
 vi.mock("@/lib/pedidos", () => ({
+  // Cuenta de cobro del pedido creado (public key del Brick): sucursal igz.
+  cuentaDelPedido: async () => ({ sucursal: "igz", facturaSucursal: null }),
   crearPedido: (...a: unknown[]) => crearPedido(...a),
   getPedidoPorClave: async () => null,
   listarPedidos: async () => [],
@@ -110,8 +112,8 @@ const post = (extra: Record<string, unknown> = {}) =>
   );
 
 beforeEach(() => {
-  vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
-  vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-key");
+  vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token");
+  vi.stubEnv("MP_PUBLIC_KEY_IGZ", "TEST-key");
   identidad = COMPRADOR_CC;
   medios = [medio("transferencia"), medio("mercadopago", { condicionesCuotas: [{ cuotas: 3, idListaPrecios: "9" }] }), CC()];
   cuotasHabilitadas.mockClear();

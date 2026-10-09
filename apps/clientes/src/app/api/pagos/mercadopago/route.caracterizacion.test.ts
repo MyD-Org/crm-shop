@@ -37,20 +37,33 @@ vi.mock("@/lib/pedidos", async (original) => ({
   registrarIntentoFallido: (...a: unknown[]) => registrarIntentoFallido(...a),
 }));
 vi.mock("@/lib/pagos/intento-abierto", () => ({ resolverIntentoAbierto: async () => "en_curso" }));
-vi.mock("@/lib/pagos/mercadopago", () => {
-  const mercadoPago = {
+// Proveedor de Mercado Pago ligado a la cuenta del pedido: un doble. La elección de la cuenta se prueba
+// en lib/pagos/cobrar.cuenta.test.ts; acá la cuenta es "igz" y está configurada según el test.
+vi.mock("@/lib/pagos/mercadopago", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos/mercadopago")>()),
+  crearMercadoPago: (cuenta: string) => ({
     id: "mercadopago",
+    cuenta,
     configurado: () => configurado,
     urlNotificacion: (origen: string) => `${origen}/api/pagos/mercadopago/webhook`,
     crearPago: (...a: unknown[]) => crearPago(...a),
-  };
-  return {
-    mercadoPago,
-    urlNotificacion: (origen: string) => `${origen}/api/pagos/mercadopago/webhook`,
-    mercadoPagoConfigurado: () => configurado,
-  };
-});
-
+    consultarPago: async () => {
+      throw new Error("no se usa");
+    },
+    cancelarPago: async () => {
+      throw new Error("no se usa");
+    },
+  }),
+}));
+vi.mock("@/lib/pagos/credenciales", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos/credenciales")>()),
+  hayCuentaConfigurada: () => configurado,
+}));
+vi.mock("@/lib/pagos/cuentas-sucursales", () => ({
+  cuentaParaCobrar: async () =>
+    (() => configurado)() ? { ok: true, cuenta: "igz", prevista: "igz", fallback: false } : { ok: false, motivo: "sin_cuenta" },
+  proveedorDeIntento: async () => null,
+}));
 import { POST } from "./route";
 
 const pagar = (body: unknown, crudo?: string) =>

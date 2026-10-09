@@ -15,7 +15,7 @@
  * Fail-closed: si MP no responde (timeout de 3 s, error HTTP, JSON ilegible) el resultado es
  * `{ ok: false }` y quien llama NO ofrece ni acepta cuotas con interés. Nunca lanza.
  */
-import { credencialesMercadoPago, type ContextoCredenciales } from "./credenciales";
+import { credencialesMercadoPago } from "./credenciales";
 
 const API = "https://api.mercadopago.com/v1/payment_methods/installments";
 const TIMEOUT_MS = 3_000;
@@ -132,15 +132,16 @@ export interface ConsultaPlanesMP {
   bin?: string;
   /** Sin tarjeta cargada: planes de referencia de una marca (p. ej. "visa"). */
   paymentMethodId?: string;
-  ctx?: ContextoCredenciales;
+  /** Cuenta del pedido (slug de la sucursal): los planes son los de ESA cuenta de Mercado Pago. */
+  cuenta: string;
 }
 
-/** Planes de MP para una tarjeta (o una marca de referencia). Caché de 60 s; nunca lanza. */
+/** Planes de MP para una tarjeta (o una marca de referencia). Caché de 60 s por cuenta; nunca lanza. */
 export async function consultarPlanesMP(
   q: ConsultaPlanesMP,
   deps: { fetch?: typeof fetch } = {},
 ): Promise<ResultadoPlanesMP> {
-  const { accessToken, cuentaId } = credencialesMercadoPago(q.ctx);
+  const { accessToken, cuentaId } = credencialesMercadoPago(q.cuenta);
   if (!accessToken || !esNumero(q.amount) || q.amount <= 0) return { ok: false };
   let filtro: string;
   if (q.bin !== undefined) {

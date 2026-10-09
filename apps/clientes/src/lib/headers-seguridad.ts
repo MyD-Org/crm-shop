@@ -21,6 +21,8 @@
  * Nonces".
  */
 
+import { paywayParaCsp, type Entorno } from "./pagos/credenciales";
+
 /** Variables que alimentan la CSP. Se inyectan para poder testear. */
 export interface EnvCsp {
   NODE_ENV?: string;
@@ -31,9 +33,6 @@ export interface EnvCsp {
   CSP_REPORT_URI?: string;
   META_PIXEL_ID?: string;
   GA4_MEASUREMENT_ID?: string;
-  /** Payway: sólo si están las dos, y sólo en las páginas de checkout (ver `OpcionesCsp`). */
-  PAYWAY_API_PUBLIC_KEY?: string;
-  PAYWAY_BASE_URL?: string;
 }
 
 export interface OpcionesCsp {
@@ -45,6 +44,12 @@ export interface OpcionesCsp {
    * El resto del sitio no lo recibe.
    */
   checkout?: boolean;
+  /**
+   * Origen de la API de Payway, o null si no hay ninguna cuenta Payway configurada. Por defecto lo
+   * calcula `paywayParaCsp` (credenciales.ts, el único que lee esas variables) con el mismo entorno.
+   * Sólo se usa con `checkout`.
+   */
+  payway?: { origen: string } | null;
 }
 
 /**
@@ -135,8 +140,8 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
     ...(origenHttps(env.R2_SHOP_MEDIA_PUBLIC_URL) ? [origenHttps(env.R2_SHOP_MEDIA_PUBLIC_URL)!] : []),
   ];
 
-  const payway =
-    opciones.checkout && env.PAYWAY_API_PUBLIC_KEY?.trim() ? origenHttps(env.PAYWAY_BASE_URL) : null;
+  const datosPayway = opciones.payway !== undefined ? opciones.payway : paywayParaCsp(env as Entorno);
+  const payway = opciones.checkout && datosPayway ? origenHttps(datosPayway.origen) : null;
 
   const meta = Boolean(env.META_PIXEL_ID?.trim());
   const ga4 = Boolean(env.GA4_MEASUREMENT_ID?.trim());

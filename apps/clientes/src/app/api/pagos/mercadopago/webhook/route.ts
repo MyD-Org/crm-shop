@@ -1,5 +1,4 @@
 import { connection, NextResponse } from "next/server";
-import { mercadoPago } from "@/lib/pagos/mercadopago";
 import { procesarWebhook } from "@/lib/pagos/webhook";
 
 /**
@@ -12,7 +11,7 @@ import { procesarWebhook } from "@/lib/pagos/webhook";
  * Corre SIN sesión de Clerk y SIN el gate del sitio (ver la excepción en `src/proxy.ts`).
  */
 export function POST(req: Request) {
-  return procesarWebhook(mercadoPago, req);
+  return procesarWebhook("mercadopago", req);
 }
 
 /**

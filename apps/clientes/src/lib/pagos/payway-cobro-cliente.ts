@@ -12,6 +12,8 @@ export interface ParamsCobro {
   bin: string;
   metodoPagoId: number;
   cuotas: number;
+  /** Cuenta (sucursal) cuya key pública tokenizó la tarjeta: el servidor la valida contra la del pedido. */
+  cuenta?: string;
 }
 
 export function cuerpoCobro(p: ParamsCobro) {
@@ -22,6 +24,7 @@ export function cuerpoCobro(p: ParamsCobro) {
     bin: p.bin,
     metodoPagoId: String(p.metodoPagoId),
     cuotas: p.cuotas,
+    ...(p.cuenta ? { cuenta: p.cuenta } : {}),
   };
 }
 

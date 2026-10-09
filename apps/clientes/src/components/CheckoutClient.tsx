@@ -16,6 +16,8 @@ import { contenidoDistinto, COPY_CARRITO, type CartItem } from "@/lib/carrito-cl
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { PagoPayway } from "@/components/PagoPayway";
 import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
+import { DireccionAutocomplete } from "@/components/DireccionAutocomplete";
+import { claveProvincia } from "@/lib/sucursales";
 import { PROVINCIAS_SELECTOR, type OpcionesCheckoutSucursales } from "@/lib/zona";
 import { VincularClient } from "@/components/VincularClient";
 import { OTRA_DIRECCION, entregaDesdeGuardada, entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
@@ -1573,7 +1575,24 @@ export function CheckoutClient({
                   />
                 )}
                 {!guardada && !usarFiscal && (
-                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  {/* La dirección va primero: elegir una sugerencia completa la ciudad y la
+                    provincia. Las dos quedan editables abajo, porque Nominatim no tiene todas
+                    las calles y el autocompletado no puede ser la única forma de cargarlas. */}
+                  <div className="sm:col-span-2">
+                    <DireccionAutocomplete
+                      value={direccion}
+                      onChange={setDireccion}
+                      onSeleccionar={(s) => {
+                        setDireccion(s.calle);
+                        // Solo se pisa lo que la sugerencia trae resuelto.
+                        if (s.ciudad) setCiudad(s.ciudad);
+                        const clave = claveProvincia(s.provincia);
+                        if (clave) setProvinciaManual(clave);
+                      }}
+                      placeholder="Av. San Martín 1234"
+                    />
+                  </div>
                   <Field label="Provincia">
                     <Select
                       options={PROVINCIAS_SELECTOR.map((p) => ({ label: p.nombre, value: p.clave }))}
@@ -1590,13 +1609,6 @@ export function CheckoutClient({
                       placeholder="Posadas"
                       value={ciudad}
                       onChange={(e) => setCiudad(e.target.value)}
-                    />
-                  </Field>
-                  <Field label="Dirección">
-                    <Input
-                      placeholder="Av. San Martín 1234"
-                      value={direccion}
-                      onChange={(e) => setDireccion(e.target.value)}
                     />
                   </Field>
                 </div>

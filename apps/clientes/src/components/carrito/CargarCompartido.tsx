@@ -6,6 +6,7 @@ import { Button, Dialog, useToast } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import type { CartItem } from "@/lib/carrito-cliente";
 import { accionAlCompartir } from "@/lib/carrito-compartido";
+import { useHidratado } from "@/lib/hidratado";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 /**
@@ -17,7 +18,12 @@ import { useAlOcultar } from "@/lib/use-al-ocultar";
  * Otro carrito → el usuario elige reemplazar o sumar; nunca se pisa solo.
  */
 export function CargarCompartido({ items: compartidos }: { items: CartItem[] }) {
-  const { items, ready, addItems, replaceItems } = useCart();
+  const carrito = useCart();
+  const { items, addItems, replaceItems } = carrito;
+  // La página llega por streaming: al hidratar, el carrito ya está listo. Sin
+  // `useHidratado` el primer render no repite el `disabled` del servidor y React
+  // no corrige el atributo: el botón queda gris para siempre.
+  const ready = useHidratado() && carrito.ready;
   const { toast } = useToast();
   const router = useRouter();
   const [preguntando, setPreguntando] = useState(false);

@@ -64,6 +64,7 @@ export function BotonCompartirLista({
   toast: textosToast,
   aviso,
   disabled = false,
+  size = "sm",
 }: {
   href: string;
   label: string;
@@ -72,6 +73,8 @@ export function BotonCompartirLista({
   /** Texto extra para el toast (p. ej. un recorte de líneas). */
   aviso?: string;
   disabled?: boolean;
+  /** Igual que el resto de la fila de acciones donde se lo pone. */
+  size?: "sm" | "md";
 }) {
   const { toast } = useToast();
   // false en el servidor: el ítem aparece recién en el navegador que la tenga.
@@ -126,7 +129,7 @@ export function BotonCompartirLista({
           : []),
       ]}
     >
-      <Button type="button" variant="outline" size="sm" disabled={disabled}>
+      <Button type="button" variant="outline" size={size} disabled={disabled}>
         <IconoCompartir />
         {label}
       </Button>

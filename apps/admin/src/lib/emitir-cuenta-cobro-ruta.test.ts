@@ -132,7 +132,7 @@ describe("vista previa de emitir: aviso de cuenta de cobro", () => {
     expect(res.status).toBe(200)
     expect(body.cuenta.avisoCobro).toEqual({
       cobradoCon: { slug: "mdp", nombre: "Mar del Plata" },
-      facturaCon: { slug: "principal", nombre: "Iguazú SA" },
+      facturaCon: { slug: "principal", nombre: "Iguazú" },
     })
     expect(body.avisos).toEqual([])
   })

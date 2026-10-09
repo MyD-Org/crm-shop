@@ -15,7 +15,7 @@ let permitido = true;
 let cuotasFlag = true;
 let medios: unknown[] = [];
 
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => permitido }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => permitido }));
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidadActual() }));
 vi.mock("@/lib/catalogo-flag", () => ({ catalogoSoloVisibles: async () => false }));
 vi.mock("@/lib/lista-cuenta-repo", () => ({ listaPrivadaDelComprador: async () => null }));

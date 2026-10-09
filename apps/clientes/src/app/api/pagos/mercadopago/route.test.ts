@@ -15,7 +15,7 @@ vi.mock("@/lib/medios-pago-repo", () => ({
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@b.com" }),
 }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => true }));
 vi.mock("@/lib/pedidos", async (original) => ({
   motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
   reservarIntento: async () => ({ intentoId: "i1" }),

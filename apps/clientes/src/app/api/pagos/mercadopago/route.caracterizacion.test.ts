@@ -28,7 +28,7 @@ vi.mock("@/lib/medios-pago-repo", () => ({
   leerMediosPagoTolerante: async () => [{ slug: "mercadopago" }, { slug: "payway" }],
 }));
 vi.mock("@/lib/auth", () => ({ identidadActual: async () => identidad }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => permitido }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => permitido }));
 vi.mock("@/lib/pedidos", async (original) => ({
   cuentasRechazadasDelPedido: async () => [],
   detalleCredencialesRechazadas: (c: string) => `credenciales_rechazadas:${c}`,

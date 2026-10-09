@@ -43,7 +43,7 @@ const enriquecer = vi.fn<(lineas: Linea[], lista: string | null) => Promise<unkn
 const listaPrivadaDelComprador = vi.fn<() => Promise<string | null>>(async () => "lista-privada-a");
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId }) }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async (...a: unknown[]) => permitir(...a) }));
 vi.mock("@/lib/auth", () => ({ identidadActual: async () => ({ clerkUserId: userId, cliente }) }));
 vi.mock("@/lib/lista-cuenta-repo", () => ({ listaPrivadaDelComprador: () => listaPrivadaDelComprador() }));
 vi.mock("@/lib/carrito-db", () => ({

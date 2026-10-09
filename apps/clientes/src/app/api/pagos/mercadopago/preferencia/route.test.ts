@@ -13,7 +13,7 @@ vi.mock("@/lib/auth", () => ({
   identidadActual: async () =>
     sesion ? { clerkUserId: "user_1", cliente: null, email: "ana@cliente.example" } : { clerkUserId: null, cliente: null },
 }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => true }));
 vi.mock("@/lib/pedidos", async (original) => ({
   cuentasRechazadasDelPedido: async () => [],
   registrarCuentaRechazada: (...a: unknown[]) => registrarCuentaRechazada(...a),

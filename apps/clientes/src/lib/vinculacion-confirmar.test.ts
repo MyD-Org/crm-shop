@@ -92,7 +92,7 @@ vi.mock("./contactos-espejo", () => ({
   vinculablePorId: vi.fn(async () => null),
 }));
 vi.mock("./email", () => ({ enmascararEmail: vi.fn(), enviarEmail: vi.fn() }));
-vi.mock("./rate-limit", () => ({ permitir: vi.fn() }));
+vi.mock("./rate-limit", () => ({ permitirAsync: vi.fn(async () => true) }));
 
 import { cancelarVinculacion, confirmarVinculacion, verificarCodigo } from "./vinculacion";
 

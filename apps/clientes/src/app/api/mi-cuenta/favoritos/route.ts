@@ -8,7 +8,7 @@ import {
   quitarFavorito,
 } from "@/lib/favoritos";
 import { esIdAlegra } from "@/lib/alegra";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 
 /** Usos por minuto y por usuario, sumando los tres métodos. */
 const USOS_POR_MINUTO = 60;
@@ -28,7 +28,7 @@ function json(body: unknown, status = 200) {
 async function solicitante(): Promise<{ userId: string } | { error: NextResponse }> {
   const { userId } = await auth();
   if (!userId) return { error: json({ error: "No autorizado" }, 401) };
-  if (!permitir(`favoritos:clerk:${userId}`, USOS_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`favoritos:clerk:${userId}`, USOS_POR_MINUTO, 60_000)) {
     return {
       error: json({ error: "Demasiadas solicitudes. Inténtelo de nuevo en unos minutos." }, 429),
     };

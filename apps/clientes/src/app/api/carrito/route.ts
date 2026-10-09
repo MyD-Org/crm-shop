@@ -9,7 +9,7 @@ import {
   type LineaCarrito,
 } from "@/lib/carrito-cliente";
 import { enriquecer, leerCarrito, mergearCarrito, reemplazarCarrito } from "@/lib/carrito-db";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 
 /**
  * Usos por minuto y por usuario, sumando los tres métodos. El cliente agrupa
@@ -35,7 +35,7 @@ const INVALIDO = () => json({ error: COPY_CARRITO.invalido }, 400);
 async function solicitante(): Promise<{ userId: string } | { error: NextResponse }> {
   const { userId } = await auth();
   if (!userId) return { error: json({ error: COPY_CARRITO.noAutorizado }, 401) };
-  if (!permitir(`carrito:clerk:${userId}`, USOS_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`carrito:clerk:${userId}`, USOS_POR_MINUTO, 60_000)) {
     return { error: json({ error: COPY_CARRITO.demasiadas }, 429) };
   }
   return { userId };

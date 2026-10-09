@@ -32,7 +32,7 @@ import {
 import { armarMailArrepentimientoCliente, armarMailArrepentimientoComercio } from "./arrepentimiento-mail";
 import { contarRecientesPorEmail, insertarSolicitud, marcarEnvios } from "./arrepentimiento-repo";
 import { urlSitioMail } from "./mail-layout";
-import { permitir } from "./rate-limit";
+import { permitirAsync } from "./rate-limit";
 import { urlLogoMail } from "./vinculacion-mail";
 
 const ERROR_GENERICO = "No se pudo registrar la solicitud. Inténtelo de nuevo en unos minutos.";
@@ -83,7 +83,7 @@ export async function enviarSolicitudArrepentimiento(
   const errores = validarCampos(valores);
   if (Object.keys(errores).length > 0) return { estado: "error", errores, valores };
 
-  if (!permitir(`arrepentimiento:ip:${await ipDelPedido()}`, MAX_POR_IP, VENTANA_IP_MS)) {
+  if (!await permitirAsync(`arrepentimiento:ip:${await ipDelPedido()}`, MAX_POR_IP, VENTANA_IP_MS)) {
     return error(ERROR_DEMASIADAS, valores);
   }
 

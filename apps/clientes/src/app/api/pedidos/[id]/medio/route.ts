@@ -15,7 +15,7 @@ import { configMpPara } from "@/lib/pagos/mp-public-key";
 import { avisarOperadorPedidoNuevo, avisarPedidoRecibido, avisarPedidoSiFalta, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
 import { cotizarConMedio } from "@/lib/pedido-medio";
 import { cambiarMedioPedido, intentoAbiertoDelPedido, lineasDelPedidoParaCarrito, pedidoParaCambiarMedio } from "@/lib/pedidos";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 
 /**
@@ -64,7 +64,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
   const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
-  if (!permitir(`pedido-medio:${quien}`, MAX_CAMBIOS_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`pedido-medio:${quien}`, MAX_CAMBIOS_POR_MINUTO, 60_000)) {
     return NextResponse.json(
       { error: "Hizo demasiados intentos. Espere un minuto e inténtelo de nuevo." },
       { status: 429, headers: { "Retry-After": "60" } },

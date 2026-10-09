@@ -3,7 +3,7 @@ import { identidadActual } from "@/lib/auth";
 import { esIdAlegra } from "@/lib/alegra";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { preciosCuentaPorIds } from "@/lib/precios-privados-repo";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 
 /** Una página del catálogo son 24; con carruseles de la home alcanza de sobra. */
 const MAX_IDS = 60;
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     if (!listaId) return json({ conLista: false, precios: {} });
 
     const { cliente } = await identidadActual();
-    if (!permitir(`precios-cuenta:${cliente?.codigocliente ?? "sin-cliente"}`, USOS_POR_MINUTO, 60_000)) {
+    if (!await permitirAsync(`precios-cuenta:${cliente?.codigocliente ?? "sin-cliente"}`, USOS_POR_MINUTO, 60_000)) {
       return json({ error: "Demasiadas consultas. Inténtelo de nuevo en un momento." }, 429);
     }
 

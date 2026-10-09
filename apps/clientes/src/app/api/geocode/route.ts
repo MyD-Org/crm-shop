@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { claveSolicitante } from "@/lib/auth";
 import { codigoPaisGeocode, idiomaGeocode } from "@/lib/geocode-pais";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 
 /**
  * Autocompletado de direcciones contra Nominatim (OpenStreetMap), acotado al
@@ -86,7 +86,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  if (!permitir(`geocode:${clave}`, MAX_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`geocode:${clave}`, MAX_POR_MINUTO, 60_000)) {
     return NextResponse.json(
       { error: "Demasiadas búsquedas. Espere un momento." },
       { status: 429 },

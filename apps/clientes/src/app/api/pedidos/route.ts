@@ -24,7 +24,7 @@ import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { motivoRevisionPedido } from "@/lib/motivo-revision";
 import { avisarPedidoSiFalta, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
 import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { SucursalPedidoError } from "@/lib/sucursales-pedido";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
@@ -129,7 +129,7 @@ export async function POST(req: Request) {
   // Cuenta también los reintentos con la misma clave: son baratos, pero un
   // loop que repite la clave tampoco es una persona.
   const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
-  if (!permitir(`pedidos:${quien}`, MAX_PEDIDOS_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`pedidos:${quien}`, MAX_PEDIDOS_POR_MINUTO, 60_000)) {
     return NextResponse.json(
       { error: "Hizo demasiados intentos de confirmar el pedido. Espere un minuto e inténtelo de nuevo." },
       { status: 429, headers: { "Retry-After": "60" } },

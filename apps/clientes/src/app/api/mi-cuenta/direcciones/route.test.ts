@@ -24,7 +24,7 @@ const { DireccionesLlenasError } = vi.hoisted(() => ({
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId }) }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async (...a: unknown[]) => permitir(...a) }));
 vi.mock("@/lib/direcciones-envio-db", () => ({
   DireccionesLlenasError,
   listarDirecciones: (...a: unknown[]) => listarDirecciones(...a),

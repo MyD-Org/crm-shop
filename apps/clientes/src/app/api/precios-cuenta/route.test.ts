@@ -13,7 +13,7 @@ let cliente: { codigocliente: string } | null = { codigocliente: "42" };
 vi.mock("@/lib/auth", () => ({ identidadActual: async () => ({ clerkUserId: "user_1", cliente }) }));
 vi.mock("@/lib/lista-cuenta-repo", () => ({ listaPrivadaDelComprador: () => listaPrivadaDelComprador() }));
 vi.mock("@/lib/precios-privados-repo", () => ({ preciosCuentaPorIds: (...a: unknown[]) => preciosCuentaPorIds(...a) }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async (...a: unknown[]) => permitir(...a) }));
 
 import { GET } from "./route";
 

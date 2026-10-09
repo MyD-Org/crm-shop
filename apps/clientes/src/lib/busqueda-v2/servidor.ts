@@ -79,7 +79,7 @@ interface ModoObtener {
   sumarUso: boolean;
   guardar: boolean;
   /** Cupo para escribir en la base (la memoria no se topea). */
-  puedeEscribir?: () => boolean;
+  puedeEscribir?: () => Promise<boolean>;
 }
 
 /**
@@ -175,7 +175,7 @@ async function obtenerBase(
   if (modo.guardar && norm && clave && !entendido.jevFallo && entendido.plan.intencion !== "codigo") {
     lru.set(clave, { plan: entendido.plan, msJev: entendido.msJev });
     // Sin Jev (sin key) nada topea el armado del plan: las escrituras en la base tienen su cupo.
-    if (modo.puedeEscribir && !modo.puedeEscribir()) return { plan: entendido.plan, msJev: entendido.msJev };
+    if (modo.puedeEscribir && !(await modo.puedeEscribir())) return { plan: entendido.plan, msJev: entendido.msJev };
     const guardar = () => guardarPlan(tenant, norm, hash, entendido.plan);
     if (opciones.diferir) opciones.diferir(guardar);
     else await guardar();

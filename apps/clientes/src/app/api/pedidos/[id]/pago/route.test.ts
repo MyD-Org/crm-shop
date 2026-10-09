@@ -6,7 +6,7 @@ const permitir = vi.fn();
 
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
 vi.mock("@/lib/pagos/estado-pago-pedido", () => ({ estadoPagoDelPedido: (...a: unknown[]) => estadoPago(...a) }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async (...a: unknown[]) => permitir(...a) }));
 
 import { GET } from "./route";
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { estadoPagoDelPedido } from "@/lib/pagos/estado-pago-pedido";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 
 /** Una consulta cada 5 s durante unos minutos más las del detalle: holgado para quien espera bien. */
 const MAX_CONSULTAS = 120;
@@ -21,7 +21,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  if (!permitir(`pago-estado:${clerkUserId ?? cliente?.codigocliente}`, MAX_CONSULTAS, VENTANA_MS)) {
+  if (!await permitirAsync(`pago-estado:${clerkUserId ?? cliente?.codigocliente}`, MAX_CONSULTAS, VENTANA_MS)) {
     return NextResponse.json(
       { error: "Demasiadas consultas. Espere unos minutos." },
       { status: 429 },

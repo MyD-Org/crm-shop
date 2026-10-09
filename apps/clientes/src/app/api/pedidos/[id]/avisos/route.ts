@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { avisarPedidoSiFalta } from "@/lib/pedido-avisos";
 import { esPedidoPropio } from "@/lib/pedidos";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 
 const MAX_LLAMADAS = 30;
 const VENTANA_MS = 5 * 60_000;
@@ -17,7 +17,7 @@ const VENTANA_MS = 5 * 60_000;
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (!permitir(`pedido-avisos:${clerkUserId ?? cliente?.codigocliente}`, MAX_LLAMADAS, VENTANA_MS)) {
+  if (!await permitirAsync(`pedido-avisos:${clerkUserId ?? cliente?.codigocliente}`, MAX_LLAMADAS, VENTANA_MS)) {
     return NextResponse.json({ error: "Demasiados intentos. Espere unos minutos." }, { status: 429 });
   }
   const { id } = await ctx.params;

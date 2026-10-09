@@ -19,7 +19,7 @@ const despues: Array<() => Promise<void> | void> = [];
 let mediosOk = true;
 let cuotasFlag = false;
 
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => true }));
 vi.mock("next/server", async (orig) => ({
   ...(await orig<typeof import("next/server")>()),
   after: (f: () => Promise<void> | void) => {

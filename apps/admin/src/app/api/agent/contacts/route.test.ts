@@ -12,8 +12,10 @@ const state = vi.hoisted(() => ({
 }))
 
 vi.mock("@/lib/tenant-context", () => ({ getTenantConfig: async () => ({ id: "t1" }) }))
+// La auth real (INTERNAL_SECRET sí / crm_token no) se prueba en lib/agent-auth.test.ts y en
+// quotes/route.test.ts; acá sólo importa que la ruta use el helper server-to-server.
 vi.mock("@/lib/agent-auth", () => ({
-  authAgentTenantRequest: (req: Request) => (req.headers.get("authorization") ? { codigocliente: "c1" } : null),
+  authAgentInternalRequest: (req: Request) => (req.headers.get("authorization") ? { codigocliente: "internal" } : null),
 }))
 vi.mock("@/lib/contactos", () => ({
   buscarPorTelefono: async (_t: unknown, tel: string) => {

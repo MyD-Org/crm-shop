@@ -17,6 +17,17 @@ export interface InfoPagoDto {
   netoRecibido: number | null
   /** Lo que descontó el proveedor (comisión, costo de las cuotas sin interés…). */
   costoProcesador: number | null
+  /** Slug de la sucursal cuya cuenta del procesador cobró (`pago_info.cuentaCobro`). Pagos anteriores: null. */
+  cuentaCobro: string | null
+  /** Slug de la cuenta que correspondía según la regla, sólo si el cobro se hizo con otra (fallback). */
+  cuentaCobroPrevista: string | null
+}
+
+/** Con qué cuenta del procesador se cobró y si fue por fallback (la prevista no estaba o fue rechazada). */
+export interface CuentaCobroDto {
+  slug: string
+  prevista: string | null
+  fallback: boolean
 }
 
 export interface PagoEnLineaDto {
@@ -30,6 +41,8 @@ export interface PagoEnLineaDto {
   /** Lo que pagó el comprador, con el interés de las cuotas si lo hubo. */
   totalPagado: number | null
   info: InfoPagoDto
+  /** Cuenta de cobro; null en pagos anteriores a que el Shop la registrara. */
+  cuenta: CuentaCobroDto | null
 }
 
 const TIPOS: readonly TipoMedioPago[] = ["credito", "debito", "prepaga", "dinero_en_cuenta"]
@@ -38,6 +51,10 @@ const texto = (v: unknown, max = 80): string | null =>
   typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null
 
 const monto = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null)
+
+// Slug de sucursal tal como lo escribe el Shop (`orders.sucursal`): minúsculas, números y guiones.
+const SLUG_CUENTA = /^[a-z0-9-]{2,20}$/
+const slug = (v: unknown): string | null => (typeof v === "string" && SLUG_CUENTA.test(v) ? v : null)
 
 export function parseInfoPago(raw: unknown): InfoPagoDto {
   const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
@@ -53,7 +70,16 @@ export function parseInfoPago(raw: unknown): InfoPagoDto {
     cupon: texto(o.cupon, 40),
     netoRecibido: monto(o.netoRecibido),
     costoProcesador: monto(o.costoProcesador),
+    cuentaCobro: slug(o.cuentaCobro),
+    cuentaCobroPrevista: slug(o.cuentaCobroPrevista),
   }
+}
+
+/** La cuenta de cobro del pago, o null si el pago es anterior a que se registrara. */
+export function cuentaDeCobroDto(info: Pick<InfoPagoDto, "cuentaCobro" | "cuentaCobroPrevista">): CuentaCobroDto | null {
+  if (!info.cuentaCobro) return null
+  const fallback = !!info.cuentaCobroPrevista && info.cuentaCobroPrevista !== info.cuentaCobro
+  return { slug: info.cuentaCobro, prevista: fallback ? info.cuentaCobroPrevista : null, fallback }
 }
 
 const TIPO_LABEL: Record<TipoMedioPago, string> = {

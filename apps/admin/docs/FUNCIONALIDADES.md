@@ -957,6 +957,45 @@ factura (y el remito) de un pedido se emiten con las credenciales de UNA cuenta:
   factura real.
 - **Remito**: sale por la cuenta de la factura (la registrada al emitirla; si todavía no se
   facturó, la que corresponde al pedido). Con la principal sigue exigiendo el cliente de Alegra.
+- **Invariante y cobro en línea**: se asume una sucursal = una cuenta de Alegra = un CUIT. Si el
+  pedido se cobró en línea, el CRM avisa (y pide confirmar) cuando se factura con una cuenta de Alegra
+  distinta de la de la sucursal que cobró; dos sucursales con la misma cuenta de Alegra no se
+  distinguen. Ver [Cuenta de cobro de cada pedido](#cuenta-de-cobro-de-cada-pedido-shop).
+
+## Cuenta de cobro de cada pedido (Shop)
+
+Change `cuentas-procesador-por-sucursal`. El cobro en línea (Mercado Pago, Payway) de un pedido del
+Shop se hace con la cuenta del procesador **de la sucursal que lo factura**, con la misma regla que
+la cuenta de Alegra de la sección anterior (la que fuerza la zona, si no la sucursal del pedido, si no
+la predeterminada). Se asume una sucursal = una cuenta de Alegra = un CUIT = una cuenta en cada
+procesador. Las credenciales viven en el entorno del Shop, con sufijo por sucursal; la operación está
+en `apps/clientes/docs/pagos-cuentas-por-sucursal.md`.
+
+- **Qué guarda el Shop**: `orders.pago_info.cuentaCobro` (slug de la sucursal que cobró) y
+  `cuentaCobroPrevista` (la que correspondía, sólo si difiere). `parseInfoPago`
+  (`src/lib/pago-en-linea.ts`) los valida (`/^[a-z0-9-]{2,20}$/`) y los expone como
+  `PagoEnLineaDto.cuenta = { slug, prevista, fallback }`; un pago viejo no los trae y el resto
+  queda igual.
+- **Detalle del pedido, tarjeta Pago**: fila "Cuenta de cobro" y, si hubo fallback, la alerta "Cobro
+  con otra cuenta" (el Shop cobró con otra sucursal porque la prevista no tenía credenciales cargadas
+  o el procesador las rechazó; revisar las de la prevista). Los nombres salen de las sucursales; si el
+  slug ya no existe se muestra el slug.
+- **Aviso al facturar**: en Emitir factura, si el pedido está **pagado en línea** y la cuenta de Alegra
+  elegida no es la de la sucursal que cobró, el diálogo muestra "Cuenta distinta de la que cobró"
+  con una casilla de confirmación; el servidor exige `confirmarCuentaDistintaDeCobro: true`
+  (`409 confirmar_cuenta_distinta_de_cobro` si falta, sin emitir ni guardar la cuenta elegida) y
+  revalida: no confía en la vista previa. El aviso va aparte de `avisos[]` (`cuenta.avisoCobro`),
+  porque los avisos de ese arreglo bloquean. En un fallback se compara contra la cuenta que
+  efectivamente cobró.
+- **Sin aviso ni bloqueo** cuando el pedido no tiene pago en línea, el pago es anterior al change (sin
+  `cuentaCobro`), la sucursal de cobro no tiene cuenta de Alegra o ya está facturado.
+- **Invariante y límite conocido**: una sucursal = una cuenta de Alegra = un CUIT. Si dos sucursales
+  comparten la misma cuenta de Alegra pero tienen cuentas de cobro distintas, el aviso no las
+  distingue y no se dispara. El CRM no lo impide: `cargarContextoCuentaFactura` registra un
+  `console.error` si encuentra la misma cuenta de Alegra en más de una sucursal activa.
+- **Textos de Sucursales** (Zonas de venta, "Sucursal que factura" y la cuenta de Alegra de cada
+  sucursal) aclaran que esa misma regla decide con qué cuenta de Mercado Pago y de Payway cobra la
+  tienda (`src/lib/sucursales-texto.ts`).
 
 ## Pedidos del Shop: vincular factura
 
@@ -1125,8 +1164,10 @@ Shop ofrece salen de esta tabla; ya no existen los flags `pagos` ni `pedido-a-co
   migración 0057 (y `db:seed-tenant` en los tenants nuevos), nace **inactiva**. Se puede activar,
   ordenar y elegir a qué entrega aplica, pero no se crea, no se elimina (`409`) ni se le cambia el
   slug ni el cobro online. Un alta con ese identificador se rechaza.
-- **Credenciales**: el Shop sólo ofrece Mercado Pago si tiene `MP_ACCESS_TOKEN` y
-  `NEXT_PUBLIC_MP_PUBLIC_KEY`; con el medio activo y sin credenciales no se muestra ni se acepta.
+- **Credenciales**: el Shop sólo ofrece Mercado Pago si al menos una sucursal tiene cargadas sus
+  credenciales (`MP_ACCESS_TOKEN_<SLUG>` y `MP_PUBLIC_KEY_<SLUG>`, una cuenta por sucursal; ver
+  [Cuenta de cobro de cada pedido](#cuenta-de-cobro-de-cada-pedido-shop)); con el medio activo y sin
+  credenciales no se muestra ni se acepta.
 - **Aviso de cuotas sin interés vs. Mercado Pago** (change `cuotas-en-el-formulario`, rebanada 6): con
   Mercado Pago activo y cuotas sin interés configuradas, la columna "Precio" del medio avisa (sin
   bloquear nada) si Mercado Pago cobra interés en esas cantidades con Visa, Mastercard, American

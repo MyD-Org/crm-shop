@@ -8,13 +8,14 @@ import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { esCompradorCuentaCorriente, pagoValidoConMedios } from "@/lib/medios-pago";
 import { medioAdmiteCambio } from "@/lib/cambiar-medio-pago";
 import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
-import { procesadorConfigurado, proveedorPago } from "@/lib/pagos";
+import { procesadorConfigurado } from "@/lib/pagos";
+import { proveedorDeIntento } from "@/lib/pagos/cuentas-sucursales";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
-import { mpPublicKeyPara } from "@/lib/pagos/mp-public-key";
+import { configMpPara } from "@/lib/pagos/mp-public-key";
 import { avisarOperadorPedidoNuevo, avisarPedidoRecibido, avisarPedidoSiFalta, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
 import { cotizarConMedio } from "@/lib/pedido-medio";
 import { cambiarMedioPedido, intentoAbiertoDelPedido, lineasDelPedidoParaCarrito, pedidoParaCambiarMedio } from "@/lib/pedidos";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 
 /**
@@ -63,7 +64,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
   const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
-  if (!permitir(`pedido-medio:${quien}`, MAX_CAMBIOS_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`pedido-medio:${quien}`, MAX_CAMBIOS_POR_MINUTO, 60_000)) {
     return NextResponse.json(
       { error: "Hizo demasiados intentos. Espere un minuto e inténtelo de nuevo." },
       { status: 429, headers: { "Retry-After": "60" } },
@@ -95,7 +96,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // Un cobro en vuelo se cierra o se espera: igual que antes de cancelar (consulta al procesador).
     const abierto = await intentoAbiertoDelPedido(id, dueno);
     if (abierto) {
-      const proveedor = proveedorPago(abierto.proveedor);
+      // Con las credenciales de la cuenta del pedido (la misma con la que se cobró).
+      const proveedor = await proveedorDeIntento(abierto);
       const resolucion = proveedor ? await resolverIntentoAbierto(id, abierto, proveedor) : "en_curso";
       if (resolucion === "pagado") {
         return conflicto(
@@ -216,7 +218,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       cuentaPago: r.cuentaPago,
       cotizacion,
       ...(contacto ? { contacto } : {}),
-      ...mpPublicKeyPara(pagoMetodo),
+      ...(await configMpPara({ id, sucursal: pedido.sucursal, facturaSucursal: pedido.facturaSucursal }, pagoMetodo)),
     });
   } catch (err) {
     console.error("[/api/pedidos/:id/medio] POST error:", err);

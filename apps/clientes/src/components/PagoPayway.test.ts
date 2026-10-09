@@ -46,8 +46,20 @@ describe("PagoPayway: datos de tarjeta", () => {
   it("el formulario no envía nada a nuestro servidor por sí mismo (sin action ni fetch con la tarjeta)", () => {
     expect(componente).not.toMatch(/<form[^>]*\baction=/);
     // El único fetch directo del componente es el de la configuración pública.
-    const fetches = componente.match(/fetch\(([^)]*)\)/g) ?? [];
-    expect(fetches).toEqual(['fetch("/api/pagos/payway-config")']);
+    const fetches = componente.match(/\bfetch\(/g) ?? [];
+    expect(fetches).toHaveLength(1);
+  });
+
+  it("pide la configuración pública DEL PEDIDO (la cuenta de su sucursal) y manda esa cuenta al cobrar", () => {
+    expect(componente).toContain("fetch(`/api/pagos/payway-config?pedido=${encodeURIComponent(pedidoId)}`)");
+    const cobro = componente.slice(componente.indexOf("await enviarCobro("));
+    expect(cobro.slice(0, 400)).toMatch(/cuenta: config\.cuenta/);
+  });
+
+  it("409 cuenta_rechazada: rearma el SDK con la key de la otra cuenta (sesión nueva) antes de reintentar", () => {
+    const rechazo = componente.slice(componente.indexOf("if (r.config && r.config.baseUrl)"));
+    expect(rechazo.slice(0, 500)).toMatch(/sesionSdk\.current = crearSesionSdk\(\)/);
+    expect(rechazo.slice(0, 500)).toMatch(/setConfig\(\{ cuenta: r\.config\.cuenta, publicKey: r\.config\.publicKey, baseUrl: r\.config\.baseUrl \}\)/);
   });
 
   it("usa autocomplete de tarjeta y teclado numérico (móvil)", () => {

@@ -42,6 +42,13 @@ export interface InfoPago {
 }
 
 /**
+ * `orders.pago_info`: el medio del cobro (`InfoPago`) más la cuenta de cobro (slug de la sucursal) con la
+ * que se cobró y, sólo si fue otra, la que le correspondía al pedido. Contrato aditivo con el CRM
+ * (`parseInfoPago` descarta lo que no conoce). Ausentes en pagos anteriores a la migración 0035.
+ */
+export type PagoInfoOrden = InfoPago & { cuentaCobro?: string; cuentaCobroPrevista?: string };
+
+/**
  * Por qué se cayó un pago, en términos nuestros.
  *
  * No son los códigos del proveedor: son las categorías que cambian **qué le
@@ -264,8 +271,13 @@ export interface DatosPago {
 export interface ProveedorPago {
   readonly id: string;
   /**
-   * ¿Hay credenciales para cobrar? Sin ellas el medio que apunta a este proveedor no se ofrece ni se
-   * acepta, aunque esté activo en el CRM.
+   * Cuenta (slug de la sucursal) a la que está LIGADO el proveedor: todas sus llamadas usan las
+   * credenciales de esa cuenta y de ninguna otra. Ver `proveedorPago(id, cuenta)`.
+   */
+  readonly cuenta: string;
+  /**
+   * ¿Esta cuenta tiene credenciales para cobrar? Sin ellas el proveedor falla con un error explícito
+   * antes de llamar al procesador (nunca cobra con otra cuenta por su cuenta).
    */
   configurado(): boolean;
   /**
@@ -287,7 +299,8 @@ export interface ProveedorPago {
   referenciaDeIntento?(intentoId: string): string;
   /**
    * URL a la que el proveedor avisa los cambios de estado, armada con el dominio por el que entró el
-   * comprador. Opcional: un proveedor que no notifica por webhook no la implementa.
+   * comprador (lleva la cuenta como pista para los logs, nunca como autoridad). Opcional: un proveedor
+   * que no notifica por webhook no la implementa.
    */
   urlNotificacion?(origen: string | null | undefined): string | undefined;
   crearPago(datos: DatosPago): Promise<EstadoPago>;
@@ -299,10 +312,10 @@ export interface ProveedorPago {
    */
   cancelarPago(referencia: string): Promise<EstadoPago>;
   /**
-   * Valida la firma del webhook y devuelve la referencia a consultar. Nunca
-   * devuelve el estado: el payload no es fuente de verdad, solo dice qué ID
-   * mirar. OPCIONAL: un proveedor que no avisa por webhook (se concilia por cron) no la implementa y
-   * su ruta de webhook responde 404.
+   * Valida la firma del webhook con el secreto de ESTA cuenta y devuelve la referencia a consultar.
+   * Nunca devuelve el estado: el payload no es fuente de verdad, solo dice qué ID mirar. No loguea el
+   * rechazo (se prueban todas las cuentas: lo loguea una vez `procesarWebhook`). OPCIONAL: un proveedor
+   * que no avisa por webhook (se concilia por cron) no la implementa y su ruta de webhook responde 404.
    */
   verificarWebhook?(
     req: Request,
@@ -324,3 +337,14 @@ export class ErrorProveedor extends Error {
     this.name = "ErrorProveedor";
   }
 }
+
+/**
+ * El procesador rechazó las credenciales de la cuenta (HTTP 401/403 al crear el pago): el request no se
+ * procesó, no hay pago. Es lo ÚNICO que habilita cobrar con otra cuenta: nunca un pago rechazado, un
+ * 402, un 400/422, un 5xx, un timeout ni un error de red (ahí el pago pudo crearse o el problema no es de
+ * la cuenta).
+ */
+export function esCredencialRechazada(err: unknown): err is ErrorProveedor {
+  return err instanceof ErrorProveedor && (err.status === 401 || err.status === 403);
+}
+

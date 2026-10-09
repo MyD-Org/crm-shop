@@ -10,14 +10,27 @@ const consultarPago = vi.fn();
 const pedidoDelPago = vi.fn();
 const registrarCobro = vi.fn();
 
-vi.mock("@/lib/pagos/mercadopago", () => ({
-  mercadoPago: {
+vi.mock("@/lib/pagos/mercadopago", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos/mercadopago")>()),
+  crearMercadoPago: (cuenta: string) => ({
     id: "mercadopago",
+    cuenta,
     verificarWebhook: (...a: unknown[]) => verificarWebhook(...a),
     consultarPago: (...a: unknown[]) => consultarPago(...a),
-  },
+  }),
 }));
+// Una sola cuenta (igz) con el secreto del webhook cargado; su proveedor es un doble.
+vi.mock("@/lib/pagos/cuentas-sucursales", () => ({
+  datosCuentas: async () => ({ predeterminada: "igz", slugs: ["igz"] }),
+}));
+vi.mock("@/lib/pagos/credenciales", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos/credenciales")>()),
+  cuentasConSecreto: (_p: string, slugs: string[]) => slugs,
+}));
+
 vi.mock("@/lib/pedidos", () => ({
+  cuentaDelIntentoPorReferencia: async () => null,
+  cuentaDelPedido: async () => null,
   pedidoDelPago: (...a: unknown[]) => pedidoDelPago(...a),
   registrarCobro: (...a: unknown[]) => registrarCobro(...a),
 }));
@@ -86,6 +99,9 @@ describe("webhook de Mercado Pago — caracterización", () => {
       reversion: false,
       cuotas: 3,
       totalPagado: 130,
+      // La cuenta que firmó el aviso (sólo se usa si el webhook crea la fila del intento).
+      cuenta: "igz",
+      cuentaPrevista: null,
     });
   });
 

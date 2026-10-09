@@ -329,13 +329,24 @@ Los pasos 1 a 8 no requieren nada de Fede. El 9 sí.
 
 ## 12. Variables de entorno
 
+Una cuenta de Mercado Pago por sucursal (la de la sucursal que factura el pedido), identificada por el
+slug de la sucursal. El sufijo de cada variable es el slug en mayúsculas con `-` -> `_` (`igz` ->
+`_IGZ`, `mdp` -> `_MDP`). Ya no existen las variables sin sufijo ni `NEXT_PUBLIC_MP_PUBLIC_KEY`.
+
 | Variable | Dónde | Nota |
 |---|---|---|
-| `MP_ACCESS_TOKEN` | server | **Secreto.** Nunca en el bundle ni en el repo. |
-| `NEXT_PUBLIC_MP_PUBLIC_KEY` | cliente | Pública por diseño. |
-| `MP_WEBHOOK_SECRET` | server | Firma del webhook. Secreto. |
+| `MP_ACCESS_TOKEN_<S>` | server | **Secreto.** Nunca en el bundle ni en el repo. |
+| `MP_PUBLIC_KEY_<S>` | server -> navegador | Pública por diseño. El servidor entrega al navegador la de la cuenta del pedido; no se lee en el cliente desde el entorno. |
+| `MP_WEBHOOK_SECRET_<S>` | server | Firma del webhook de esa aplicación. Secreto. |
 
-Se cargan con `vercel env`, no en un `.env` commiteado.
+Se cargan con `vercel env`, no en un `.env` commiteado. Una cuenta cobra con access token y public key;
+el secreto del webhook hace falta para validar avisos. Reglas de elección de cuenta, fallback
+(`cuenta_rechazada`), registro (`pago_intentos.cuenta`, `pago_info.cuentaCobro`), webhook de varias
+cuentas y orden de despliegue: ver `pagos-cuentas-por-sucursal.md`.
+
+Webhook: la misma URL (`/api/pagos/mercadopago/webhook`) se registra en la aplicación de cada cuenta; el
+servidor prueba la firma contra el secreto de cada una y la que valida identifica la cuenta. El pie del
+sitio (logos de tarjetas) usa la cuenta de la sucursal predeterminada.
 
 ## Cuotas sin interés por lista (flag `cuotas-cobro`)
 

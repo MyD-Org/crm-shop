@@ -28,8 +28,10 @@ vi.mock("@/lib/medios-pago-repo", () => ({
   leerMediosPagoTolerante: async () => [{ slug: "mercadopago" }, { slug: "payway" }],
 }));
 vi.mock("@/lib/auth", () => ({ identidadActual: async () => identidad }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => permitido }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => permitido }));
 vi.mock("@/lib/pedidos", async (original) => ({
+  cuentasRechazadasDelPedido: async () => [],
+  detalleCredencialesRechazadas: (c: string) => `credenciales_rechazadas:${c}`,
   motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
   reservarIntento: (...a: unknown[]) => reservarIntento(...a),
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),
@@ -37,20 +39,33 @@ vi.mock("@/lib/pedidos", async (original) => ({
   registrarIntentoFallido: (...a: unknown[]) => registrarIntentoFallido(...a),
 }));
 vi.mock("@/lib/pagos/intento-abierto", () => ({ resolverIntentoAbierto: async () => "en_curso" }));
-vi.mock("@/lib/pagos/mercadopago", () => {
-  const mercadoPago = {
+// Proveedor de Mercado Pago ligado a la cuenta del pedido: un doble. La elección de la cuenta se prueba
+// en lib/pagos/cobrar.cuenta.test.ts; acá la cuenta es "igz" y está configurada según el test.
+vi.mock("@/lib/pagos/mercadopago", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos/mercadopago")>()),
+  crearMercadoPago: (cuenta: string) => ({
     id: "mercadopago",
+    cuenta,
     configurado: () => configurado,
     urlNotificacion: (origen: string) => `${origen}/api/pagos/mercadopago/webhook`,
     crearPago: (...a: unknown[]) => crearPago(...a),
-  };
-  return {
-    mercadoPago,
-    urlNotificacion: (origen: string) => `${origen}/api/pagos/mercadopago/webhook`,
-    mercadoPagoConfigurado: () => configurado,
-  };
-});
-
+    consultarPago: async () => {
+      throw new Error("no se usa");
+    },
+    cancelarPago: async () => {
+      throw new Error("no se usa");
+    },
+  }),
+}));
+vi.mock("@/lib/pagos/credenciales", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos/credenciales")>()),
+  hayCuentaConfigurada: () => configurado,
+}));
+vi.mock("@/lib/pagos/cuentas-sucursales", () => ({
+  cuentaParaCobrar: async () =>
+    (() => configurado)() ? { ok: true, cuenta: "igz", prevista: "igz", fallback: false } : { ok: false, motivo: "sin_cuenta" },
+  proveedorDeIntento: async () => null,
+}));
 import { POST } from "./route";
 
 const pagar = (body: unknown, crudo?: string) =>
@@ -166,7 +181,7 @@ describe("POST /api/pagos/mercadopago — caracterización", () => {
       cuotas: 1,
       totalEsperado: 100,
       conInteres: false,
-    });
+    }, expect.objectContaining({ cuenta: expect.any(String) }));
     expect(crearPago).toHaveBeenCalledWith({
       pedidoId: "p1",
       monto: 100,

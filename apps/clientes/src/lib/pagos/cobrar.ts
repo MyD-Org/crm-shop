@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import {
   cerrarIntentoSinPago,
+  detalleCredencialesRechazadas,
   fijarReferenciaIntento,
   getItemsParaAntifraude,
   getPedidoParaPago,
@@ -14,12 +15,21 @@ import {
   ErrorProveedor,
   MENSAJE_RECHAZO,
   convieneReintentar,
+  esCredencialRechazada,
   type DatosAntifraude,
-  type ProveedorPago,
 } from "@/lib/pagos/tipos";
+import { proveedorPago, rasgosProcesador } from "@/lib/pagos";
+import { credencialesMercadoPago, hayCuentaConfigurada } from "@/lib/pagos/credenciales";
+import {
+  candidatasDelPedido,
+  cuentaParaCobrar,
+  proveedorDeIntento,
+  type PedidoParaCuenta,
+} from "@/lib/pagos/cuentas-sucursales";
+import { paywayConfigPublica } from "@/lib/pagos/payway";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
 import { procesadorDeMedio } from "@/lib/medios-pago";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { requierePlanesMP, validarCuotasPago, type EntradaValidacionCuotas } from "@/lib/pagos/cuotas-validacion";
 import { opcionDelCobro } from "@/lib/pagos/opciones-cobro";
 import { rechazoPorOpcionDeCobro } from "@/lib/pagos/opcion-cobro-guard";
@@ -38,6 +48,8 @@ interface Body {
   metodoPagoId?: unknown;
   medio?: unknown;
   bin?: unknown;
+  /** Cuenta con la que el navegador tokenizó la tarjeta (la que le dio el servidor). Se valida acá. */
+  cuenta?: unknown;
 }
 
 /** Pedido cancelado, tomado por un operador o vencido. Ver `motivoNoCobrable`. */
@@ -50,9 +62,33 @@ const NO_COBRABLE = {
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
 
+/** Lo que el navegador necesita para (re)armar el formulario de la cuenta vigente. */
+export type ConfigPublicaCobro = { cuenta: string; publicKey: string; baseUrl?: string };
+
+export function configPublicaCobro(procesadorId: string, cuenta: string): ConfigPublicaCobro | null {
+  if (procesadorId === "mercadopago") {
+    const { publicKey } = credencialesMercadoPago(cuenta);
+    return publicKey ? { cuenta, publicKey } : null;
+  }
+  if (procesadorId === "payway") return paywayConfigPublica(cuenta);
+  return null;
+}
+
+/** Al comprador, cuando hay que volver a cargar la tarjeta con la cuenta alternativa. */
+export const MENSAJE_CUENTA_RECHAZADA =
+  "Hubo un inconveniente con el procesador de pagos. Vuelva a ingresar los datos de su tarjeta.";
+/** Ninguna cuenta del procesador pudo cobrar (todas rechazaron sus credenciales). */
+export const MENSAJE_INCONVENIENTE_TECNICO =
+  "No pudimos procesar el pago por un inconveniente técnico. Inténtelo nuevamente en unos minutos o elija otro medio de pago.";
+
+/** Sin credenciales: el motivo histórico de Mercado Pago se conserva (ningún cliente lo lee). */
+const motivoNoConfigurado = (procesadorId: string) =>
+  procesadorId === "mercadopago" ? "mp_no_configurado" : "procesador_no_configurado";
+
 /**
- * Cobra un pedido ya creado con el procesador `proveedor`. Lo comparten las rutas
- * `POST /api/pagos/mercadopago` (URL histórica) y `POST /api/pagos/[proveedor]`.
+ * Cobra un pedido ya creado con el procesador `procesadorId`, con la cuenta (sucursal) que le
+ * corresponde al pedido o, si no se puede, con otra del mismo procesador (`cuentaParaCobrar`). Lo comparten las rutas `POST /api/pagos/mercadopago` (URL
+ * histórica) y `POST /api/pagos/[proveedor]`.
  *
  * El pedido existe ANTES de intentar cobrar: si el cobro falla, queda ahí para
  * reintentar con otro medio sin que el comprador tenga que rehacer el checkout.
@@ -60,31 +96,33 @@ const texto = (v: unknown, max = 200) =>
  * El monto NO se acepta del cliente. Sale del pedido persistido, que es el
  * total congelado en la transacción que lo creó.
  */
-export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Promise<Response> {
+export async function cobrarPedido(procesadorId: string, req: Request): Promise<Response> {
+  const rasgos = rasgosProcesador(procesadorId);
+  if (!rasgos) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+
   const { clerkUserId, cliente, email, registradoEn } = await identidadActual();
   if (!clerkUserId && !cliente) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  // Sin credenciales del procesador en el Shop no se puede cobrar nada. Se corta acá, antes de
-  // leer el pedido o de hablar con el procesador. NO se exige que el medio esté activo en el CRM:
-  // sólo se cobran pedidos que ya son de este procesador (más abajo), así un pedido en vuelo se paga
-  // aunque el operador desactive el medio; crear pedidos nuevos ya lo bloquea POST /api/pedidos.
+  // Sin NINGUNA cuenta del procesador configurada en el Shop no se puede cobrar nada. Se corta acá,
+  // antes de leer el pedido o de hablar con el procesador. NO se exige que el medio esté activo en el
+  // CRM: sólo se cobran pedidos que ya son de este procesador (más abajo), así un pedido en vuelo se
+  // paga aunque el operador desactive el medio; crear pedidos nuevos ya lo bloquea POST /api/pedidos.
   // El webhook y la conciliación no pasan por acá y siguen corriendo siempre.
-  if (!proveedor.configurado()) {
+  if (!hayCuentaConfigurada(procesadorId)) {
     return NextResponse.json(
       {
         error:
-          "Los pagos en línea no están disponibles en este momento. Un asesor coordinará el pago con usted.",
-        // `mp_no_configurado` es el motivo histórico de Mercado Pago; ningún cliente lo lee.
-        motivo: proveedor.id === "mercadopago" ? "mp_no_configurado" : "procesador_no_configurado",
+          "El medio de pago no está disponible por el momento. Seleccione otro medio de pago o inténtelo nuevamente más tarde.",
+        motivo: motivoNoConfigurado(procesadorId),
       },
       { status: 409 },
     );
   }
 
   const clave = `pago:${clerkUserId ?? cliente?.codigocliente}`;
-  if (!permitir(clave, MAX_INTENTOS, VENTANA_MS)) {
+  if (!await permitirAsync(clave, MAX_INTENTOS, VENTANA_MS)) {
     return NextResponse.json(
       { error: "Demasiados intentos de pago. Espere unos minutos." },
       { status: 429 },
@@ -113,7 +151,7 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
   // sin él un procesador que lo exige rechazaría el request. Mercado Pago lo usa para consultar sus planes
   // de cuotas con interés; Payway exige exactamente 6.
   const bin = typeof body.bin === "string" && /^\d{6,8}$/.test(body.bin) ? body.bin : undefined;
-  if (proveedor.requiereBin && bin?.length !== 6) {
+  if (rasgos.requiereBin && bin?.length !== 6) {
     return NextResponse.json(
       { error: "Faltan datos de la tarjeta. Vuelva a ingresarla.", motivo: "datos_invalidos" },
       { status: 400 },
@@ -136,7 +174,7 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
   // uno "a coordinar" (o por transferencia) terminaba con un cobro que nadie
   // pidió. Mismo 404 que un pedido ajeno, y antes de cualquier llamada a Mercado
   // Pago o de escribir un intento fallido: sus columnas de pago no se tocan.
-  if (procesadorDeMedio(pedido.pagoMetodo) !== proveedor.id) {
+  if (procesadorDeMedio(pedido.pagoMetodo) !== procesadorId) {
     return NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404 });
   }
 
@@ -152,6 +190,53 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
   if (motivoNoCobrable(pedido)) {
     return NextResponse.json(NO_COBRABLE, { status: 409 });
   }
+
+  /**
+   * Cuenta del cobro: la de la sucursal del pedido (`facturaSucursal ?? sucursal ?? predeterminada`), o
+   * otra cuenta configurada del mismo procesador si ésa no está configurada o el procesador ya rechazó
+   * sus credenciales en este pedido (`cuentaParaCobrar`). Queda congelada en el intento con la prevista.
+   * La cuenta que declara el navegador (con la que tokenizó la tarjeta) se valida contra la del
+   * servidor: si no coincide, se le devuelve la config vigente para volver a armar el formulario.
+   */
+  const declarada = body.cuenta === undefined ? undefined : texto(body.cuenta, 60);
+  const elegida = await cuentaParaCobrar(procesadorId, pedido, declarada);
+  if (!elegida.ok && elegida.motivo === "cuenta_no_valida") {
+    const vigente = await cuentaParaCobrar(procesadorId, pedido);
+    const config = vigente.ok ? configPublicaCobro(procesadorId, vigente.cuenta) : null;
+    return NextResponse.json(
+      {
+        error: "La configuración del pago cambió. Vuelva a ingresar los datos de su tarjeta e inténtelo nuevamente.",
+        motivo: "cuenta_no_valida",
+        ...(config ? { config } : {}),
+      },
+      { status: 409 },
+    );
+  }
+  const proveedor = elegida.ok ? proveedorPago(procesadorId, elegida.cuenta) : null;
+  if (!elegida.ok || !proveedor) {
+    if (!elegida.ok && (await todasRechazadas(procesadorId, pedido))) {
+      // Todas las cuentas configuradas rechazaron sus credenciales en este pedido: nada más que probar.
+      console.error(`[pagos] cuenta_rechazada procesador=${procesadorId} pedido=${pedido.id}: ninguna cuenta disponible`);
+      return NextResponse.json({ error: MENSAJE_INCONVENIENTE_TECNICO, motivo: "cuentas_rechazadas" }, { status: 502 });
+    }
+    console.error(`[/api/pagos/${procesadorId}] pedido=${pedido.id}: ninguna cuenta de las sucursales tiene credenciales`);
+    return NextResponse.json(
+      {
+        error:
+          "Los pagos en línea no están disponibles en este momento. Un asesor coordinará el pago con usted.",
+        motivo: motivoNoConfigurado(procesadorId),
+      },
+      { status: 409 },
+    );
+  }
+
+  if (elegida.fallback) {
+    // Queda en el intento y en `pago_info` (el CRM lo muestra); acá, para el log del momento.
+    console.warn(
+      `[pagos] cobro con otra cuenta procesador=${procesadorId} pedido=${pedido.id} prevista=${elegida.prevista} cuenta=${elegida.cuenta}`,
+    );
+  }
+  const cuentas = { cuenta: elegida.cuenta, cuentaPrevista: elegida.prevista };
 
   const metodoPagoId = texto(body.metodoPagoId, 40) || undefined;
 
@@ -199,7 +284,7 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
         { status: 422 },
       );
     }
-    entradaCuotas.planes = await consultarPlanesMP({ amount: pedido.total, bin });
+    entradaCuotas.planes = await consultarPlanesMP({ amount: pedido.total, bin, cuenta: proveedor.cuenta });
   }
   const validacion = validarCuotasPago(entradaCuotas);
   if (!validacion.ok) {
@@ -265,13 +350,21 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
    * en Mercado Pago); si no se puede, el comprador espera. Dos pagos abiertos
    * pueden aprobarse los dos.
    */
-  let reserva = await reservarIntento(pedido.id, proveedor.id, medio, intencion);
+  let reserva = await reservarIntento(pedido.id, proveedor.id, medio, intencion, cuentas);
   if (reserva && "abierto" in reserva) {
-    const resolucion = await resolverIntentoAbierto(pedido.id, reserva.abierto, proveedor);
+    // El intento abierto se consulta/cancela con SU cuenta (la congelada al reservarlo), no con la de hoy.
+    const delIntento =
+      (await proveedorDeIntento({
+        proveedor: reserva.abierto.proveedor,
+        cuenta: reserva.abierto.cuenta,
+        sucursal: pedido.sucursal,
+        facturaSucursal: pedido.facturaSucursal,
+      })) ?? proveedor;
+    const resolucion = await resolverIntentoAbierto(pedido.id, reserva.abierto, delIntento);
     if (resolucion === "pagado") {
       return NextResponse.json({ estado: "pagado", yaEstaba: true });
     }
-    reserva = resolucion === "libre" ? await reservarIntento(pedido.id, proveedor.id, medio, intencion) : reserva;
+    reserva = resolucion === "libre" ? await reservarIntento(pedido.id, proveedor.id, medio, intencion, cuentas) : reserva;
   }
   if (!reserva) {
     return NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404 });
@@ -400,6 +493,35 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
     });
   } catch (err) {
     console.error(`[/api/pagos/${proveedor.id}] error:`, err);
+
+    /**
+     * El procesador rechazó las credenciales de la cuenta: no hay pago. Se cierra el intento con la
+     * evidencia (`credenciales_rechazadas:<cuenta>`, en la base: el reintento puede caer en otra
+     * instancia) y, si hay otra cuenta usable, se le devuelve su config al navegador para que el
+     * comprador vuelva a cargar la tarjeta (el token quedó atado a la public key de esta cuenta).
+     */
+    if (esCredencialRechazada(err)) {
+      console.error(
+        `[pagos] cuenta_rechazada procesador=${proveedor.id} cuenta=${proveedor.cuenta} pedido=${pedido.id} status=${err.status}`,
+      );
+      await registrarIntentoFallido(pedido.id, err.message).catch((e) =>
+        console.error(`[/api/pagos/${proveedor.id}] no se pudo registrar el intento:`, e),
+      );
+      await cerrarIntentoSinPago(intentoId, detalleCredencialesRechazadas(proveedor.cuenta)).catch((e) =>
+        console.error(`[/api/pagos/${proveedor.id}] no se pudo cerrar el intento:`, e),
+      );
+      const otra = await cuentaParaCobrar(procesadorId, pedido).catch(() => null);
+      const config =
+        otra?.ok && otra.cuenta !== proveedor.cuenta ? configPublicaCobro(procesadorId, otra.cuenta) : null;
+      if (config) {
+        return NextResponse.json(
+          { error: MENSAJE_CUENTA_RECHAZADA, motivo: "cuenta_rechazada", reintentable: true, config },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({ error: MENSAJE_INCONVENIENTE_TECNICO, motivo: "cuentas_rechazadas" }, { status: 502 });
+    }
+
     // Deja rastro del intento fallido. Sin esto el pedido queda en `pendiente`
     // sin ninguna señal de que alguien trató de pagar y no pudo.
     //
@@ -428,4 +550,11 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
       { status: 502 },
     );
   }
+}
+
+/** ¿El pedido se quedó sin cuenta porque TODAS las configuradas rechazaron sus credenciales? */
+async function todasRechazadas(procesadorId: string, pedido: PedidoParaCuenta): Promise<boolean> {
+  const { candidatas } = await candidatasDelPedido(procesadorId, pedido);
+  const configuradas = candidatas.filter((c) => c.configurada);
+  return configuradas.length > 0 && configuradas.every((c) => c.rechazada);
 }

@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Alert, Button, Dialog, Field, Select, useToast } from "@myd-org/ui"
 import type { CuentaFacturaDto } from "@/lib/pedido-factura-cuenta-repo"
 import type { PedidoDetalleDto } from "@/lib/pedidos-repo"
+import { AvisoCuentaDistintaDeCobro, puedeEmitirConAvisoCobro } from "./AvisoCuentaDistintaDeCobro"
 import { textoVentaEntreEmpresas } from "./CuentaFacturaInfo"
 import { fmtCantidad, fmtMoneda } from "./format"
 import { interpretarRespuestaFactura, separarAvisoFactura, mensajeAvisoFactura } from "./logica"
@@ -75,6 +76,8 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
   const [numeracionId, setNumeracionId] = useState("")
   /** Cuenta elegida a mano en este diálogo; null = la que propone el sistema. */
   const [eleccion, setEleccion] = useState<string | null>(null)
+  /** Casilla "Entiendo que se factura con una cuenta distinta de la que cobró"; se limpia al cambiar de cuenta. */
+  const [confirmaCobro, setConfirmaCobro] = useState(false)
   const [emitiendo, setEmitiendo] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -93,6 +96,7 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
     setError(null)
     setPreview(null)
     setEleccion(cuentaSlug)
+    setConfirmaCobro(false)
     const { status, body } = await llamar(undefined, cuentaSlug)
     setCargando(false)
     const r = interpretarRespuestaFactura<PreviewEmision>(status, body, esPreview)
@@ -110,6 +114,7 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
     setAbierto(false)
     setPreview(null)
     setEleccion(null)
+    setConfirmaCobro(false)
     setNumeracionId("")
     setError(null)
   }
@@ -117,7 +122,9 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
   const numeracionSeleccionada = preview?.numeraciones.find((n) => n.alegraId === numeracionId) ?? null
   const bloqueadoPorIva = !!preview?.bloqueo && numeracionSeleccionada?.subDocumentType !== "INVOICE_X"
   const hayAvisos = (preview?.avisos.length ?? 0) > 0
-  const puedeConfirmar = !!preview && !!numeracionId && !bloqueadoPorIva && !hayAvisos
+  const avisoCobro = preview?.cuenta?.avisoCobro ?? null
+  const puedeConfirmar =
+    !!preview && !!numeracionId && !bloqueadoPorIva && !hayAvisos && puedeEmitirConAvisoCobro(avisoCobro, confirmaCobro)
 
   async function emitir() {
     if (!puedeConfirmar) return
@@ -125,9 +132,18 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
     const { status, body } = await llamar({
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ numberTemplateId: numeracionId, ...(eleccion ? { cuenta: eleccion } : {}) }),
+      body: JSON.stringify({
+        numberTemplateId: numeracionId,
+        ...(eleccion ? { cuenta: eleccion } : {}),
+        ...(avisoCobro && confirmaCobro ? { confirmarCuentaDistintaDeCobro: true } : {}),
+      }),
     })
     setEmitiendo(false)
+    // Falta la confirmación (no es un conflicto con otro operador): se avisa sin cerrar el diálogo.
+    if (status === 409 && (body as { code?: unknown } | null)?.code === "confirmar_cuenta_distinta_de_cobro") {
+      toast({ title: (body as { error?: string }).error ?? "Confirme que desea facturar con una cuenta distinta de la que cobró el pago.", tone: "danger" })
+      return
+    }
     const r = interpretarRespuestaFactura<PedidoDetalleDto>(status, body, esDetalle)
     if (r.tipo === "ok") {
       const { detalle, aviso } = separarAvisoFactura(r.valor)
@@ -218,6 +234,13 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
                 )}
               </div>
             )}
+
+            <AvisoCuentaDistintaDeCobro
+              aviso={avisoCobro}
+              confirmado={confirmaCobro}
+              onConfirmadoChange={setConfirmaCobro}
+              disabled={emitiendo}
+            />
 
             <Field label="Tipo de comprobante">
               <Select

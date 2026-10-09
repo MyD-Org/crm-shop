@@ -11,7 +11,7 @@ const cotizar = vi.fn();
 let minimo6: number | null = 60000;
 const TOTAL_POR_LISTA: Record<string, number> = { L1: 60000, L3: 60500, L6: 61000 };
 
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => true }));
 vi.mock("@/lib/pedido-avisos", () => ({ avisoOperadorAlCrear: () => true, avisarPedidoRecibido: vi.fn() }));
 vi.mock("next/server", async (orig) => ({
   ...(await orig<typeof import("next/server")>()),
@@ -25,6 +25,8 @@ vi.mock("@/lib/cotizacion", async (orig) => ({
   cotizar: (...a: unknown[]) => cotizar(...a),
 }));
 vi.mock("@/lib/pedidos", () => ({
+  // Cuenta de cobro del pedido creado (public key del Brick): sucursal igz.
+  cuentaDelPedido: async () => ({ sucursal: "igz", facturaSucursal: null }),
   crearPedido: (...a: unknown[]) => crearPedido(...a),
   getPedidoPorClave: async () => null,
   listarPedidos: async () => [],
@@ -77,8 +79,8 @@ const post = (extra: Record<string, unknown> = {}) =>
 const listasCotizadas = () => cotizar.mock.calls.map((c) => (c[1] as { idListaMedio?: string }).idListaMedio);
 
 beforeEach(() => {
-  vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
-  vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-key");
+  vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token");
+  vi.stubEnv("MP_PUBLIC_KEY_IGZ", "TEST-key");
   minimo6 = 60000;
   TOTAL_POR_LISTA.L1 = 60000;
   crearPedido.mockReset();

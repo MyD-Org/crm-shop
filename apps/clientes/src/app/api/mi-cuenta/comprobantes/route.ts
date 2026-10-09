@@ -27,7 +27,7 @@ import { startSeguro } from "@/lib/cuenta-corriente/filtros";
 import { jsonNoStore, requerirComprador, requerirCuentaCorriente } from "@/lib/cuenta-corriente/guard";
 import { getPedidoParaComprobante } from "@/lib/pedidos";
 import { getComprobantesR2 } from "@/lib/r2";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { shopTenantId } from "@/lib/tenant";
 
 /**
@@ -153,7 +153,7 @@ async function informarDePedido(raw: Record<string, unknown>) {
       typeof comprador.duenio === "string"
         ? `comprobantes:${tenantId}:${comprador.duenio}`
         : `comprobantes:${tenantId}:clerk:${comprador.duenio.clerkUserId}`;
-    if (!permitir(claveHora, RECEIPTS_HOURLY_LIMIT, HORA_MS)) {
+    if (!await permitirAsync(claveHora, RECEIPTS_HOURLY_LIMIT, HORA_MS)) {
       return jsonNoStore({ error: LIMITE_HORARIO, code: "hourly_limit" }, { status: 429 });
     }
     if ((await contarRecientes(tenantId, comprador.duenio, now)) >= RECEIPTS_DAILY_LIMIT) {
@@ -215,7 +215,7 @@ async function informarDeCuentaCorriente(raw: unknown) {
     const codigo = cliente.codigocliente;
 
     // Primero el límite de la hora (barato, en memoria), después el del día (base).
-    if (!permitir(`comprobantes:${tenantId}:${codigo}`, RECEIPTS_HOURLY_LIMIT, HORA_MS)) {
+    if (!await permitirAsync(`comprobantes:${tenantId}:${codigo}`, RECEIPTS_HOURLY_LIMIT, HORA_MS)) {
       return jsonNoStore({ error: LIMITE_HORARIO, code: "hourly_limit" }, { status: 429 });
     }
     if ((await contarRecientes(tenantId, codigo, now)) >= RECEIPTS_DAILY_LIMIT) {

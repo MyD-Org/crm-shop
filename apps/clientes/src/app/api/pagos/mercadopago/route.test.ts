@@ -15,7 +15,7 @@ vi.mock("@/lib/medios-pago-repo", () => ({
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@b.com" }),
 }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => true }));
 vi.mock("@/lib/pedidos", async (original) => ({
   motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
   reservarIntento: async () => ({ intentoId: "i1" }),
@@ -26,10 +26,32 @@ vi.mock("@/lib/pedidos", async (original) => ({
 vi.mock("@/lib/pagos/intento-abierto", () => ({
   resolverIntentoAbierto: async () => "en_curso",
 }));
-vi.mock("@/lib/pagos/mercadopago", () => ({
-  mercadoPago: { id: "mercadopago", configurado: () => true, crearPago: (...a: unknown[]) => crearPago(...a) },
-  urlNotificacion: () => undefined,
-  mercadoPagoConfigurado: () => true,
+// Proveedor de Mercado Pago ligado a la cuenta del pedido: un doble. La elección de la cuenta se prueba
+// en lib/pagos/cobrar.cuenta.test.ts; acá la cuenta es "igz" y está configurada según el test.
+vi.mock("@/lib/pagos/mercadopago", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos/mercadopago")>()),
+  crearMercadoPago: (cuenta: string) => ({
+    id: "mercadopago",
+    cuenta,
+    configurado: () => true,
+    urlNotificacion: () => undefined,
+    crearPago: (...a: unknown[]) => crearPago(...a),
+    consultarPago: async () => {
+      throw new Error("no se usa");
+    },
+    cancelarPago: async () => {
+      throw new Error("no se usa");
+    },
+  }),
+}));
+vi.mock("@/lib/pagos/credenciales", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos/credenciales")>()),
+  hayCuentaConfigurada: () => true,
+}));
+vi.mock("@/lib/pagos/cuentas-sucursales", () => ({
+  cuentaParaCobrar: async () =>
+    (() => true)() ? { ok: true, cuenta: "igz", prevista: "igz", fallback: false } : { ok: false, motivo: "sin_cuenta" },
+  proveedorDeIntento: async () => null,
 }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => flag }));
 // Estos tests son del cobro en sí. Las credenciales y el método del pedido se prueban en

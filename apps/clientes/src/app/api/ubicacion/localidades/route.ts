@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { GeorefError, MIN_CARACTERES_LOCALIDAD, buscarLocalidades, etiquetaLocalidad } from "@/lib/georef";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { TEXTOS_UBICACION } from "@/lib/ubicacion";
 import { demasiadasConsultas, errorUbicacion, ipDe } from "@/lib/ubicacion-api";
 
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   const q = new URL(req.url).searchParams.get("q")?.trim() ?? "";
   if (q.length < MIN_CARACTERES_LOCALIDAD) return NextResponse.json({ localidades: [] });
   if (q.length > MAX_LARGO) return errorUbicacion(TEXTOS_UBICACION.invalida, 400);
-  if (!permitir(`ubicacion-loc:${ipDe(req)}`, MAX_POR_MINUTO, 60_000)) return demasiadasConsultas();
+  if (!await permitirAsync(`ubicacion-loc:${ipDe(req)}`, MAX_POR_MINUTO, 60_000)) return demasiadasConsultas();
 
   try {
     const sugerencias = await buscarLocalidades(q);

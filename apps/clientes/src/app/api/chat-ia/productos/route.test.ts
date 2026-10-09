@@ -10,7 +10,7 @@ vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
 vi.mock("@/lib/lista-cuenta-repo", () => ({ listaPrivadaDelComprador: () => listaPrivadaDelComprador() }));
 vi.mock("@/lib/precios-privados-repo", () => ({ preciosPrivados: (...a: unknown[]) => preciosPrivados(...a) }));
 vi.mock("@/lib/catalog", () => ({ getProductosPorIds: (...a: unknown[]) => getProductosPorIds(...a) }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async (...a: unknown[]) => permitir(...a) }));
 const disponibles = vi.fn(async () => false);
 vi.mock("@/lib/catalogo-atributos-disponibles", () => ({ atributosEstructuradosDisponibles: () => disponibles() }));
 vi.mock("@/lib/flags-publicos", () => ({ flagsPublicos: async () => ({ soloVisibles: false, cuotas: false }) }));

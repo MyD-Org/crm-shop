@@ -33,7 +33,7 @@ import {
   type RevisionDeCuotas,
 } from "./pagos/cuotas-validacion";
 import type { MotivoRevisionPedido } from "./motivo-revision";
-import type { InfoPago } from "./pagos/tipos";
+import type { InfoPago, PagoInfoOrden } from "./pagos/tipos";
 import {
   etiquetaEntrega,
   PAGO_LABEL,
@@ -787,6 +787,32 @@ export interface PedidoParaPago {
   entregaCiudad?: string | null;
   entregaDireccion?: string | null;
   facturacionDomicilio?: string | null;
+  /**
+   * Cuenta de cobro (opcionales en el tipo por los dobles de prueba): `orders.sucursal` y la sucursal que
+   * factura si la zona lo fuerza (`sucursal_regla.facturaSucursal`). Inmutables tras crear el pedido.
+   */
+  sucursal?: string | null;
+  facturaSucursal?: string | null;
+}
+
+/** `sucursal_regla.facturaSucursal` del snapshot congelado (null si no hay regla o no fuerza). */
+function facturaSucursalDe(regla: { facturaSucursal?: string | null } | null | undefined): string | null {
+  return regla?.facturaSucursal ?? null;
+}
+
+/**
+ * Lo que hace falta de un pedido para saber con qué cuenta se cobra (`cuentaPrevistaDelPedido`). Sin
+ * filtro de dueño: sólo lo usan rutas que ya validaron el pedido. null si no existe en este tenant.
+ */
+export async function cuentaDelPedido(
+  id: string,
+): Promise<{ sucursal: string | null; facturaSucursal: string | null } | null> {
+  const [fila] = await getDb()
+    .select({ sucursal: orders.sucursal, sucursalRegla: orders.sucursalRegla })
+    .from(orders)
+    .where(and(eq(orders.id, id), esDeEsteTenant()))
+    .limit(1);
+  return fila ? { sucursal: fila.sucursal ?? null, facturaSucursal: facturaSucursalDe(fila.sucursalRegla) } : null;
 }
 
 /**
@@ -853,6 +879,8 @@ export async function getPedidoParaPago(
     entregaCiudad: fila.entregaCiudad,
     entregaDireccion: fila.entregaDireccion,
     facturacionDomicilio: fila.facturacionDomicilio,
+    sucursal: fila.sucursal ?? null,
+    facturaSucursal: facturaSucursalDe(fila.sucursalRegla),
   };
 }
 
@@ -943,6 +971,48 @@ export interface ResultadoCobro {
   moneda?: string;
   /** Medio con el que se cobró (marca, tipo, últimos 4…), si el proveedor lo informó. */
   info?: InfoPago;
+  /**
+   * Cuenta de cobro (slug de la sucursal) con la que se cobró y la que le correspondía al pedido. Sólo se
+   * usan al CREAR la fila del intento (un pago que el webhook recupera sin reserva: la cuenta es la que
+   * firmó el aviso). Una fila existente conserva la cuenta con la que se reservó.
+   */
+  cuenta?: string;
+  cuentaPrevista?: string | null;
+}
+
+/** Prefijo del detalle de un intento cerrado porque el procesador rechazó las credenciales de su cuenta. */
+export const DETALLE_CREDENCIALES_RECHAZADAS = "credenciales_rechazadas:";
+
+/** `credenciales_rechazadas:<cuenta>`, con `:cliente` si lo informó el navegador (no el procesador). */
+export function detalleCredencialesRechazadas(cuenta: string, origen: "servidor" | "cliente" = "servidor"): string {
+  return `${DETALLE_CREDENCIALES_RECHAZADAS}${cuenta}${origen === "cliente" ? ":cliente" : ""}`;
+}
+
+/** Cuenta del detalle `credenciales_rechazadas:<cuenta>[:cliente]`, o null si no es uno de esos. */
+export function cuentaDeDetalleRechazo(detalle: string | null | undefined): string | null {
+  if (!detalle?.startsWith(DETALLE_CREDENCIALES_RECHAZADAS)) return null;
+  const cuenta = detalle.slice(DETALLE_CREDENCIALES_RECHAZADAS.length).split(":")[0];
+  return cuenta || null;
+}
+
+/**
+ * `orders.pago_info` a escribir: el medio del intento decisivo más su cuenta de cobro (y la prevista sólo
+ * si fue otra). La cuenta va cuando el pedido queda pagado o junto con el medio informado; un intento
+ * anterior a la 0035 (sin cuenta) no agrega las claves. null = no se toca `pago_info`.
+ */
+export function pagoInfoDelCobro(
+  decisivo: { info: InfoPago | null; cuenta: string | null; cuentaPrevista: string | null },
+  pagado: boolean,
+): PagoInfoOrden | null {
+  const conCuenta = Boolean(decisivo.cuenta) && (pagado || Boolean(decisivo.info));
+  if (!decisivo.info && !conCuenta) return null;
+  return {
+    ...(decisivo.info ?? {}),
+    ...(conCuenta ? { cuentaCobro: decisivo.cuenta as string } : {}),
+    ...(conCuenta && decisivo.cuentaPrevista && decisivo.cuentaPrevista !== decisivo.cuenta
+      ? { cuentaCobroPrevista: decisivo.cuentaPrevista }
+      : {}),
+  };
 }
 
 /**
@@ -1063,6 +1133,7 @@ async function intentoDelCobro(
       proveedor: cobro.proveedor,
       referencia: cobro.referencia || null,
       estado: "pendiente",
+      ...(cobro.cuenta ? { cuenta: cobro.cuenta, cuentaPrevista: cobro.cuentaPrevista ?? null } : {}),
     })
     .returning(columnasIntento);
   return { ...creada, estado: creada.estado as PagoEstado, nuevo: true };
@@ -1201,6 +1272,8 @@ async function registrarCobroTx(
         cuotasSolicitadas: pagoIntentos.cuotasSolicitadas,
         totalEsperado: pagoIntentos.totalEsperado,
         conInteres: pagoIntentos.conInteres,
+        cuenta: pagoIntentos.cuenta,
+        cuentaPrevista: pagoIntentos.cuentaPrevista,
       })
       .from(pagoIntentos)
       .where(and(eq(pagoIntentos.orderId, pedidoId), intentoDeEsteTenant()))
@@ -1278,6 +1351,9 @@ async function registrarCobroTx(
       console.error(`[pagos] ${revisionCuotas} pedido=${pedidoId}`);
     }
 
+    // Medio del cobro + cuenta con la que se cobró (contrato con el CRM, ver `PagoInfoOrden`).
+    const pagoInfo = decisivo ? pagoInfoDelCobro(decisivo, nuevo === "pagado") : null;
+
     await tx
       .update(orders)
       .set({
@@ -1289,7 +1365,7 @@ async function registrarCobroTx(
               ...(decisivo.medio ? { pagoMedio: decisivo.medio } : {}),
               ...(decisivo.cuotas != null ? { pagoCuotas: decisivo.cuotas } : {}),
               ...(decisivo.totalPagado != null ? { pagoTotalPagado: decisivo.totalPagado } : {}),
-              ...(decisivo.info ? { pagoInfo: decisivo.info } : {}),
+              ...(pagoInfo ? { pagoInfo } : {}),
             }
           : {}),
         ...(nuevo !== actual ? { pagoEstado: nuevo } : {}),
@@ -1344,6 +1420,20 @@ export interface IntentoAbierto {
   proveedor: string;
   referencia: string | null;
   creadoEn: Date;
+  /**
+   * Cuenta de cobro del pedido (para ligar el proveedor que lo consulta o cancela). La traen
+   * `intentoAbiertoDelPedido`; `reservarIntento` no (la ruta de cobro ya tiene el pedido).
+   */
+  sucursal?: string | null;
+  facturaSucursal?: string | null;
+  /** Cuenta congelada en el intento (migración 0035). null = intento anterior: se deriva del pedido. */
+  cuenta?: string | null;
+}
+
+/** Cuenta con la que se reserva un intento y la que le correspondía al pedido (null = ninguna prevista). */
+export interface CuentasIntento {
+  cuenta: string;
+  cuentaPrevista: string | null;
 }
 
 /**
@@ -1356,12 +1446,16 @@ export interface IntentoAbierto {
  *
  * `intencion`: lo que se le va a pedir al procesador (cuotas, monto, con interés). Queda en el intento
  * para que la reconciliación no marque como discrepancia un cobro con interés que el comprador eligió.
+ *
+ * `cuentas`: la cuenta de cobro con la que se va a cobrar y la prevista del pedido. Obligatoria: queda
+ * congelada en el intento, y la conciliación, la cancelación y la consulta usan ESA cuenta.
  */
 export async function reservarIntento(
   pedidoId: string,
   proveedor: string,
   medio: string,
-  intencion?: IntencionCobro,
+  intencion: IntencionCobro | undefined,
+  cuentas: CuentasIntento,
 ): Promise<{ intentoId: string } | { abierto: IntentoAbierto } | { noCobrable: true } | null> {
   return getDb().transaction(async (tx) => {
     const [pedido] = await tx
@@ -1381,6 +1475,7 @@ export async function reservarIntento(
         proveedor: pagoIntentos.proveedor,
         referencia: pagoIntentos.referencia,
         creadoEn: pagoIntentos.createdAt,
+        cuenta: pagoIntentos.cuenta,
       })
       .from(pagoIntentos)
       .where(
@@ -1401,6 +1496,8 @@ export async function reservarIntento(
         orderId: pedidoId,
         proveedor,
         medio,
+        cuenta: cuentas.cuenta,
+        cuentaPrevista: cuentas.cuentaPrevista,
         ...(intencion
           ? {
               cuotasSolicitadas: intencion.cuotas,
@@ -1477,6 +1574,73 @@ export async function cerrarIntentoSinPago(intentoId: string, detalle: string): 
     .where(
       and(eq(pagoIntentos.id, intentoId), eq(pagoIntentos.estado, "pendiente"), intentoDeEsteTenant()),
     );
+}
+
+/**
+ * Cuentas del procesador cuyas credenciales se rechazaron en ESTE pedido (evidencia persistida: filas
+ * cerradas con `credenciales_rechazadas:<cuenta>`). Se lee de la base y no de memoria: el reintento del
+ * comprador puede caer en otra instancia. Sólo vale para este pedido: uno nuevo vuelve a la prevista.
+ */
+export async function cuentasRechazadasDelPedido(pedidoId: string, proveedor: string): Promise<string[]> {
+  const filas = await getDb()
+    .select({ cuenta: pagoIntentos.cuenta, detalle: pagoIntentos.detalle })
+    .from(pagoIntentos)
+    .where(
+      and(
+        eq(pagoIntentos.orderId, pedidoId),
+        eq(pagoIntentos.proveedor, proveedor),
+        eq(pagoIntentos.estado, "fallido"),
+        sql`${pagoIntentos.detalle} like ${DETALLE_CREDENCIALES_RECHAZADAS + "%"}`,
+        intentoDeEsteTenant(),
+      ),
+    );
+  return [...new Set(filas.flatMap((f) => cuentaDeDetalleRechazo(f.detalle) ?? f.cuenta ?? []))];
+}
+
+/**
+ * Deja la evidencia de que una cuenta no sirve para cobrar ESTE pedido sin pasar por un intento de cobro
+ * (lo informa el navegador: la public key fue rechazada al armar el formulario). Fila ya cerrada
+ * (`fallido`), bajo el lock del pedido; NO toca `pago_estado` (no hubo pago ni rechazo de pago).
+ * Devuelve false si el pedido no existe en este tenant.
+ */
+export async function registrarCuentaRechazada(
+  pedidoId: string,
+  proveedor: string,
+  cuenta: string,
+  cuentaPrevista: string | null,
+  origen: "servidor" | "cliente",
+): Promise<boolean> {
+  return getDb().transaction(async (tx) => {
+    const [pedido] = await tx
+      .select({ id: orders.id })
+      .from(orders)
+      .where(and(eq(orders.id, pedidoId), esDeEsteTenant()))
+      .limit(1)
+      .for("update");
+    if (!pedido) return false;
+    await tx.insert(pagoIntentos).values({
+      tenantId: shopTenantId(),
+      orderId: pedidoId,
+      proveedor,
+      estado: "fallido",
+      detalle: detalleCredencialesRechazadas(cuenta, origen),
+      cuenta,
+      cuentaPrevista,
+    });
+    return true;
+  });
+}
+
+/** Cuenta congelada en el intento de ese pago (null si no hay intento o es anterior a la 0035). */
+export async function cuentaDelIntentoPorReferencia(proveedor: string, referencia: string): Promise<string | null> {
+  const [fila] = await getDb()
+    .select({ cuenta: pagoIntentos.cuenta })
+    .from(pagoIntentos)
+    .where(
+      and(eq(pagoIntentos.proveedor, proveedor), eq(pagoIntentos.referencia, referencia), intentoDeEsteTenant()),
+    )
+    .limit(1);
+  return fila?.cuenta ?? null;
 }
 
 /**
@@ -1766,8 +1930,9 @@ export async function pedidoParaCambiarMedio(
   /** Cuotas y total congelados hoy (el formulario de pago los compara con la opción elegida). */
   cuotas: number | null;
   total: number;
-  /** Sucursal del pedido (credenciales del procesador por sucursal, a futuro). */
+  /** Sucursal del pedido y la que factura si la zona lo fuerza: definen la cuenta de cobro. */
   sucursal: string | null;
+  facturaSucursal: string | null;
   /** Si ya salieron "Recibimos su pedido" y "Nuevo pedido" (pedido sin cobro en línea). */
   avisosEnviados: boolean;
   /** Lo que el checkout precarga al volver al paso Pago con un pedido retomado. */
@@ -1782,6 +1947,7 @@ export async function pedidoParaCambiarMedio(
       cuotas: orders.cuotas,
       total: orders.total,
       sucursal: orders.sucursal,
+      sucursalRegla: orders.sucursalRegla,
       entregaCiudad: orders.entregaCiudad,
       entregaDireccion: orders.entregaDireccion,
       contactoNombre: orders.contactoNombre,
@@ -1804,6 +1970,7 @@ export async function pedidoParaCambiarMedio(
     cuotas: p.cuotas,
     total: Number(p.total),
     sucursal: p.sucursal ?? null,
+    facturaSucursal: facturaSucursalDe(p.sucursalRegla),
     avisosEnviados: p.avisosEnviadosEn !== null,
     entrega: {
       // Con retiro, la sucursal del pedido es el local elegido.
@@ -1994,6 +2161,9 @@ export async function intentoAbiertoDelPedido(
       proveedor: pagoIntentos.proveedor,
       referencia: pagoIntentos.referencia,
       creadoEn: pagoIntentos.createdAt,
+      cuenta: pagoIntentos.cuenta,
+      sucursal: orders.sucursal,
+      sucursalRegla: orders.sucursalRegla,
     })
     .from(pagoIntentos)
     .innerJoin(orders, eq(orders.id, pagoIntentos.orderId))
@@ -2007,7 +2177,9 @@ export async function intentoAbiertoDelPedido(
     )
     .orderBy(asc(pagoIntentos.createdAt))
     .limit(1);
-  return fila ?? null;
+  if (!fila) return null;
+  const { sucursalRegla, ...resto } = fila;
+  return { ...resto, sucursal: resto.sucursal ?? null, facturaSucursal: facturaSucursalDe(sucursalRegla) };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -2089,10 +2261,30 @@ export async function intentosPendientesDeReconciliar(opciones: {
    * no los conocía, pero si los aprueba tarde quedaban cobrados sin registrar (Payway).
    */
   noLlegoDesde?: Date;
-}): Promise<{ orderId: string; referencia: string; creadoEn: Date }[]> {
+}): Promise<
+  {
+    orderId: string;
+    referencia: string;
+    creadoEn: Date;
+    /** Cuenta congelada en el intento; null = intento anterior a la 0035 (se deriva del pedido). */
+    cuenta: string | null;
+    sucursal: string | null;
+    facturaSucursal: string | null;
+  }[]
+> {
   const filas = await getDb()
-    .select({ orderId: pagoIntentos.orderId, referencia: pagoIntentos.referencia, creadoEn: pagoIntentos.createdAt })
+    .select({
+      orderId: pagoIntentos.orderId,
+      referencia: pagoIntentos.referencia,
+      creadoEn: pagoIntentos.createdAt,
+      // Cuenta del intento (o, si es anterior a la 0035, la del pedido): la conciliación consulta con
+      // las credenciales de esa cuenta, nunca con otra.
+      cuenta: pagoIntentos.cuenta,
+      sucursal: orders.sucursal,
+      sucursalRegla: orders.sucursalRegla,
+    })
     .from(pagoIntentos)
+    .innerJoin(orders, eq(orders.id, pagoIntentos.orderId))
     .where(
       and(
         // La base es compartida con el CRM y acá no hay comprador que acote la
@@ -2116,7 +2308,11 @@ export async function intentosPendientesDeReconciliar(opciones: {
     )
     .orderBy(asc(pagoIntentos.createdAt))
     .limit(opciones.limite);
-  return filas.filter((f): f is { orderId: string; referencia: string; creadoEn: Date } => f.referencia != null);
+  return filas.flatMap(({ sucursalRegla, referencia, ...f }) =>
+    referencia != null
+      ? [{ ...f, referencia, sucursal: f.sucursal ?? null, facturaSucursal: facturaSucursalDe(sucursalRegla) }]
+      : [],
+  );
 }
 
 /**

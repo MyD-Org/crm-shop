@@ -139,7 +139,7 @@ describe("firmaValida — rechazos", () => {
   it("rechaza si falta el secreto, en vez de dejar pasar", () => {
     const r = valido({ secreto: "" });
     expect(r.valido).toBe(false);
-    expect(r.valido === false && r.motivo).toContain("MP_WEBHOOK_SECRET");
+    expect(r.valido === false && r.motivo).toContain("falta el secreto del webhook");
   });
 
   it("rechaza cuando faltan headers o data.id", () => {

@@ -47,6 +47,8 @@ export type ResultadoToken =
   | { ok: false; motivo: MotivoToken; mensaje: string };
 
 export interface ConfigPayway {
+  /** Cuenta (sucursal) dueña de la key pública: va en el cobro. */
+  cuenta?: string;
   /** Host de la API (https), con o sin `/api/v2`. */
   baseUrl: string;
   /** API key PÚBLICA (sólo sirve para tokenizar). */

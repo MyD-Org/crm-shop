@@ -11,7 +11,7 @@ const cotizar = vi.fn();
 const listaPrivadaDelComprador = vi.fn();
 let cliente: { codigocliente: string; razonsocial: string; cuit: string; origen: string } | null = null;
 
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => true }));
 vi.mock("@/lib/pedido-avisos", () => ({ avisoOperadorAlCrear: () => true, avisarPedidoRecibido: vi.fn(), avisarOperadorPedidoNuevo: vi.fn() }));
 vi.mock("next/server", async (orig) => ({
   ...(await orig<typeof import("next/server")>()),
@@ -26,6 +26,8 @@ vi.mock("@/lib/cotizacion", async (orig) => ({
   cotizar: (...a: unknown[]) => cotizar(...a),
 }));
 vi.mock("@/lib/pedidos", () => ({
+  // Cuenta de cobro del pedido creado (public key del Brick): sucursal igz.
+  cuentaDelPedido: async () => ({ sucursal: "igz", facturaSucursal: null }),
   crearPedido: (...a: unknown[]) => crearPedido(...a),
   getPedidoPorClave: async () => null,
   listarPedidos: async () => [],

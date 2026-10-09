@@ -15,7 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { PlanDeCuotas, PlanPedido } from "../lib/pagos/cuotas-tipos";
-import type { InfoPago } from "../lib/pagos/tipos";
+import type { InfoPago, PagoInfoOrden } from "../lib/pagos/tipos";
 import type { ReglaAplicada } from "../lib/sucursales";
 import type { CuentaPagoSnapshot } from "../lib/cuentas-bancarias";
 
@@ -436,7 +436,7 @@ export const orders = shop.table(
     /** Total pagado real (con interés) según el proveedor. `total` no cambia. */
     pagoTotalPagado: numeric("pago_total_pagado", { precision: 14, scale: 2 }),
     /** Medio con el que se cobró (marca, tipo, últimos 4…), del intento que decide el estado. */
-    pagoInfo: jsonb("pago_info").$type<InfoPago>(),
+    pagoInfo: jsonb("pago_info").$type<PagoInfoOrden>(),
     /**
      * Pago que un operador tiene que revisar, o null si está todo en orden:
      * - `cobro_duplicado`: más de un intento aprobado; hay que devolver el
@@ -825,6 +825,14 @@ export const pagoIntentos = shop.table(
     cuotasSolicitadas: integer("cuotas_solicitadas"),
     totalEsperado: numeric("total_esperado", { precision: 14, scale: 2 }),
     conInteres: boolean("con_interes"),
+    /**
+     * Cuenta de cobro (slug de la sucursal) con la que se cobró este intento, y la que le correspondía
+     * al pedido (`cuentaDeCobro`). Distintas = cobro con otra cuenta (la prevista no estaba configurada o
+     * el procesador rechazó sus credenciales). La reconciliación, la cancelación y la consulta usan
+     * `cuenta`. NULL en ambas = intento anterior a la migración 0035: se deriva del pedido.
+     */
+    cuenta: text("cuenta"),
+    cuentaPrevista: text("cuenta_prevista"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

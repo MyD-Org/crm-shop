@@ -19,7 +19,7 @@ const despues: Array<() => Promise<void> | void> = [];
 let mediosOk = true;
 let cuotasFlag = false;
 
-vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => true }));
 vi.mock("next/server", async (orig) => ({
   ...(await orig<typeof import("next/server")>()),
   after: (f: () => Promise<void> | void) => {
@@ -33,8 +33,13 @@ vi.mock("@/lib/contacto-pedido-repo", () => ({ contactoDelPedido: async () => nu
 vi.mock("@/lib/lista-cuenta-repo", () => ({ listaPrivadaDelComprador: async () => null }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => cuotasFlag }));
 vi.mock("@/lib/pagos", () => ({
-  proveedorPago: (id: string) => (id === "mercadopago" || id === "payway" ? { id } : null),
   procesadorConfigurado: () => true,
+}));
+// El intento abierto se resuelve con el proveedor ligado a la cuenta del pedido.
+vi.mock("@/lib/pagos/cuentas-sucursales", async (orig) => ({
+  ...(await orig<typeof import("@/lib/pagos/cuentas-sucursales")>()),
+  proveedorDeIntento: async (i: { proveedor: string }) =>
+    i.proveedor === "mercadopago" || i.proveedor === "payway" ? { id: i.proveedor, cuenta: "mdp" } : null,
 }));
 vi.mock("@/lib/pagos/intento-abierto", () => ({ resolverIntentoAbierto: (...a: unknown[]) => resolverIntentoAbierto(...a) }));
 vi.mock("@/lib/pedido-avisos", () => ({
@@ -48,6 +53,7 @@ vi.mock("@/lib/cotizacion", async (orig) => ({
   cotizar: (...a: unknown[]) => cotizar(...a),
 }));
 vi.mock("@/lib/pedidos", () => ({
+  cuentasRechazadasDelPedido: async () => [],
   pedidoParaCambiarMedio: (...a: unknown[]) => pedidoParaCambiarMedio(...a),
   cambiarMedioPedido: (...a: unknown[]) => cambiarMedioPedido(...a),
   intentoAbiertoDelPedido: (...a: unknown[]) => intentoAbiertoDelPedido(...a),
@@ -136,11 +142,20 @@ describe("POST /api/pedidos/:id/medio", () => {
     expect(avisarPedidoRecibido).not.toHaveBeenCalled();
   });
 
-  it("a Mercado Pago: la respuesta trae la public key del Brick (resolver de credenciales)", async () => {
-    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-clave-publica");
-    pedidoParaCambiarMedio.mockResolvedValue({ entregaTipo: "retiro", pagoMetodo: "mercadopago", lineas: [{ id: "1", qty: 2 }] });
+  it("a Mercado Pago: la respuesta trae la public key de la cuenta del pedido y esa cuenta", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-token");
+    vi.stubEnv("MP_PUBLIC_KEY_MDP", "TEST-clave-publica-mdp");
+    vi.stubEnv("MP_ACCESS_TOKEN_IGZ", "TEST-token");
+    vi.stubEnv("MP_PUBLIC_KEY_IGZ", "TEST-clave-publica-igz");
+    pedidoParaCambiarMedio.mockResolvedValue({
+      entregaTipo: "retiro",
+      pagoMetodo: "mercadopago",
+      lineas: [{ id: "1", qty: 2 }],
+      sucursal: "mdp",
+      facturaSucursal: null,
+    });
     const r = await llamar({ pagoMetodo: "mercadopago" });
-    expect((await r.json()).mpPublicKey).toBe("TEST-clave-publica");
+    expect(await r.json()).toMatchObject({ mpPublicKey: "TEST-clave-publica-mdp", mpCuenta: "mdp" });
     vi.unstubAllEnvs();
   });
 

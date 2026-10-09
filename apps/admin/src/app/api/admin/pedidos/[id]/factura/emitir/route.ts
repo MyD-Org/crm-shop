@@ -12,6 +12,7 @@ import { crearContactoEnCuenta } from "@/lib/contacto-en-cuenta"
 import { asegurarItemsEnCuenta, itemsSinIdEnCuenta, type LineaParaCuenta } from "@/lib/alegra-items-cuenta"
 import {
   armarCuentaFacturaDto,
+  avisoCobroDelPedido,
   cargarContextoCuentaFactura,
   comoDestino,
   configDeCuentaRow,
@@ -51,7 +52,7 @@ import { canSeeCosts } from "@/lib/roles"
 //   usar, numeraciones de factura activas + sugerida, y bloqueo/avisos si no se puede emitir.
 //   NUNCA escribe: ni en Alegra ni en la base.
 //
-//   POST /api/admin/pedidos/[id]/factura/emitir { numberTemplateId } → confirma: revalida la
+//   POST /api/admin/pedidos/[id]/factura/emitir { numberTemplateId, cuenta?, confirmarCuentaDistintaDeCobro? } → confirma: revalida la
 //   numeración y el bloqueo por IVA SERVER-SIDE (nunca confía en lo que mostró el preview),
 //   resuelve o crea el contacto, crea la factura en Alegra (`createInvoice`) y persiste el
 //   vínculo con el evento 'factura_emitida' del historial. 200 = detalle + `avisoFactura`.
@@ -61,6 +62,11 @@ import { canSeeCosts } from "@/lib/roles"
 // `cuenta` en el POST, que la guarda con su auditoría). Todo —numeraciones, impuestos, contacto,
 // ítems y la factura— se hace con las credenciales de ESA cuenta; el id de cada línea se resuelve
 // en ella (y el ítem se crea si no existe). Ver `pedido-factura-cuenta-repo.ts`.
+//
+// Cuenta de cobro (change `cuentas-procesador-por-sucursal`, R3): si el pedido se cobró en línea con
+// la cuenta de una sucursal y se factura con una cuenta de Alegra que no es la suya, el GET lo
+// informa en `cuenta.avisoCobro` (campo aparte: `avisos[]` bloquea) y el POST exige
+// `confirmarCuentaDistintaDeCobro: true` (409 `confirmar_cuenta_distinta_de_cobro` si falta).
 //
 // Permiso `requireAdminPlus` (no `requireOperatorPlus`, a diferencia de "vincular") en los dos
 // verbos: emitir crea dinero real e irreversible en Alegra, aunque el GET sólo lea.
@@ -90,6 +96,7 @@ const MSG = {
   numeracionInvalida:
     "La numeración seleccionada ya no está disponible. Vuelva a abrir la vista previa e inténtelo nuevamente.",
   numeracionRequerida: "Seleccione una numeración para emitir la factura.",
+  confirmarCuentaDistintaDeCobro: "Confirme que desea facturar con una cuenta distinta de la que cobró el pago.",
   conflicto: "El pedido fue modificado por otra persona. Actualice la página e inténtelo nuevamente.",
   emisionEnCurso: "Hay una emisión de esta factura en curso. Espere unos segundos y actualice la página.",
   interno_confirmar: "No se pudo emitir la factura. Inténtelo nuevamente.",
@@ -245,6 +252,8 @@ export async function POST(req: Request, { params }: IdParams) {
   }
 
   const cuentaBody = (body as Record<string, unknown>).cuenta
+  // Sólo `true` (booleano) cuenta como confirmación.
+  const confirmaCuentaDistinta = (body as Record<string, unknown>).confirmarCuentaDistintaDeCobro === true
   const eleccion = typeof cuentaBody === "string" && cuentaBody.trim() ? cuentaBody.trim().slice(0, 40) : null
 
   const { id } = await params
@@ -283,6 +292,13 @@ export async function POST(req: Request, { params }: IdParams) {
     config = configDeCuentaRow(base, cuenta)
   } catch (err) {
     return fail(422, "cuenta_sin_credenciales", err instanceof Error ? err.message : MSG.sinConfig)
+  }
+
+  // Cobrado en línea con la cuenta de una sucursal y facturado con otra: no bloquea, pero exige una
+  // confirmación explícita. Se revalida acá (no se confía en lo que mostró la vista previa) y antes
+  // de consultar Alegra, reservar o guardar la cuenta elegida.
+  if (!confirmaCuentaDistinta && avisoCobroDelPedido(pedido, ctxCuenta, cuenta)) {
+    return fail(409, "confirmar_cuenta_distinta_de_cobro", MSG.confirmarCuentaDistintaDeCobro)
   }
 
   // ── Validaciones server-side, TODAS antes de tocar Alegra con una escritura ──

@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { esIdDireccion } from "@/lib/direcciones-envio";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import { GeorefError, localidadPorId } from "@/lib/georef";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { claveProvincia } from "@/lib/sucursales";
 import {
@@ -32,7 +32,7 @@ const MAX_POR_MINUTO = 20;
 const invalida = () => errorUbicacion(TEXTOS_UBICACION.invalida, 400);
 
 export async function POST(req: Request) {
-  if (!permitir(`ubicacion-elegir:${ipDe(req)}`, MAX_POR_MINUTO, 60_000)) return demasiadasConsultas();
+  if (!await permitirAsync(`ubicacion-elegir:${ipDe(req)}`, MAX_POR_MINUTO, 60_000)) return demasiadasConsultas();
 
   const body: unknown = await req.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body)) return invalida();

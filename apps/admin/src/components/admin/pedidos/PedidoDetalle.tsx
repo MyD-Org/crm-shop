@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Card, Dialog, Field, Select, Stepper, Table, Text
 import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
 import { reglaATexto, whatsappLink, type NombresSucursal } from "@/lib/sucursales-texto"
 import { ESTADO_PEDIDO_LABEL, MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
+import { AlertaCobroOtraCuenta } from "./AlertaCobroOtraCuenta"
 import { CuentaFacturaInfo } from "./CuentaFacturaInfo"
 import { ContactoControl } from "./ContactoControl"
 import { EmitirFacturaControl } from "./EmitirFacturaControl"
@@ -350,7 +351,7 @@ export function PedidoDetalle({
               <Dato label="Medio de pago">{Object.hasOwn(mediosPago, pedido.pagoMetodo) ? mediosPago[pedido.pagoMetodo] : pagoMetodoLabel(pedido.pagoMetodo)}</Dato>
               <Dato label="Estado del pago">{pagoEstadoLabel(pedido.pagoEstado)}</Dato>
               {pedido.pagoEnLinea &&
-                datosCobroEnLinea(pedido.pagoEnLinea, pedido.total).map((d) => (
+                datosCobroEnLinea(pedido.pagoEnLinea, pedido.total, nombresSucursal).map((d) => (
                   <Dato key={d.label} label={d.label}>{d.valor}</Dato>
                 ))}
               {pedido.pagoManual && pedido.pagoRegistradoPorNombre && (
@@ -359,6 +360,7 @@ export function PedidoDetalle({
                 </Dato>
               )}
             </dl>
+            <AlertaCobroOtraCuenta pago={pedido.pagoEnLinea} nombresSucursal={nombresSucursal} />
             <RegistrarPagoControl pedido={pedido} onChanged={setPedido} />
           </Card>
 

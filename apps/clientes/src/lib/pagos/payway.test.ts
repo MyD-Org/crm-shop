@@ -40,7 +40,8 @@ const datos = (extra: Partial<DatosPago> = {}): DatosPago => ({
 
 const fetchMock = vi.fn();
 const pausa = vi.fn(async () => {});
-const payway = crearPayway({ fetch: fetchMock as unknown as typeof fetch, pausa });
+// Ligado a la cuenta de la sucursal mdp: sus keys llevan el sufijo _MDP.
+const payway = crearPayway({ cuenta: "mdp", fetch: fetchMock as unknown as typeof fetch, pausa });
 
 const llamadas = () =>
   (fetchMock.mock.calls as [string, RequestInit | undefined][]).map(([url, init]) => ({
@@ -53,8 +54,10 @@ const llamadas = () =>
 beforeEach(() => {
   fetchMock.mockReset();
   pausa.mockClear();
-  vi.stubEnv("PAYWAY_API_PRIVATE_KEY", KEY_PRIVADA);
-  vi.stubEnv("PAYWAY_API_PUBLIC_KEY", KEY_PUBLICA);
+  vi.stubEnv("PAYWAY_API_PRIVATE_KEY_MDP", KEY_PRIVADA);
+  vi.stubEnv("PAYWAY_API_PUBLIC_KEY_MDP", KEY_PUBLICA);
+  vi.stubEnv("PAYWAY_API_PRIVATE_KEY_IGZ", "clave-privada-de-otra-cuenta");
+  vi.stubEnv("PAYWAY_API_PUBLIC_KEY_IGZ", "clave-publica-de-otra-cuenta");
   vi.stubEnv("PAYWAY_BASE_URL", BASE);
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -64,33 +67,36 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("paywayConfigPublica()", () => {
-  it("entrega la key PÚBLICA y la base (para tokenizar en el navegador), nunca la privada", () => {
-    const c = paywayConfigPublica();
-    expect(c).toEqual({ publicKey: KEY_PUBLICA, baseUrl: BASE });
+describe("paywayConfigPublica(cuenta)", () => {
+  it("entrega la cuenta, su key PÚBLICA y la base (para tokenizar en el navegador), nunca la privada", () => {
+    const c = paywayConfigPublica("mdp");
+    expect(c).toEqual({ cuenta: "mdp", publicKey: KEY_PUBLICA, baseUrl: BASE });
     expect(JSON.stringify(c)).not.toContain(KEY_PRIVADA);
+    expect(paywayConfigPublica("igz")?.publicKey).toBe("clave-publica-de-otra-cuenta");
   });
 
   it("normaliza la base (sin barra final ni /api/v2)", () => {
     vi.stubEnv("PAYWAY_BASE_URL", `${BASE}/api/v2/`);
-    expect(paywayConfigPublica()?.baseUrl).toBe(BASE);
+    expect(paywayConfigPublica("mdp")?.baseUrl).toBe(BASE);
   });
 
-  it("null si el medio no está configurado (falta cualquiera de las tres)", () => {
-    for (const nombre of ["PAYWAY_API_PRIVATE_KEY", "PAYWAY_API_PUBLIC_KEY", "PAYWAY_BASE_URL"]) {
+  it("null si la cuenta no está configurada (falta cualquiera de las tres)", () => {
+    for (const nombre of ["PAYWAY_API_PRIVATE_KEY_MDP", "PAYWAY_API_PUBLIC_KEY_MDP", "PAYWAY_BASE_URL"]) {
       vi.stubEnv(nombre, "");
-      expect(paywayConfigPublica()).toBeNull();
+      expect(paywayConfigPublica("mdp")).toBeNull();
       vi.stubEnv(nombre, nombre.includes("BASE") ? BASE : "placeholder");
     }
+    expect(paywayConfigPublica("otra")).toBeNull();
   });
 });
 
 describe("configurado()", () => {
-  it("sólo con la key pública, la privada y una base https", () => {
+  it("sólo con la key pública, la privada (de SU cuenta) y una base https", () => {
     expect(payway.configurado()).toBe(true);
+    expect(payway.cuenta).toBe("mdp");
     for (const [nombre, valor] of [
-      ["PAYWAY_API_PRIVATE_KEY", ""],
-      ["PAYWAY_API_PUBLIC_KEY", ""],
+      ["PAYWAY_API_PRIVATE_KEY_MDP", ""],
+      ["PAYWAY_API_PUBLIC_KEY_MDP", ""],
       ["PAYWAY_BASE_URL", ""],
       ["PAYWAY_BASE_URL", "http://payway.example"],
       ["PAYWAY_BASE_URL", "no es una url"],
@@ -344,7 +350,7 @@ describe("crearPago — timeout: se consulta antes de cualquier otra cosa, nunca
 
   it("espera hasta 30 s por el POST y 15 s por las consultas", async () => {
     const espiado = vi.spyOn(AbortSignal, "timeout");
-    const real = crearPayway({ fetch: fetchMock as unknown as typeof fetch, pausa });
+    const real = crearPayway({ cuenta: "mdp", fetch: fetchMock as unknown as typeof fetch, pausa });
     fetchMock.mockResolvedValueOnce(json(201, aprobado));
     await real.crearPago(datos());
     expect(espiado).toHaveBeenLastCalledWith(30_000);
@@ -358,6 +364,33 @@ describe("crearPago — timeout: se consulta antes de cualquier otra cosa, nunca
     const e = await payway.crearPago(datos());
     expect(e).toMatchObject({ estado: "pendiente", referencia: REF });
     expect(llamadas().filter((x) => x.metodo === "POST")).toHaveLength(1);
+  });
+});
+
+describe("proveedor ligado a una cuenta", () => {
+  it("cobra con la key privada de SU cuenta, nunca con la de otra", async () => {
+    fetchMock.mockImplementation(async () => json(201, aprobado));
+    await payway.crearPago(datos());
+    await crearPayway({ cuenta: "igz", fetch: fetchMock as unknown as typeof fetch, pausa }).crearPago(datos());
+    const [a, b] = llamadas();
+    expect(a.headers.apikey).toBe(KEY_PRIVADA);
+    expect(b.headers.apikey).toBe("clave-privada-de-otra-cuenta");
+  });
+
+  it("cuenta sin key privada: error explícito sin llamar a Payway (ni con otra cuenta)", async () => {
+    vi.stubEnv("PAYWAY_API_PRIVATE_KEY_MDP", "");
+    await expect(payway.crearPago(datos())).rejects.toThrow(/mdp/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("las keys sin sufijo no sirven", async () => {
+    vi.unstubAllEnvs();
+    vi.stubEnv("PAYWAY_API_PRIVATE_KEY", KEY_PRIVADA);
+    vi.stubEnv("PAYWAY_API_PUBLIC_KEY", KEY_PUBLICA);
+    vi.stubEnv("PAYWAY_BASE_URL", BASE);
+    expect(payway.configurado()).toBe(false);
+    await expect(payway.crearPago(datos())).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

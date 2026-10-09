@@ -26,6 +26,7 @@ import { binValido } from "./checkout/consultor-cuotas";
 import { useOpcionesCuotas } from "./checkout/useOpcionesCuotas";
 import { alEstarListo, alFallarBrick, alVencerPlazo, iniciarPlazoCarga } from "./pago-mp-carga";
 import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "./PagoMercadoPagoAvisos";
+import { cambioDeCuenta } from "@/lib/pagos/cuenta-rechazada-cliente";
 
 /**
  * Cobro con Mercado Pago: "¿Cómo quiere pagar?" con tarjeta de crédito, de débito o la cuenta de
@@ -77,8 +78,13 @@ interface Props {
   pagoMetodo: string;
   /** Cuotas congeladas hoy en el pedido (null = sin elegir, cuenta como 1 pago). */
   cuotasPedido: number | null;
-  /** Public key de la cuenta del pedido (la manda el servidor); sin ella, la del entorno. */
+  /**
+   * Public key de la cuenta que cobra el pedido (la manda el servidor). Sin ella no se monta el
+   * formulario: nunca se tokeniza con una key supuesta (sería la cuenta de otra sucursal).
+   */
   publicKey?: string;
+  /** Esa cuenta (slug de la sucursal): va en el POST de cobro para que el servidor la valide. */
+  cuenta?: string;
   /** Lo elegido en el desplegable, para el resumen lateral (null al salir del formulario). Estable. */
   onEleccionCuotas?: (e: EleccionCuotas | null) => void;
   /** El pedido pasó a otras cuotas (y otro total) antes de cobrar. */
@@ -126,6 +132,7 @@ export function PagoMercadoPago({
   pagoMetodo,
   cuotasPedido,
   publicKey,
+  cuenta,
   onEleccionCuotas,
   onPedidoActualizado,
   opcionesCobro,
@@ -150,7 +157,17 @@ export function PagoMercadoPago({
     onCobroEnCurso?.(cobroEnCurso);
   }, [cobroEnCurso, onCobroEnCurso]);
 
-  const key = publicKey || process.env.NEXT_PUBLIC_MP_PUBLIC_KEY;
+  /**
+   * Cuenta con la que se cobra después de un `409 cuenta_rechazada` / `cuenta_no_valida`: la manda el
+   * servidor y pisa la de la prop mientras la prop siga siendo la misma (`base`); si el pedido trae otra
+   * key, vuelve a regir la del pedido.
+   */
+  const [cuentaVigente, setCuentaVigente] = useState<{ base?: string; publicKey: string; cuenta: string } | null>(null);
+  const reemplazo = cuentaVigente && cuentaVigente.base === publicKey ? cuentaVigente : null;
+  // Sólo la key del servidor para ESTE pedido. Si cambia (otra cuenta), se reinicia el SDK y el Brick
+  // se remonta (su `key` la incluye).
+  const key = reemplazo?.publicKey ?? (publicKey || undefined);
+  const cuentaCobro = reemplazo?.cuenta ?? cuenta;
   useEffect(() => {
     inicializar(key);
   }, [key]);
@@ -281,12 +298,23 @@ export function PagoMercadoPago({
           cuotas: elegida.cuotas,
           metodoPagoId: datos?.payment_method_id,
           ...(bin ? { bin } : {}),
+          // La cuenta con la que se tokenizó: el servidor la valida contra la del pedido.
+          ...(cuentaCobro ? { cuenta: cuentaCobro } : {}),
         }),
       });
 
       const json = (await res.json()) as RespuestaPago;
 
       if (!res.ok) {
+        // Hay que tokenizar con otra cuenta: el Brick se remonta con SU key (cambia la `key` del Brick)
+        // y el comprador vuelve a cargar la tarjeta. Un rechazo del pago nunca llega por acá.
+        const cambio = cambioDeCuenta(json);
+        if (cambio) {
+          setCuentaVigente({ base: publicKey, publicKey: cambio.config.publicKey, cuenta: cambio.config.cuenta });
+          remontarBrick();
+          setEstado({ fase: "rechazado", mensaje: cambio.mensaje, reintentable: true });
+          return;
+        }
         remontarBrick();
         setEstado({
           fase: "rechazado",
@@ -530,7 +558,7 @@ export function PagoMercadoPago({
         className={estado.fase === "cargando" ? "invisible" : procesando ? "opacity-60" : undefined}
       >
         <CardPayment
-          key={`${tipoTarjeta}-${intento}`}
+          key={`${key}-${tipoTarjeta}-${intento}`}
           initialization={initialization}
           customization={customization}
           onSubmit={onSubmit}

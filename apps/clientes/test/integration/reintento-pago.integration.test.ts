@@ -3,6 +3,11 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   crearPedido,
+  cuentaDelPedido,
+  fijarReferenciaIntento,
+  getPedidoParaPago,
+  intentoAbiertoDelPedido,
+  intentosPendientesDeReconciliar,
   pedidoParaReintentarPago,
   registrarCobro,
   reservarIntento,
@@ -71,7 +76,7 @@ async function contarPedidos() {
 
 async function pedidoRechazado() {
   const p = await crearPedido(cliente, datos, cotizacion);
-  const r = await reservarIntento(p.id, "payway", "tarjeta");
+  const r = await reservarIntento(p.id, "payway", "tarjeta", undefined, { cuenta: "igz", cuentaPrevista: "igz" });
   if (!r || !("intentoId" in r)) throw new Error("sin intento");
   await registrarCobro(p.id, { proveedor: "payway", referencia: "ref-1", estado: "fallido", detalle: "x" }, { intentoId: r.intentoId, avisar: false });
   return p.id;
@@ -115,5 +120,43 @@ describe("pedidoParaReintentarPago", () => {
     expect(await pedidoParaReintentarPago(dueno, id, SLUGS, Date.now() + dia)).toEqual({ ok: false, motivo: "no_cobrable" });
     await getDb().execute(sql`update shop.orders set estado = 'cancelado', cancelacion_motivo = 'prueba' where id = ${id}`);
     expect(await pedidoParaReintentarPago(dueno, id, SLUGS)).toEqual({ ok: false, motivo: "no_cobrable" });
+  });
+});
+
+describe("cuenta de cobro del pedido (sucursal y la que factura si la zona la fuerza)", () => {
+  it("la exponen el pedido para pagar, la lectura por id, el intento abierto y la conciliación", async () => {
+    const p = await crearPedido(cliente, datos, cotizacion);
+    // Despacha igz y la zona fuerza que facture mdp.
+    await getDb().execute(
+      sql`update shop.orders set sucursal = 'igz', sucursal_regla = ${JSON.stringify({ v: 1, regla: "zona:test", motivo: "zona", provincia: "x", zonaId: null, sucursalZona: "igz", facturaSucursal: "mdp", lineasATraer: [] })}::jsonb where id = ${p.id}`,
+    );
+    const r = await reservarIntento(p.id, "payway", "tarjeta", undefined, { cuenta: "igz", cuentaPrevista: "igz" });
+    if (!r || !("intentoId" in r)) throw new Error("sin intento");
+    await fijarReferenciaIntento(r.intentoId, "ref-cuenta");
+
+    expect(await getPedidoParaPago(p.id, dueno)).toMatchObject({ sucursal: "igz", facturaSucursal: "mdp" });
+    expect(await cuentaDelPedido(p.id)).toEqual({ sucursal: "igz", facturaSucursal: "mdp" });
+    expect(await intentoAbiertoDelPedido(p.id, dueno)).toMatchObject({
+      proveedor: "payway",
+      referencia: "ref-cuenta",
+      sucursal: "igz",
+      facturaSucursal: "mdp",
+    });
+    const pendientes = await intentosPendientesDeReconciliar({
+      proveedor: "payway",
+      quietosDesde: new Date(Date.now() + 60_000),
+      creadosDesde: new Date(Date.now() - 60_000),
+      limite: 10,
+    });
+    expect(pendientes).toEqual([
+      expect.objectContaining({ orderId: p.id, referencia: "ref-cuenta", sucursal: "igz", facturaSucursal: "mdp" }),
+    ]);
+  });
+
+  it("pedido sin sucursal ni regla: los dos en null (rige la predeterminada)", async () => {
+    const p = await crearPedido(cliente, datos, cotizacion);
+    expect(await cuentaDelPedido(p.id)).toEqual({ sucursal: null, facturaSucursal: null });
+    expect(await getPedidoParaPago(p.id, dueno)).toMatchObject({ sucursal: null, facturaSucursal: null });
+    expect(await cuentaDelPedido("00000000-0000-4000-8000-000000000000")).toBeNull();
   });
 });

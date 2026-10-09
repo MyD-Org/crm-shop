@@ -9,10 +9,11 @@ import { idListaDelMedio } from "@/lib/lista-medio";
 import { esCompradorCuentaCorriente, procesadorDeMedio } from "@/lib/medios-pago";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { credencialesMercadoPago } from "@/lib/pagos/credenciales";
+import { cuentaParaCobrar } from "@/lib/pagos/cuentas-sucursales";
 import { MARCAS_TARJETA, marcaDeMercadoPago, nombreDeMarca } from "@/lib/pagos/marcas";
 import { consultarPlanesMP, type PlanesMP } from "@/lib/pagos/mercadopago-planes";
 import { pedidoParaCambiarMedio } from "@/lib/pedidos";
-import { permitir } from "@/lib/rate-limit";
+import { permitirAsync } from "@/lib/rate-limit";
 
 /** Respuesta: lo que el formulario de pago necesita para el desplegable "Cuotas". */
 export interface OpcionesCuotasPedido {
@@ -53,7 +54,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
-  if (!permitir(`pedido-cuotas:${quien}`, MAX_POR_MINUTO, 60_000)) {
+  if (!await permitirAsync(`pedido-cuotas:${quien}`, MAX_POR_MINUTO, 60_000)) {
     return NextResponse.json(
       { error: "Hizo demasiados intentos. Espere un minuto e inténtelo de nuevo." },
       { status: 429, headers: { "Retry-After": "60" } },
@@ -124,13 +125,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     // Planes de Mercado Pago: con BIN, los de esa tarjeta; sin BIN, los de referencia.
+    // Con la cuenta de Mercado Pago del pedido (la de su sucursal): los planes y la public key son de ella.
     let planes: PlanesMP | null = null;
     let mpDisponible = false;
-    if (procesadorId === "mercadopago") {
+    const cuentaMp = procesadorId === "mercadopago" ? await cuentaParaCobrar("mercadopago", { ...pedido, id }) : null;
+    if (cuentaMp?.ok) {
       const r = await consultarPlanesMP(
         bin
-          ? { amount: precioUnPago, bin, ctx: { sucursal: pedido.sucursal } }
-          : { amount: precioUnPago, paymentMethodId: MARCA_REFERENCIA_MP, ctx: { sucursal: pedido.sucursal } },
+          ? { amount: precioUnPago, bin, cuenta: cuentaMp.cuenta }
+          : { amount: precioUnPago, paymentMethodId: MARCA_REFERENCIA_MP, cuenta: cuentaMp.cuenta },
       );
       mpDisponible = r.ok;
       planes = r.ok ? r.entrada : null;
@@ -148,7 +151,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       planesDeLaTarjeta: Boolean(bin),
     });
 
-    const publicKey = procesadorId === "mercadopago" ? credencialesMercadoPago({ sucursal: pedido.sucursal }).publicKey : null;
+    const publicKey = cuentaMp?.ok ? credencialesMercadoPago(cuentaMp.cuenta).publicKey : null;
     const respuesta: OpcionesCuotasPedido = {
       procesador: { id: procesadorId, nombre: medio.nombre },
       ...(publicKey ? { publicKey } : {}),

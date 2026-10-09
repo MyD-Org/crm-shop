@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
-import { VENTANA_PAGO_MS, getPedidoParaPago, motivoNoCobrable } from "@/lib/pedidos";
+import { VENTANA_PAGO_MS, getPedidoParaPago, motivoNoCobrable, registrarCuentaRechazada } from "@/lib/pedidos";
 import { procesadorDeMedio } from "@/lib/medios-pago";
-import { permitir } from "@/lib/rate-limit";
-import { crearPreferencia, mercadoPagoConfigurado } from "@/lib/pagos/mercadopago";
+import { permitirAsync } from "@/lib/rate-limit";
+import { crearPreferencia } from "@/lib/pagos/mercadopago";
+import { procesadorConfigurado } from "@/lib/pagos";
+import { candidatasDelPedido } from "@/lib/pagos/cuentas-sucursales";
+import { esCredencialRechazada } from "@/lib/pagos/tipos";
 import { armarPreferencia } from "@/lib/pagos/mercadopago-preferencia";
 import { rechazoPorOpcionDeCobro } from "@/lib/pagos/opcion-cobro-guard";
 
@@ -16,7 +19,9 @@ const VENTANA_MS = 5 * 60_000;
  *
  * No cobra nada: el comprador paga en el flujo de Mercado Pago, vuelve a `/checkout?pedido=<id>` y el
  * webhook (o la consulta del sondeo) registra el cobro por `registrarCobro`, por `external_reference`.
- * Monto y referencia salen SIEMPRE del pedido persistido, nunca del body.
+ * Monto y referencia salen SIEMPRE del pedido persistido, nunca del body. La preferencia se crea con
+ * la cuenta de Mercado Pago del pedido (la de su sucursal) o, si no se puede, con otra configurada; el
+ * webhook identifica la cuenta por su firma.
  */
 export async function POST(req: Request) {
   const { clerkUserId, cliente, email } = await identidadActual();
@@ -24,14 +29,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  if (!mercadoPagoConfigurado()) {
-    return NextResponse.json(
+  const sinCuenta = () =>
+    NextResponse.json(
       { error: "Los pagos en línea no están disponibles en este momento.", motivo: "mp_no_configurado" },
       { status: 409 },
     );
-  }
+  if (!procesadorConfigurado("mercadopago")) return sinCuenta();
 
-  if (!permitir(`pago-pref:${clerkUserId ?? cliente?.codigocliente}`, MAX_PEDIDOS, VENTANA_MS)) {
+  if (!await permitirAsync(`pago-pref:${clerkUserId ?? cliente?.codigocliente}`, MAX_PEDIDOS, VENTANA_MS)) {
     return NextResponse.json({ error: "Demasiados intentos. Espere unos minutos." }, { status: 429 });
   }
 
@@ -63,24 +68,48 @@ export async function POST(req: Request) {
   // La cuenta de Mercado Pago puede estar deshabilitada para el medio en el admin (migración 0073).
   const rechazoOpcion = await rechazoPorOpcionDeCobro(pedido.pagoMetodo, "mercadopago", "cuenta_mp");
   if (rechazoOpcion) return rechazoOpcion;
-  try {
-    const url = await crearPreferencia(
-      armarPreferencia({
-        pedidoId: pedido.id,
-        numero: pedido.numero,
-        total: pedido.total,
-        origen: new URL(req.url).origin,
-        emailComprador: pedido.clienteEmail ?? cliente?.email ?? email ?? undefined,
-        cuotas: pedido.cuotas,
-        venceEn: new Date(pedido.creadoEn.getTime() + VENTANA_PAGO_MS),
-      }),
-    );
-    return NextResponse.json({ url }, { headers: { "Cache-Control": "no-store" } });
-  } catch (err) {
-    console.error("[/api/pagos/mercadopago/preferencia] error:", err);
-    return NextResponse.json(
-      { error: "No pudimos habilitar el pago con cuenta de Mercado Pago. Puede pagar con tarjeta." },
-      { status: 502 },
-    );
+  /**
+   * Cuentas usables, la prevista primero (`candidatasDelPedido`). Acá no hay tarjeta tokenizada: si Mercado
+   * Pago rechaza las credenciales de una cuenta (401/403), se prueba la siguiente en el mismo request, sin
+   * que el comprador tenga que hacer nada. Cualquier otro error corta (no se repite con otra cuenta).
+   */
+  const { prevista, candidatas } = await candidatasDelPedido("mercadopago", pedido);
+  const usables = candidatas.filter((c) => c.configurada && !c.rechazada).map((c) => c.cuenta);
+  if (usables.length === 0) return sinCuenta();
+  for (const cuenta of usables) {
+    try {
+      const url = await crearPreferencia(
+        cuenta,
+        armarPreferencia({
+          cuenta,
+          pedidoId: pedido.id,
+          numero: pedido.numero,
+          total: pedido.total,
+          origen: new URL(req.url).origin,
+          emailComprador: pedido.clienteEmail ?? cliente?.email ?? email ?? undefined,
+          cuotas: pedido.cuotas,
+          venceEn: new Date(pedido.creadoEn.getTime() + VENTANA_PAGO_MS),
+        }),
+      );
+      if (cuenta !== prevista) {
+        console.warn(`[pagos] preferencia con otra cuenta pedido=${pedido.id} prevista=${prevista} cuenta=${cuenta}`);
+      }
+      return NextResponse.json({ url }, { headers: { "Cache-Control": "no-store" } });
+    } catch (err) {
+      if (esCredencialRechazada(err)) {
+        console.error(`[pagos] cuenta_rechazada procesador=mercadopago cuenta=${cuenta} pedido=${pedido.id} status=${err.status}`);
+        // Evidencia en el pedido: el cobro con tarjeta tampoco vuelve a probar esta cuenta.
+        await registrarCuentaRechazada(pedido.id, "mercadopago", cuenta, prevista, "servidor").catch((e) =>
+          console.error("[/api/pagos/mercadopago/preferencia] no se pudo registrar la cuenta rechazada:", e),
+        );
+        continue;
+      }
+      console.error("[/api/pagos/mercadopago/preferencia] error:", err);
+      break;
+    }
   }
+  return NextResponse.json(
+    { error: "No pudimos habilitar el pago con cuenta de Mercado Pago. Puede pagar con tarjeta." },
+    { status: 502 },
+  );
 }

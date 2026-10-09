@@ -12,9 +12,7 @@ import { NO_LLEGO_MS } from "./intento-abierto";
 const intentosPendientesDeReconciliar = vi.fn();
 const registrarCobro = vi.fn();
 
-vi.mock("./mercadopago", () => ({
-  mercadoPago: { id: "mercadopago", configurado: () => false, consultarPago: vi.fn() },
-}));
+// Sin cuentas de Mercado Pago en el entorno: sólo Payway.
 vi.mock("@/lib/pedidos", () => ({
   intentosPendientesDeReconciliar: (...a: unknown[]) => intentosPendientesDeReconciliar(...a),
   registrarCobro: (...a: unknown[]) => registrarCobro(...a),
@@ -27,17 +25,21 @@ const fetchMock = vi.fn();
 const json = (status: number, cuerpo: unknown) =>
   new Response(JSON.stringify(cuerpo), { status, headers: { "Content-Type": "application/json" } });
 
-const candidato = (minutos: number) => ({
+const candidato = (minutos: number, sucursal = "mdp") => ({
   orderId: "p1",
   referencia: REF,
   creadoEn: new Date(Date.now() - minutos * 60_000),
+  sucursal,
+  facturaSucursal: null,
 });
 
 beforeEach(() => {
   for (const f of [fetchMock, intentosPendientesDeReconciliar, registrarCobro]) f.mockReset();
   vi.stubGlobal("fetch", fetchMock);
-  vi.stubEnv("PAYWAY_API_PRIVATE_KEY", "clave-privada-de-prueba");
-  vi.stubEnv("PAYWAY_API_PUBLIC_KEY", "clave-publica-de-prueba");
+  vi.stubEnv("PAYWAY_API_PRIVATE_KEY_MDP", "clave-privada-de-prueba");
+  vi.stubEnv("PAYWAY_API_PUBLIC_KEY_MDP", "clave-publica-de-prueba");
+  vi.stubEnv("PAYWAY_API_PRIVATE_KEY_IGZ", "clave-privada-de-otra-cuenta");
+  vi.stubEnv("PAYWAY_API_PUBLIC_KEY_IGZ", "clave-publica-de-otra-cuenta");
   vi.stubEnv("PAYWAY_BASE_URL", "https://payway.example");
   vi.spyOn(console, "error").mockImplementation(() => {});
   registrarCobro.mockResolvedValue(true);
@@ -97,8 +99,17 @@ describe("reconciliarPagosPendientes — payway", () => {
     expect(registrarCobro).toHaveBeenCalledTimes(1);
   });
 
-  it("sin credenciales de Payway se omite: no consulta la base ni la red", async () => {
-    vi.stubEnv("PAYWAY_API_PRIVATE_KEY", "");
+  it("consulta con la key privada de la cuenta del pedido (un 504 de mdp se concilia con mdp, no con igz)", async () => {
+    intentosPendientesDeReconciliar.mockResolvedValue([candidato(30, "mdp"), { ...candidato(30, "igz"), orderId: "p2" }]);
+    fetchMock.mockImplementation(async () => json(200, listadoUnPago));
+    await correr();
+    const claves = (fetchMock.mock.calls as [string, RequestInit][]).map(([, i]) => (i.headers as Record<string, string>).apikey);
+    expect(claves).toEqual(["clave-privada-de-prueba", "clave-privada-de-otra-cuenta"]);
+  });
+
+  it("sin credenciales de Payway en ninguna cuenta se omite: no consulta la base ni la red", async () => {
+    vi.stubEnv("PAYWAY_API_PRIVATE_KEY_MDP", "");
+    vi.stubEnv("PAYWAY_API_PRIVATE_KEY_IGZ", "");
     const r = await correr();
     expect(r).toEqual({ revisados: 0, actualizados: 0, errores: 0 });
     expect(intentosPendientesDeReconciliar).not.toHaveBeenCalled();

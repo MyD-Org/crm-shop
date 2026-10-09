@@ -12,7 +12,7 @@ const permitir = vi.fn();
 const cookieGet = vi.fn();
 const cookieSet = vi.fn();
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
-vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
+vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async (...a: unknown[]) => permitir(...a) }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: (n: string) => cookieGet(n), set: (...a: unknown[]) => cookieSet(...a) }),
 }));

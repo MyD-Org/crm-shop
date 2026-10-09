@@ -21,10 +21,10 @@
  * caso es dos updates iguales, no un doble cobro.
  */
 
-import { idsProveedores, proveedorPago } from "./index";
-import type { ProveedorPago } from "./tipos";
+import { idsProveedores, procesadorConfigurado } from "./index";
 import { intentosPendientesDeReconciliar } from "@/lib/pedidos";
 import { conciliarIntento } from "./conciliar-intento";
+import { proveedorDeIntento } from "./cuentas-sucursales";
 
 /**
  * Antigüedad mínima desde el último toque al pago antes de re-consultar. Menos
@@ -61,9 +61,10 @@ interface Opciones {
 }
 
 /**
- * Recorre los pendientes vivos de cada proveedor registrado (o sólo del indicado) y les pregunta al
- * proveedor de cada intento cómo terminaron. Un proveedor que no está en el registro se omite sin
- * romper el lote. Devuelve el conteo para el log del cron.
+ * Recorre los pendientes vivos de cada proveedor registrado (o sólo del indicado) y le pregunta al
+ * proveedor de cada intento, LIGADO A LA CUENTA DEL INTENTO (la congelada al reservarlo; la del pedido si es
+ * anterior a la 0035), cómo terminaron. Un proveedor que no está
+ * en el registro se omite sin romper el lote. Devuelve el conteo para el log del cron.
  */
 export async function reconciliarPagosPendientes(
   opciones: Opciones = {},
@@ -72,12 +73,10 @@ export async function reconciliarPagosPendientes(
   const ids = proveedor ? [proveedor] : idsProveedores();
   const total: ResultadoReconciliacion = { revisados: 0, actualizados: 0, errores: 0 };
   for (const id of ids) {
-    const p = proveedorPago(id);
-    if (!p) continue;
-    // Sin credenciales no se puede consultar: cada intento daría error. (Tampoco hay nada que
-    // reconciliar de un procesador que nunca se activó.)
-    if (p.configurado && !p.configurado()) continue;
-    const r = await reconciliarProveedor(p, limite);
+    // Sin ninguna cuenta configurada no se puede consultar: cada intento daría error. (Tampoco hay
+    // nada que reconciliar de un procesador que nunca se activó.)
+    if (!procesadorConfigurado(id)) continue;
+    const r = await reconciliarProveedor(id, limite);
     total.revisados += r.revisados;
     total.actualizados += r.actualizados;
     total.errores += r.errores;
@@ -86,7 +85,7 @@ export async function reconciliarPagosPendientes(
 }
 
 async function reconciliarProveedor(
-  proveedor: ProveedorPago,
+  procesadorId: string,
   limite: number,
 ): Promise<ResultadoReconciliacion> {
   const ahora = Date.now();
@@ -94,7 +93,7 @@ async function reconciliarProveedor(
   const corteAntiguedad = new Date(ahora - VENTANA_MS);
 
   const candidatos = await intentosPendientesDeReconciliar({
-    proveedor: proveedor.id,
+    proveedor: procesadorId,
     quietosDesde: corteWebhook,
     creadosDesde: corteAntiguedad,
     noLlegoDesde: new Date(ahora - VENTANA_NO_LLEGO_MS),
@@ -103,6 +102,8 @@ async function reconciliarProveedor(
 
   let actualizados = 0;
   let errores = 0;
+  /** Cuentas sin credenciales ya logueadas en esta corrida: un log por cuenta, no por intento. */
+  const sinCredenciales = new Set<string>();
 
   /**
    * Secuencial a propósito: en paralelo saturaríamos al proveedor con ráfagas que
@@ -112,6 +113,18 @@ async function reconciliarProveedor(
    */
   for (const c of candidatos) {
     try {
+      // Con las credenciales de la cuenta del intento (la que lo cobró), nunca con otra, aunque la cuenta
+      // prevista del pedido hoy resolviera a otra o la del intento rechace sus credenciales.
+      const proveedor = await proveedorDeIntento({ proveedor: procesadorId, ...c });
+      if (!proveedor?.configurado()) {
+        errores++;
+        const cuenta = proveedor?.cuenta ?? "sin cuenta";
+        if (!sinCredenciales.has(cuenta)) {
+          sinCredenciales.add(cuenta);
+          console.error(`[reconciliar] ${procesadorId}: la cuenta ${cuenta} no tiene credenciales; sus intentos quedan pendientes`);
+        }
+        continue;
+      }
       const { cambio } = await conciliarIntento(proveedor, c);
       if (cambio) actualizados++;
     } catch (err) {

@@ -667,6 +667,8 @@ describe("escrituras del flujo de pago", () => {
     });
   });
 
+  const CUENTAS = { cuenta: "igz", cuentaPrevista: "mdp" };
+
   it("reservarIntento: bloquea el pedido y no abre otro si hay uno abierto", async () => {
     const creado = new Date("2026-09-23T12:00:00Z");
     grabadora = dbGrabadora((c) => {
@@ -674,7 +676,7 @@ describe("escrituras del flujo de pago", () => {
       if (c.sql.startsWith("select")) return [["i1", "mercadopago", "ref-1", creado.toISOString()]];
       return [];
     });
-    const r = await reservarIntento(ID, "mercadopago", "tarjeta");
+    const r = await reservarIntento(ID, "mercadopago", "tarjeta", undefined, CUENTAS);
     expect(r).toMatchObject({ abierto: { id: "i1", referencia: "ref-1" } });
     expect(grabadora.consultas[0].sql).toContain("for update");
     esperaTenant(grabadora.consultas[0]);
@@ -684,7 +686,7 @@ describe("escrituras del flujo de pago", () => {
 
   it("reservarIntento: re-chequea el estado con el lock; un pedido cancelado no abre intento", async () => {
     grabadora = dbGrabadora((c) => (c.sql.includes("for update") ? [[ID, "cancelado"]] : []));
-    expect(await reservarIntento(ID, "mercadopago", "tarjeta")).toEqual({ noCobrable: true });
+    expect(await reservarIntento(ID, "mercadopago", "tarjeta", undefined, CUENTAS)).toEqual({ noCobrable: true });
     expect(grabadora.consultas.some((c) => c.sql.startsWith("insert"))).toBe(false);
   });
 
@@ -694,9 +696,16 @@ describe("escrituras del flujo de pago", () => {
       if (c.sql.startsWith("insert")) return [["nuevo"]];
       return [];
     });
-    expect(await reservarIntento(ID, "mercadopago", "tarjeta")).toEqual({ intentoId: "nuevo" });
+    expect(await reservarIntento(ID, "mercadopago", "tarjeta", undefined, CUENTAS)).toEqual({ intentoId: "nuevo" });
     const insert = grabadora.consultas.find((c) => c.sql.startsWith("insert"))!;
-    expect(valoresInsertados(insert)).toMatchObject({ tenant_id: "tenant-a", order_id: ID, medio: "tarjeta" });
+    // La cuenta de cobro y la prevista quedan congeladas en el intento.
+    expect(valoresInsertados(insert)).toMatchObject({
+      tenant_id: "tenant-a",
+      order_id: ID,
+      medio: "tarjeta",
+      cuenta: "igz",
+      cuenta_prevista: "mdp",
+    });
   });
 
   it("registrarIntentoFallido", async () => {

@@ -142,7 +142,7 @@ describe("asegurarItemsEnCuenta: alta del ítem al facturar, en los dos sentidos
     const r = await asegurarItemsEnCuenta(A, cfg, IGZ, [linea("mdp:900", { precioUnitario: 1234.5, ivaPorcentaje: 21 })], f.deps)
     expect(r).toMatchObject({ ok: true, creados: ["mdp:900"] })
     expect(f.creaciones).toEqual([
-      { cuenta: "igz", input: { name: "Producto SOLO-1", code: "SOLO-1", price: 1234.5, taxId: "1" } },
+      { cuenta: "igz", input: { name: "Producto SOLO-1", code: "SOLO-1", price: 1234.5, taxId: "1", brand: null } },
     ])
     const id = r.ok ? r.ids.get("mdp:900") : null
     expect(id).toBe("9000")

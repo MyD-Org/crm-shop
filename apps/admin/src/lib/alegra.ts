@@ -488,14 +488,19 @@ function mapRawCategory(raw: Record<string, unknown>): AlegraCategory {
  * Alegra no tiene campo de marca: cada cuenta la modela como un campo personalizado. Se busca por
  * nombre sin distinguir mayúsculas ni tildes, porque el nombre lo eligió quien configuró la cuenta.
  */
+function esCampoMarca(nombre: unknown): boolean {
+  const n = String(nombre ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+  return n === "marca" || n === "brand"
+}
+
 function marcaDeCustomFields(raw: Record<string, unknown>): string | null {
   const campos = Array.isArray(raw.customFields) ? (raw.customFields as Record<string, unknown>[]) : []
   for (const c of campos) {
-    const nombre = String(c?.name ?? "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-    if (nombre === "marca" || nombre === "brand") {
+    if (esCampoMarca(c?.name)) {
       const valor = String(c?.value ?? "").trim()
       if (valor) return valor
     }
@@ -972,13 +977,54 @@ export interface AlegraItemCreateInput {
   price: number
   /** Id de impuesto de ESA cuenta (`/taxes`), o null para crear el ítem sin impuesto. */
   taxId: string | null
+  /** Marca del catálogo: va al campo adicional "MARCA" de la cuenta, si lo tiene. */
+  brand?: string | null
+}
+
+/**
+ * La cuenta exige un campo adicional que el CRM no sabe completar (o la marca, y el producto no
+ * tiene). Se corta ANTES del POST: el mensaje es para el operador (en usted).
+ */
+export class ItemCampoObligatorioError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "ItemCampoObligatorioError"
+  }
+}
+
+/**
+ * `customFields` para el alta: la marca en el campo "MARCA"/"Brand" de la cuenta (si existe y está
+ * activo). Un campo obligatorio que no se puede completar corta con `ItemCampoObligatorioError`.
+ * Pasó con MDP (2026-10-08): MARCA obligatoria -> 422 code 1822 en los dos intentos de alta.
+ */
+async function customFieldsParaAlta(config: TenantConfig, input: AlegraItemCreateInput): Promise<{ id: string; value: string }[]> {
+  const raw = (await alegraFetch(config, "/custom-fields")) as unknown
+  const campos = (Array.isArray(raw) ? (raw as Record<string, unknown>[]) : []).filter((c) => String(c?.status ?? "active") === "active")
+  const marca = input.brand?.trim() || null
+  const salida: { id: string; value: string }[] = []
+  for (const c of campos) {
+    const obligatorio = Boolean((c?.settings as { isRequired?: unknown } | undefined)?.isRequired)
+    if (esCampoMarca(c?.name)) {
+      if (marca) salida.push({ id: String(c.id), value: marca })
+      else if (obligatorio) {
+        throw new ItemCampoObligatorioError(
+          `No se puede dar de alta "${input.name}" en Alegra: la cuenta exige la marca y el producto no tiene. Cárguela en Alegra o en el catálogo y vuelva a intentarlo.`,
+        )
+      }
+    } else if (obligatorio) {
+      throw new ItemCampoObligatorioError(
+        `No se puede dar de alta "${input.name}" en Alegra: la cuenta exige el campo adicional "${String(c?.name ?? "")}". Dé de alta el producto en Alegra y vuelva a intentarlo.`,
+      )
+    }
+  }
+  return salida
 }
 
 /**
  * ¿Se crea el ítem como inventariable (con stock inicial 0)? Abierto O4 del design: no está
  * verificado que Alegra AR deje facturar un inventariable con stock 0 recién creado. Si el alta
- * como inventariable falla con un 4xx, `createItem` reintenta SIN inventario (producto no
- * inventariable): el ítem queda usable para facturar aunque no lleve stock. Cambiar esta constante
+ * como inventariable falla con un 4xx, `createItem` reintenta como no inventariable (solo con la
+ * unidad: Alegra AR la exige siempre, code 3140): el ítem queda usable para facturar aunque no lleve stock. Cambiar esta constante
  * a `false` fuerza siempre el alta no inventariable.
  */
 export const CREAR_ITEM_INVENTARIABLE = true
@@ -990,21 +1036,26 @@ export const CREAR_ITEM_INVENTARIABLE = true
  */
 export async function createItem(config: TenantConfig, input: AlegraItemCreateInput): Promise<AlegraProduct> {
   if (config.alegraMock) return mockCreateItem(input)
+  const customFields = await customFieldsParaAlta(config, input)
   const base: Record<string, unknown> = {
     name: input.name,
     price: input.price,
     ...(input.code ? { reference: input.code } : {}),
     ...(input.taxId ? { tax: [{ id: Number.isNaN(Number(input.taxId)) ? input.taxId : Number(input.taxId) }] } : {}),
+    ...(customFields.length > 0 ? { customFields } : {}),
   }
   const crear = async (body: Record<string, unknown>) =>
     mapRawItem((await alegraFetch(config, "/items", undefined, { method: "POST", body })) as Record<string, unknown>)
-  if (!CREAR_ITEM_INVENTARIABLE) return crear({ ...base, type: "product" })
+  const noInventariable = { ...base, type: "product", inventory: { unit: "unit" } }
+  if (!CREAR_ITEM_INVENTARIABLE) return crear(noInventariable)
   try {
     return await crear({ ...base, type: "product", inventory: { unit: "unit", initialQuantity: 0, unitCost: 0 } })
   } catch (err) {
     // 4xx (validación): no se creó nada, es seguro reintentar como no inventariable. 429 y 5xx no.
     if (err instanceof AlegraHttpError && err.status >= 400 && err.status < 500 && err.status !== 429) {
-      return crear({ ...base, type: "product" })
+      // Sin este log el error del primer intento se perdía y solo quedaba el del reintento.
+      console.warn(JSON.stringify({ event: "alegra_item_inventariable_rechazado", tenant: config.id, error: err.message }))
+      return crear(noInventariable)
     }
     throw err
   }

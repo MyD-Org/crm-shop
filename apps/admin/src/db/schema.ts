@@ -1566,6 +1566,9 @@ export const listaPrecioCondiciones = pgTable(
     // Tarjetas a las que aplica esa cantidad de cuotas (0074): ids de src/lib/marcas-tarjeta.ts.
     // NULL = todas. Drift solo-SQL: CHECK (null, o con cuotas, 1..20 ids [a-z0-9]+).
     marcas: text("marcas").array(),
+    // Forma de pago a la que aplica la lista del pago único (0076): credito | debito | cuenta_mp.
+    // NULL = todas. Drift solo-SQL: CHECK (null, o con cuotas NULL y valor del conjunto).
+    forma: text("forma"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1575,7 +1578,12 @@ export const listaPrecioCondiciones = pgTable(
       columns: [t.tenantId, t.medioSlug],
       foreignColumns: [mediosPagoShop.tenantId, mediosPagoShop.slug],
     }).onDelete("cascade"),
-    uniqueIndex("lista_precio_condiciones_uniq").on(t.tenantId, t.medioSlug, sql`coalesce(${t.cuotas}, 0)`),
+    uniqueIndex("lista_precio_condiciones_uniq").on(
+      t.tenantId,
+      t.medioSlug,
+      sql`coalesce(${t.cuotas}, 0)`,
+      sql`coalesce(${t.forma}, '')`,
+    ),
     index("lista_precio_condiciones_lista_idx").on(t.listaId),
   ],
 )

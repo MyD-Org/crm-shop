@@ -29,7 +29,9 @@ const UUID_LISTA = "5b0c0a7e-1d6e-4c1b-8e2a-6c1f4d9a0b11";
 describe("leerMediosPago", () => {
   it("pide sólo columnas declaradas, del tenant, ordenadas; la lista sale de las condiciones (pago único)", async () => {
     const g = dbGrabadora((c) =>
-      c.sql.includes("lista_precio_condiciones")
+      c.sql.includes('"forma"')
+        ? []
+        : c.sql.includes("lista_precio_condiciones")
         ? [["efectivo", UUID_LISTA, null]]
         : c.sql.includes("opciones_cobro")
           ? [["efectivo", ["credito", "debito", "cuenta_mp"]]]
@@ -96,7 +98,9 @@ describe("leerMediosPago", () => {
 
   it("un medio sin condición no tiene lista: rige la de referencia", async () => {
     const g = dbGrabadora((c) =>
-      c.sql.includes("lista_precio_condiciones")
+      c.sql.includes('"forma"')
+        ? []
+        : c.sql.includes("lista_precio_condiciones")
         ? [["otro", UUID_LISTA, null]]
         : [["efectivo", "Efectivo", "", true, true, true, false, 0, false, false, "publico"]],
     );
@@ -107,7 +111,7 @@ describe("leerMediosPago", () => {
     const L3 = "00000000-0000-4000-8000-000000000003";
     const L6 = "00000000-0000-4000-8000-000000000006";
     const g = dbGrabadora((c) =>
-      c.sql.includes('"marcas"')
+      c.sql.includes('"forma"') || c.sql.includes('"marcas"')
         ? []
         : c.sql.includes("lista_precio_condiciones")
           ? [
@@ -166,7 +170,9 @@ describe("formas de pago del cobro en línea (migración 0073 del CRM)", () => {
   const MP = ["mercadopago", "Mercado Pago", "", true, true, true, true, 0, false, false, "publico"];
   const conOpciones = (opciones: (c: { sql: string }) => unknown[][]) =>
     dbGrabadora((c) =>
-      c.sql.includes("lista_precio_condiciones") ? [] : c.sql.includes("opciones_cobro") ? opciones(c) : [MP],
+      c.sql.includes('"forma"')
+        ? []
+        : c.sql.includes("lista_precio_condiciones") ? [] : c.sql.includes("opciones_cobro") ? opciones(c) : [MP],
     );
 
   it("las lee en una consulta aparte, del tenant; desconocidas se descartan y vacío queda vacío", async () => {
@@ -208,7 +214,9 @@ describe("marcas de las condiciones de cuotas (migración 0074 del CRM)", () => 
   const L6 = "00000000-0000-4000-8000-000000000006";
   const conMarcas = (marcas: (c: { sql: string }) => unknown[][]) =>
     dbGrabadora((c) =>
-      c.sql.includes('"marcas"')
+      c.sql.includes('"forma"')
+        ? []
+        : c.sql.includes('"marcas"')
         ? marcas(c)
         : c.sql.includes("lista_precio_condiciones")
           ? [
@@ -234,7 +242,7 @@ describe("marcas de las condiciones de cuotas (migración 0074 del CRM)", () => 
     expect(consulta.sql).toContain('"public"."lista_precio_condiciones"');
     expect(consulta.params).toContain("tenant-ejemplo");
     // La consulta de condiciones no la pide: una columna ausente no puede tirar las condiciones.
-    expect(g.consultas.filter((c) => c.sql.includes("lista_precio_condiciones") && !c.sql.includes('"marcas"'))).toHaveLength(1);
+    expect(g.consultas.filter((c) => c.sql.includes("lista_precio_condiciones") && !c.sql.includes('"marcas"') && !c.sql.includes('"forma"'))).toHaveLength(1);
   });
 
   it("una restricción que queda vacía tras filtrar hace la condición inaccesible: no se ofrece, con aviso", async () => {
@@ -322,4 +330,78 @@ describe("mensaje_confirmacion y WhatsApp: tolerantes a la migración ausente", 
     expect(await leerWhatsappSucursal("igz")).toBeNull();
     err.mockRestore();
   });
+});
+
+describe("listas por forma de pago (migración 0076 del CRM)", () => {
+  const MP = ["mercadopago", "Mercado Pago", "", true, true, true, true, 0, false, false, "publico"];
+  const L_TODAS = "00000000-0000-4000-8000-0000000000a1";
+  const L_DEBITO = "00000000-0000-4000-8000-0000000000b2";
+  const L_CREDITO = "00000000-0000-4000-8000-0000000000c3";
+  const ID_TODAS = "id-todas";
+  const ID_DEBITO = "id-debito";
+  const ID_RARA = "id-rara";
+  // [medioSlug, listaId, cuotas, montoMinimo, id]
+  const condiciones = [
+    ["mercadopago", L_TODAS, null, null, ID_TODAS],
+    ["mercadopago", L_DEBITO, null, null, ID_DEBITO],
+    ["mercadopago", L_CREDITO, null, null, ID_RARA],
+  ];
+  const conFormas = (formas: (c: { sql: string }) => unknown[][]) =>
+    dbGrabadora((c) =>
+      c.sql.includes('"forma"')
+        ? formas(c)
+        : c.sql.includes("lista_precio_condiciones")
+          ? condiciones
+          : c.sql.includes("opciones_cobro")
+            ? []
+            : [MP],
+    );
+
+  it("una fila con forma no pisa la lista del medio y va a listasPorForma; las desconocidas se ignoran", async () => {
+    const g = conFormas(() => [
+      [ID_DEBITO, "mercadopago", L_DEBITO, "debito"],
+      [ID_RARA, "mercadopago", L_CREDITO, "efectivo"],
+    ]);
+    const [mp] = await leerMediosPago(g.db as never);
+    expect(mp.idListaPrecios).toBe(L_TODAS);
+    expect(mp.listasPorForma).toEqual({ debito: L_DEBITO });
+    const consulta = g.consultas.find((c) => c.sql.includes('"forma"'))!;
+    expect(consulta.sql).toContain('"public"."lista_precio_condiciones"');
+    expect(consulta.sql).toContain('"forma" is not null');
+    expect(consulta.params).toContain("tenant-ejemplo");
+  });
+
+  it("con filas por forma y sin fila de todas las formas, el medio queda sin lista propia", async () => {
+    const g = dbGrabadora((c) =>
+      c.sql.includes('"forma"')
+        ? [[ID_DEBITO, "mercadopago", L_DEBITO, "debito"]]
+        : c.sql.includes("lista_precio_condiciones")
+          ? [["mercadopago", L_DEBITO, null, null, ID_DEBITO]]
+          : c.sql.includes("opciones_cobro")
+            ? []
+            : [MP],
+    );
+    const [mp] = await leerMediosPago(g.db as never);
+    expect(mp.idListaPrecios).toBeNull();
+    expect(mp.listasPorForma).toEqual({ debito: L_DEBITO });
+  });
+
+  it("columna ausente (42703): idéntico a antes, sin listasPorForma", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const g = conFormas(() => {
+      throw Object.assign(new Error('column "forma" does not exist'), { code: "42703" });
+    });
+    const [mp] = await leerMediosPago(g.db as never);
+    expect(mp).not.toHaveProperty("listasPorForma");
+    expect(mp.idListaPrecios).toBe(L_CREDITO) // sin la columna cada fila de pago único pisa a la anterior: gana la última, como siempre;
+    expect(aviso).toHaveBeenCalled();
+    aviso.mockRestore();
+  });
+
+  it("sin filas por forma, el medio no trae listasPorForma", async () => {
+    const g = conFormas(() => []);
+    const [mp] = await leerMediosPago(g.db as never);
+    expect(mp).not.toHaveProperty("listasPorForma");
+  });
+
 });

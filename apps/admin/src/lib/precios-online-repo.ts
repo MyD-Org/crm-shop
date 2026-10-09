@@ -380,6 +380,8 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
             eq(listaPrecioCondiciones.tenantId, tenantId),
             eq(listaPrecioCondiciones.medioSlug, medioSlug),
             cuotas === null ? sql`${listaPrecioCondiciones.cuotas} IS NULL` : eq(listaPrecioCondiciones.cuotas, cuotas),
+            // Sólo la fila de todas las formas (0076): las filas por forma no se tocan acá.
+            sql`${listaPrecioCondiciones.forma} IS NULL`,
           ),
         )
       const objeto = `condicion:${medioSlug}:${cuotas ?? 0}`

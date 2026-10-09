@@ -533,6 +533,13 @@
       "when": 1792929200000,
       "tag": "0075_portal_otps_sesiones_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793015600000,
+      "tag": "0076_lista_condiciones_forma",
+      "breakpoints": true
     }
   ]
 }

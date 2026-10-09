@@ -1711,6 +1711,8 @@ export async function pedidoPendienteMasReciente(
   total: number;
   cuotas: number | null;
   pagoMetodo: string;
+  /** Forma de pago congelada (crédito, débito, cuenta MP); null = sin precios por forma o pedido anterior. */
+  formaCobro: OpcionCobro | null;
   /** Lo que compra el pedido, para compararlo con el carrito (que sigue lleno hasta el cobro). */
   lineas: { id: string; qty: number }[];
   /** Hay un cobro ya enviado al procesador y sin resolver: el checkout retoma "Estamos confirmando su pago". */
@@ -1725,6 +1727,7 @@ export async function pedidoPendienteMasReciente(
       total: orders.total,
       cuotas: orders.cuotas,
       pagoMetodo: orders.pagoMetodo,
+      formaCobro: orders.formaCobro,
     })
     .from(orders)
     .where(
@@ -1752,6 +1755,7 @@ type FilaRescate = {
   total: string | null;
   cuotas: number | null;
   pagoMetodo: string;
+  formaCobro: string | null;
 };
 
 /** Completa un pedido a retomar con sus líneas y si ya hay un cobro enviado sin resolver. */
@@ -1778,6 +1782,7 @@ async function armarRescate(fila: FilaRescate) {
     total: num(fila.total),
     cuotas: fila.cuotas,
     pagoMetodo: fila.pagoMetodo,
+    formaCobro: leerForma(fila.formaCobro),
     lineas: lineas.map((l) => ({ id: l.id, qty: num(l.qty) })),
     pagoEnCurso: Boolean(enCurso),
   };
@@ -1810,6 +1815,7 @@ export async function pedidoParaReintentarPago(
       total: orders.total,
       cuotas: orders.cuotas,
       pagoMetodo: orders.pagoMetodo,
+      formaCobro: orders.formaCobro,
       pagoEstado: orders.pagoEstado,
       estado: orders.estado,
       createdAt: orders.createdAt,

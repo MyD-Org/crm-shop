@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MedioPago } from "./medios-pago";
-import { hayPreciosPorForma, idListaDelMedio, listaDelPagoUnico, pagoParaCotizar, resolverForma } from "./lista-medio";
+import { formaInicialDelMedio, hayPreciosPorForma, idListaDelMedio, listaDelPagoUnico, pagoParaCotizar, resolverForma } from "./lista-medio";
 
 const medio = (o: Partial<MedioPago>): MedioPago => ({
   slug: "transferencia",
@@ -244,5 +244,22 @@ describe("pagoParaCotizar con forma", () => {
 
   it("sin forma, igual que antes", () => {
     expect(pagoParaCotizar([m], "retiro", m)).toEqual({ listaKey: "A", pagoMetodo: "mercadopago" });
+  });
+});
+
+describe("formaInicialDelMedio (la forma con la que nace el pedido)", () => {
+  it("sin precios distintos por forma: null (el pedido no valida la forma)", () => {
+    expect(formaInicialDelMedio(mp())).toBeNull();
+    expect(formaInicialDelMedio(mp({ listasPorForma: { debito: "A" } }))).toBeNull();
+  });
+
+  it("con precios distintos: la primera forma que el medio ofrece, la misma que elige resolverForma", () => {
+    const m = mp({ listasPorForma: { debito: "B" } });
+    expect(formaInicialDelMedio(m)).toBe("credito");
+    expect(resolverForma(m, undefined)).toMatchObject({ ok: true, forma: formaInicialDelMedio(m) });
+    const soloDebito = mp({ opcionesCobro: ["debito", "cuenta_mp"], listasPorForma: { cuenta_mp: "B" } });
+    expect(formaInicialDelMedio(soloDebito)).toBe("debito");
+    expect(resolverForma(soloDebito, undefined)).toMatchObject({ ok: true, forma: "debito" });
+    expect(formaInicialDelMedio(payway({ listasPorForma: { debito: "B" } }))).toBe("credito");
   });
 });

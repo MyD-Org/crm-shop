@@ -266,3 +266,114 @@ describe("cuotas sin interés (rebanada D)", () => {
     });
   });
 });
+
+describe("listas por forma de pago (change listas-por-forma-de-pago)", () => {
+  // Referencia 100.000; crédito L1 (90.000), débito L5 (80.000), cuenta MP L5.
+  const precios = [
+    { idPriceList: "1", name: "General", price: 100000, main: true },
+    { idPriceList: "L1", name: "Lista 1", price: 90000 },
+    { idPriceList: "L5", name: "Lista 5", price: 80000 },
+    { idPriceList: "L6", name: "Lista 6", price: 70000 },
+  ];
+  const mp = (extra: Partial<MedioPago> = {}) =>
+    medio("mercadopago", { cobroOnline: true, destacarEnCatalogo: true, mostrarEnFicha: true, ...extra });
+  const pw = (extra: Partial<MedioPago> = {}) =>
+    medio("payway", { cobroOnline: true, destacarEnCatalogo: true, mostrarEnFicha: true, nombre: "Payway", ...extra });
+
+  it("sin filas por forma: salida idéntica a la de siempre (sin listasPorForma ni forma)", () => {
+    const sel = seleccionarMediosPrecio([mp({ idListaPrecios: "L1" })], false);
+    expect(sel.destacado).toEqual({ slug: "mercadopago", nombre: "MERCADOPAGO", idListaPrecios: "L1" });
+    const r = armarPreciosMedios(precios, null, sel);
+    expect(r.precioMedio).toEqual({ slug: "mercadopago", nombre: "MERCADOPAGO", price: 90000 });
+    expect(r.preciosMedios).toHaveLength(1);
+    expect(r.preciosMedios?.[0].forma).toBeUndefined();
+  });
+
+  it("un medio solo con listas por forma (sin lista del medio) es elegible", () => {
+    const sel = seleccionarMediosPrecio([mp({ idListaPrecios: null, listasPorForma: { debito: "L5" } })], false);
+    expect(sel.destacado?.idListaPrecios).toBe("");
+    expect(sel.destacado?.listasPorForma).toEqual([
+      { forma: "credito", idListaPrecios: "" },
+      { forma: "debito", idListaPrecios: "L5" },
+      { forma: "cuenta_mp", idListaPrecios: "" },
+    ]);
+    expect(sel.ficha).toHaveLength(1);
+  });
+
+  it("cada forma sin lista propia hereda la del medio", () => {
+    const sel = seleccionarMediosPrecio([mp({ idListaPrecios: "L1", listasPorForma: { debito: "L5" } })], false);
+    expect(sel.destacado?.listasPorForma?.map((f) => f.idListaPrecios)).toEqual(["L1", "L5", "L1"]);
+  });
+
+  it("Payway ofrece solo crédito y débito; una fila de cuenta MP se ignora", () => {
+    const sel = seleccionarMediosPrecio([pw({ idListaPrecios: null, listasPorForma: { debito: "L5", cuenta_mp: "L6" } })], false);
+    expect(sel.destacado?.listasPorForma?.map((f) => f.forma)).toEqual(["credito", "debito"]);
+    const soloCuenta = seleccionarMediosPrecio([pw({ idListaPrecios: null, listasPorForma: { cuenta_mp: "L6" } })], false);
+    expect(soloCuenta.destacado).toBeNull();
+  });
+
+  it("otro medio que no es de Mercado Pago ni de Payway ignora las listas por forma", () => {
+    const sel = seleccionarMediosPrecio([medio("transferencia", { destacarEnCatalogo: true, idListaPrecios: null, listasPorForma: { debito: "L5" } })], false);
+    expect(sel.destacado).toBeNull();
+  });
+
+  it("card: la lista del medio (forma NULL) gana aunque una forma sea más barata", () => {
+    const sel = seleccionarMediosPrecio([mp({ idListaPrecios: "L1", listasPorForma: { debito: "L5" } })], false);
+    const r = armarPreciosMedios(precios, null, sel);
+    expect(r.precioMedio).toEqual({ slug: "mercadopago", nombre: "MERCADOPAGO", price: 90000 });
+  });
+
+  it("card: sin lista del medio, la forma MÁS BARATA con su rótulo", () => {
+    const sel = seleccionarMediosPrecio([mp({ idListaPrecios: null, listasPorForma: { credito: "L1", debito: "L5" } })], false);
+    const r = armarPreciosMedios(precios, null, sel);
+    expect(r.precioMedio).toEqual({ slug: "mercadopago", nombre: "MERCADOPAGO", price: 80000, forma: "debito" });
+  });
+
+  it("card: con empate gana la primera forma; sin descuento en ninguna, sin línea", () => {
+    const empate = seleccionarMediosPrecio([mp({ idListaPrecios: null, listasPorForma: { debito: "L5", cuenta_mp: "L5" } })], false);
+    expect(armarPreciosMedios(precios, null, empate).precioMedio?.forma).toBe("debito");
+    const nada = seleccionarMediosPrecio([mp({ idListaPrecios: null, listasPorForma: { debito: "ZZ" } })], false);
+    expect(armarPreciosMedios(precios, null, nada).precioMedio).toBeUndefined();
+  });
+
+  it("ficha: una línea por forma cuando los precios difieren (Mercado Pago)", () => {
+    const sel = seleccionarMediosPrecio([mp({ idListaPrecios: null, listasPorForma: { credito: "L1", debito: "L5", cuenta_mp: "L5" } })], false);
+    const r = armarPreciosMedios(precios, 21, sel);
+    expect(r.preciosMedios?.map((p) => [p.forma, p.price])).toEqual([
+      ["credito", 90000],
+      ["debito", 80000],
+      ["cuenta_mp", 80000],
+    ]);
+    expect(r.preciosMedios?.[0].precioFinal).toBe(108900);
+  });
+
+  it("ficha: una línea por forma cuando los precios difieren (Payway: crédito y débito)", () => {
+    const sel = seleccionarMediosPrecio([pw({ idListaPrecios: null, listasPorForma: { credito: "L1", debito: "L5" } })], false);
+    const r = armarPreciosMedios(precios, null, sel);
+    expect(r.preciosMedios?.map((p) => p.forma)).toEqual(["credito", "debito"]);
+  });
+
+  it("ficha: una forma sin descuento respecto de la referencia no tiene línea", () => {
+    const sel = seleccionarMediosPrecio([mp({ idListaPrecios: null, listasPorForma: { debito: "L5" } })], false);
+    const r = armarPreciosMedios(precios, null, sel);
+    expect(r.preciosMedios?.map((p) => p.forma)).toEqual(["debito"]);
+  });
+
+  it("ficha: si todas las formas cuestan lo mismo, una sola línea sin rótulo de forma", () => {
+    const iguales = seleccionarMediosPrecio([mp({ idListaPrecios: "L5", listasPorForma: { debito: "L5", credito: "L5" } })], false);
+    const r = armarPreciosMedios(precios, null, iguales);
+    expect(r.preciosMedios).toEqual([{ slug: "mercadopago", nombre: "MERCADOPAGO", price: 80000 }]);
+  });
+
+  it("claves de caché distintas: el medio serializado cambia con las listas por forma", () => {
+    const a = seleccionarMediosPrecio([mp({ idListaPrecios: "L1", listasPorForma: { debito: "L5" } })], false);
+    const b = seleccionarMediosPrecio([mp({ idListaPrecios: "L1", listasPorForma: { debito: "L6" } })], false);
+    const c = seleccionarMediosPrecio([mp({ idListaPrecios: "L1" })], false);
+    expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
+    expect(JSON.stringify(a)).not.toBe(JSON.stringify(c));
+  });
+
+  it("con el flag precio-especial-cuenta encendido no se exhibe nada, tampoco por forma", () => {
+    expect(seleccionarMediosPrecio([mp({ listasPorForma: { debito: "L5" } })], true)).toEqual({ destacado: null, ficha: [] });
+  });
+});

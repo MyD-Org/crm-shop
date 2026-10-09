@@ -14,6 +14,19 @@ const FORMA_DE_OPCION_MP: Readonly<Record<OpcionMercadoPago, OpcionCobro>> = {
   cuenta: "cuenta_mp",
 };
 
+/** La forma de pago (la de las listas de precios) que corresponde a una opción de Mercado Pago. */
+export function formaDeOpcionMercadoPago(opcion: OpcionMercadoPago): OpcionCobro {
+  return FORMA_DE_OPCION_MP[opcion];
+}
+
+/** La opción de Mercado Pago de una forma de pago, si está entre las habilitadas; si no, `null`. */
+export function opcionDeFormaMercadoPago(
+  forma: OpcionCobro | null | undefined,
+  habilitadas: readonly OpcionMercadoPago[],
+): OpcionMercadoPago | null {
+  return habilitadas.find((o) => FORMA_DE_OPCION_MP[o] === forma) ?? null;
+}
+
 /** Las opciones de Mercado Pago habilitadas, en su orden. Sin dato, todas. */
 export function opcionesMercadoPagoHabilitadas(opcionesCobro: readonly OpcionCobro[] | undefined): OpcionMercadoPago[] {
   return (Object.keys(FORMA_DE_OPCION_MP) as OpcionMercadoPago[]).filter(

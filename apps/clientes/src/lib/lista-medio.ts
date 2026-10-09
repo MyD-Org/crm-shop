@@ -27,7 +27,7 @@ export function listaDelPagoUnico(
 }
 
 /** Formas de pago que el medio ofrece, o [] si su procesador no admite precios por forma. */
-function formasDelMedio(medio: Pick<MedioPago, "slug" | "opcionesCobro">): OpcionCobro[] {
+export function formasDelMedio(medio: Pick<MedioPago, "slug" | "opcionesCobro">): OpcionCobro[] {
   const procesador = procesadorDeMedio(medio.slug);
   if (!procesador || !PROCESADORES_CON_FORMAS.includes(procesador)) return [];
   return opcionesAplicables(procesador, medio.opcionesCobro);
@@ -44,6 +44,17 @@ export function hayPreciosPorForma(
   const formas = formasDelMedio(medio);
   if (formas.length < 2) return false;
   return new Set(formas.map((f) => listaDelPagoUnico(medio, f) ?? "")).size > 1;
+}
+
+/**
+ * Forma con la que nace el pedido de un medio con precios distintos por forma: la primera que el medio
+ * ofrece (crédito, débito, cuenta MP). Es la misma que elige `resolverForma` cuando no llega ninguna,
+ * así el total que ve el comprador al cotizar coincide con el del pedido. Sin precios por forma, `null`.
+ */
+export function formaInicialDelMedio(
+  medio: Pick<MedioPago, "slug" | "idListaPrecios" | "listasPorForma" | "opcionesCobro">,
+): OpcionCobro | null {
+  return hayPreciosPorForma(medio) ? (formasDelMedio(medio)[0] ?? null) : null;
 }
 
 /**

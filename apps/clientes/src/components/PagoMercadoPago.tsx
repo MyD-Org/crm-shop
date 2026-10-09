@@ -628,7 +628,7 @@ export function PagoMercadoPago({
     {
       value: "cuenta",
       label: "Cuenta de Mercado Pago",
-      description: "Dinero disponible o tarjetas guardadas en su cuenta",
+      description: "Con el dinero disponible en su cuenta",
       icon: <IconoBilletera />,
       content: <PagoCuentaMercadoPago pedidoId={pedidoId} antesDeIr={() => asegurarCuotas(1, unPago.total)} />,
       disabled: procesando,

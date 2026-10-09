@@ -87,7 +87,6 @@ export async function POST(req: Request) {
           total: pedido.total,
           origen: new URL(req.url).origin,
           emailComprador: pedido.clienteEmail ?? cliente?.email ?? email ?? undefined,
-          cuotas: pedido.cuotas,
           venceEn: new Date(pedido.creadoEn.getTime() + VENTANA_PAGO_MS),
         }),
       );

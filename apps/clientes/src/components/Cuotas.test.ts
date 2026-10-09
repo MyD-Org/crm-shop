@@ -135,3 +135,34 @@ describe("MediosDePagoDetalle con el carrito", () => {
     expect(t).not.toContain("Le faltan");
   });
 });
+
+describe("MediosDePagoDetalle con débito a otro precio", () => {
+  const props = {
+    precioContado: 121000,
+    opciones: [opcion({ cuotas: 6, total: 120000, montoCuota: 20000 })],
+  };
+  const html = renderToStaticMarkup(
+    createElement(MediosDePagoDetalle, { ...props, preciosForma: { debito: 110000, credito: 121000 } }),
+  );
+  const t = texto(html);
+
+  it("se divide en dos bloques: débito con 1 pago y crédito con 1 pago y cuotas", () => {
+    expect(html.match(/<section/g)).toHaveLength(2);
+    expect(t).not.toContain("Tarjeta de crédito o débito");
+    expect(t).not.toContain("Precio contado");
+    expect(t).toContain("Tarjeta de débito 1 pago Precio con débito $ 110.000,00");
+    expect(t).toContain("Tarjeta de crédito 1 pago Precio con crédito $ 121.000,00 6 cuotas de $ 20.000,00");
+    expect(t.indexOf("Tarjeta de débito")).toBeLessThan(t.indexOf("Tarjeta de crédito"));
+  });
+
+  it("el débito no lleva cuotas", () => {
+    const debito = html.slice(0, html.indexOf("medio-cuotas"));
+    expect(debito).not.toContain("cuotas de");
+  });
+
+  it("sin precios por forma queda igual que antes", () => {
+    const base = renderToStaticMarkup(createElement(MediosDePagoDetalle, props));
+    expect(renderToStaticMarkup(createElement(MediosDePagoDetalle, { ...props, preciosForma: null }))).toBe(base);
+    expect(texto(base)).toContain("Tarjeta de crédito o débito 1 pago Precio contado $ 121.000,00");
+  });
+});

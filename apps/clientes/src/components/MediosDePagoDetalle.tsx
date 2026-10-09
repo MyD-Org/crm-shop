@@ -1,6 +1,7 @@
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import type { CuotaNoAlcanzada, OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { fmtPrecio } from "@/lib/format";
+import type { PreciosFormaModal } from "@/lib/precios-forma-modal";
 
 /**
  * Contenido del modal "Ver medios de pago": UN bloque "Tarjeta de crédito o débito" con 1 pago
@@ -14,6 +15,7 @@ export function MediosDePagoDetalle({
   precioContado,
   noAlcanzadas = [],
   conCarrito = null,
+  preciosForma = null,
 }: {
   opciones: OpcionCuotas[];
   precioContado: number;
@@ -24,6 +26,11 @@ export function MediosDePagoDetalle({
    * cuotas (con el monto de este producto) y deja de ser una fila atenuada "desde $X".
    */
   conCarrito?: Pick<OpcionCuotas, "cuotas" | "total" | "montoCuota"> | null;
+  /**
+   * Solo si la tarjeta de débito tiene un precio distinto al de crédito en 1 pago: el modal se divide
+   * en un bloque de débito (1 pago) y otro de crédito (1 pago y cuotas). Ausente = un solo bloque.
+   */
+  preciosForma?: PreciosFormaModal | null;
 }) {
   // Mínimo de la cantidad que se alcanza con el carrito: la fila lo aclara ("En compras desde $X"),
   // sin mencionar el carrito.
@@ -35,20 +42,35 @@ export function MediosDePagoDetalle({
       ].sort((a, b) => a.cuotas - b.cuotas)
     : opciones;
   const atenuadas = conCarrito ? noAlcanzadas.filter((n) => n.cuotas !== conCarrito.cuotas) : noAlcanzadas;
+  const filaUnPago = (subtitulo: string, precio: number) => (
+    <li className="flex items-center justify-between gap-4 px-3 py-2.5">
+      <span className="text-sm text-text">
+        {TEXTOS_CUOTAS.unPago}
+        <span className="block text-xs text-muted">{subtitulo}</span>
+      </span>
+      <span className="text-sm font-semibold text-text">{fmtPrecio(precio)}</span>
+    </li>
+  );
   return (
     <div className="space-y-5">
+      {preciosForma && (
+        <section aria-labelledby="medio-debito">
+          <h3 id="medio-debito" className="mb-2 text-sm font-bold text-text">
+            {TEXTOS_CUOTAS.tituloDebito}
+          </h3>
+          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+            {filaUnPago(TEXTOS_CUOTAS.precioConDebito, preciosForma.debito)}
+          </ul>
+        </section>
+      )}
       <section aria-labelledby="medio-cuotas">
         <h3 id="medio-cuotas" className="mb-2 text-sm font-bold text-text">
-          {TEXTOS_CUOTAS.tituloTarjeta}
+          {preciosForma ? TEXTOS_CUOTAS.tituloCredito : TEXTOS_CUOTAS.tituloTarjeta}
         </h3>
         <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-          <li className="flex items-center justify-between gap-4 px-3 py-2.5">
-            <span className="text-sm text-text">
-              {TEXTOS_CUOTAS.unPago}
-              <span className="block text-xs text-muted">{TEXTOS_CUOTAS.precioContado}</span>
-            </span>
-            <span className="text-sm font-semibold text-text">{fmtPrecio(precioContado)}</span>
-          </li>
+          {preciosForma
+            ? filaUnPago(TEXTOS_CUOTAS.precioConCredito, preciosForma.credito)
+            : filaUnPago(TEXTOS_CUOTAS.precioContado, precioContado)}
           {filas.map((o) => (
             <li key={o.cuotas} className="flex items-start justify-between gap-4 px-3 py-2.5">
               <span className="text-sm text-text">

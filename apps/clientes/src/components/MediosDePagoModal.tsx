@@ -4,6 +4,8 @@ import { useRef, useState } from "react";
 import { Dialog, PaymentLogos, type PaymentLogo } from "@myd-org/ui";
 import { MediosDePagoDetalle } from "@/components/MediosDePagoDetalle";
 import type { CuotasFichaCarrito } from "@/lib/ficha-cuotas-carrito";
+import type { PrecioMedio } from "@/data/products";
+import { preciosFormaDelModal } from "@/lib/precios-forma-modal";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { filasNoAlcanzadas, opcionesCombinadas, type CuotasProducto } from "@/lib/cuotas-sin-interes";
 
@@ -20,6 +22,7 @@ export function MediosDePagoModal({
   cuotas,
   conCarrito = null,
   logos = [],
+  preciosMedios,
   className = "",
 }: {
   /** Precio contado del producto (1 pago), con IVA. */
@@ -29,6 +32,8 @@ export function MediosDePagoModal({
   conCarrito?: CuotasFichaCarrito | null;
   /** Logos de las tarjetas aceptadas (Mercado Pago): abajo, todos juntos. Vacío = no se muestran. */
   logos?: PaymentLogo[];
+  /** Precios por medio/forma de la ficha: con débito distinto al crédito el modal se divide en dos bloques. */
+  preciosMedios?: PrecioMedio[];
   className?: string;
 }) {
   const [abierto, setAbierto] = useState(false);
@@ -64,10 +69,11 @@ export function MediosDePagoModal({
             noAlcanzadas={filasNoAlcanzadas(cuotas)}
             conCarrito={conCarrito}
             precioContado={precioFinal}
+            preciosForma={preciosFormaDelModal(preciosMedios, precioFinal)}
           />
         )}
         {abierto && logos.length > 0 && (
-          <div className="mt-5 border-t border-border pt-4">
+          <div className="mt-5 flex justify-center border-t border-border pt-4">
             <PaymentLogos aria-label="Tarjetas aceptadas" logos={logos} />
           </div>
         )}

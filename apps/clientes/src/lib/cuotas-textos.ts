@@ -21,6 +21,11 @@ export const TEXTOS_CUOTAS = {
   descripcionModal: (precio: number) => `Opciones de pago para ${fmtPrecio(precio)}`,
   /** Título del bloque único del modal (no nombra al procesador). */
   tituloTarjeta: "Tarjeta de crédito o débito",
+  /** Títulos de los dos bloques cuando la tarjeta de débito tiene un precio distinto. */
+  tituloDebito: "Tarjeta de débito",
+  tituloCredito: "Tarjeta de crédito",
+  precioConDebito: "Precio con débito",
+  precioConCredito: "Precio con crédito",
   unPago: "1 pago",
   precioContado: "Precio contado",
   total: "Total",

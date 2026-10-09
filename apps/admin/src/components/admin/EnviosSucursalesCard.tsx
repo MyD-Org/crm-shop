@@ -1,17 +1,17 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Button, Card, Field, Input, Select, Switch, useToast } from "@myd-org/ui"
+import { Button, Card, Field, Select, Switch, useToast } from "@myd-org/ui"
 import type { SucursalDto } from "@/lib/sucursales-repo"
 import type { ReglasVenta } from "@/lib/reglas-venta-validacion"
-import { ciudadesATexto, textoACiudades } from "@/lib/envios-sucursales"
+import { CiudadesEnvioSelector } from "@/components/admin/CiudadesEnvioSelector"
 
 // Envíos: "Desde dónde sale el envío". Por sucursal, si realiza envíos y a qué ciudades; y si el
 // pedido puede despacharse desde otra sucursal cuando la de la zona no tiene stock. Usa las APIs
 // de Sucursales (PATCH parcial) y de Reglas de venta (PUT parcial). Cada guardado avisa al Shop
 // (best-effort): si el aviso no llegó, el cambio igual quedó guardado.
 
-type FilaForm = { slug: string; nombre: string; activa: boolean; aceptaEnvio: boolean; ciudades: string; original: string; originalEnvio: boolean }
+type FilaForm = { slug: string; nombre: string; activa: boolean; aceptaEnvio: boolean; ciudades: string[]; original: string[]; originalEnvio: boolean }
 type Errores = Record<string, string>
 
 const OPCIONES_RESPALDO = [
@@ -21,13 +21,15 @@ const OPCIONES_RESPALDO = [
 
 const TITULO_SECCION = "text-xs font-semibold uppercase tracking-wider"
 
+const mismasCiudades = (a: string[], b: string[]) => a.length === b.length && a.every((c, i) => c === b[i])
+
 const aFila = (s: SucursalDto): FilaForm => ({
   slug: s.slug,
   nombre: s.nombre,
   activa: s.activa,
   aceptaEnvio: s.aceptaEnvio,
-  ciudades: ciudadesATexto(s.envioCiudades),
-  original: ciudadesATexto(s.envioCiudades),
+  ciudades: [...s.envioCiudades],
+  original: [...s.envioCiudades],
   originalEnvio: s.aceptaEnvio,
 })
 
@@ -77,11 +79,11 @@ export function EnviosSucursalesCard() {
     let hubo = false
     try {
       for (const f of filas) {
-        if (f.aceptaEnvio === f.originalEnvio && f.ciudades === f.original) continue
+        if (f.aceptaEnvio === f.originalEnvio && mismasCiudades(f.ciudades, f.original)) continue
         const res = await fetch(`/api/admin/sucursales/${f.slug}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ aceptaEnvio: f.aceptaEnvio, envioCiudades: textoACiudades(f.ciudades) }),
+          body: JSON.stringify({ aceptaEnvio: f.aceptaEnvio, envioCiudades: f.ciudades }),
         })
         const json = (await res.json().catch(() => null)) as { error?: string; propagado?: boolean; sucursal?: SucursalDto } | null
         if (!res.ok || !json?.sucursal) {
@@ -164,17 +166,11 @@ export function EnviosSucursalesCard() {
                 label={f.aceptaEnvio ? "Realiza envíos" : "No realiza envíos"}
               />
               {f.aceptaEnvio && (
-                <Field
-                  label="Ciudades de envío"
-                  hint="Separadas por coma. Vacío = toda la zona de la sucursal."
+                <CiudadesEnvioSelector
+                  value={f.ciudades}
+                  onChange={(ciudades) => cambiarFila(f.slug, { ciudades })}
                   error={errores[f.slug]}
-                >
-                  <Input
-                    value={f.ciudades}
-                    onChange={(e) => cambiarFila(f.slug, { ciudades: e.target.value })}
-                    aria-invalid={Boolean(errores[f.slug])}
-                  />
-                </Field>
+                />
               )}
               {!f.aceptaEnvio && errores[f.slug] && (
                 <p className="text-sm" role="alert" style={{ color: "var(--red)" }}>

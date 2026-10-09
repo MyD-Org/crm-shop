@@ -424,6 +424,13 @@ export const orders = shop.table(
      */
     cuotas: integer("cuotas"),
     /**
+     * Forma de pago con la que se cotizó y congeló el total (migración 0036, change
+     * `listas-por-forma-de-pago`): `credito`, `debito` o `cuenta_mp`. SOLO se guarda cuando el medio
+     * tiene precios distintos por forma (`hayPreciosPorForma`); null = pedido anterior o medio sin
+     * precios por forma, y entonces el cobro no valida la forma.
+     */
+    formaCobro: text("forma_cobro"),
+    /**
      * Cuándo salieron los avisos "Recibimos su pedido" (comprador) y "Nuevo pedido" (local) de un
      * pedido sin cobro en línea. Con transferencia no salen al crearlo: salen al irse de la pantalla
      * de transferencia, al informar el comprobante o, como respaldo, desde el cron a los 15 minutos
@@ -545,7 +552,11 @@ export const orders = shop.table(
     ),
     check(
       "orders_pago_revision_check",
-      sql`${t.pagoRevision} is null or ${t.pagoRevision} in ('cobro_duplicado','pagado_cancelado','cuotas_distintas','monto_distinto')`,
+      sql`${t.pagoRevision} is null or ${t.pagoRevision} in ('cobro_duplicado','pagado_cancelado','cuotas_distintas','monto_distinto','forma_distinta')`,
+    ),
+    check(
+      "orders_forma_cobro_check",
+      sql`${t.formaCobro} is null or ${t.formaCobro} in ('credito','debito','cuenta_mp')`,
     ),
     // Cancelado ⇒ motivo. Vale para el CRM y para el Shop por igual.
     check(

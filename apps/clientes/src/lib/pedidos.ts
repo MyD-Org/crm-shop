@@ -34,6 +34,7 @@ import {
 } from "./pagos/cuotas-validacion";
 import type { MotivoRevisionPedido } from "./motivo-revision";
 import type { InfoPago, PagoInfoOrden } from "./pagos/tipos";
+import type { OpcionCobro } from "./pagos/opciones-cobro";
 import {
   etiquetaEntrega,
   PAGO_LABEL,
@@ -62,6 +63,11 @@ import { pedidosConComprobanteInformado } from "./comprobantes/repo";
 /** Formato visible del número correlativo. */
 export function formatearNumero(numero: number): string {
   return `PED-${String(numero).padStart(8, "0")}`;
+}
+
+/** La columna `forma_cobro` es texto con CHECK: lectura tolerante (algo desconocido = sin forma). */
+function leerForma(v: string | null | undefined): OpcionCobro | null {
+  return v === "credito" || v === "debito" || v === "cuenta_mp" ? v : null;
 }
 
 /** `numeric` de Postgres vuelve como string: convertir siempre por acá. */
@@ -99,6 +105,11 @@ export interface DatosPedido {
    * apagado o medio sin cobro en línea.
    */
   cuotas?: number | null;
+  /**
+   * Forma de pago con la que se cotizó y congeló el total (change `listas-por-forma-de-pago`). Solo
+   * no nula si el medio tiene precios distintos por forma; null/ausente = el cobro no valida la forma.
+   */
+  formaCobro?: OpcionCobro | null;
   notas?: string;
   /** Copia congelada del perfil de facturación al momento de comprar. */
   facturacion?: {
@@ -192,6 +203,8 @@ export async function crearPedido(
   numero: string;
   repetido: boolean;
   cuotas: number | null;
+  /** Forma de pago congelada (null = el pedido no valida la forma). */
+  formaCobro: OpcionCobro | null;
   /** Cuenta congelada de la transferencia; null = sin cuenta aplicable u otro medio de pago. */
   cuentaPago: CuentaPagoSnapshot | null;
 }> {
@@ -221,6 +234,7 @@ export async function crearPedido(
             id: orders.id,
             numero: orders.numero,
             cuotas: orders.cuotas,
+            formaCobro: orders.formaCobro,
             pagoCuenta: orders.pagoCuenta,
           })
           .from(orders)
@@ -232,6 +246,7 @@ export async function crearPedido(
             numero: formatearNumero(existente.numero),
             repetido: true,
             cuotas: existente.cuotas,
+            formaCobro: leerForma(existente.formaCobro),
             cuentaPago: existente.pagoCuenta ?? null,
           };
         }
@@ -331,6 +346,7 @@ export async function crearPedido(
         // Cuotas sin interés congeladas (1 = un pago; null = flag apagado o medio sin cobro en línea).
         // El plan viejo (`cuotas_max`, `cuotas_plan`) ya no se escribe: los pedidos históricos lo conservan.
         cuotas: datos.cuotas ?? null,
+        formaCobro: datos.formaCobro ?? null,
         sucursal: asignacion?.sucursal ?? null,
         sucursalRegla: asignacion?.regla ?? null,
         sucursalAsignadaEn: asignacion ? new Date() : null,
@@ -344,7 +360,7 @@ export async function crearPedido(
         target: orders.idempotencyKey,
         where: sql`${orders.idempotencyKey} is not null`,
       })
-      .returning({ id: orders.id, numero: orders.numero, cuotas: orders.cuotas });
+      .returning({ id: orders.id, numero: orders.numero, cuotas: orders.cuotas, formaCobro: orders.formaCobro });
 
     // Sin fila devuelta, la clave ya existía: es un reintento del mismo intento
     // de compra. Se devuelve el pedido original y NO se escriben las líneas de
@@ -355,6 +371,7 @@ export async function crearPedido(
           id: orders.id,
           numero: orders.numero,
           cuotas: orders.cuotas,
+          formaCobro: orders.formaCobro,
           pagoCuenta: orders.pagoCuenta,
         })
         .from(orders)
@@ -378,6 +395,7 @@ export async function crearPedido(
         numero: formatearNumero(existente.numero),
         repetido: true,
         cuotas: existente.cuotas,
+        formaCobro: leerForma(existente.formaCobro),
         cuentaPago: existente.pagoCuenta ?? null,
       };
     }
@@ -431,6 +449,7 @@ export async function crearPedido(
       numero: formatearNumero(pedido.numero),
       repetido: false,
       cuotas: pedido.cuotas,
+      formaCobro: leerForma(pedido.formaCobro),
       cuentaPago,
     };
   });
@@ -777,6 +796,13 @@ export interface PedidoParaPago {
   facturacionNroDoc: string | null;
   /** Congelado al crear el pedido. null = legacy / sin oferta leíble. */
   cuotas: number | null;
+  /**
+   * Forma de pago congelada (change `listas-por-forma-de-pago`). null = pedido anterior o sin precios
+   * por forma: no se valida. Opcional en el tipo por los dobles de prueba.
+   */
+  formaCobro?: OpcionCobro | null;
+  /** Marca de revisión del pago (`monto_distinto`, `forma_distinta`...): un pedido con marca no se recotiza ni se cobra de nuevo. */
+  pagoRevision?: string | null;
   /** Estado del pedido (no del pago): sólo se cobra uno `pendiente`. */
   estado: OrderEstado;
   creadoEn: Date;
@@ -871,6 +897,8 @@ export async function getPedidoParaPago(
     facturacionTipoDoc: fila.facturacionTipoDoc,
     facturacionNroDoc: fila.facturacionNroDoc,
     cuotas: fila.cuotas,
+    formaCobro: leerForma(fila.formaCobro),
+    pagoRevision: fila.pagoRevision ?? null,
     estado: fila.estado as OrderEstado,
     creadoEn: fila.createdAt,
     contactoNombre: fila.contactoNombre,
@@ -1929,6 +1957,10 @@ export async function pedidoParaCambiarMedio(
   lineas: { id: string; qty: number }[];
   /** Cuotas y total congelados hoy (el formulario de pago los compara con la opción elegida). */
   cuotas: number | null;
+  /** Forma de pago congelada hoy (null = sin precios por forma o pedido anterior). */
+  formaCobro: OpcionCobro | null;
+  /** Marca de revisión del pago, si tiene. */
+  pagoRevision: string | null;
   total: number;
   /** Sucursal del pedido y la que factura si la zona lo fuerza: definen la cuenta de cobro. */
   sucursal: string | null;
@@ -1945,6 +1977,8 @@ export async function pedidoParaCambiarMedio(
       entregaTipo: orders.entregaTipo,
       pagoMetodo: orders.pagoMetodo,
       cuotas: orders.cuotas,
+      formaCobro: orders.formaCobro,
+      pagoRevision: orders.pagoRevision,
       total: orders.total,
       sucursal: orders.sucursal,
       sucursalRegla: orders.sucursalRegla,
@@ -1968,6 +2002,8 @@ export async function pedidoParaCambiarMedio(
     pagoMetodo: p.pagoMetodo,
     lineas: items.map((i) => ({ id: i.id, qty: Number(i.qty) })),
     cuotas: p.cuotas,
+    formaCobro: leerForma(p.formaCobro),
+    pagoRevision: p.pagoRevision ?? null,
     total: Number(p.total),
     sucursal: p.sucursal ?? null,
     facturaSucursal: facturaSucursalDe(p.sucursalRegla),
@@ -1983,7 +2019,15 @@ export async function pedidoParaCambiarMedio(
 }
 
 export type ResultadoCambioMedio =
-  | { ok: true; id: string; numero: string; cuotas: number | null; total: number; cuentaPago: CuentaPagoSnapshot | null }
+  | {
+      ok: true;
+      id: string;
+      numero: string;
+      cuotas: number | null;
+      formaCobro: OpcionCobro | null;
+      total: number;
+      cuentaPago: CuentaPagoSnapshot | null;
+    }
   | {
       ok: false;
       motivo:
@@ -1992,6 +2036,8 @@ export type ResultadoCambioMedio =
         | "no_cambia"
         | "pago_en_curso"
         | "pago_informado"
+        /** El pago ya fue cobrado y está en revisión (`pago_revision`): no se recotiza un pedido con plata cobrada. */
+        | "pago_en_revision"
         /** Las líneas del pedido ya no coinciden con las cotizadas. */
         | "lineas_distintas";
     };
@@ -2010,6 +2056,8 @@ export async function cambiarMedioPedido(
   nuevo: {
     pagoMetodo: string;
     cuotas: number | null;
+    /** Forma de pago con la que se cotizó (null = el medio no tiene precios por forma). */
+    formaCobro?: OpcionCobro | null;
     /** Lista efectivamente usada para cotizar (privada del comprador, o la del medio). */
     idPriceList: string | null;
     cotizacion: Cotizacion;
@@ -2026,6 +2074,7 @@ export async function cambiarMedioPedido(
         sucursal: orders.sucursal,
         costoEnvio: orders.costoEnvio,
         clerkUserId: orders.clerkUserId,
+        pagoRevision: orders.pagoRevision,
       })
       .from(orders)
       .where(
@@ -2040,6 +2089,7 @@ export async function cambiarMedioPedido(
       .limit(1)
       .for("update");
     if (!pedido) return { ok: false, motivo: "no_existe" };
+    if (pedido.pagoRevision) return { ok: false, motivo: "pago_en_revision" };
     if (!medioAdmiteCambio(pedido.pagoMetodo)) return { ok: false, motivo: "no_cambia" };
 
     const [abierto] = await tx
@@ -2100,6 +2150,7 @@ export async function cambiarMedioPedido(
         pagoCuenta: cuentaPago,
         idPriceList: nuevo.idPriceList,
         cuotas: nuevo.cuotas,
+        formaCobro: nuevo.formaCobro ?? null,
         subtotal: String(cot.subtotal),
         iva: String(cot.iva),
         total: String(total),
@@ -2113,7 +2164,7 @@ export async function cambiarMedioPedido(
     // Sin cobro en línea el pedido ya es una compra (igual que al crearlo): el carrito del servidor se vacía.
     if (pedido.clerkUserId && !esPagoEnLinea(nuevo.pagoMetodo)) await vaciarCarritoTx(tx, pedido.clerkUserId);
 
-    return { ok: true, id, numero: formatearNumero(pedido.numero), cuotas: nuevo.cuotas, total, cuentaPago };
+    return { ok: true, id, numero: formatearNumero(pedido.numero), cuotas: nuevo.cuotas, formaCobro: nuevo.formaCobro ?? null, total, cuentaPago };
   });
 }
 

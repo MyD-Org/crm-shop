@@ -37,6 +37,8 @@ const MAX_CAMBIOS_POR_MINUTO = 10;
 const MENSAJE_PAGO_EN_CURSO =
   "Este pedido tiene un pago en proceso. Espere unos minutos a que se confirme antes de cambiar el medio de pago.";
 
+const MENSAJE_PAGO_EN_REVISION = "Este pedido tiene un pago en revisión. Comuníquese con nosotros.";
+
 const conflicto = (error: string, motivo: string, extra: Record<string, unknown> = {}) =>
   NextResponse.json({ error, motivo, ...extra }, { status: 409 });
 
@@ -74,7 +76,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   if (!id) return NextResponse.json({ error: "Falta el pedido" }, { status: 400 });
 
-  let body: { pagoMetodo?: unknown; cuotas?: unknown; totalVisto?: unknown };
+  let body: { pagoMetodo?: unknown; cuotas?: unknown; forma?: unknown; totalVisto?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -89,6 +91,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const pedido = await pedidoParaCambiarMedio(id, dueno);
     // No existe, es de otro o ya no está pendiente: el mismo 404 genérico que cancelar.
     if (!pedido) return NextResponse.json({ error: "No se pudo cambiar el medio de pago" }, { status: 404 });
+    if (pedido.pagoRevision) return conflicto(MENSAJE_PAGO_EN_REVISION, "pago_en_revision");
     if (!medioAdmiteCambio(pedido.pagoMetodo)) {
       return conflicto("Este pedido ya no admite cambiar el medio de pago.", "no_cambia");
     }
@@ -127,6 +130,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       entregaTipo: pedido.entregaTipo,
       pagoMetodo,
       cuotasPedidas: body.cuotas,
+      formaPedida: body.forma,
       mediosCrm,
       opcionesMedios,
       idListaPrivada,
@@ -135,12 +139,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       origen: "/api/pedidos/:id/medio",
     });
     if (!resuelto.ok) {
+      if (resuelto.motivo === "forma_no_disponible") {
+        return NextResponse.json(
+          { error: "Esa forma de pago no está disponible para este medio.", motivo: "forma_no_disponible" },
+          { status: 400 },
+        );
+      }
       return NextResponse.json(
         { error: TEXTOS_CUOTAS.cuotasNoDisponibles, motivo: "cuotas_no_disponibles" },
         { status: 422 },
       );
     }
-    const { cuotasPedido, idListaMedio, cotizacion } = resuelto;
+    const { cuotasPedido, idListaMedio, formaCobro, cotizacion } = resuelto;
 
     if (cotizacion.hayProblemas) {
       return conflicto(
@@ -165,6 +175,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const r = await cambiarMedioPedido(id, dueno, {
       pagoMetodo,
       cuotas: cuotasPedido,
+      formaCobro,
       idPriceList: idListaPrivada ?? idListaMedio ?? null,
       cotizacion,
     });
@@ -176,6 +187,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           return conflicto("Este pedido ya no admite cambiar el medio de pago.", "no_cambia");
         case "pago_en_curso":
           return conflicto(MENSAJE_PAGO_EN_CURSO, "pago_en_curso");
+        case "pago_en_revision":
+          return conflicto(MENSAJE_PAGO_EN_REVISION, "pago_en_revision");
         case "pago_informado":
           return conflicto(
             "Este pedido ya tiene un pago informado y no se puede cambiar el medio de pago desde la tienda. Comuníquese con nosotros.",
@@ -214,6 +227,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       id: r.id,
       numero: r.numero,
       cuotas: r.cuotas,
+      formaCobro: r.formaCobro,
       total: r.total,
       cuentaPago: r.cuentaPago,
       cotizacion,

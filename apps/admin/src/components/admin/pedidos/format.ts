@@ -8,7 +8,7 @@
 import type { BadgeTone } from "@myd-org/ui"
 import type { EventoHistorialDto, PagoRevision } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL, esEstadoPedido, type EstadoPedido } from "@/lib/pedidos-transiciones"
-import { textoMedioCobrado, type PagoEnLineaDto } from "@/lib/pago-en-linea"
+import { textoMedioCobrado, type FormaElegida, type PagoEnLineaDto } from "@/lib/pago-en-linea"
 import { fmtMonto } from "../comprobantes/format"
 
 /** 123456.7 → "$ 123.456,70". Reusa el formateador de moneda del admin (comprobantes). */
@@ -171,6 +171,17 @@ export const PAGO_REVISION_INFO: Record<PagoRevision, { label: string; detalle: 
     detalle:
       "El monto cobrado no coincide con el total del pedido. Revise el pago en el procesador de cobro antes de facturar.",
   },
+  forma_distinta: {
+    label: "Forma de pago distinta",
+    detalle:
+      "El cliente pagó con una forma distinta a la elegida y el precio no corresponde. El pedido quedó pendiente. Revise el pago en el procesador de cobro y devuélvalo o ajuste el pedido antes de facturar.",
+  },
+}
+
+const FORMA_ELEGIDA_LABEL: Record<FormaElegida, string> = {
+  credito: "Tarjeta de crédito",
+  debito: "Tarjeta de débito",
+  cuenta_mp: "Cuenta de Mercado Pago",
 }
 
 /** Título por motivo de revisión (`motivo_revision` del Shop, 0010). */
@@ -339,6 +350,7 @@ export function datosCobroEnLinea(
   const datos: { label: string; valor: string }[] = []
   const medio = textoMedioCobrado(p)
   if (medio) datos.push({ label: "Pagó con", valor: medio })
+  if (p.formaElegida) datos.push({ label: "Forma de pago elegida", valor: FORMA_ELEGIDA_LABEL[p.formaElegida] })
   if (p.cuenta) datos.push({ label: "Cuenta de cobro", valor: nombresSucursal[p.cuenta.slug] ?? p.cuenta.slug })
   if (p.cuotas != null && p.cuotas >= 1) {
     datos.push({ label: "Cuotas", valor: p.cuotas === 1 ? "1 pago" : `${p.cuotas} cuotas` })

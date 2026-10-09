@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest"
 import type { Cliente } from "@/types"
 
-// Unit del envío del código de acceso al portal. Sin Alegra ni Resend: se mockean
-// `@/lib/erp` (resolución del identificador) y `@/lib/email` (envío). El rate limit
-// es un Map en memoria del módulo, así que cada test recarga el módulo para arrancar
+// Unit del envío del código de acceso al portal. Sin Alegra, Resend ni base: se mockean
+// `@/lib/erp` (resolución del identificador), `@/lib/email` (envío) y `@/lib/portal-otp`
+// (la fila en `portal_otps`; su lógica real se prueba en test/integration/portal-otp). El rate
+// limit es un Map en memoria del módulo, así que cada test recarga los módulos para arrancar
 // con la cuota limpia y usa un identificador propio.
 
 const state = vi.hoisted(() => ({
@@ -13,6 +14,7 @@ const state = vi.hoisted(() => ({
   session: {} as Record<string, unknown>,
   saved: 0,
   busquedas: 0,
+  emitidos: [] as { tenantId: string; identifier: string; codigocliente: string }[],
 }))
 
 vi.mock("next/headers", () => ({ cookies: async () => ({}) }))
@@ -34,6 +36,13 @@ vi.mock("@/lib/erp", () => ({
   getClienteByIdentifier: async () => {
     state.busquedas += 1
     return state.cliente
+  },
+}))
+
+vi.mock("@/lib/portal-otp", () => ({
+  emitirOtp: async (input: { tenantId: string; identifier: string; codigocliente: string }) => {
+    state.emitidos.push(input)
+    return { id: `otp-${state.emitidos.length}`, code: "482915", expiresAt: new Date(Date.now() + 600_000) }
   },
 }))
 
@@ -69,6 +78,7 @@ async function loadRoute() {
   state.session = {}
   state.saved = 0
   state.busquedas = 0
+  state.emitidos = []
   const route = await import("./route")
   return route.POST
 }
@@ -93,8 +103,8 @@ describe("POST /api/auth/send-code", () => {
     const body = await res.json()
     expect(body.sentTo).toBe("co*****@acme.com")
     // El código va en el mail, nunca en el cuerpo de la respuesta salvo devCode fuera de prod.
-    expect(body.devCode).toMatch(/^\d{6}$/)
-    expect(state.sent[0].html).toContain(body.devCode)
+    expect(body.devCode).toBe("482915")
+    expect(state.sent[0].html).toContain("482915")
   })
 
   it("manda el código en formato detectable por el celular", async () => {
@@ -112,19 +122,20 @@ describe("POST /api/auth/send-code", () => {
     expect(html).toContain(code)
   })
 
-  it("guarda en la sesión el mismo código que se envió, con vencimiento futuro", async () => {
+  it("guarda el código en el servidor y en la cookie deja SOLO el id", async () => {
     const POST = await loadRoute()
     const res = await POST(req("20-12345678-9"))
-    const body = await res.json()
+    expect(res.status).toBe(200)
 
+    // Se emite normalizado a dígitos ("20-12345678-9" y "20123456789" son el mismo) y con el
+    // id de Alegra del contacto, para que verify-code lo lea por id en vez de volver a buscarlo.
+    expect(state.emitidos).toEqual([{ tenantId: "t1", identifier: "20123456789", codigocliente: "42" }])
     expect(state.saved).toBe(1)
-    expect(state.session.otp).toBe(body.devCode)
-    // Se guarda normalizado a dígitos: "20-12345678-9" y "20123456789" son el mismo.
-    expect(state.session.identifier).toBe("20123456789")
-    // verify-code lee el contacto por este id en vez de volver a buscarlo.
-    expect(state.session.codigocliente).toBe("42")
-    expect(state.session.attempts).toBe(0)
-    expect(state.session.otpExpiry as number).toBeGreaterThan(Date.now())
+    expect(state.session.otpId).toBe("otp-1")
+    // Nada del código ni del contador viaja en la cookie: reenviarla no reinicia nada.
+    expect(state.session).not.toHaveProperty("otp")
+    expect(state.session).not.toHaveProperty("attempts")
+    expect(state.session).not.toHaveProperty("otpExpiry")
   })
 
   it("404 sin emitir código si el identificador no existe en el ERP", async () => {
@@ -136,6 +147,7 @@ describe("POST /api/auth/send-code", () => {
     expect(res.status).toBe(404)
     expect((await res.json()).error).toMatch(/Verifique el número o comuníquese con la sucursal/)
     expect(state.sent).toHaveLength(0)
+    expect(state.emitidos).toHaveLength(0)
     expect(state.saved).toBe(0)
   })
 
@@ -148,10 +160,10 @@ describe("POST /api/auth/send-code", () => {
     expect(res.status).toBe(409)
     expect((await res.json()).error).toMatch(/Comuníquese con la sucursal para que le den el alta/)
     expect(state.sent).toHaveLength(0)
-    expect(state.saved).toBe(0)
+    expect(state.emitidos).toHaveLength(0)
   })
 
-  it("502 sin sellar la sesión si Resend rechaza el envío", async () => {
+  it("502 sin sellar la cookie si Resend rechaza el envío", async () => {
     const POST = await loadRoute()
     state.sendError = new Error("domain not verified")
 

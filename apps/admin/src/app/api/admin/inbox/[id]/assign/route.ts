@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, tenants } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { listConversations } from "@/lib/inbox-api"
 import { assignInCrm, availableOperators, getAssignments, loadFromAssignments, pickLeastLoaded } from "@/lib/assignment"
 import { sendPushToOperator } from "@/lib/push"
@@ -20,15 +18,15 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 //                                                       conversaciones activas asignadas;
 //                                                       si se pasa department filtra por él
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
+  const guard = await requireOperatorPlus(req)
+  if (!guard.ok) return guard.response
 
   const { id } = await params
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json({ error: "body requerido" }, { status: 400 })
 
   const db = getDb()
-  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, session.tenantId))
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, guard.tenantId))
   if (!tenant?.aiTenantId || !tenant?.aiApiUrl) {
     return NextResponse.json({ error: "inbox no configurado" }, { status: 503 })
   }
@@ -58,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const [operator] = await db
       .select({ id: adminUsers.id, passwordHash: adminUsers.passwordHash })
       .from(adminUsers)
-      .where(and(eq(adminUsers.id, requested), eq(adminUsers.tenantId, session.tenantId)))
+      .where(and(eq(adminUsers.id, requested), eq(adminUsers.tenantId, guard.tenantId)))
 
     if (!operator || !operator.passwordHash) {
       return NextResponse.json({ error: "operador no encontrado" }, { status: 404 })
@@ -68,7 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } else if (body.strategy === "least-loaded") {
     // Mismo criterio que la reconciliación automática (ADR 0006): operadores DISPONIBLES
     // del depto + menos cargado. La carga se cuenta desde la DB del CRM (fuente de verdad).
-    const operators = await availableOperators(session.tenantId, body.department ?? null)
+    const operators = await availableOperators(guard.tenantId, body.department ?? null)
     if (!operators.length) {
       const reason = body.department
         ? `no hay operadores disponibles en el departamento "${body.department}"`
@@ -76,7 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: reason }, { status: 404 })
     }
 
-    const assignments = await getAssignments(session.tenantId)
+    const assignments = await getAssignments(guard.tenantId)
     const activeConvIds = new Set(convs.filter((c) => c.status !== "closed").map((c) => c.id))
     const chosen = pickLeastLoaded(operators, loadFromAssignments(assignments, activeConvIds))
     targetOperatorId = chosen!.id
@@ -87,12 +85,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     )
   }
 
-  await assignInCrm(session.tenantId, id, targetOperatorId, body.department ?? convDepartment)
+  await assignInCrm(guard.tenantId, id, targetOperatorId, body.department ?? convDepartment)
 
   // Notifica al operador asignado (salvo que se haya autoasignado: ya lo sabe). Best-effort.
-  if (targetOperatorId !== session.userId) {
+  if (targetOperatorId !== guard.user.id) {
     const contactName = conv?.contact || "un cliente"
-    await sendPushToOperator(session.tenantId, targetOperatorId, {
+    await sendPushToOperator(guard.tenantId, targetOperatorId, {
       title: "Nueva conversación asignada",
       body: `Se le asignó la conversación con ${contactName}.`,
       url: `/admin/inbox/${id}`,

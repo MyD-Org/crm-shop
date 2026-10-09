@@ -3,6 +3,7 @@ import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers } from "@/db/schema"
+import { invalidateTenantRegistry } from "@/lib/tenants"
 import { seedTenant, seedOperator, truncateAll } from "./helpers"
 
 // Tests de AUTORIZACIÓN a nivel de RUTA. lib/roles.ts ya tiene tests unitarios de la lógica
@@ -11,11 +12,15 @@ import { seedTenant, seedOperator, truncateAll } from "./helpers"
 // reales contra la DB de test y verificamos los status que devuelven.
 //
 // Se mockea solo la sesión (quién está logueado) y el envío de mail; la DB y toda la lógica
-// de permisos son las de verdad.
+// de permisos son las de verdad. El rol que cuenta es el de la FILA de admin_users (lo resuelve
+// el guard), no el de la cookie.
 
 let session: Record<string, unknown>
 
-vi.mock("next/headers", () => ({ cookies: async () => ({}) }))
+vi.mock("next/headers", () => ({
+  cookies: async () => ({}),
+  headers: async () => new Headers({ "x-tenant-id": "tenant-a" }),
+}))
 vi.mock("iron-session", () => ({ getIronSession: async () => session }))
 vi.mock("resend", () => ({
   Resend: class {
@@ -26,7 +31,8 @@ vi.mock("resend", () => ({
 const { POST: inviteUser } = await import("@/app/api/admin/usuarios/route")
 const { PATCH: patchUser, DELETE: deleteUser } = await import("@/app/api/admin/usuarios/[id]/route")
 
-const TENANT = "test-tenant"
+const TENANT = "tenant-a"
+const HOST = `${TENANT}.localhost`
 
 function loginAs(userId: string, role: "operator" | "admin" | "superadmin") {
   session = { userId, role, tenantId: TENANT, name: "Test", email: "t@x.com", save: async () => {} }
@@ -34,18 +40,20 @@ function loginAs(userId: string, role: "operator" | "admin" | "superadmin") {
 
 function invite(body: unknown) {
   return inviteUser(
-    new NextRequest("http://localhost/api/admin/usuarios", {
+    new NextRequest(`http://${HOST}/api/admin/usuarios`, {
       method: "POST",
       body: JSON.stringify(body),
+      headers: { host: HOST },
     }),
   )
 }
 
 function patch(targetId: string, body: unknown) {
   return patchUser(
-    new NextRequest(`http://localhost/api/admin/usuarios/${targetId}`, {
+    new NextRequest(`http://${HOST}/api/admin/usuarios/${targetId}`, {
       method: "PATCH",
       body: JSON.stringify(body),
+      headers: { host: HOST },
     }),
     { params: Promise.resolve({ id: targetId }) },
   )
@@ -53,7 +61,7 @@ function patch(targetId: string, body: unknown) {
 
 function remove(targetId: string) {
   return deleteUser(
-    new NextRequest(`http://localhost/api/admin/usuarios/${targetId}`, { method: "DELETE" }),
+    new NextRequest(`http://${HOST}/api/admin/usuarios/${targetId}`, { method: "DELETE", headers: { host: HOST } }),
     { params: Promise.resolve({ id: targetId }) },
   )
 }
@@ -67,10 +75,25 @@ describe("permisos en las rutas de usuarios", () => {
   beforeEach(async () => {
     await truncateAll()
     await seedTenant(TENANT)
+    invalidateTenantRegistry()
     operador = await seedOperator(TENANT, { role: "operator", name: "Opes" })
     admin = await seedOperator(TENANT, { role: "admin", name: "Admin" })
     otroAdmin = await seedOperator(TENANT, { role: "admin", name: "Otro Admin" })
     superadmin = await seedOperator(TENANT, { role: "superadmin", name: "Dueña" })
+  })
+
+  describe("rol de la cookie vs fila de admin_users", () => {
+    it("una cookie con rol superadmin pero fila de operador NO da permisos (rol fresco)", async () => {
+      loginAs(operador, "superadmin") // cookie vieja/forjada: la fila dice operator
+      const res = await invite({ name: "X", email: "x@x.com", role: "operator" })
+      expect(res.status).toBe(403)
+    })
+
+    it("un usuario borrado después de loguearse → 401", async () => {
+      loginAs(admin, "admin")
+      await getDb().delete(adminUsers).where(eq(adminUsers.id, admin))
+      expect((await invite({ name: "X", email: "x@x.com", role: "operator" })).status).toBe(401)
+    })
   })
 
   describe("invitar (POST)", () => {

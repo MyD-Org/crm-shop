@@ -7,8 +7,15 @@ const state = vi.hoisted(() => ({
   costs: (async () => ({ month: "2026-10", limit: 1000, numbers: [], errors: [], lastRunAt: null })) as () => Promise<unknown>,
 }))
 
-vi.mock("next/headers", () => ({ cookies: async () => ({}) }))
-vi.mock("iron-session", () => ({ getIronSession: async () => state.session }))
+vi.mock("@/lib/admin-route-guard", () => ({
+  adminNotFoundResponse: () => Response.json({ error: "No encontrado", code: "not_found" }, { status: 404 }),
+  requireAdminPlus: async () => {
+    const s = state.session
+    if (!s.userId) return { ok: false, response: Response.json({ error: "No autorizado", code: "unauthorized" }, { status: 401 }) }
+    if (s.role === "operator") return { ok: false, response: Response.json({ error: "No encontrado", code: "not_found" }, { status: 404 }) }
+    return { ok: true, tenantId: s.tenantId, user: { id: s.userId, name: "Nombre", email: "u@cliente.example", role: s.role } }
+  },
+}))
 vi.mock("@/db", () => ({
   getDb: () => ({ select: () => ({ from: () => ({ where: () => Promise.resolve(state.tenant) }) }) }),
 }))
@@ -17,7 +24,7 @@ vi.mock("@/lib/inbox-api", () => ({ getWaCosts: () => state.costs() }))
 
 async function get() {
   const { GET } = await import("./route")
-  return GET()
+  return GET(new Request("http://admin.test/api/admin/inbox/wa-costos"))
 }
 
 beforeEach(() => {
@@ -36,9 +43,9 @@ describe("GET /api/admin/inbox/wa-costos", () => {
     state.session = {}
     expect((await get()).status).toBe(401)
   })
-  it("403 si no es superadmin", async () => {
+  it("404 si no es superadmin (mismo cuerpo que el guard)", async () => {
     state.session = { userId: "u", tenantId: "t", role: "admin" }
-    expect((await get()).status).toBe(403)
+    expect((await get()).status).toBe(404)
   })
   it("503 sin inbox configurado", async () => {
     state.tenant = [{ id: "t" }]

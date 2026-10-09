@@ -14,9 +14,15 @@ const state = vi.hoisted(() => ({
   existe: true,
 }))
 
-vi.mock("next/headers", () => ({ cookies: async () => ({}) }))
-vi.mock("iron-session", () => ({ getIronSession: async () => state.session }))
-vi.mock("@/lib/admin-session", () => ({ adminSessionOptions: {} }))
+vi.mock("@/lib/admin-route-guard", () => ({
+  adminNotFoundResponse: () => Response.json({ error: "No encontrado", code: "not_found" }, { status: 404 }),
+  requireAdminPlus: async () => {
+    const s = state.session
+    if (!s.userId) return { ok: false, response: Response.json({ error: "No autorizado", code: "unauthorized" }, { status: 401 }) }
+    if (s.role === "operator") return { ok: false, response: Response.json({ error: "No encontrado", code: "not_found" }, { status: 404 }) }
+    return { ok: true, tenantId: s.tenantId, user: { id: s.userId, name: "Nombre", email: "u@cliente.example", role: s.role } }
+  },
+}))
 vi.mock("@/lib/shop-revalidar", () => ({
   pingShopRevalidarSucursales: async () => {
     state.ping++
@@ -60,13 +66,13 @@ beforeEach(() => {
 })
 
 describe("/api/admin/settings/schedule", () => {
-  it("sin sesión → 401; operator → 403", async () => {
+  it("sin sesión → 401; operator → 404 (mismo cuerpo que un id inexistente)", async () => {
     const { GET, PUT } = await import("./route")
     state.session = {}
     expect((await GET(req("GET"))).status).toBe(401)
     state.session = { userId: "u1", role: "operator", tenantId: "tenant-a" }
-    expect((await GET(req("GET"))).status).toBe(403)
-    expect((await PUT(req("PUT", "", valido))).status).toBe(403)
+    expect((await GET(req("GET"))).status).toBe(404)
+    expect((await PUT(req("PUT", "", valido))).status).toBe(404)
     expect(state.guardar).toEqual([])
   })
 

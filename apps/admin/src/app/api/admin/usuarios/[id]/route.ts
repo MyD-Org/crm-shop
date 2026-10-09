@@ -5,11 +5,12 @@ import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers } from "@/db/schema"
 import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { assignableRoles, canActOnRole, canManageUsers } from "@/lib/roles"
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
+  const guard = await requireOperatorPlus(req)
+  if (!guard.ok) return guard.response
 
   const { id } = await params
   const body = await req.json().catch(() => null)
@@ -19,14 +20,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const [target] = await db
     .select()
     .from(adminUsers)
-    .where(and(eq(adminUsers.id, id), eq(adminUsers.tenantId, session.tenantId)))
+    .where(and(eq(adminUsers.id, id), eq(adminUsers.tenantId, guard.tenantId)))
   if (!target) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
 
   // Editar a OTRO requiere poder gestionar usuarios y tener autoridad sobre el rol del target
   // (un admin puede tocar operadores, no otros admins ni al superadmin). El auto-edit (nombre
   // propio) lo puede hacer cualquiera.
-  const isSelf = id === session.userId
-  if (!isSelf && (!canManageUsers(session.role) || !canActOnRole(session.role, target.role))) {
+  const isSelf = id === guard.user.id
+  if (!isSelf && (!canManageUsers(guard.user.role) || !canActOnRole(guard.user.role, target.role))) {
     return NextResponse.json({ error: "No tiene permisos sobre este usuario" }, { status: 403 })
   }
 
@@ -34,9 +35,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.name && typeof body.name === "string") updates.name = body.name.trim()
   // Rol y departamentos: solo al gestionar a otro (no a uno mismo). El rol a asignar debe estar
   // dentro de lo que el actor puede otorgar (un admin no puede promover a admin/superadmin).
-  if (!isSelf && canManageUsers(session.role)) {
+  if (!isSelf && canManageUsers(guard.user.role)) {
     if (body.role) {
-      if (!assignableRoles(session.role).includes(body.role)) {
+      if (!assignableRoles(guard.user.role).includes(body.role)) {
         return NextResponse.json({ error: "No puede asignar ese rol" }, { status: 403 })
       }
       updates.role = body.role
@@ -54,6 +55,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Si el usuario editó su propio nombre, actualizar la sesión para que se refleje de inmediato
   if (isSelf && updates.name) {
+    // La cookie guarda el nombre para la UI; el guard no la expone, así que se refresca aparte.
+    const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
     session.name = updated.name
     await session.save()
   }
@@ -61,23 +64,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ id: updated.id, name: updated.name, role: updated.role, departments: updated.departments })
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
-  if (!canManageUsers(session.role)) return NextResponse.json({ error: "No tiene permisos de gestión de usuarios" }, { status: 403 })
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireOperatorPlus(req)
+  if (!guard.ok) return guard.response
+  if (!canManageUsers(guard.user.role)) return NextResponse.json({ error: "No tiene permisos de gestión de usuarios" }, { status: 403 })
 
   const { id } = await params
-  if (id === session.userId) return NextResponse.json({ error: "No puede eliminarse a usted mismo" }, { status: 400 })
+  if (id === guard.user.id) return NextResponse.json({ error: "No puede eliminarse a usted mismo" }, { status: 400 })
 
   const db = getDb()
   const [target] = await db
     .select()
     .from(adminUsers)
-    .where(and(eq(adminUsers.id, id), eq(adminUsers.tenantId, session.tenantId)))
+    .where(and(eq(adminUsers.id, id), eq(adminUsers.tenantId, guard.tenantId)))
   if (!target) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
 
   // Un admin solo puede eliminar operadores; al superadmin y a otros admins, solo el superadmin.
-  if (!canActOnRole(session.role, target.role)) {
+  if (!canActOnRole(guard.user.role, target.role)) {
     return NextResponse.json({ error: "No tiene permisos sobre este usuario" }, { status: 403 })
   }
 

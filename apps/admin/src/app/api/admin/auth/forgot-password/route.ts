@@ -7,13 +7,26 @@ import { sendEmail } from "@/lib/email"
 import { safeLogoUrl } from "@/lib/email-layout"
 import { buildForgotPasswordEmail } from "@/lib/forgot-password-email"
 import { EMPTY_TENANT, tenantConfigFromRow } from "@/lib/tenants"
+import { ipDe, permitir, respuestaLimite } from "@/lib/rate-limit"
+
+// Endpoint anónimo que dispara un mail: sin límite es un generador de spam contra los usuarios
+// del CRM. Por IP (429 visible) y por email (silencioso: la respuesta sigue siendo { ok: true }
+// para no decir si la cuenta existe; simplemente no sale otro mail). Contador por proceso.
+const MAX_POR_IP = 10
+const MAX_POR_EMAIL = 3
+const VENTANA_MS = 15 * 60 * 1000
 
 export async function POST(req: NextRequest) {
+  if (!permitir(`forgot-password:ip:${ipDe(req)}`, MAX_POR_IP, VENTANA_MS)) return respuestaLimite()
   const body = await req.json().catch(() => null)
-  if (!body?.email) return NextResponse.json({ error: "email requerido" }, { status: 400 })
+  if (typeof body?.email !== "string" || !body.email) {
+    return NextResponse.json({ error: "email requerido" }, { status: 400 })
+  }
+  const email = body.email.trim().toLowerCase()
+  if (!permitir(`forgot-password:email:${email}`, MAX_POR_EMAIL, VENTANA_MS)) return NextResponse.json({ ok: true })
 
   const db = getDb()
-  const [user] = await db.select().from(adminUsers).where(eq(adminUsers.email, body.email.toLowerCase()))
+  const [user] = await db.select().from(adminUsers).where(eq(adminUsers.email, email))
 
   // Siempre responder OK para no filtrar si el email existe
   if (!user || !user.passwordHash) return NextResponse.json({ ok: true })

@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, adminPasswordTokens, tenants } from "@/db/schema"
 import { generateToken } from "@/lib/admin-crypto"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { canActOnRole, canManageUsers } from "@/lib/roles"
 import { sendEmail } from "@/lib/email"
 import { safeLogoUrl } from "@/lib/email-layout"
@@ -17,8 +15,9 @@ import { EMPTY_TENANT, tenantConfigFromRow } from "@/lib/tenants"
 // El inviteUrl (con el token crudo) se devuelve siempre para que quien gestiona usuarios
 // copie el link a mano desde la UI mientras no haya servidor de mail configurado.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  if (!session.userId || !canManageUsers(session.role)) {
+  const guard = await requireOperatorPlus(req)
+  if (!guard.ok) return guard.response
+  if (!canManageUsers(guard.user.role)) {
     return NextResponse.json({ error: "No tiene permisos de gestión de usuarios" }, { status: 403 })
   }
 
@@ -28,10 +27,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const [user] = await db
     .select()
     .from(adminUsers)
-    .where(and(eq(adminUsers.id, id), eq(adminUsers.tenantId, session.tenantId)))
+    .where(and(eq(adminUsers.id, id), eq(adminUsers.tenantId, guard.tenantId)))
   if (!user) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
   // Un admin solo puede reenviar invitaciones de operadores (no de admins/superadmins).
-  if (!canActOnRole(session.role, user.role)) {
+  if (!canActOnRole(guard.user.role, user.role)) {
     return NextResponse.json({ error: "No tiene permisos sobre este usuario" }, { status: 403 })
   }
   if (user.passwordHash) return NextResponse.json({ error: "El usuario ya activó su cuenta" }, { status: 409 })
@@ -50,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? req.nextUrl.origin
   const inviteUrl = `${baseUrl}/admin/reset-password/${token}`
 
-  const [tenantRow] = await db.select().from(tenants).where(eq(tenants.id, session.tenantId))
+  const [tenantRow] = await db.select().from(tenants).where(eq(tenants.id, guard.tenantId))
   const tenant = tenantRow ? tenantConfigFromRow(tenantRow) : EMPTY_TENANT
 
   let emailSent = true

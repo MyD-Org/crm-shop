@@ -22,8 +22,13 @@ const state = vi.hoisted(() => ({
   pushCalls: [] as unknown[][],
 }))
 
-vi.mock("next/headers", () => ({ cookies: async () => ({}) }))
-vi.mock("iron-session", () => ({ getIronSession: async () => state.session }))
+vi.mock("@/lib/admin-route-guard", () => ({
+  requireOperatorPlus: async () => {
+    const s = state.session
+    if (!s.userId) return { ok: false, response: Response.json({ error: "No autorizado", code: "unauthorized" }, { status: 401 }) }
+    return { ok: true, tenantId: s.tenantId, user: { id: s.userId, name: "Nombre", email: "u@cliente.example", role: "operator" } }
+  },
+}))
 
 vi.mock("@/db", () => ({
   getDb: () => ({

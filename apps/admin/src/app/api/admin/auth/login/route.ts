@@ -123,6 +123,8 @@ export async function POST(req: NextRequest) {
   session.role = user.role as AdminSessionData["role"]
   // El tenant del host, que por la query de arriba es el mismo que `user.tenantId`.
   session.tenantId = tenantId
+  // Para poder revocarla después (reset de contraseña): ver getGuardedAdminSession.
+  session.issuedAt = Date.now()
   await session.save()
 
   return NextResponse.json({ ok: true })

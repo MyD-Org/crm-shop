@@ -1,9 +1,6 @@
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { desc, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { catalogSyncLog } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
 import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { getTenantByIdFromDb } from "@/lib/tenants"
 import { PRESUPUESTO_TRAMO_MS, syncTenant } from "@/lib/alegra-sync-tenant"
@@ -29,14 +26,15 @@ export async function POST(req: Request) {
 }
 
 // GET: última sincronización (para mostrar estado/fecha en el admin).
-export async function GET() {
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  if (!session.userId) return Response.json({ error: "no autorizado" }, { status: 401 })
+export async function GET(req: Request) {
+  // admin+, igual que el POST.
+  const guard = await requireAdminPlus(req)
+  if (!guard.ok) return guard.response
 
   const [last] = await getDb()
     .select()
     .from(catalogSyncLog)
-    .where(eq(catalogSyncLog.tenantId, session.tenantId))
+    .where(eq(catalogSyncLog.tenantId, guard.tenantId))
     .orderBy(desc(catalogSyncLog.startedAt))
     .limit(1)
 

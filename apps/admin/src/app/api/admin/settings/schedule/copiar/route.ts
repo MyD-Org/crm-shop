@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
-import { roleRank } from "@/lib/roles"
+import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { copiarHorario, MSG_SUCURSAL_NO_EXISTE, QUE_COPIAR, type QueCopiar } from "@/lib/horarios-repo"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 
@@ -11,16 +8,11 @@ import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 // Copia lo GUARDADO de la sucursal `desde` a las demás (sobrescribe lo copiado, en una
 // transacción). Admin y superadmin. Un destino que no es del tenant → 404 y no se escribe nada.
 
-async function getSession() {
-  return getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-}
-
 const invalido = (error: string) => NextResponse.json({ error }, { status: 400 })
 
 export async function POST(req: NextRequest) {
-  const session = await getSession()
-  if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
-  if (roleRank(session.role) < 1) return NextResponse.json({ error: "prohibido" }, { status: 403 })
+  const guard = await requireAdminPlus(req)
+  if (!guard.ok) return guard.response
 
   let body: unknown
   try {
@@ -43,7 +35,7 @@ export async function POST(req: NextRequest) {
     return invalido("Indique las sucursales de destino.")
   }
 
-  const r = await copiarHorario(session.tenantId, { desde: b.desde.trim(), hacia, que: b.que as QueCopiar })
+  const r = await copiarHorario(guard.tenantId, { desde: b.desde.trim(), hacia, que: b.que as QueCopiar })
   if (r.kind === "not_found") return NextResponse.json({ error: MSG_SUCURSAL_NO_EXISTE }, { status: 404 })
   if (r.kind === "invalid") return invalido(r.error)
 

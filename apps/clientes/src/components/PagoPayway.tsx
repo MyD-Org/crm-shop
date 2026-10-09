@@ -311,6 +311,12 @@ export function PagoPayway({
       setEstado({ fase: "pendiente" });
       onPendiente?.();
     } else {
+      if (r.config && r.config.baseUrl) {
+        // Otra cuenta: el SDK se vuelve a instanciar con SU key (la sesión guarda la instancia de la
+        // anterior) y el comprador vuelve a cargar la tarjeta, que ya se borró del estado.
+        sesionSdk.current = crearSesionSdk();
+        setConfig({ cuenta: r.config.cuenta, publicKey: r.config.publicKey, baseUrl: r.config.baseUrl });
+      }
       setEstado({ fase: "rechazado", mensaje: r.mensaje });
     }
   }

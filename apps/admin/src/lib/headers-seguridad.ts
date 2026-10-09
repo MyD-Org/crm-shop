@@ -44,6 +44,8 @@
 /** Variables que alimentan la CSP. Se inyectan para poder testear. */
 export interface EnvCsp {
   NODE_ENV?: string
+  /** "preview" en los deploys de Preview de Vercel: ahí se admite la Toolbar de Vercel (vercel.live). */
+  VERCEL_ENV?: string
   NEXT_PUBLIC_SENTRY_DSN?: string
   R2_SHOP_MEDIA_PUBLIC_URL?: string
   CSP_REPORT_URI?: string
@@ -51,7 +53,7 @@ export interface EnvCsp {
 
 export interface OpcionesCsp {
   /**
-   * Política de las páginas del correo (`/admin/correo`). El cuerpo de cada mensaje se muestra en
+   * Política de Mensajes (`/admin/inbox`, donde el correo vive como solapas). El cuerpo de cada mensaje se muestra en
    * un <iframe sandbox srcdoc> (MensajeHtml.tsx) y los documentos `about:srcdoc` HEREDAN la CSP
    * del documento que los enmarca, además de la propia (`correo-srcdoc.ts`, que ya limita todo a
    * `img-src https: data:` cuando la persona pulsa "Mostrar imágenes"). Un correo trae imágenes de
@@ -87,27 +89,34 @@ export function origenSentry(dsn: string | undefined): string | null {
  */
 const R2 = "https://*.r2.cloudflarestorage.com"
 
+/**
+ * Toolbar de Vercel en los deploys de Preview (comentarios, flags): inyecta su script, un iframe y
+ * pide a vercel.live. Sólo con `VERCEL_ENV=preview`; en producción no se carga y no se admite.
+ */
+const VERCEL_TOOLBAR = "https://vercel.live"
+
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com"
 const GOOGLE_FONTS_ARCHIVOS = "https://fonts.gstatic.com"
 
 /** Arma la política. Sin duplicados y en orden estable. */
 export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: OpcionesCsp = {}): string {
   const dev = env.NODE_ENV === "development"
+  const preview = env.VERCEL_ENV === "preview"
   const sentry = origenSentry(env.NEXT_PUBLIC_SENTRY_DSN)
   const fotos = origenHttps(env.R2_SHOP_MEDIA_PUBLIC_URL)
 
   const directivas: Record<string, string[]> = {
     "default-src": ["'self'"],
-    "script-src": ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : [])],
+    "script-src": ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...(preview ? [VERCEL_TOOLBAR] : [])],
     // El DS y el widget inyectan estilos inline; Google Fonts sirve la hoja de Bowlby One.
     "style-src": ["'self'", "'unsafe-inline'", GOOGLE_FONTS_CSS],
     "img-src": ["'self'", "data:", "blob:", R2, ...(fotos ? [fotos] : []), ...(opciones.correo ? ["https:"] : [])],
     "font-src": ["'self'", "data:", GOOGLE_FONTS_ARCHIVOS],
     // Adjuntos de audio/video del inbox (URL firmada de R2).
     "media-src": ["'self'", "blob:", R2],
-    "connect-src": ["'self'", R2, ...(sentry ? [sentry] : []), ...(dev ? ["ws:"] : [])],
+    "connect-src": ["'self'", R2, ...(sentry ? [sentry] : []), ...(dev ? ["ws:"] : []), ...(preview ? [VERCEL_TOOLBAR] : [])],
     // PDF del portal (blob:) y comprobantes PDF (302 a R2).
-    "frame-src": ["'self'", "blob:", R2],
+    "frame-src": ["'self'", "blob:", R2, ...(preview ? [VERCEL_TOOLBAR] : [])],
     "worker-src": ["'self'", "blob:"],
     "form-action": ["'self'"],
     "frame-ancestors": ["'self'"],

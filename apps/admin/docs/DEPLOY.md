@@ -198,8 +198,10 @@ El Shop cobra en cuotas sólo con el flag `cuotas-cobro` (Vercel Flags, apagado 
 Todas las respuestas llevan una **Content-Security-Policy en modo Report-Only**
 (`Content-Security-Policy-Report-Only`, armada en `src/lib/headers-seguridad.ts`): el navegador
 informa lo que bloquearía pero **no bloquea nada**. Los orígenes que admite salen de variables
-(Sentry, fotos del catálogo) y del inventario documentado en ese archivo; las páginas de
-`/admin/correo` admiten además `img-src https:` (los mensajes traen imágenes de cualquier host).
+(Sentry, fotos del catálogo) y del inventario documentado en ese archivo; Mensajes (`/admin/inbox`,
+donde el correo vive como solapas) admite además `img-src https:` (los mensajes traen imágenes de
+cualquier host). En los deploys de Preview (`VERCEL_ENV=preview`) se admite también la Toolbar de
+Vercel (`vercel.live`); en producción no.
 
 Para pasarla a enforcing:
 

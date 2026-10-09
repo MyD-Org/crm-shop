@@ -108,6 +108,7 @@ export function PedidoAcciones({
         <BotonCompartirLista
           href={paraCompartir.href}
           label="Compartir pedido"
+          size="md"
           mensaje={MENSAJE_PEDIDO}
           toast={{
             title: "Enlace copiado",

@@ -1,4 +1,4 @@
-import { authAgentTenantRequest } from "@/lib/agent-auth"
+import { authAgentInternalRequest } from "@/lib/agent-auth"
 import { getTenantConfig } from "@/lib/tenant-context"
 import { listPriceLists, listPaymentTerms, listSellers, listTaxes, listCurrencies } from "@/lib/alegra"
 
@@ -7,12 +7,17 @@ import { listPriceLists, listPaymentTerms, listSellers, listTaxes, listCurrencie
 // vendedores, impuestos y monedas — todo lo que el agente necesita para hablar de precios
 // y armar cotizaciones. Incluye shop_url (env NEXT_PUBLIC_SHOP_URL) para compartir el link
 // de la tienda cuando exista.
+//
+// Auth: sólo INTERNAL_SECRET (server-to-server). El crm_token del cliente logueado NO sirve acá:
+// llega al navegador dentro del JWT del widget y la respuesta expone configuración interna del
+// tenant (nombres de los vendedores, listas de precio e impuestos de la cuenta de Alegra) que
+// el cliente no ve en la tienda. Ver lib/agent-auth.ts.
 export async function GET(req: Request) {
   try {
     const tenant = await getTenantConfig()
-    const auth = authAgentTenantRequest(req, tenant.id)
+    const auth = authAgentInternalRequest(req)
     if (!auth) {
-      console.warn("[agent/sales-config] 401 — request sin crm_token válido (Authorization Bearer)")
+      console.warn("[agent/sales-config] 401 — request sin INTERNAL_SECRET válido (Authorization Bearer)")
       return Response.json({ error: "unauthorized" }, { status: 401 })
     }
 

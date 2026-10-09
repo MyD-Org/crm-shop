@@ -154,6 +154,12 @@ describe("datosCobroEnLinea", () => {
     expect(datosCobroEnLinea(soloCosto, 1210).map((d) => d.label)).not.toContain("Comisión y costos de Mercado Pago")
     expect(datosCobroEnLinea(base, 1210).map((d) => d.label)).not.toContain("Recibe neto")
   })
+  it("cuenta de cobro: fila con el nombre de la sucursal (o el slug si ya no existe); pagos viejos sin fila", () => {
+    const conCuenta: PagoEnLineaDto = { ...base, cuenta: { slug: "mdp", prevista: null, fallback: false } }
+    expect(datosCobroEnLinea(conCuenta, 1210, { mdp: "Mar del Plata" })[1]).toEqual({ label: "Cuenta de cobro", valor: "Mar del Plata" })
+    expect(datosCobroEnLinea(conCuenta, 1210).find((d) => d.label === "Cuenta de cobro")?.valor).toBe("mdp")
+    expect(datosCobroEnLinea(base, 1210).map((d) => d.label)).not.toContain("Cuenta de cobro")
+  })
   it("Payway: cupón y autorización, sin el id interno", () => {
     const payway: PagoEnLineaDto = {
       ...base,

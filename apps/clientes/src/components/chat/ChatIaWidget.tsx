@@ -14,7 +14,6 @@ import { useSenalesIniciativa } from "@/hooks/useSenalesIniciativa";
 import { contextoParaChat } from "@/lib/chat-ia-puente";
 import {
   ATRIBUTO_DOCK,
-  ATRIBUTO_OCULTO,
   ATRIBUTO_PEEK,
   BREAKPOINT_MOBILE,
   MEDIA_DOCK,
@@ -23,7 +22,6 @@ import {
   hojaMinimizada,
   hrefDeFiltros,
   idProductoDeRuta,
-  ocultarLauncherEnRuta,
   puedeNavegarSolo,
 } from "@/lib/chat-ia-integracion";
 
@@ -126,7 +124,7 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
 
   // Puente con la página (lib/chat-ia-puente.ts): al montarse, el chat queda
   // disponible para los "Conversar" del catálogo; `pedido` es su `sendRequest`.
-  const { registrar, pedido, teaser, aceptarTeaser, descartarTeaser } = useChatIa();
+  const { registrar, pedido, orden, teaser, aceptarTeaser, descartarTeaser } = useChatIa();
   useEffect(() => registrar(), [registrar]);
 
   // Abierto controlado (el drawer se abre solo al llegar un `sendRequest`, y
@@ -154,6 +152,14 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
   }, []);
   const minimizada = hojaMinimizada({ mobile, abierto, presentacion });
 
+  // Botón "Asistente" del header (BotonAsistente): sin launcher del widget, el
+  // chat se abre y se cierra con las órdenes del puente.
+  const [ultimaOrden, setUltimaOrden] = useState(orden?.id);
+  if (orden?.id !== ultimaOrden) {
+    setUltimaOrden(orden?.id);
+    if (orden) cambiarAbierto(orden.abrir);
+  }
+
   // Hoja minimizada: globals.css sube las barras de compra fijas (ficha,
   // carrito) por encima de la barra del chat.
   useEffect(() => {
@@ -162,16 +168,6 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
     else html.removeAttribute(ATRIBUTO_PEEK);
     return () => html.removeAttribute(ATRIBUTO_PEEK);
   }, [minimizada]);
-
-  // En el checkout el launcher no se muestra en mobile (globals.css, por este
-  // atributo): sólo se oculta la burbuja, un chat ya abierto no se cierra.
-  const ocultar = ocultarLauncherEnRuta(pathname);
-  useEffect(() => {
-    const html = document.documentElement;
-    if (ocultar) html.setAttribute(ATRIBUTO_OCULTO, "");
-    else html.removeAttribute(ATRIBUTO_OCULTO);
-    return () => html.removeAttribute(ATRIBUTO_OCULTO);
-  }, [ocultar]);
 
   // Invitación proactiva (src/lib/iniciativa/): chat abierto, checkout,
   // agregados al carrito y la espera en la ficha. El teaser queda en el puente
@@ -274,6 +270,9 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
       dock={acoplable ? "right" : "none"}
       sendRequest={pedido ?? undefined}
       mobileBreakpoint={BREAKPOINT_MOBILE}
+      // Sin burbuja: se abre con el botón "Asistente" del header y se cierra con
+      // ese botón, la X de la cabecera o Escape (ai-widget 0.9.0).
+      launcher={false}
       presentation={presentacion}
       onPresentationChange={setPresentacion}
       // Invitación proactiva (src/lib/iniciativa/): el puente cuenta los topes

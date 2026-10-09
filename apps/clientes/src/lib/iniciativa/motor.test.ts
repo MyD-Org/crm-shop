@@ -141,6 +141,6 @@ describe("motor de la invitación + puente", () => {
     const baja = registrarChatIa();
     anotarEvento({ tipo: "ficha-sin-agregar" });
     baja();
-    expect(estadoChatIa()).toEqual({ disponible: false, pedido: null, teaser: null });
+    expect(estadoChatIa()).toEqual({ disponible: false, abierto: false, orden: null, pedido: null, teaser: null });
   });
 });

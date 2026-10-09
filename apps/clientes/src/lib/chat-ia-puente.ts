@@ -49,9 +49,20 @@ export interface TeaserChatIa {
   mensaje: string;
 }
 
+/** Orden de abrir o cerrar el chat (botón "Asistente" del header). */
+export interface OrdenChatIa {
+  /** Cambia con cada orden: el widget la aplica cuando ve un id nuevo. */
+  id: string;
+  abrir: boolean;
+}
+
 export interface EstadoChatIa {
   /** Hay un chat montado que puede recibir pedidos. */
   disponible: boolean;
+  /** El chat está abierto (lo avisa el widget con `fijarChatAbierto`). */
+  abierto: boolean;
+  /** Última orden de abrir/cerrar, o null. */
+  orden: OrdenChatIa | null;
   /** Último pedido de conversación, o null. */
   pedido: PedidoChatIa | null;
   /** Invitación vigente para el launcher, o null. */
@@ -61,7 +72,9 @@ export interface EstadoChatIa {
 /** Tope del texto que se manda como primer mensaje (el de la búsqueda). */
 export const LARGO_MAX_PEDIDO = 500;
 
-let estado: EstadoChatIa = { disponible: false, pedido: null, teaser: null };
+const INICIAL: EstadoChatIa = { disponible: false, abierto: false, orden: null, pedido: null, teaser: null };
+
+let estado: EstadoChatIa = INICIAL;
 let registrados = 0;
 let secuencia = 0;
 let chatAbierto = false;
@@ -84,7 +97,7 @@ export function estadoChatIa(): EstadoChatIa {
 }
 
 /** Estado del servidor (y del primer render): nunca hay chat. */
-const ESTADO_SERVIDOR: EstadoChatIa = { disponible: false, pedido: null, teaser: null };
+const ESTADO_SERVIDOR: EstadoChatIa = INICIAL;
 export function estadoChatIaServidor(): EstadoChatIa {
   return ESTADO_SERVIDOR;
 }
@@ -103,7 +116,7 @@ export function registrarChatIa(): () => void {
     registrados -= 1;
     if (registrados === 0) {
       chatAbierto = false;
-      publicar({ disponible: false, pedido: null, teaser: null });
+      publicar(INICIAL);
     }
   };
 }
@@ -120,6 +133,17 @@ export function conversar(texto: string): boolean {
   return true;
 }
 
+/**
+ * Abre el chat si está cerrado y lo cierra si está abierto (botón "Asistente"
+ * del header). `false` (y nada cambia) si no hay chat.
+ */
+export function alternarChatIa(): boolean {
+  if (!estado.disponible) return false;
+  secuencia += 1;
+  publicar({ ...estado, orden: { id: `orden-${secuencia}`, abrir: !chatAbierto } });
+  return true;
+}
+
 /** El último pedido (lo que el widget pasa como `sendRequest`). */
 export function pedidoChatIa(): PedidoChatIa | null {
   return estado.pedido;
@@ -131,7 +155,8 @@ export function pedidoChatIa(): PedidoChatIa | null {
  */
 export function fijarChatAbierto(abierto: boolean): void {
   chatAbierto = abierto;
-  if (abierto && estado.teaser) publicar({ ...estado, teaser: null });
+  const teaser = abierto ? null : estado.teaser;
+  if (estado.abierto !== abierto || estado.teaser !== teaser) publicar({ ...estado, abierto, teaser });
 }
 
 export function chatIaAbierto(): boolean {
@@ -207,6 +232,6 @@ export function reiniciarChatIa() {
   registrados = 0;
   secuencia = 0;
   chatAbierto = false;
-  estado = { disponible: false, pedido: null, teaser: null };
+  estado = INICIAL;
   oyentes.clear();
 }

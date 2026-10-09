@@ -74,6 +74,9 @@ export const ETIQUETAS_CHAT = {
   peekResultsLabel: "Ver resultados",
 } as const;
 
+/** Botón del header que abre y cierra el chat (BotonAsistente). */
+export const ETIQUETA_BOTON_ASISTENTE = "Asistente";
+
 export const SUBTITULO_CHAT = "Consultas sobre productos y pedidos";
 
 /** Color de marca del widget: token del DS, nunca un literal. */

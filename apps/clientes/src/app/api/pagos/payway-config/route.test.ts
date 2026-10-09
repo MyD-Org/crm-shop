@@ -5,6 +5,7 @@ const getPedidoParaPago = vi.fn();
 
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidadActual() }));
 vi.mock("@/lib/pedidos", () => ({
+  cuentasRechazadasDelPedido: async () => [],
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),
 }));
 vi.mock("@/lib/tenant", () => ({ shopTenantId: () => "tenant-ejemplo" }));
@@ -76,8 +77,16 @@ describe("GET /api/pagos/payway-config?pedido=", () => {
     expect((await pedir()).status).toBe(404);
   });
 
-  it("la cuenta del pedido sin configurar -> 409 en usted (sin la key de otra cuenta)", async () => {
+  it("la cuenta del pedido sin configurar -> la config de la otra cuenta configurada", async () => {
     vi.stubEnv("PAYWAY_API_PUBLIC_KEY_MDP", "");
+    const r = await pedir();
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ cuenta: "igz", publicKey: "publica-igz", baseUrl: "https://payway.example" });
+  });
+
+  it("ninguna cuenta configurada -> 409 en usted, sin keys", async () => {
+    vi.stubEnv("PAYWAY_API_PUBLIC_KEY_MDP", "");
+    vi.stubEnv("PAYWAY_API_PUBLIC_KEY_IGZ", "");
     const r = await pedir();
     expect(r.status).toBe(409);
     const j = await r.json();

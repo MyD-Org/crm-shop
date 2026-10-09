@@ -30,6 +30,8 @@ vi.mock("@/lib/medios-pago-repo", () => ({
 vi.mock("@/lib/auth", () => ({ identidadActual: async () => identidad }));
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => permitido }));
 vi.mock("@/lib/pedidos", async (original) => ({
+  cuentasRechazadasDelPedido: async () => [],
+  detalleCredencialesRechazadas: (c: string) => `credenciales_rechazadas:${c}`,
   motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
   reservarIntento: (...a: unknown[]) => reservarIntento(...a),
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),
@@ -179,7 +181,7 @@ describe("POST /api/pagos/mercadopago — caracterización", () => {
       cuotas: 1,
       totalEsperado: 100,
       conInteres: false,
-    });
+    }, expect.objectContaining({ cuenta: expect.any(String) }));
     expect(crearPago).toHaveBeenCalledWith({
       pedidoId: "p1",
       monto: 100,

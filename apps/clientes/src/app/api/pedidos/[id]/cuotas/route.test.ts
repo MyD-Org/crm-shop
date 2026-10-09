@@ -27,6 +27,7 @@ vi.mock("@/lib/cotizacion", async (orig) => ({
   cotizar: (...a: unknown[]) => cotizar(...a),
 }));
 vi.mock("@/lib/pedidos", () => ({
+  cuentasRechazadasDelPedido: async () => [],
   pedidoParaCambiarMedio: (...a: unknown[]) => pedidoParaCambiarMedio(...a),
   cambiarMedioPedido: (...a: unknown[]) => cambiarMedioPedido(...a),
 }));

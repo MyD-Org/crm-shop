@@ -29,6 +29,8 @@ vi.mock("@/lib/pagos/credenciales", async (orig) => ({
 }));
 
 vi.mock("@/lib/pedidos", () => ({
+  cuentaDelIntentoPorReferencia: async () => null,
+  cuentaDelPedido: async () => null,
   pedidoDelPago: (...a: unknown[]) => pedidoDelPago(...a),
   registrarCobro: (...a: unknown[]) => registrarCobro(...a),
 }));
@@ -97,6 +99,9 @@ describe("webhook de Mercado Pago — caracterización", () => {
       reversion: false,
       cuotas: 3,
       totalPagado: 130,
+      // La cuenta que firmó el aviso (sólo se usa si el webhook crea la fila del intento).
+      cuenta: "igz",
+      cuentaPrevista: null,
     });
   });
 

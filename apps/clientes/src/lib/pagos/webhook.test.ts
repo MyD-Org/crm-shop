@@ -9,7 +9,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const pedidoDelPago = vi.fn();
 const registrarCobro = vi.fn();
+/** Cuenta congelada en el intento de ese pago (null = sin intento o anterior a la 0035). */
+const cuentaDelIntento = vi.fn<(...a: unknown[]) => Promise<string | null>>(async () => null);
 vi.mock("@/lib/pedidos", () => ({
+  cuentaDelIntentoPorReferencia: (...a: unknown[]) => cuentaDelIntento(...a),
+  // Pedido de mdp (sucursal): la prevista de un intento que crea el webhook.
+  cuentaDelPedido: async () => ({ sucursal: "mdp", facturaSucursal: null }),
   pedidoDelPago: (...a: unknown[]) => pedidoDelPago(...a),
   registrarCobro: (...a: unknown[]) => registrarCobro(...a),
 }));
@@ -75,6 +80,8 @@ afterEach(() => {
   fetchMock.mockReset();
   pedidoDelPago.mockReset();
   registrarCobro.mockReset();
+  cuentaDelIntento.mockReset();
+  cuentaDelIntento.mockResolvedValue(null);
 });
 
 describe("procesarWebhook — cuenta por el secreto que firma", () => {
@@ -121,6 +128,33 @@ describe("procesarWebhook — cuenta por el secreto que firma", () => {
     vi.stubEnv("MP_WEBHOOK_SECRET_MDP", "");
     vi.stubEnv("MP_WEBHOOK_SECRET", SECRETOS.igz);
     expect((await procesarWebhook("mercadopago", aviso(SECRETOS.igz))).status).toBe(401);
+  });
+
+  it("la cuenta que firmó y la prevista del pedido van al registro (las usa si crea la fila del intento)", async () => {
+    await procesarWebhook("mercadopago", aviso(SECRETOS.igz));
+    expect(registrarCobro).toHaveBeenCalledWith("p1", expect.objectContaining({ cuenta: "igz", cuentaPrevista: "mdp" }));
+  });
+
+  it("intento de mdp y aviso firmado por igz: aviso en el log y se procesa con igz", async () => {
+    cuentaDelIntento.mockResolvedValue("mdp");
+    expect((await procesarWebhook("mercadopago", aviso(SECRETOS.igz))).status).toBe(200);
+    expect(autorizaciones()).toEqual(["Bearer TEST-token-igz"]);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/cuenta mdp y el aviso lo firmó igz/));
+    expect(registrarCobro).toHaveBeenCalledWith("p1", expect.objectContaining({ cuenta: "igz" }));
+  });
+
+  it("secretos repetidos: prefiere la cuenta congelada del intento", async () => {
+    vi.stubEnv("MP_WEBHOOK_SECRET_MDP", SECRETOS.igz);
+    cuentaDelIntento.mockResolvedValue("mdp");
+    expect((await procesarWebhook("mercadopago", aviso(SECRETOS.igz))).status).toBe(200);
+    expect(autorizaciones()).toEqual(["Bearer TEST-token-mdp"]);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("secretos repetidos"));
+  });
+
+  it("secretos repetidos sin intento: la primera en el orden determinista (predeterminada)", async () => {
+    vi.stubEnv("MP_WEBHOOK_SECRET_MDP", SECRETOS.igz);
+    expect((await procesarWebhook("mercadopago", aviso(SECRETOS.igz, { pista: "mdp" }))).status).toBe(200);
+    expect(autorizaciones()).toEqual(["Bearer TEST-token-igz"]);
   });
 
   it("un procesador sin webhook (Payway) responde 404", async () => {

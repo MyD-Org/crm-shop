@@ -1,7 +1,7 @@
 import { procesadorDeMedio } from "@/lib/medios-pago";
 import { cuentaDelPedido } from "@/lib/pedidos";
 import { credencialesMercadoPago } from "./credenciales";
-import { cuentaParaCobrar, type PedidoConCuenta } from "./cuentas-sucursales";
+import { cuentaParaCobrar, type PedidoParaCuenta } from "./cuentas-sucursales";
 
 /** Lo que el Brick de Mercado Pago necesita del servidor para ESTE pedido. */
 export interface ConfigMp {
@@ -18,10 +18,12 @@ export interface ConfigMp {
  * cobra con una cuenta supuesta). `pedido` es el id (se lee su sucursal) o sus datos de cuenta. Nunca
  * lanza: la respuesta del pedido no depende de esto.
  */
-export async function configMpPara(pedido: string | PedidoConCuenta, pagoMetodo: string): Promise<ConfigMp> {
+export async function configMpPara(pedido: string | PedidoParaCuenta, pagoMetodo: string): Promise<ConfigMp> {
   if (procesadorDeMedio(pagoMetodo) !== "mercadopago") return {};
   try {
-    const datos = typeof pedido === "string" ? await cuentaDelPedido(pedido) : pedido;
+    // Con el id, `cuentaParaCobrar` ve también si el procesador ya rechazó la cuenta en este pedido.
+    const leidos = typeof pedido === "string" ? await cuentaDelPedido(pedido) : null;
+    const datos: PedidoParaCuenta | null = typeof pedido === "string" ? (leidos ? { ...leidos, id: pedido } : null) : pedido;
     if (!datos) return {};
     const elegida = await cuentaParaCobrar("mercadopago", datos);
     if (!elegida.ok) return {};

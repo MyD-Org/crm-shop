@@ -61,7 +61,7 @@ async function pedidoConCarrito() {
   await db.execute(
     sql`insert into shop.carts (tenant_id, clerk_user_id, items, version) values (${TENANT}, 'user_1', '[{"id":"item-1","qty":1}]'::jsonb, 3)`,
   );
-  const r = await reservarIntento(p.id, "payway", "tarjeta");
+  const r = await reservarIntento(p.id, "payway", "tarjeta", undefined, { cuenta: "igz", cuentaPrevista: "igz" });
   if (!r || !("intentoId" in r)) throw new Error("sin intento");
   return { pedidoId: p.id, intentoId: r.intentoId };
 }
@@ -98,7 +98,7 @@ describe("carrito tras un cobro en línea pendiente", () => {
   it("un reintento (segundo intento) que vuelve a quedar pendiente NO borra el carrito nuevo", async () => {
     const { pedidoId, intentoId } = await pedidoConCarrito();
     await registrarCobro(pedidoId, cobro("fallido"), { intentoId, avisar: false });
-    const r = await reservarIntento(pedidoId, "payway", "tarjeta");
+    const r = await reservarIntento(pedidoId, "payway", "tarjeta", undefined, { cuenta: "igz", cuentaPrevista: "igz" });
     if (!r || !("intentoId" in r)) throw new Error("sin intento");
     await registrarCobro(pedidoId, { ...cobro("pendiente"), referencia: "ref-2" }, { intentoId: r.intentoId });
     expect((await leerCarrito("user_1")).items).toEqual([{ id: "item-1", qty: 1 }]);

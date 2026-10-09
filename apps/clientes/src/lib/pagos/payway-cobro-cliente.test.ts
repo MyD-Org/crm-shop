@@ -66,6 +66,24 @@ describe("enviarCobro", () => {
     expect(await enviarCobro(PARAMS, f)).toMatchObject({ fase: "rechazado", reintentable: false });
   });
 
+  it("409 cuenta_rechazada: el mensaje de reingreso y la config de la otra cuenta para volver a tokenizar", async () => {
+    const config = { cuenta: "igz", publicKey: "publica-igz", baseUrl: "https://payway.example" };
+    const f = vi.fn().mockResolvedValue(
+      respuesta(409, { error: "Hubo un inconveniente con el procesador de pagos.", motivo: "cuenta_rechazada", reintentable: true, config }),
+    );
+    expect(await enviarCobro(PARAMS, f)).toEqual({
+      fase: "rechazado",
+      mensaje: "Hubo un inconveniente técnico con el medio de pago. Vuelva a ingresar los datos de su tarjeta e inténtelo nuevamente.",
+      reintentable: true,
+      config,
+    });
+  });
+
+  it("un rechazo del pago no trae config: la key no cambia", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta(200, { estado: "fallido", mensaje: "Fondos insuficientes.", config: { cuenta: "igz", publicKey: "x" } }));
+    expect(await enviarCobro(PARAMS, f)).not.toHaveProperty("config");
+  });
+
   it("falla de red al enviar el token: NO se sabe si se cobró -> pendiente, no reintentar", async () => {
     const f = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     expect(await enviarCobro(PARAMS, f)).toEqual({ fase: "pendiente" });

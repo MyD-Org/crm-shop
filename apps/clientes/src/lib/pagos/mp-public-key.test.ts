@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const cuentaDelPedido = vi.fn();
-vi.mock("@/lib/pedidos", () => ({ cuentaDelPedido: (id: string) => cuentaDelPedido(id) }));
+const rechazadas = vi.fn<(...a: unknown[]) => Promise<string[]>>(async () => []);
+vi.mock("@/lib/pedidos", () => ({
+  cuentasRechazadasDelPedido: (...a: unknown[]) => rechazadas(...a),
+  cuentaDelPedido: (id: string) => cuentaDelPedido(id),
+}));
+
 // Sucursales del CRM: igz predeterminada y mdp.
 vi.mock("@/lib/tenant", () => ({ shopTenantId: () => "tenant-ejemplo" }));
 vi.mock("@/db", () => ({
@@ -55,8 +60,24 @@ describe("configMpPara (public key del Brick por pedido)", () => {
     expect(cuentaDelPedido).toHaveBeenCalledWith("pedido-1");
   });
 
-  it("la cuenta del pedido sin configurar: nada (sin key supuesta de otra cuenta)", async () => {
+  it("la cuenta del pedido sin configurar: la key de la alternativa configurada", async () => {
     vi.stubEnv("MP_PUBLIC_KEY_MDP", "");
+    expect(await configMpPara({ sucursal: "mdp", facturaSucursal: null }, "mercadopago")).toEqual({
+      mpPublicKey: "TEST-publica-igz",
+      mpCuenta: "igz",
+    });
+  });
+
+  it("retomar un pedido cuya cuenta ya rechazó el procesador: la key de la otra", async () => {
+    cuentaDelPedido.mockResolvedValue({ sucursal: "mdp", facturaSucursal: null });
+    rechazadas.mockResolvedValueOnce(["mdp"]);
+    expect(await configMpPara("pedido-1", "mercadopago")).toEqual({ mpPublicKey: "TEST-publica-igz", mpCuenta: "igz" });
+    expect(rechazadas).toHaveBeenCalledWith("pedido-1", "mercadopago");
+  });
+
+  it("ninguna cuenta configurada: nada (el formulario no se monta)", async () => {
+    vi.stubEnv("MP_PUBLIC_KEY_MDP", "");
+    vi.stubEnv("MP_PUBLIC_KEY_IGZ", "");
     expect(await configMpPara({ sucursal: "mdp", facturaSucursal: null }, "mercadopago")).toEqual({});
   });
 

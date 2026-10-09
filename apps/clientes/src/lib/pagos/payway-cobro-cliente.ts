@@ -6,6 +6,8 @@
  * tarjeta, el código de seguridad ni el monto (el monto sale del pedido, en el servidor).
  */
 
+import { cambioDeCuenta, type ConfigCuentaCobro } from "./cuenta-rechazada-cliente";
+
 export interface ParamsCobro {
   pedidoId: string;
   token: string;
@@ -31,7 +33,11 @@ export function cuerpoCobro(p: ParamsCobro) {
 export type ResultadoCobro =
   | { fase: "pagado" }
   | { fase: "pendiente" }
-  | { fase: "rechazado"; mensaje: string; reintentable: boolean };
+  /**
+   * `config`: el cobro no se hizo porque hay que tokenizar con OTRA cuenta (`cambioDeCuenta`): el
+   * formulario se vuelve a armar con esa key y el comprador vuelve a cargar la tarjeta.
+   */
+  | { fase: "rechazado"; mensaje: string; reintentable: boolean; config?: ConfigCuentaCobro };
 
 interface RespuestaPago {
   estado?: "pagado" | "pendiente" | "fallido";
@@ -58,6 +64,8 @@ export async function enviarCobro(p: ParamsCobro, doFetch: typeof fetch = fetch)
   const json = (await res.json().catch(() => ({}))) as RespuestaPago;
 
   if (!res.ok) {
+    const cambio = cambioDeCuenta(json);
+    if (cambio) return { fase: "rechazado", mensaje: cambio.mensaje, reintentable: true, config: cambio.config };
     return {
       fase: "rechazado",
       mensaje: json.error ?? "No pudimos procesar el pago. Inténtelo de nuevo en un momento.",

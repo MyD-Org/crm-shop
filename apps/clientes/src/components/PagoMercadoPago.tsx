@@ -26,6 +26,7 @@ import { binValido } from "./checkout/consultor-cuotas";
 import { useOpcionesCuotas } from "./checkout/useOpcionesCuotas";
 import { alEstarListo, alFallarBrick, alVencerPlazo, iniciarPlazoCarga } from "./pago-mp-carga";
 import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "./PagoMercadoPagoAvisos";
+import { cambioDeCuenta } from "@/lib/pagos/cuenta-rechazada-cliente";
 
 /**
  * Cobro con Mercado Pago: "¿Cómo quiere pagar?" con tarjeta de crédito, de débito o la cuenta de
@@ -156,9 +157,17 @@ export function PagoMercadoPago({
     onCobroEnCurso?.(cobroEnCurso);
   }, [cobroEnCurso, onCobroEnCurso]);
 
+  /**
+   * Cuenta con la que se cobra después de un `409 cuenta_rechazada` / `cuenta_no_valida`: la manda el
+   * servidor y pisa la de la prop mientras la prop siga siendo la misma (`base`); si el pedido trae otra
+   * key, vuelve a regir la del pedido.
+   */
+  const [cuentaVigente, setCuentaVigente] = useState<{ base?: string; publicKey: string; cuenta: string } | null>(null);
+  const reemplazo = cuentaVigente && cuentaVigente.base === publicKey ? cuentaVigente : null;
   // Sólo la key del servidor para ESTE pedido. Si cambia (otra cuenta), se reinicia el SDK y el Brick
   // se remonta (su `key` la incluye).
-  const key = publicKey || undefined;
+  const key = reemplazo?.publicKey ?? (publicKey || undefined);
+  const cuentaCobro = reemplazo?.cuenta ?? cuenta;
   useEffect(() => {
     inicializar(key);
   }, [key]);
@@ -290,13 +299,22 @@ export function PagoMercadoPago({
           metodoPagoId: datos?.payment_method_id,
           ...(bin ? { bin } : {}),
           // La cuenta con la que se tokenizó: el servidor la valida contra la del pedido.
-          ...(cuenta ? { cuenta } : {}),
+          ...(cuentaCobro ? { cuenta: cuentaCobro } : {}),
         }),
       });
 
       const json = (await res.json()) as RespuestaPago;
 
       if (!res.ok) {
+        // Hay que tokenizar con otra cuenta: el Brick se remonta con SU key (cambia la `key` del Brick)
+        // y el comprador vuelve a cargar la tarjeta. Un rechazo del pago nunca llega por acá.
+        const cambio = cambioDeCuenta(json);
+        if (cambio) {
+          setCuentaVigente({ base: publicKey, publicKey: cambio.config.publicKey, cuenta: cambio.config.cuenta });
+          remontarBrick();
+          setEstado({ fase: "rechazado", mensaje: cambio.mensaje, reintentable: true });
+          return;
+        }
         remontarBrick();
         setEstado({
           fase: "rechazado",

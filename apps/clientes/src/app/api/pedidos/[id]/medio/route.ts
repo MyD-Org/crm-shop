@@ -218,7 +218,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       cuentaPago: r.cuentaPago,
       cotizacion,
       ...(contacto ? { contacto } : {}),
-      ...(await configMpPara({ sucursal: pedido.sucursal, facturaSucursal: pedido.facturaSucursal }, pagoMetodo)),
+      ...(await configMpPara({ id, sucursal: pedido.sucursal, facturaSucursal: pedido.facturaSucursal }, pagoMetodo)),
     });
   } catch (err) {
     console.error("[/api/pedidos/:id/medio] POST error:", err);

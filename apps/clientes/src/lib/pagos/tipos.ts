@@ -42,6 +42,13 @@ export interface InfoPago {
 }
 
 /**
+ * `orders.pago_info`: el medio del cobro (`InfoPago`) más la cuenta de cobro (slug de la sucursal) con la
+ * que se cobró y, sólo si fue otra, la que le correspondía al pedido. Contrato aditivo con el CRM
+ * (`parseInfoPago` descarta lo que no conoce). Ausentes en pagos anteriores a la migración 0035.
+ */
+export type PagoInfoOrden = InfoPago & { cuentaCobro?: string; cuentaCobroPrevista?: string };
+
+/**
  * Por qué se cayó un pago, en términos nuestros.
  *
  * No son los códigos del proveedor: son las categorías que cambian **qué le
@@ -330,3 +337,14 @@ export class ErrorProveedor extends Error {
     this.name = "ErrorProveedor";
   }
 }
+
+/**
+ * El procesador rechazó las credenciales de la cuenta (HTTP 401/403 al crear el pago): el request no se
+ * procesó, no hay pago. Es lo ÚNICO que habilita cobrar con otra cuenta: nunca un pago rechazado, un
+ * 402, un 400/422, un 5xx, un timeout ni un error de red (ahí el pago pudo crearse o el problema no es de
+ * la cuenta).
+ */
+export function esCredencialRechazada(err: unknown): err is ErrorProveedor {
+  return err instanceof ErrorProveedor && (err.status === 401 || err.status === 403);
+}
+

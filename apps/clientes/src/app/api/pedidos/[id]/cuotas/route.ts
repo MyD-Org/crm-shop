@@ -128,7 +128,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // Con la cuenta de Mercado Pago del pedido (la de su sucursal): los planes y la public key son de ella.
     let planes: PlanesMP | null = null;
     let mpDisponible = false;
-    const cuentaMp = procesadorId === "mercadopago" ? await cuentaParaCobrar("mercadopago", pedido) : null;
+    const cuentaMp = procesadorId === "mercadopago" ? await cuentaParaCobrar("mercadopago", { ...pedido, id }) : null;
     if (cuentaMp?.ok) {
       const r = await consultarPlanesMP(
         bin

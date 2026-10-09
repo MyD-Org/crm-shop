@@ -31,6 +31,8 @@ vi.mock("@/lib/pagos/credenciales", async (orig) => ({
 }));
 
 vi.mock("@/lib/pedidos", () => ({
+  cuentaDelIntentoPorReferencia: async () => null,
+  cuentaDelPedido: async () => null,
   pedidoDelPago: (...a: unknown[]) => pedidoDelPago(...a),
   registrarCobro: (...a: unknown[]) => registrarCobro(...a),
 }));

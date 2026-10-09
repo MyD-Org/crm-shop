@@ -22,8 +22,8 @@ import {
 } from "@/lib/pedidos";
 import { proveedorPago } from "@/lib/pagos";
 import { conciliarIntento } from "./conciliar-intento";
-import { cuentaPrevistaDelPedido, proveedorDeIntento } from "./cuentas-sucursales";
-import { MENSAJE_RECHAZO } from "./tipos";
+import { candidatasDelPedido, proveedorDeIntento } from "./cuentas-sucursales";
+import { ErrorProveedor, MENSAJE_RECHAZO, esCredencialRechazada } from "./tipos";
 
 export interface EstadoPagoPedido {
   estado: PagoEstado;
@@ -58,31 +58,41 @@ export async function estadoPagoDelPedido(
   let sinCobro = false;
 
   if (enLinea && pedido.pagoEstado !== "pagado" && opciones.pagoMercadoPagoId) {
-    // Con la cuenta del pedido, que es con la que se creó la preferencia.
-    const cuenta = await cuentaPrevistaDelPedido(pedido);
-    const mp = cuenta ? proveedorPago("mercadopago", cuenta) : null;
-    if (mp?.configurado()) {
+    /**
+     * La preferencia se creó con la cuenta prevista o, si sus credenciales fallaron, con otra: no se sabe
+     * con cuál. Se consulta (sólo lectura) con cada cuenta usable, la prevista primero: la que conoce el
+     * pago y dice que es de ESTE pedido es la cuenta del cobro; un 404 pasa a la siguiente.
+     */
+    const { prevista, candidatas } = await candidatasDelPedido("mercadopago", pedido);
+    for (const c of candidatas.filter((x) => x.configurada && !x.rechazada)) {
+      const mp = proveedorPago("mercadopago", c.cuenta);
+      if (!mp) continue;
       try {
         const estado = await mp.consultarPago(opciones.pagoMercadoPagoId);
         // Un id ajeno (de otro pedido o de otro comprador) no se registra en éste.
-        if (estado.pedidoId === id) {
-          await registrarCobro(id, {
-            proveedor: mp.id,
-            referencia: opciones.pagoMercadoPagoId,
-            estado: estado.estado,
-            detalle: estado.detalle,
-            reversion: estado.reversion,
-            cuotas: estado.cuotasPagadas,
-            totalPagado: estado.totalPagado,
-            moneda: estado.moneda,
-            ...(estado.info ? { info: estado.info } : {}),
-          });
-          if (estado.estado === "fallido" && estado.motivo) mensaje = MENSAJE_RECHAZO[estado.motivo];
-          pedido = (await getPedidoParaPago(id, dueno)) ?? pedido;
-        }
+        if (estado.pedidoId !== id) break;
+        await registrarCobro(id, {
+          proveedor: mp.id,
+          referencia: opciones.pagoMercadoPagoId,
+          estado: estado.estado,
+          detalle: estado.detalle,
+          reversion: estado.reversion,
+          cuotas: estado.cuotasPagadas,
+          totalPagado: estado.totalPagado,
+          moneda: estado.moneda,
+          ...(estado.info ? { info: estado.info } : {}),
+          cuenta: c.cuenta,
+          cuentaPrevista: prevista,
+        });
+        if (estado.estado === "fallido" && estado.motivo) mensaje = MENSAJE_RECHAZO[estado.motivo];
+        pedido = (await getPedidoParaPago(id, dueno)) ?? pedido;
+        break;
       } catch (err) {
-        // Sin respuesta de Mercado Pago sigue como estaba: el webhook o la conciliación lo retoman.
-        console.error(`[estado-pago] pedido=${id} pago_mp:`, err);
+        // Esta cuenta no conoce el pago (404) o no la deja consultar (credenciales): se prueba la siguiente.
+        // Cualquier otro error corta: sigue como estaba y el webhook o la conciliación lo retoman.
+        if ((err instanceof ErrorProveedor && err.status === 404) || esCredencialRechazada(err)) continue;
+        console.error(`[estado-pago] pedido=${id} pago_mp cuenta=${c.cuenta}:`, err);
+        break;
       }
     }
   }
@@ -90,10 +100,11 @@ export async function estadoPagoDelPedido(
   if (enLinea && pedido.pagoEstado === "pendiente") {
     const abierto = await intentoAbiertoDelPedido(id, dueno);
     sinCobro = abierto === null;
-    // Con la cuenta del pedido (la del intento).
+    // Con la cuenta congelada en el intento (o, si es anterior a la 0035, la del pedido).
     const proveedor = abierto?.referencia
       ? await proveedorDeIntento({
           proveedor: abierto.proveedor,
+          cuenta: abierto.cuenta,
           sucursal: pedido.sucursal,
           facturaSucursal: pedido.facturaSucursal,
         })

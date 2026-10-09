@@ -67,6 +67,32 @@ describe("reconciliarPagosPendientes — por proveedor", () => {
     ]);
   });
 
+  it("la cuenta congelada en el intento manda aunque la prevista del pedido hoy resuelva a otra", async () => {
+    intentosPendientesDeReconciliar.mockResolvedValue([
+      { orderId: "p1", referencia: "r1", cuenta: "mdp", sucursal: "igz", facturaSucursal: null },
+      // Anterior a la 0035: sin cuenta, se deriva del pedido.
+      { orderId: "p2", referencia: "r2", cuenta: null, sucursal: "igz", facturaSucursal: null },
+    ]);
+    consultarPago.mockResolvedValue({ estado: "pendiente", referencia: "r", detalle: "x" });
+    await reconciliarPagosPendientes({ proveedor: "mercadopago" });
+    expect(consultarPago.mock.calls).toEqual([
+      ["mdp", "r1"],
+      ["igz", "r2"],
+    ]);
+  });
+
+  it("credenciales rechazadas de la cuenta congelada: el intento queda pendiente (error contado) y no se consulta con otra", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    intentosPendientesDeReconciliar.mockResolvedValue([
+      { orderId: "p1", referencia: "r1", cuenta: "mdp", sucursal: "mdp", facturaSucursal: null },
+    ]);
+    const { ErrorProveedor } = await import("./tipos");
+    consultarPago.mockRejectedValue(new ErrorProveedor("Mercado Pago respondió 401", 401));
+    const r = await reconciliarPagosPendientes({ proveedor: "mercadopago" });
+    expect(r).toMatchObject({ revisados: 1, actualizados: 0, errores: 1 });
+    expect(consultarPago.mock.calls).toEqual([["mdp", "r1"]]);
+  });
+
   it("una cuenta sin credenciales: sus intentos cuentan como error, un solo log, y el lote sigue", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     intentosPendientesDeReconciliar.mockResolvedValue([

@@ -89,4 +89,15 @@ describe("PagoMercadoPago.tsx: cuenta del pedido", () => {
     const post = fuente.slice(fuente.indexOf('fetch("/api/pagos/mercadopago"'));
     expect(post.slice(0, 600)).toMatch(/cuenta/);
   });
+
+  it("409 cuenta_rechazada / cuenta_no_valida: aplica la config de la otra cuenta (key nueva = Brick nuevo)", () => {
+    const manejo = fuente.slice(fuente.indexOf("if (!res.ok) {"));
+    const bloque = manejo.slice(0, 700);
+    expect(bloque).toMatch(/cambioDeCuenta\(json\)/);
+    expect(bloque).toMatch(/setCuentaVigente\(\{ base: publicKey, publicKey: cambio\.config\.publicKey, cuenta: cambio\.config\.cuenta \}\)/);
+    expect(bloque).toMatch(/remontarBrick\(\)/);
+    // La key y la cuenta del cobro salen de la config aplicada mientras la prop siga siendo la misma.
+    expect(fuente).toMatch(/const key = reemplazo\?\.publicKey \?\? \(publicKey \|\| undefined\)/);
+    expect(fuente).toMatch(/cuenta: cuentaCobro/);
+  });
 });

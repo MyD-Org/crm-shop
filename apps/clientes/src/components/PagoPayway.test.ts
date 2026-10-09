@@ -56,6 +56,12 @@ describe("PagoPayway: datos de tarjeta", () => {
     expect(cobro.slice(0, 400)).toMatch(/cuenta: config\.cuenta/);
   });
 
+  it("409 cuenta_rechazada: rearma el SDK con la key de la otra cuenta (sesión nueva) antes de reintentar", () => {
+    const rechazo = componente.slice(componente.indexOf("if (r.config && r.config.baseUrl)"));
+    expect(rechazo.slice(0, 500)).toMatch(/sesionSdk\.current = crearSesionSdk\(\)/);
+    expect(rechazo.slice(0, 500)).toMatch(/setConfig\(\{ cuenta: r\.config\.cuenta, publicKey: r\.config\.publicKey, baseUrl: r\.config\.baseUrl \}\)/);
+  });
+
   it("usa autocomplete de tarjeta y teclado numérico (móvil)", () => {
     for (const a of ["cc-number", "cc-exp", "cc-csc", "cc-name"]) expect(componente).toContain(`autoComplete="${a}"`);
     expect(componente).toContain('inputMode="numeric"');

@@ -171,9 +171,6 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
       <Button variant="ghost" size="sm" onClick={() => void abrir()}>
         Emitir factura
       </Button>
-      <p className="mt-1 text-xs" style={{ color: "var(--ink-faint)" }}>
-        Crea el comprobante real en Alegra. Para facturas hechas por fuera, use &ldquo;Vincular factura&rdquo; arriba.
-      </p>
 
       <Dialog
         dismissible={false}

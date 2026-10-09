@@ -1,25 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { getBotStatus, setBotStatus } from "@/lib/inbox-api"
 
-async function requireTenant() {
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  if (!session.userId) return { error: NextResponse.json({ error: "no autorizado" }, { status: 401 }) }
+async function requireTenant(req: Request) {
+  const guard = await requireOperatorPlus(req)
+  if (!guard.ok) return { error: guard.response }
 
-  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, session.tenantId))
+  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, guard.tenantId))
   if (!tenant?.aiTenantId || !tenant?.aiApiUrl) {
     return { error: NextResponse.json({ error: "inbox no configurado" }, { status: 503 }) }
   }
   return { tenant }
 }
 
-export async function GET() {
-  const { error, tenant } = await requireTenant()
+export async function GET(req: Request) {
+  const { error, tenant } = await requireTenant(req)
   if (error) return error
 
   const botEnabled = await getBotStatus(tenant.aiApiUrl, tenant.aiTenantId)
@@ -27,7 +25,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { error, tenant } = await requireTenant()
+  const { error, tenant } = await requireTenant(req)
   if (error) return error
 
   const body = await req.json().catch(() => null)

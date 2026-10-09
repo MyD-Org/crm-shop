@@ -593,6 +593,80 @@ describe("escrituras del flujo de pago", () => {
     expect(revisionEscrita()).toBeNull();
   });
 
+  /**
+   * Red de seguridad del monto: el pedido del lock vale 1000.00. Un pago aprobado por menos (o en
+   * otra moneda) queda anotado en su intento como lo informó el procesador, pero el pedido NO pasa a
+   * `pagado`: queda como estaba, marcado `monto_distinto`, sin vaciar el carrito ni avisar.
+   */
+  describe("registrarCobro: un pago aprobado tiene que cubrir el total del pedido", () => {
+    const aprobado = (totalPagado: number, cuotas: number | null = null) =>
+      responder({
+        lock: "pendiente",
+        clerk: "user_1",
+        porReferencia: ["i1", "ref-1", "pendiente"],
+        todos: [["i1", "ref-1", "pagado", "mercadopago", "accredited", "tarjeta", cuotas, totalPagado.toFixed(2)]],
+      });
+
+    it("MENOR que el total: el intento queda pagado pero el pedido no, y se marca monto_distinto", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      grabadora = dbGrabadora(aprobado(600));
+      expect(await registrarCobro(ID, { ...cobro, totalPagado: 600 })).toBe(true);
+
+      // El intento refleja al procesador: el pago existe y está aprobado.
+      const intento = updateDe("pago_intentos");
+      expect(intento.sql).toContain('"estado" =');
+      expect(intento.params).toContain("pagado");
+      // El pedido no se acredita, pero apunta al pago para que el operador lo encuentre.
+      const pedido = updateDe("orders");
+      expect(pedido.sql).not.toContain('"pago_estado" =');
+      expect(pedido.params).toContain("ref-1");
+      expect(revisionEscrita()).toBe("monto_distinto");
+      expect(updateDe("carts")).toBeUndefined();
+      expect(error).toHaveBeenCalledWith(expect.stringContaining("monto_distinto"));
+    });
+
+    it("IGUAL al total: acredita como siempre", async () => {
+      grabadora = dbGrabadora(aprobado(1000));
+      await registrarCobro(ID, { ...cobro, totalPagado: 1000 });
+      const pedido = updateDe("orders");
+      expect(pedido.sql).toContain('"pago_estado" =');
+      expect(pedido.params).toContain("pagado");
+      expect(revisionEscrita()).toBeNull();
+      expect(updateDe("carts")).toBeDefined();
+    });
+
+    it("MAYOR que el total (cuotas con interés del procesador): acredita", async () => {
+      grabadora = dbGrabadora(aprobado(1290, 6));
+      await registrarCobro(ID, { ...cobro, totalPagado: 1290, cuotas: 6 });
+      const pedido = updateDe("orders");
+      expect(pedido.sql).toContain('"pago_estado" =');
+      expect(pedido.params).toContain("pagado");
+      expect(revisionEscrita()).toBeNull();
+    });
+
+    it("mismo número en otra moneda: no acredita y se marca monto_distinto", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      grabadora = dbGrabadora(aprobado(1000));
+      await registrarCobro(ID, { ...cobro, totalPagado: 1000, moneda: "USD" });
+      expect(updateDe("orders").sql).not.toContain('"pago_estado" =');
+      expect(revisionEscrita()).toBe("monto_distinto");
+      expect(updateDe("carts")).toBeUndefined();
+    });
+
+    it("en pesos y sin total informado: acredita (no se acusa lo que no vino)", async () => {
+      grabadora = dbGrabadora(
+        responder({
+          lock: "pendiente",
+          porReferencia: ["i1", "ref-1", "pendiente"],
+          todos: [["i1", "ref-1", "pagado", "mercadopago", "accredited", null, null, null]],
+        }),
+      );
+      await registrarCobro(ID, { ...cobro, moneda: "ARS" });
+      expect(updateDe("orders").params).toContain("pagado");
+      expect(revisionEscrita()).toBeNull();
+    });
+  });
+
   it("reservarIntento: bloquea el pedido y no abre otro si hay uno abierto", async () => {
     const creado = new Date("2026-09-23T12:00:00Z");
     grabadora = dbGrabadora((c) => {

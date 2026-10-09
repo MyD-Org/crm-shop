@@ -296,6 +296,11 @@ con las tools del agente consultando los datos reales del CRM.
   - `GET /api/agent/invoices` — facturas (filtro `?status=paid|pending`)
   - `GET /api/agent/payments` — pagos
   - `GET /api/agent/account-balance` — saldo
+  - El `crm_token` vuelve al navegador dentro del JWT de sesión del widget (ai-api lo firma,
+    no lo cifra), así que sólo abre datos del propio cliente o datos públicos del tenant
+    (catálogo, precios, condiciones). `/api/agent/contacts` y `/api/agent/quotes` operan
+    sobre cualquier contacto y exigen `INTERNAL_SECRET` (tools de ai-api con
+    `{{auth.internal_secret}}`).
 - **CORS**: rewrite `/ai-api/*` → `ai-api` (configurado en `next.config.ts`).
 - **Badges de novedades** — los ítems del sidebar del backoffice llevan contador de items
   nuevos desde la última visita a la sección (modelo last-visit en localStorage, por
@@ -1266,10 +1271,10 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | GET | `/api/agent/invoices` | agent token | Facturas (para el agente) |
 | GET | `/api/agent/payments` | agent token | Pagos (para el agente) |
 | GET | `/api/agent/account-balance` | agent token | Saldo (para el agente) |
-| GET | `/api/agent/contacts` | agent token | Busca clientes en el espejo de contactos (`?q=` o `?phone=`) |
-| POST | `/api/agent/quotes` | agent token | Crea una cotización en Alegra |
-| GET | `/api/agent/quotes` | agent token | Cotizaciones de un contacto (`?contact_id=`) |
-| GET | `/api/agent/sales-config` | agent token | Listas de precio, condiciones de pago, vendedores, impuestos, monedas + link del shop |
+| GET/POST | `/api/agent/contacts` | `INTERNAL_SECRET` | Busca clientes en el espejo de contactos (`?q=` o `?phone=`) / crea uno en Alegra. Sólo server-to-server: el `crm_token` no sirve (opera sobre cualquier contacto del tenant) |
+| POST | `/api/agent/quotes` | `INTERNAL_SECRET` | Crea una cotización en Alegra (ídem: `contact_id` arbitrario) |
+| GET | `/api/agent/quotes` | `INTERNAL_SECRET` | Cotizaciones de un contacto (`?contact_id=`) |
+| GET | `/api/agent/sales-config` | agent token o `INTERNAL_SECRET` | Listas de precio, condiciones de pago, vendedores, impuestos, monedas + link del shop |
 | POST | `/api/portal/comprobantes` | sesión portal | Informar pago: valida, rate limit y URL PUT prefirmada para R2 |
 | POST | `/api/portal/comprobantes/{id}/confirm` | sesión portal | Verifica el archivo en R2 (tipo/tamaño/sha256) y publica el comprobante |
 | GET | `/api/admin/comprobantes` | admin | Lista de comprobantes (status, paginado; sin URLs firmadas) |

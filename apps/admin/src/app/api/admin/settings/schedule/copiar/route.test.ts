@@ -10,9 +10,15 @@ const state = vi.hoisted(() => ({
   resultado: { kind: "ok", destinos: ["sede-sur"] } as Record<string, unknown>,
 }))
 
-vi.mock("next/headers", () => ({ cookies: async () => ({}) }))
-vi.mock("iron-session", () => ({ getIronSession: async () => state.session }))
-vi.mock("@/lib/admin-session", () => ({ adminSessionOptions: {} }))
+vi.mock("@/lib/admin-route-guard", () => ({
+  adminNotFoundResponse: () => Response.json({ error: "No encontrado", code: "not_found" }, { status: 404 }),
+  requireAdminPlus: async () => {
+    const s = state.session
+    if (!s.userId) return { ok: false, response: Response.json({ error: "No autorizado", code: "unauthorized" }, { status: 401 }) }
+    if (s.role === "operator") return { ok: false, response: Response.json({ error: "No encontrado", code: "not_found" }, { status: 404 }) }
+    return { ok: true, tenantId: s.tenantId, user: { id: s.userId, name: "Nombre", email: "u@cliente.example", role: s.role } }
+  },
+}))
 vi.mock("@/lib/shop-revalidar", () => ({
   pingShopRevalidarSucursales: async () => {
     state.ping++
@@ -45,12 +51,12 @@ beforeEach(() => {
 })
 
 describe("POST /api/admin/settings/schedule/copiar", () => {
-  it("sin sesión → 401; operator → 403", async () => {
+  it("sin sesión → 401; operator → 404 (mismo cuerpo que un id inexistente)", async () => {
     const { POST } = await import("./route")
     state.session = {}
     expect((await POST(req({ desde: "a", hacia: "todas", que: "todo" }))).status).toBe(401)
     state.session = { userId: "u1", role: "operator", tenantId: "tenant-a" }
-    expect((await POST(req({ desde: "a", hacia: "todas", que: "todo" }))).status).toBe(403)
+    expect((await POST(req({ desde: "a", hacia: "todas", que: "todo" }))).status).toBe(404)
     expect(state.llamadas).toEqual([])
   })
 

@@ -1,19 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { eq, and, ilike, or } from "drizzle-orm"
 import { getDb } from "@/db"
 import { priceLists, catalogItems } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
-
-async function getSession() {
-  return getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-}
+import { requireAdminPlus } from "@/lib/admin-route-guard"
 
 // GET /api/admin/catalog/[id]?q=... — items de una lista, con búsqueda opcional
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
+  const guard = await requireAdminPlus(req)
+  if (!guard.ok) return guard.response
 
   const { id } = await params
   const q = req.nextUrl.searchParams.get("q") ?? ""
@@ -22,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const [list] = await db
     .select()
     .from(priceLists)
-    .where(and(eq(priceLists.id, id), eq(priceLists.tenantId, session.tenantId)))
+    .where(and(eq(priceLists.id, id), eq(priceLists.tenantId, guard.tenantId)))
 
   if (!list) return NextResponse.json({ error: "lista no encontrada" }, { status: 404 })
 
@@ -39,16 +33,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 // DELETE /api/admin/catalog/[id] — elimina una lista y sus items (cascade en DB)
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireAdminPlus(req)
+  if (!guard.ok) return guard.response
 
   const { id } = await params
   const db = getDb()
 
   const [deleted] = await db
     .delete(priceLists)
-    .where(and(eq(priceLists.id, id), eq(priceLists.tenantId, session.tenantId)))
+    .where(and(eq(priceLists.id, id), eq(priceLists.tenantId, guard.tenantId)))
     .returning()
 
   if (!deleted) return NextResponse.json({ error: "lista no encontrada" }, { status: 404 })

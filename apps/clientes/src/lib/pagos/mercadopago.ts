@@ -144,6 +144,7 @@ export function interpretar(pago: RespuestaMercadoPago): EstadoPago {
         ? pago.installments
         : undefined,
     totalPagado: montoValido(pago.transaction_details?.total_paid_amount),
+    ...(typeof pago.currency_id === "string" && pago.currency_id ? { moneda: pago.currency_id } : {}),
     ...infoDeMercadoPago(pago),
   };
 }

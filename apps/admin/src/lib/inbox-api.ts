@@ -165,7 +165,7 @@ export async function getMessages(
   aiTenantId: string,
   conversationId: string,
 ): Promise<InboxMessage[]> {
-  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/conversations/${conversationId}/messages`)
+  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/conversations/${encodeURIComponent(conversationId)}/messages`)
   if (!res.ok) throw new Error(`ai-api error ${res.status}`)
   return res.json()
 }
@@ -189,7 +189,7 @@ export async function getContact(
   channelAccountId?: string | null,
 ): Promise<InboxContact> {
   const qs = channelAccountId ? `?account=${encodeURIComponent(channelAccountId)}` : ""
-  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/contacts/${endUserId}${qs}`)
+  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/contacts/${encodeURIComponent(endUserId)}${qs}`)
   if (!res.ok) throw new Error(`ai-api error ${res.status}`)
   return res.json()
 }
@@ -204,7 +204,7 @@ export async function getContactMessages(
   if (opts.before != null) params.set("before", String(opts.before))
   if (opts.limit != null) params.set("limit", String(opts.limit))
   const qs = params.toString()
-  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/contacts/${endUserId}/messages${qs ? `?${qs}` : ""}`)
+  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/contacts/${encodeURIComponent(endUserId)}/messages${qs ? `?${qs}` : ""}`)
   if (!res.ok) throw new Error(`ai-api error ${res.status}`)
   return res.json()
 }
@@ -303,7 +303,7 @@ export async function setMode(
   mode: "bot" | "human",
   operatorName?: string,
 ): Promise<void> {
-  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/conversations/${conversationId}/mode`, {
+  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/conversations/${encodeURIComponent(conversationId)}/mode`, {
     method: "POST",
     body: JSON.stringify({ mode, ...(operatorName ? { operatorName } : {}) }),
   })
@@ -320,7 +320,7 @@ export async function retryMessage(
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await inboxFetch(
     aiApiUrl, aiTenantId,
-    `/v1/inbox/conversations/${conversationId}/messages/${messageId}/retry`,
+    `/v1/inbox/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/retry`,
     { method: "POST" },
   )
   if (res.ok) return { ok: true }
@@ -338,7 +338,7 @@ export async function dismissMessage(
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await inboxFetch(
     aiApiUrl, aiTenantId,
-    `/v1/inbox/conversations/${conversationId}/messages/${messageId}/dismiss`,
+    `/v1/inbox/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/dismiss`,
     { method: "POST" },
   )
   if (res.ok) return { ok: true }
@@ -354,7 +354,7 @@ export async function archiveConversation(
   aiTenantId: string,
   conversationId: string,
 ): Promise<void> {
-  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/conversations/${conversationId}/archive`, { method: "POST" })
+  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/conversations/${encodeURIComponent(conversationId)}/archive`, { method: "POST" })
   if (!res.ok) throw new Error(`ai-api error ${res.status}`)
 }
 
@@ -377,7 +377,7 @@ export async function startAssist(
   endUserId: string,
   conversationId?: string,
 ): Promise<{ ok: true; session: AssistSession } | { ok: false; error: string }> {
-  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/contacts/${endUserId}/assist`, {
+  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/contacts/${encodeURIComponent(endUserId)}/assist`, {
     method: "POST",
     body: JSON.stringify(conversationId ? { conversationId } : {}),
   })
@@ -413,7 +413,7 @@ export async function sendReply(
   conversationId: string,
   text: string,
 ): Promise<SendReplyResult> {
-  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/conversations/${conversationId}/reply`, {
+  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/conversations/${encodeURIComponent(conversationId)}/reply`, {
     method: "POST",
     body: JSON.stringify({ text }),
   })

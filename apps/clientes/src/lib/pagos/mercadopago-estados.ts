@@ -122,6 +122,8 @@ export interface RespuestaMercadoPago {
   installments?: number;
   /** Monto del pago: el total del pedido, sin el interés que paga el comprador. */
   transaction_amount?: number;
+  /** Moneda del pago (ISO 4217). Una cuenta argentina cobra en "ARS"; otra cosa no acredita el pedido. */
+  currency_id?: string;
   /**
    * `total_paid_amount` incluye el interés de las cuotas. `net_received_amount` es lo que se le
    * acredita al vendedor (MP informa 0 mientras el pago no se aprobó).

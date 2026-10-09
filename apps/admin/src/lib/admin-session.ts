@@ -12,6 +12,12 @@ export interface AdminSessionData {
   email: string
   role: "operator" | "admin" | "superadmin"
   tenantId: string
+  /**
+   * Epoch ms en que se emitió la cookie (login). Se compara con
+   * `admin_users.sessions_revoked_before`: una cookie emitida antes de esa fecha no vale más.
+   * Las sesiones de antes de 0075 no lo traen y cuentan como emitidas en 0.
+   */
+  issuedAt?: number
 }
 
 export const adminSessionOptions: SessionOptions = {
@@ -31,6 +37,7 @@ export type GuardFailReason =
   | "tenant-mismatch"
   | "user-gone"
   | "inactive"
+  | "revoked"
 
 export type GuardedSession =
   | {
@@ -67,7 +74,9 @@ export type GuardedSession =
  *   4. fila inexistente             → `user-gone`       (cuenta borrada)
  *   5. fila.tenantId ≠ request      → `tenant-mismatch` (usuario movido de tenant)
  *   6. `passwordHash === null`      → `inactive`        (invitación pendiente / desactivada)
- *   7. rol distinto al de la cookie → se USA el de la fila, no expulsa (refresh, no expulsión)
+ *   7. cookie emitida antes de
+ *      `sessionsRevokedBefore`      → `revoked`         (contraseña reseteada: caen las cookies viejas)
+ *   8. rol distinto al de la cookie → se USA el de la fila, no expulsa (refresh, no expulsión)
  *
  * El `select` es el que el layout protegido ya hacía (traía solo `availability`): se le suman
  * columnas, sin round-trips nuevos.
@@ -91,6 +100,7 @@ export async function getGuardedAdminSession(req?: Request): Promise<GuardedSess
       availability: adminUsers.availability,
       tenantId: adminUsers.tenantId,
       passwordHash: adminUsers.passwordHash,
+      sessionsRevokedBefore: adminUsers.sessionsRevokedBefore,
     })
     .from(adminUsers)
     .where(eq(adminUsers.id, session.userId))
@@ -98,6 +108,9 @@ export async function getGuardedAdminSession(req?: Request): Promise<GuardedSess
   if (!me) return { ok: false, reason: "user-gone" }
   if (me.tenantId !== tenantId) return { ok: false, reason: "tenant-mismatch" }
   if (me.passwordHash === null) return { ok: false, reason: "inactive" }
+  if (me.sessionsRevokedBefore && (session.issuedAt ?? 0) < me.sessionsRevokedBefore.getTime()) {
+    return { ok: false, reason: "revoked" }
+  }
 
   return {
     ok: true,

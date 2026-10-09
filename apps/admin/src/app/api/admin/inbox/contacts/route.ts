@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { assignPendingConversations } from "@/lib/assignment"
 import { listEnrichedContacts } from "@/lib/inbox-contacts"
 
 export async function GET(req: Request) {
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
+  const guard = await requireOperatorPlus(req)
+  if (!guard.ok) return guard.response
 
-  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, session.tenantId))
+  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, guard.tenantId))
   if (!tenant?.aiTenantId || !tenant?.aiApiUrl) {
     return NextResponse.json({ error: "inbox no configurado" }, { status: 503 })
   }

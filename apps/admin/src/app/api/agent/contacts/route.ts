@@ -1,4 +1,4 @@
-import { authAgentTenantRequest } from "@/lib/agent-auth"
+import { authAgentInternalRequest } from "@/lib/agent-auth"
 import { getTenantConfig } from "@/lib/tenant-context"
 import { buscarPorTelefono, buscarPorTexto, crearContacto } from "@/lib/contactos"
 
@@ -15,6 +15,11 @@ import { buscarPorTelefono, buscarPorTexto, crearContacto } from "@/lib/contacto
 // cualquiera. Puede devolver más de un contacto (mismo número cargado en varios); quien
 // llama no debe elegir uno, es el caso ambiguo.
 //
+// Auth: sólo INTERNAL_SECRET (server-to-server). El crm_token del cliente logueado NO sirve acá:
+// llega al navegador dentro del JWT del widget y con él cualquier cliente podría buscar los
+// datos (CUIT, email, teléfono) de otros clientes o dar de alta contactos en Alegra. Ver
+// lib/agent-auth.ts.
+//
 // POST /api/agent/contacts
 //   body: { name, identification?, email?, phone? }
 //   Crea un cliente nuevo en Alegra (y lo escribe en el espejo en el momento) cuando el que da su CUIT no existe todavía. Devuelve
@@ -22,9 +27,9 @@ import { buscarPorTelefono, buscarPorTexto, crearContacto } from "@/lib/contacto
 export async function GET(req: Request) {
   try {
     const tenant = await getTenantConfig()
-    const auth = authAgentTenantRequest(req, tenant.id)
+    const auth = authAgentInternalRequest(req)
     if (!auth) {
-      console.warn("[agent/contacts] 401 — request sin crm_token válido (Authorization Bearer)")
+      console.warn("[agent/contacts] 401 — request sin INTERNAL_SECRET válido (Authorization Bearer)")
       return Response.json({ error: "unauthorized" }, { status: 401 })
     }
 
@@ -68,9 +73,9 @@ interface CreateContactBody {
 export async function POST(req: Request) {
   try {
     const tenant = await getTenantConfig()
-    const auth = authAgentTenantRequest(req, tenant.id)
+    const auth = authAgentInternalRequest(req)
     if (!auth) {
-      console.warn("[agent/contacts] 401 — request sin crm_token válido (Authorization Bearer)")
+      console.warn("[agent/contacts] 401 — request sin INTERNAL_SECRET válido (Authorization Bearer)")
       return Response.json({ error: "unauthorized" }, { status: 401 })
     }
 

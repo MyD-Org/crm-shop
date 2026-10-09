@@ -93,6 +93,7 @@ export async function resolverIntentoAbierto(
     reversion: estado.reversion,
     cuotas: estado.cuotasPagadas,
     totalPagado: estado.totalPagado,
+    moneda: estado.moneda,
     ...(estado.info ? { info: estado.info } : {}),
   }, { avisar: estado.estado !== "fallido" });
 

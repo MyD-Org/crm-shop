@@ -20,7 +20,11 @@ vi.mock("@/lib/shop-revalidar", () => ({
   },
 }))
 vi.mock("@/lib/medios-pago-shop-repo", () => ({
-  listarMediosPagoConAvisos: async () => ({ medios: [{ slug: "efectivo", avisos: ["aviso"] }], listas: [{ id: "l1", nombre: "Lista" }] }),
+  listarMediosPagoConAvisos: async () => ({
+    medios: [{ slug: "efectivo", avisos: ["aviso"] }],
+    listas: [{ id: "l1", nombre: "Lista" }],
+    listaReferencia: { id: "l0", nombre: "Lista Cuotas" },
+  }),
   conAvisos: async (_t: string, medios: Record<string, unknown>[]) => medios.map((m) => ({ ...m, avisos: [] })),
   listasDisponiblesParaMedios: async () => [{ id: "l1", nombre: "Lista" }],
   crearMedioPago: async () => state.resultado,
@@ -102,6 +106,7 @@ describe("/api/admin/medios-pago-shop", () => {
     expect(await res.json()).toEqual({
       medios: [{ slug: "efectivo", avisos: ["aviso"] }],
       listas: [{ id: "l1", nombre: "Lista" }],
+      listaReferencia: { id: "l0", nombre: "Lista Cuotas" },
     })
   })
 

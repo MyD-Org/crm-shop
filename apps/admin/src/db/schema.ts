@@ -98,9 +98,46 @@ export const adminUsers = pgTable(
     availabilityChangedAt: timestamp("availability_changed_at", { withTimezone: true }),
     // null mientras el usuario no haya aceptado la invitación y seteado contraseña
     passwordHash: text("password_hash"),
+    // Las cookies `admin-session` emitidas ANTES de esta fecha dejan de valer (lo setea
+    // reset-password). NULL = no se revocó nada. Ver getGuardedAdminSession (0075).
+    sessionsRevokedBefore: timestamp("sessions_revoked_before", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("admin_users_email").on(t.email)],
+)
+
+/**
+ * Códigos de acceso al portal del cliente (send-code / verify-code), en el servidor (0075).
+ *
+ * Antes el código, su vencimiento y el contador de intentos viajaban dentro de la cookie
+ * sellada `portal-otp`: como el servidor no guardaba nada, reenviar la cookie original dejaba
+ * el contador en cero y los 6 dígitos se forzaban en la ventana de 10 minutos. Ahora la cookie
+ * lleva sólo el `id` de esta fila.
+ *
+ *  - `codeHash`: HMAC del código (ver src/lib/portal-otp.ts). El código en claro sólo existe
+ *    en el email.
+ *  - `intentos`: lo incrementa verify-code en el MISMO UPDATE que lee el hash (atómico).
+ *  - `consumedAt`: un código vale una sola vez.
+ */
+export const portalOtps = pgTable(
+  "portal_otps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    /** Documento normalizado (sólo dígitos) con el que se pidió el código. */
+    identifier: text("identifier").notNull(),
+    /** Id de Alegra del contacto resuelto al pedir el código: verify-code no lo vuelve a buscar. */
+    codigocliente: text("codigocliente").notNull(),
+    codeHash: text("code_hash").notNull(),
+    intentos: integer("intentos").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("po_tenant_identifier").on(t.tenantId, t.identifier, t.createdAt),
+    index("po_expira").on(t.expiresAt),
+  ],
 )
 
 // Catálogo de departamentos por tenant — se usa como fuente única para:

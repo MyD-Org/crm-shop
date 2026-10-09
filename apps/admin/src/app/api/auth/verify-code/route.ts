@@ -2,12 +2,24 @@ import { cookies } from "next/headers"
 import { getIronSession } from "iron-session"
 import { sessionOptionsForHost, otpSessionOptions } from "@/lib/session"
 import { getTenantConfig } from "@/lib/tenant-context"
-import { getCliente, getClienteByIdentifier } from "@/lib/erp"
+import { getCliente } from "@/lib/erp"
 import { AlegraRateLimitError } from "@/lib/alegra"
+import { intentarOtp } from "@/lib/portal-otp"
+import { ipDe, permitir } from "@/lib/rate-limit"
 import type { SessionData, OtpSessionData } from "@/types"
 
-// Intentos de verificación permitidos por código antes de invalidarlo.
-const MAX_OTP_ATTEMPTS = 5
+// Verificación del código del portal. El estado del código (hash, vencimiento, intentos, un
+// solo uso) vive en `portal_otps` y lo administra src/lib/portal-otp.ts: la cookie trae sólo el
+// id, así que reenviar una cookie vieja no reinicia nada.
+//
+// Límite por IP además del tope de 5 intentos por código: un atacante puede pedir un código
+// nuevo por cada víctima, y esto frena el barrido masivo en una sola instancia (ver CAVEAT en
+// src/lib/rate-limit.ts). 60 cada 15 minutos cubre de sobra una oficina detrás de una IP:
+// un login legítimo son 1 o 2 intentos.
+const MAX_VERIFY_POR_IP = 60
+const VERIFY_WINDOW_MS = 15 * 60 * 1000
+
+const PEDIR_OTRO = "Solicite un nuevo código."
 
 export async function POST(request: Request) {
   try {
@@ -15,52 +27,46 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { code, redirectTo } = body as { code: string; redirectTo?: string }
 
-    if (!code || code.length !== 6) {
+    if (typeof code !== "string" || !/^\d{6}$/.test(code)) {
       return Response.json({ error: "Código inválido" }, { status: 400 })
     }
 
+    if (!permitir(`verify-code:${tenant.id}:ip:${ipDe(request)}`, MAX_VERIFY_POR_IP, VERIFY_WINDOW_MS)) {
+      return Response.json(
+        { error: "Demasiados intentos. Espere unos minutos e inténtelo de nuevo." },
+        { status: 429 },
+      )
+    }
+
     const cookieStore = await cookies()
-
-    // `attempts` no está en OtpSessionData; se extiende localmente. Vive en la cookie
-    // sellada, por lo que el cliente no puede resetearlo para saltear el límite.
-    const otpSession = await getIronSession<OtpSessionData & { attempts?: number }>(
-      cookieStore,
-      otpSessionOptions,
-    )
-
-    if (!otpSession.otp || !otpSession.otpExpiry || !otpSession.identifier) {
-      return Response.json({ error: "La verificación expiró. Solicite un nuevo código." }, { status: 400 })
+    const otpSession = await getIronSession<OtpSessionData>(cookieStore, otpSessionOptions)
+    if (!otpSession.otpId) {
+      return Response.json({ error: `La verificación expiró. ${PEDIR_OTRO}` }, { status: 400 })
     }
 
-    if (Date.now() > otpSession.otpExpiry) {
-      otpSession.destroy()
-      return Response.json({ error: "El código expiró. Solicite uno nuevo." }, { status: 400 })
-    }
-
-    if (otpSession.otp !== code) {
-      // Límite de intentos: tras MAX_OTP_ATTEMPTS fallos invalidamos el código.
-      const attempts = (otpSession.attempts ?? 0) + 1
-      if (attempts >= MAX_OTP_ATTEMPTS) {
-        otpSession.destroy()
-        return Response.json(
-          { error: "Demasiados intentos fallidos. Solicite un nuevo código." },
-          { status: 429 },
-        )
+    const resultado = await intentarOtp({ id: otpSession.otpId, tenantId: tenant.id, code })
+    if (!resultado.ok) {
+      switch (resultado.motivo) {
+        case "incorrecto":
+          return Response.json({ error: "Código incorrecto" }, { status: 400 })
+        case "agotado":
+          otpSession.destroy()
+          return Response.json({ error: `Demasiados intentos fallidos. ${PEDIR_OTRO}` }, { status: 429 })
+        case "vencido":
+          otpSession.destroy()
+          return Response.json({ error: `El código expiró. ${PEDIR_OTRO}` }, { status: 400 })
+        default:
+          otpSession.destroy()
+          return Response.json({ error: `La verificación expiró. ${PEDIR_OTRO}` }, { status: 400 })
       }
-      otpSession.attempts = attempts
-      await otpSession.save()
-      return Response.json({ error: "Código incorrecto" }, { status: 400 })
     }
 
     // El contacto ya se resolvió al pedir el código: se lee por id (1 request) en vez de
-    // volver a buscarlo por email/CUIT. Las sesiones emitidas antes de este cambio no
-    // traen el id y caen a la búsqueda.
-    const clienteData = otpSession.codigocliente
-      ? await getCliente(tenant, otpSession.codigocliente).catch((err) => {
-          if (err instanceof AlegraRateLimitError) throw err
-          return null
-        })
-      : await getClienteByIdentifier(tenant, otpSession.identifier)
+    // volver a buscarlo por email/CUIT.
+    const clienteData = await getCliente(tenant, resultado.codigocliente).catch((err) => {
+      if (err instanceof AlegraRateLimitError) throw err
+      return null
+    })
     if (!clienteData) {
       return Response.json({ error: "No encontramos una cuenta asociada. Comuníquese con la sucursal." }, { status: 404 })
     }

@@ -104,10 +104,11 @@ export interface SessionData {
   isLoggedIn: boolean
 }
 
+/**
+ * Cookie `portal-otp` entre send-code y verify-code. Lleva SOLO el id de la fila de
+ * `portal_otps` (0075): el código (como HMAC), el vencimiento, el contador de intentos y el
+ * contacto resuelto viven en el servidor. Ver src/lib/portal-otp.ts.
+ */
 export interface OtpSessionData {
-  identifier?: string
-  /** Id de Alegra del contacto resuelto al pedir el código: verify-code no lo vuelve a buscar. */
-  codigocliente?: string
-  otp?: string
-  otpExpiry?: number
+  otpId?: string
 }

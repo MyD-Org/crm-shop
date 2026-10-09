@@ -7,6 +7,7 @@ import { useCart } from "@/context/CartContext";
 import { useFavoritos } from "@/context/FavoritosContext";
 import type { Product } from "@/data/products";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
+import { useHidratado } from "@/lib/hidratado";
 import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 
 /**
@@ -24,7 +25,11 @@ export function FavoritosCompartidosLista({
   noDisponibles: number;
 }) {
   const { addItems } = useCart();
-  const { ready, disponible, esFavorito, agregarTodos } = useFavoritos();
+  const favoritos = useFavoritos();
+  const { disponible, esFavorito, agregarTodos } = favoritos;
+  // Mismo motivo que en CargarCompartido: hueco por streaming, el contexto ya
+  // está listo al hidratar y el `disabled` del servidor no se corregiría.
+  const ready = useHidratado() && favoritos.ready;
   const { toast } = useToast();
   const [agregando, setAgregando] = useState(false);
   const preciosCuenta = usePreciosCuenta(productos.map((p) => p.id));

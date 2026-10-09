@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import listadoUnPago from "./__fixtures__/payway/listado-un-pago.json";
+import aprobadoDebito from "./__fixtures__/payway/pago-aprobado-debito.json";
 import listadoVacio from "./__fixtures__/payway/listado-vacio.json";
 import rechazado51 from "./__fixtures__/payway/pago-rechazado-51.json";
 import { NO_LLEGO_MS } from "./intento-abierto";
@@ -62,6 +63,16 @@ describe("reconciliarPagosPendientes — payway", () => {
     expect(registrarCobro).toHaveBeenCalledWith(
       "p1",
       expect.objectContaining({ proveedor: "payway", referencia: REF, estado: "pagado" }),
+    );
+  });
+
+  it("la reconciliación trae el tipo REAL del pago (débito, id 31) para la red de forma_distinta", async () => {
+    intentosPendientesDeReconciliar.mockResolvedValue([candidato(30)]);
+    fetchMock.mockImplementation(async () => json(200, { ...listadoVacio, results: [aprobadoDebito] }));
+    await correr();
+    expect(registrarCobro).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ estado: "pagado", info: expect.objectContaining({ tipo: "debito" }) }),
     );
   });
 

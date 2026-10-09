@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import aprobado from "./__fixtures__/payway/pago-aprobado.json";
+import aprobadoDebito from "./__fixtures__/payway/pago-aprobado-debito.json";
+import { motivoFormaDistinta } from "./forma-cobro";
 import rechazado51 from "./__fixtures__/payway/pago-rechazado-51.json";
 import rechazado05 from "./__fixtures__/payway/pago-rechazado-05.json";
 import anulado from "./__fixtures__/payway/pago-anulado.json";
@@ -221,5 +223,22 @@ describe("interpretarPago — medio con el que se cobró (info)", () => {
   it("rechazo: autorización vacía no se guarda", () => {
     const e = interpretarPago({ status: "rejected", status_details: { card_authorization_code: "", ticket: null } });
     expect(e.info).toBeUndefined();
+  });
+});
+
+describe("interpretarPago - tipo de la RESPUESTA y red de forma_distinta", () => {
+  it("el tipo sale del payment_method_id de la respuesta: 1 crédito, 31 débito", () => {
+    expect(interpretarPago(aprobado).info?.tipo).toBe("credito");
+    expect(interpretarPago(aprobadoDebito).info?.tipo).toBe("debito");
+  });
+  it("débito devuelto con forma congelada crédito acusa forma_distinta; el crédito con crédito no", () => {
+    expect(motivoFormaDistinta("credito", interpretarPago(aprobadoDebito).info?.tipo)).toBe("forma_distinta");
+    expect(motivoFormaDistinta("debito", interpretarPago(aprobadoDebito).info?.tipo)).toBeNull();
+    expect(motivoFormaDistinta("credito", interpretarPago(aprobado).info?.tipo)).toBeNull();
+  });
+  it("payment_method_id ausente o fuera de la tabla: no acusa", () => {
+    const { payment_method_id: _omitido, ...sinId } = aprobado;
+    expect(motivoFormaDistinta("debito", interpretarPago(sinId).info?.tipo)).toBeNull();
+    expect(motivoFormaDistinta("debito", interpretarPago({ ...aprobado, payment_method_id: 9999 }).info?.tipo)).toBeNull();
   });
 });

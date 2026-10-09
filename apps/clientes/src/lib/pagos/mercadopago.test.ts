@@ -305,7 +305,7 @@ describe("crearPreferencia", () => {
     items: [{ id: "p", title: "Pedido", quantity: 1 as const, unit_price: 10, currency_id: "ARS" as const }],
     external_reference: "p",
     purpose: "wallet_purchase" as const,
-    payment_methods: { installments: 1, excluded_payment_methods: [{ id: "consumer_credits" }] },
+    payment_methods: { installments: 1 as const, excluded_payment_types: [], excluded_payment_methods: [{ id: "consumer_credits" }] },
   };
 
   it("hace POST a /checkout/preferences con el Access Token de la cuenta y devuelve el link (init_point)", async () => {

@@ -16,8 +16,6 @@ export interface DatosPreferencia {
   /** Origen por el que entró el comprador (para volver al mismo entorno). */
   origen: string | null | undefined;
   emailComprador?: string;
-  /** Cuotas congeladas en el pedido (1 o null = un pago): tope de cuotas dentro de Mercado Pago. */
-  cuotas?: number | null;
   /**
    * Hasta cuándo se puede pagar (el vencimiento del pedido con cobro en línea). Pasado eso Mercado
    * Pago no deja pagar: antes el link servía siempre y se podía pagar un pedido ya vencido o cancelado.
@@ -32,8 +30,8 @@ export interface Preferencia {
   external_reference: string;
   purpose: "wallet_purchase";
   payment_methods: {
-    installments: number;
-    default_installments?: number;
+    installments: 1;
+    excluded_payment_types: { id: string }[];
     excluded_payment_methods: { id: string }[];
   };
   payer?: { email: string };
@@ -45,12 +43,11 @@ export interface Preferencia {
 }
 
 /**
- * Tope de cuotas dentro de Mercado Pago = las cuotas elegidas en la tienda (el precio ya las incluye):
- * así nunca se financia más de lo cobrado. Sin cuotas válidas, un pago.
+ * Tipos de pago que Mercado Pago NO ofrece en este flujo: todos menos el dinero en cuenta
+ * (`account_money`, que Mercado Pago no deja excluir). Así no se paga con una tarjeta guardada en la
+ * cuenta al precio de dinero en cuenta: las tarjetas se pagan en la tienda, con su opción.
  */
-export function cuotasPreferencia(cuotas: number | null | undefined): number {
-  return typeof cuotas === "number" && Number.isInteger(cuotas) && cuotas >= 1 ? cuotas : 1;
-}
+export const TIPOS_EXCLUIDOS = ["credit_card", "debit_card", "prepaid_card", "ticket", "atm", "bank_transfer"] as const;
 
 /** A dónde vuelve el comprador. Mercado Pago rechaza back_urls que no sean https de dominio público. */
 export function urlRetorno(origen: string | null | undefined, pedidoId: string): string | undefined {
@@ -62,7 +59,6 @@ export function armarPreferencia(d: DatosPreferencia): Preferencia {
   const retorno = urlRetorno(d.origen, d.pedidoId);
   // La cuenta va como pista en la URL del aviso (sólo logs; la identifica el secreto que firma).
   const webhook = urlNotificacion(d.origen, d.cuenta);
-  const cuotas = cuotasPreferencia(d.cuotas);
   return {
     items: [
       {
@@ -76,10 +72,10 @@ export function armarPreferencia(d: DatosPreferencia): Preferencia {
     // Misma referencia que el pago con tarjeta: el webhook rescata el pedido por ella.
     external_reference: d.pedidoId,
     purpose: "wallet_purchase",
+    // Sólo dinero en cuenta, en un pago. "Cuotas sin tarjeta" (Crédito de Mercado Pago) tampoco.
     payment_methods: {
-      installments: cuotas,
-      ...(cuotas > 1 ? { default_installments: cuotas } : {}),
-      // "Cuotas sin tarjeta" (Crédito de Mercado Pago) no se ofrece.
+      installments: 1,
+      excluded_payment_types: TIPOS_EXCLUIDOS.map((id) => ({ id })),
       excluded_payment_methods: [{ id: "consumer_credits" }],
     },
     ...(d.emailComprador ? { payer: { email: d.emailComprador } } : {}),

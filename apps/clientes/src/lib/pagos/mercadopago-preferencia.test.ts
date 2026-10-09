@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armarPreferencia, cuotasPreferencia, urlRetorno, volvioConPagoDeMercadoPago } from "./mercadopago-preferencia";
+import { armarPreferencia, urlRetorno, volvioConPagoDeMercadoPago } from "./mercadopago-preferencia";
 
 const base = {
   pedidoId: "ped-1",
@@ -7,17 +7,6 @@ const base = {
   total: 1500.5,
   origen: "https://tienda.example",
 };
-
-describe("cuotasPreferencia", () => {
-  it("las cuotas del pedido; sin cuotas o inválidas, un pago", () => {
-    expect(cuotasPreferencia(6)).toBe(6);
-    expect(cuotasPreferencia(1)).toBe(1);
-    expect(cuotasPreferencia(null)).toBe(1);
-    expect(cuotasPreferencia(undefined)).toBe(1);
-    expect(cuotasPreferencia(0)).toBe(1);
-    expect(cuotasPreferencia(2.5)).toBe(1);
-  });
-});
 
 describe("urlRetorno", () => {
   it("vuelve al checkout del mismo pedido", () => {
@@ -34,19 +23,22 @@ describe("urlRetorno", () => {
 });
 
 describe("armarPreferencia", () => {
-  it("un ítem con el total del pedido en ARS, un pago, sin Crédito de Mercado Pago y propósito wallet", () => {
+  it("un ítem con el total del pedido en ARS, un pago, sólo dinero en cuenta y propósito wallet", () => {
     const p = armarPreferencia(base);
     expect(p.purpose).toBe("wallet_purchase");
     expect(p.items).toEqual([
       { id: "ped-1", title: "Pedido 000123 — Central LED", quantity: 1, unit_price: 1500.5, currency_id: "ARS" },
     ]);
-    expect(p.payment_methods).toEqual({ installments: 1, excluded_payment_methods: [{ id: "consumer_credits" }] });
-  });
-
-  it("con cuotas en el pedido: tope y cuotas sugeridas = las elegidas", () => {
-    expect(armarPreferencia({ ...base, cuotas: 6 }).payment_methods).toEqual({
-      installments: 6,
-      default_installments: 6,
+    expect(p.payment_methods).toEqual({
+      installments: 1,
+      excluded_payment_types: [
+        { id: "credit_card" },
+        { id: "debit_card" },
+        { id: "prepaid_card" },
+        { id: "ticket" },
+        { id: "atm" },
+        { id: "bank_transfer" },
+      ],
       excluded_payment_methods: [{ id: "consumer_credits" }],
     });
   });

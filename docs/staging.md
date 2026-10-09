@@ -35,16 +35,40 @@ Los crons de `apps/admin/vercel.json` corren solo en producción. El `ignoreComm
 ### Variables que cambian en staging
 
 - **Shop (`apps/clientes`):** `DATABASE_URL`, `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING`,
-  `MIGRATE_DATABASE_URL`, `NEXT_PUBLIC_SITE_URL`, `CRM_ADMIN_URL`, `MP_ACCESS_TOKEN`,
-  `NEXT_PUBLIC_MP_PUBLIC_KEY`, `MP_WEBHOOK_SECRET`, `PAYWAY_API_PUBLIC_KEY`,
-  `PAYWAY_API_PRIVATE_KEY`, `PAYWAY_BASE_URL` (sandbox), `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` y
+  `MIGRATE_DATABASE_URL`, `NEXT_PUBLIC_SITE_URL`, `CRM_ADMIN_URL`, las credenciales de pago
+  **por sucursal** (ver abajo), `PAYWAY_BASE_URL` (sandbox, compartida), `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` y
   `CLERK_SECRET_KEY` (instancia de desarrollo), `CLERK_WEBHOOK_SIGNING_SECRET`,
   `NEXT_PUBLIC_CLERK_PROXY_URL` (vacía en staging), `COOKIE_DOMAIN` (vacía en staging).
+- **Credenciales de pago del Shop, una cuenta por sucursal.** Cada variable lleva el sufijo `_<SLUG>`
+  (slug de la sucursal en mayúsculas, `-` -> `_`): `MP_ACCESS_TOKEN_<S>`, `MP_PUBLIC_KEY_<S>`,
+  `MP_WEBHOOK_SECRET_<S>`, `PAYWAY_API_PRIVATE_KEY_<S>` y `PAYWAY_API_PUBLIC_KEY_<S>`, con
+  credenciales de prueba. Se cargan con `vercel env add MP_ACCESS_TOKEN_IGZ preview staging` (y
+  análogas para `_MDP`) y hay que redesplegar (la CSP se arma en el build). Ya no existen las
+  variables sin sufijo ni `NEXT_PUBLIC_MP_PUBLIC_KEY`.
 - **Admin (`apps/admin`):** `DATABASE_URL`, `NEXT_PUBLIC_BASE_URL`, `NEXT_PUBLIC_SHOP_URL`,
   `SHOP_INTERNAL_URL`, `SHOP_REDIRECT_ORIGIN`, `MP_PUBLIC_KEY` (la de prueba), `COOKIE_DOMAIN`
   (vacía en staging), `SENTRY_ENVIRONMENT` y `NEXT_PUBLIC_SENTRY_ENVIRONMENT` (`staging`).
 - **Alegra:** si staging usa la misma cuenta que producción, los pedidos de prueba que se facturen
   quedan en la cuenta real. No facturar desde staging salvo que se use una cuenta de prueba.
+
+### Checklist de despliegue: cuentas de cobro por sucursal
+
+Change `cuentas-procesador-por-sucursal` (detalle y rollback en
+`apps/clientes/docs/pagos-cuentas-por-sucursal.md`). En este orden:
+
+1. **U1** Copiar los valores actuales a las variables `_IGZ` en Preview `staging` y en Production
+   (`MP_ACCESS_TOKEN` -> `MP_ACCESS_TOKEN_IGZ`, `NEXT_PUBLIC_MP_PUBLIC_KEY` -> `MP_PUBLIC_KEY_IGZ`,
+   `MP_WEBHOOK_SECRET` -> `MP_WEBHOOK_SECRET_IGZ`, `PAYWAY_API_PRIVATE_KEY` y `PAYWAY_API_PUBLIC_KEY`
+   -> `..._IGZ`) y redesplegar, **antes** de mergear R1 (#527). Las variables sin sufijo se conservan.
+2. Mergear R1 a `staging` y probar el cobro.
+3. **U3** Aplicar la migración 0035 del Shop en la base de staging **antes** de mergear R2.
+4. Mergear R2 a `staging`; después R3 (#528).
+5. **U4/U5** Cargar `_MDP` (staging y producción) y registrar la URL del webhook de Mercado Pago y el
+   secreto en la aplicación de MDP (la misma URL que en la de IGZ).
+6. **U6** Aplicar la migración 0035 en producción **antes** de mergear el PR `staging` -> `main`.
+   R1 y R2 viajan juntos a `main`.
+7. **U9** Una semana sin incidentes en producción: borrar las variables sin sufijo (Production y
+   Preview `staging`).
 
 ## Uso diario
 

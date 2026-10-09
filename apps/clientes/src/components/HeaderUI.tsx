@@ -185,25 +185,12 @@ function HeaderVista({
         // La barra compacta lleva sólo el buscador.
         search={
           <div className="flex w-full flex-col">
-            {/* El chat se abre desde acá: el widget no tiene burbuja flotante. */}
-            <div className="flex w-full items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <SearchAutocomplete busquedaIa={busquedaIa} />
-              </div>
-              <BotonAsistente />
-            </div>
+            {/* El chat se abre desde el buscador: el widget no tiene burbuja flotante. */}
+            <SearchAutocomplete busquedaIa={busquedaIa} extra={<BotonAsistente />} />
             {ubicacionEnLinea ? <div className="mt-2.5 flex lg:hidden">{ubicacionEnLinea}</div> : null}
           </div>
         }
-        compactSearch={
-          // La barra compacta es angosta (200–340 px desde lg): el botón va sólo con el ícono.
-          <div className="flex w-full items-center gap-2">
-            <div className="min-w-0 flex-1">
-              <SearchAutocomplete busquedaIa={busquedaIa} />
-            </div>
-            <BotonAsistente compacto />
-          </div>
-        }
+        compactSearch={<SearchAutocomplete busquedaIa={busquedaIa} extra={<BotonAsistente />} />}
         // Debajo de lg: cuenta a la izquierda, marca al centro y carrito a la derecha.
         mobileStart={cuentaNodo("start")}
         nav={nav}

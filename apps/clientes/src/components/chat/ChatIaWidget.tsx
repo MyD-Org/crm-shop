@@ -8,7 +8,7 @@ import { useCart } from "@/context/CartContext";
 import type { PropsChatIa } from "@/lib/chat-ia";
 import { hrefWhatsApp, mensajeTraspaso } from "@/lib/chat-ia-handoff";
 import { lineasAItems, type ProductoResuelto } from "@/lib/chat-ia-productos";
-import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "@/lib/chat-ia-textos";
+import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT, SUGERENCIAS_CHAT } from "@/lib/chat-ia-textos";
 import { useChatIa } from "@/hooks/useChatIa";
 import { useSenalesIniciativa } from "@/hooks/useSenalesIniciativa";
 import { contextoParaChat } from "@/lib/chat-ia-puente";
@@ -264,6 +264,7 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
       labels={{ ...ETIQUETAS_CHAT, headerTitle: titulo }}
       theme="light"
       enableHistory
+      suggestions={SUGERENCIAS_CHAT}
       commerce={commerce}
       open={abierto}
       onOpenChange={cambiarAbierto}

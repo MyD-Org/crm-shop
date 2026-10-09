@@ -161,7 +161,7 @@ export function CartPreview({
           dentro del popover, no en el header). */}
       <Link
         href="/carrito"
-        className="flex items-center gap-2 rounded-full bg-primary px-[18px] py-[9px] text-sm font-semibold text-on-primary transition-colors hover:bg-accent hover:text-white"
+        className="flex items-center gap-2 rounded-full bg-primary px-3.5 py-[9px] text-sm font-semibold text-on-primary transition-colors hover:bg-accent hover:text-white"
       >
         <span ref={iconoRef} className="inline-flex">
           <CartIcon />
@@ -169,7 +169,7 @@ export function CartPreview({
         {/* En pantallas chicas queda sólo el ícono + la cantidad: la palabra
             mide 52px y es lo que hace que el carrito no entre al lado de la
             marca en la primera fila del header. El ícono ya dice qué es. */}
-        <span className="max-sm:sr-only">Carrito</span>
+        <span className="sr-only">Carrito</span>
         <span className="relative inline-flex h-5 min-w-5 items-center justify-center overflow-hidden rounded-full bg-white/20 text-[11px] font-extrabold">
           <span ref={destelloRef} aria-hidden className="absolute inset-0 bg-white/30 opacity-0" />
           <span ref={numeroRef} className="relative">

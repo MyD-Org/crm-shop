@@ -1,7 +1,45 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { REDIS_TIMEOUT_MS, ipDe, permitir, permitirAsync } from "./rate-limit"
 
 // Las claves llevan un prefijo distinto por test porque el store vive en el módulo.
+
+/**
+ * Cliente de node-redis falso: lo que se prueba es el contrato (qué comandos manda, cómo lee la
+ * respuesta) y, sobre todo, que ante CUALQUIER problema cae al contador en memoria en vez de
+ * bloquear o de lanzar.
+ */
+const exec = vi.fn<() => Promise<unknown>>()
+const connect = vi.fn<() => Promise<void>>()
+const comandos: Array<[string, ...unknown[]]> = []
+const clienteFalso = {
+  isOpen: true,
+  on: vi.fn(),
+  connect,
+  destroy: vi.fn(),
+  multi: () => {
+    const multi = {
+      incr: (k: string) => {
+        comandos.push(["INCR", k])
+        return multi
+      },
+      pExpire: (k: string, ms: number) => {
+        comandos.push(["PEXPIRE", k, ms])
+        return multi
+      },
+      exec,
+    }
+    return multi
+  },
+}
+const createClient = vi.fn((_opciones: unknown) => clienteFalso)
+vi.mock("redis", () => ({ createClient: (opciones: unknown) => createClient(opciones) }))
+
+import { REDIS_PAUSA_TRAS_FALLO_MS, REDIS_TIMEOUT_MS, ipDe, permitir, permitirAsync } from "./rate-limit"
+
+const URL_REDIS = "rediss://default:s3cr3t-placeholder@redis.example:6379"
+
+function olvidarCliente() {
+  delete (globalThis as { crmRateLimitRedis?: unknown }).crmRateLimitRedis
+}
 
 describe("permitir", () => {
   beforeEach(() => vi.useFakeTimers())
@@ -33,123 +71,144 @@ describe("permitir", () => {
   })
 })
 
-/**
- * `permitirAsync` habla con la REST API de Upstash por `fetch`. Acá `fetch` es un mock: lo que se
- * prueba es el contrato (qué manda, cómo lee la respuesta) y, sobre todo, que ante CUALQUIER
- * problema cae al contador en memoria en vez de bloquear o de lanzar.
- */
 describe("permitirAsync", () => {
-  const URL_REDIS = "https://redis.example"
-  const TOKEN = "token-de-prueba"
-  const fetchMock = vi.fn<typeof fetch>()
-
-  /** Respuesta del pipeline de Upstash: `[{result: INCR}, {result: PEXPIRE}]`. */
-  const respuestaPipeline = (usos: number) =>
-    new Response(JSON.stringify([{ result: usos }, { result: 1 }]), { status: 200 })
-
   beforeEach(() => {
-    vi.stubGlobal("fetch", fetchMock)
-    vi.stubEnv("UPSTASH_REDIS_REST_URL", URL_REDIS)
-    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", TOKEN)
-    vi.stubEnv("KV_REST_API_URL", "")
-    vi.stubEnv("KV_REST_API_TOKEN", "")
+    olvidarCliente()
+    comandos.length = 0
+    clienteFalso.isOpen = true
+    connect.mockResolvedValue(undefined)
+    vi.stubEnv("REDIS_URL", URL_REDIS)
+    vi.stubEnv("UPSTASH_REDIS_REST_REDIS_URL", "")
     vi.spyOn(console, "warn").mockImplementation(() => {})
   })
 
   afterEach(() => {
-    fetchMock.mockReset()
-    vi.unstubAllGlobals()
+    exec.mockReset()
+    connect.mockReset()
+    createClient.mockClear()
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
+    olvidarCliente()
   })
 
-  it("cuenta en Redis con INCR + PEXPIRE en un pipeline y respeta el tope", async () => {
-    fetchMock
-      .mockResolvedValueOnce(respuestaPipeline(1))
-      .mockResolvedValueOnce(respuestaPipeline(2))
-      .mockResolvedValueOnce(respuestaPipeline(3))
+  it("cuenta en Redis con INCR + PEXPIRE en un MULTI y respeta el tope", async () => {
+    exec.mockResolvedValueOnce([1, true]).mockResolvedValueOnce([2, true]).mockResolvedValueOnce([3, true])
 
     expect(await permitirAsync("redis:tope", 2, 60_000)).toBe(true)
     expect(await permitirAsync("redis:tope", 2, 60_000)).toBe(true)
     expect(await permitirAsync("redis:tope", 2, 60_000)).toBe(false)
 
-    expect(fetchMock).toHaveBeenCalledTimes(3)
-    const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe(`${URL_REDIS}/pipeline`)
-    expect(init?.method).toBe("POST")
-    expect((init?.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`)
-    expect(init?.signal).toBeInstanceOf(AbortSignal)
-
-    const cuerpo = JSON.parse(String(init?.body)) as string[][]
+    expect(exec).toHaveBeenCalledTimes(3)
     const ventana = Math.floor(Date.now() / 60_000)
-    expect(cuerpo).toEqual([
+    expect(comandos.slice(0, 2)).toEqual([
       ["INCR", `rl:redis:tope:${ventana}`],
-      ["PEXPIRE", `rl:redis:tope:${ventana}`, "60000"],
+      ["PEXPIRE", `rl:redis:tope:${ventana}`, 60_000],
     ])
   })
 
-  it("acepta las variables KV_REST_API_* como alternativa, sin mezclar pares", async () => {
-    vi.stubEnv("UPSTASH_REDIS_REST_URL", "")
-    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "")
-    vi.stubEnv("KV_REST_API_URL", "https://kv.example/")
-    vi.stubEnv("KV_REST_API_TOKEN", "token-kv")
-    fetchMock.mockResolvedValueOnce(respuestaPipeline(1))
+  it("crea UN cliente por proceso (singleton en globalThis), con timeout corto y sin reintentos infinitos", async () => {
+    exec.mockResolvedValue([1, true])
+    await permitirAsync("redis:singleton", 5, 60_000)
+    await permitirAsync("redis:singleton", 5, 60_000)
 
-    expect(await permitirAsync("redis:kv", 1, 60_000)).toBe(true)
-
-    const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe("https://kv.example/pipeline")
-    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer token-kv")
+    expect(createClient).toHaveBeenCalledTimes(1)
+    expect(connect).toHaveBeenCalledTimes(1)
+    const opciones = createClient.mock.calls[0]![0] as {
+      url: string
+      disableOfflineQueue: boolean
+      socket: { connectTimeout: number; reconnectStrategy: (n: number) => false | number }
+    }
+    expect(opciones.url).toBe(URL_REDIS)
+    expect(opciones.disableOfflineQueue).toBe(true)
+    expect(opciones.socket.connectTimeout).toBe(REDIS_TIMEOUT_MS)
+    expect(opciones.socket.reconnectStrategy(0)).toBeTypeOf("number")
+    expect(opciones.socket.reconnectStrategy(3)).toBe(false)
+    expect(clienteFalso.on).toHaveBeenCalledWith("error", expect.any(Function))
   })
 
-  it("sin credenciales no toca la red y cuenta en memoria", async () => {
-    vi.stubEnv("UPSTASH_REDIS_REST_URL", "")
-    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "")
+  it("acepta la variable del Shop (UPSTASH_REDIS_REST_REDIS_URL) como alternativa", async () => {
+    vi.stubEnv("REDIS_URL", "")
+    vi.stubEnv("UPSTASH_REDIS_REST_REDIS_URL", "rediss://default:s3cr3t-placeholder@shop.example:6379")
+    exec.mockResolvedValue([1, true])
 
-    expect(await permitirAsync("memoria:sin-cred", 1, 60_000)).toBe(true)
-    expect(await permitirAsync("memoria:sin-cred", 1, 60_000)).toBe(false)
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await permitirAsync("redis:shop-var", 1, 60_000)).toBe(true)
+    expect((createClient.mock.calls[0]![0] as { url: string }).url).toContain("shop.example")
   })
 
-  it("con máximo 0 no deja pasar ni consulta a Redis", async () => {
+  it("sin URL no crea cliente y cuenta en memoria", async () => {
+    vi.stubEnv("REDIS_URL", "")
+
+    expect(await permitirAsync("memoria:sin-url", 1, 60_000)).toBe(true)
+    expect(await permitirAsync("memoria:sin-url", 1, 60_000)).toBe(false)
+    expect(createClient).not.toHaveBeenCalled()
+  })
+
+  it("con máximo 0 no deja pasar ni toca Redis", async () => {
     expect(await permitirAsync("redis:cero", 0, 60_000)).toBe(false)
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(createClient).not.toHaveBeenCalled()
   })
 
-  it("ante un error de red cae al contador en memoria (fail-open al local)", async () => {
-    fetchMock.mockRejectedValue(new TypeError("fetch failed"))
+  it("si no se puede conectar cae al contador en memoria (fail-open al local)", async () => {
+    connect.mockRejectedValue(new Error("ECONNREFUSED"))
 
-    expect(await permitirAsync("memoria:red", 1, 60_000)).toBe(true)
-    expect(await permitirAsync("memoria:red", 1, 60_000)).toBe(false)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(await permitirAsync("memoria:conexion", 1, 60_000)).toBe(true)
+    expect(await permitirAsync("memoria:conexion", 1, 60_000)).toBe(false)
+    expect(exec).not.toHaveBeenCalled()
   })
 
-  it("ante un HTTP no-2xx o una respuesta inesperada cae a memoria", async () => {
-    fetchMock
-      .mockResolvedValueOnce(new Response("no", { status: 500 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([{ error: "WRONGTYPE" }, { result: 0 }]), { status: 200 }))
-      .mockResolvedValueOnce(new Response("{}", { status: 200 }))
+  it("ante un error del comando o una respuesta inesperada cae a memoria", async () => {
+    exec.mockRejectedValueOnce(new Error("WRONGTYPE"))
+    expect(await permitirAsync("memoria:comando", 2, 60_000)).toBe(true)
 
-    expect(await permitirAsync("memoria:http", 2, 60_000)).toBe(true)
-    expect(await permitirAsync("memoria:http", 2, 60_000)).toBe(true)
-    expect(await permitirAsync("memoria:http", 2, 60_000)).toBe(false)
+    olvidarCliente() // sin la pausa tras el fallo, para probar el segundo caso
+    exec.mockResolvedValueOnce(["no-es-un-numero", true])
+    expect(await permitirAsync("memoria:comando", 2, 60_000)).toBe(true)
+
+    olvidarCliente()
+    exec.mockResolvedValueOnce([1, true])
+    // El tercero sí llega a Redis y Redis dice 1 ≤ 2, pero el contador en memoria ya tenía 2:
+    // los caminos son independientes y eso es lo esperado (Redis manda cuando está).
+    expect(await permitirAsync("memoria:comando", 2, 60_000)).toBe(true)
+  })
+
+  it(`tras un fallo no vuelve a intentar con Redis durante ${REDIS_PAUSA_TRAS_FALLO_MS / 1000} s`, async () => {
+    exec.mockRejectedValueOnce(new Error("se cayó"))
+    await permitirAsync("memoria:pausa", 10, 60_000)
+    expect(exec).toHaveBeenCalledTimes(1)
+
+    exec.mockResolvedValue([1, true])
+    await permitirAsync("memoria:pausa", 10, 60_000)
+    await permitirAsync("memoria:pausa", 10, 60_000)
+    expect(exec).toHaveBeenCalledTimes(1) // sigue en memoria, sin pegarle a Redis
+
+    vi.useFakeTimers({ now: Date.now() + REDIS_PAUSA_TRAS_FALLO_MS + 1 })
+    await permitirAsync("memoria:pausa", 10, 60_000)
+    expect(exec).toHaveBeenCalledTimes(2) // pasada la pausa, vuelve a intentar
+    vi.useRealTimers()
+  })
+
+  it("si el cliente quedó cerrado (reconexión rendida) crea uno nuevo pasada la pausa", async () => {
+    exec.mockResolvedValue([1, true])
+    await permitirAsync("redis:cerrado", 10, 60_000)
+    clienteFalso.isOpen = false
+    await permitirAsync("redis:cerrado", 10, 60_000)
+    expect(createClient).toHaveBeenCalledTimes(2)
+    expect(clienteFalso.destroy).toHaveBeenCalledTimes(1)
   })
 
   it(`corta la espera a ${REDIS_TIMEOUT_MS} ms y cae a memoria`, async () => {
-    // fetch "colgado": sólo termina cuando el AbortSignal del timeout dispara.
-    fetchMock.mockImplementation(
-      (_url, init) =>
-        new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason))
-        }),
-    )
+    exec.mockImplementation(() => new Promise(() => {})) // nunca responde
 
     const inicio = Date.now()
     expect(await permitirAsync("memoria:timeout", 1, 60_000)).toBe(true)
-    expect(await permitirAsync("memoria:timeout", 1, 60_000)).toBe(false)
     const tardo = Date.now() - inicio
-    expect(tardo).toBeGreaterThanOrEqual(REDIS_TIMEOUT_MS * 2 - 20)
-    expect(tardo).toBeLessThan(REDIS_TIMEOUT_MS * 2 + 1_000)
+    expect(tardo).toBeGreaterThanOrEqual(REDIS_TIMEOUT_MS - 20)
+    expect(tardo).toBeLessThan(REDIS_TIMEOUT_MS + 1_000)
+
+    // El segundo entra en la pausa tras el fallo: no espera nada y cuenta en memoria.
+    const inicio2 = Date.now()
+    expect(await permitirAsync("memoria:timeout", 1, 60_000)).toBe(false)
+    expect(Date.now() - inicio2).toBeLessThan(REDIS_TIMEOUT_MS)
   })
 })
 

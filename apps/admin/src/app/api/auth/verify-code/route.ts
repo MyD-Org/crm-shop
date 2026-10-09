@@ -5,7 +5,7 @@ import { getTenantConfig } from "@/lib/tenant-context"
 import { getCliente } from "@/lib/erp"
 import { AlegraRateLimitError } from "@/lib/alegra"
 import { intentarOtp } from "@/lib/portal-otp"
-import { ipDe, permitir } from "@/lib/rate-limit"
+import { ipDe, permitirAsync } from "@/lib/rate-limit"
 import type { SessionData, OtpSessionData } from "@/types"
 
 // Verificación del código del portal. El estado del código (hash, vencimiento, intentos, un
@@ -13,8 +13,8 @@ import type { SessionData, OtpSessionData } from "@/types"
 // id, así que reenviar una cookie vieja no reinicia nada.
 //
 // Límite por IP además del tope de 5 intentos por código: un atacante puede pedir un código
-// nuevo por cada víctima, y esto frena el barrido masivo en una sola instancia (ver CAVEAT en
-// src/lib/rate-limit.ts). 60 cada 15 minutos cubre de sobra una oficina detrás de una IP:
+// nuevo por cada víctima, y esto frena el barrido masivo (contador compartido en Redis si hay credenciales;
+// si no, por instancia: ver src/lib/rate-limit.ts). 60 cada 15 minutos cubre de sobra una oficina detrás de una IP:
 // un login legítimo son 1 o 2 intentos.
 const MAX_VERIFY_POR_IP = 60
 const VERIFY_WINDOW_MS = 15 * 60 * 1000
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Código inválido" }, { status: 400 })
     }
 
-    if (!permitir(`verify-code:${tenant.id}:ip:${ipDe(request)}`, MAX_VERIFY_POR_IP, VERIFY_WINDOW_MS)) {
+    if (!await permitirAsync(`verify-code:${tenant.id}:ip:${ipDe(request)}`, MAX_VERIFY_POR_IP, VERIFY_WINDOW_MS)) {
       return Response.json(
         { error: "Demasiados intentos. Espere unos minutos e inténtelo de nuevo." },
         { status: 429 },

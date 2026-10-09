@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Button, Card, Field, Select, Switch, useToast } from "@myd-org/ui"
+import { Button, Card, RadioGroup, Switch, useToast } from "@myd-org/ui"
 import type { SucursalDto } from "@/lib/sucursales-repo"
 import type { ReglasVenta } from "@/lib/reglas-venta-validacion"
 import { CiudadesEnvioSelector } from "@/components/admin/CiudadesEnvioSelector"
@@ -15,8 +15,18 @@ type FilaForm = { slug: string; nombre: string; activa: boolean; aceptaEnvio: bo
 type Errores = Record<string, string>
 
 const OPCIONES_RESPALDO = [
-  { value: "si", label: "Sí, despachar desde otra sucursal" },
-  { value: "no", label: "No, informar que no hay stock" },
+  {
+    value: "si",
+    label: "Sí, despachar desde otra sucursal",
+    description:
+      "Si la sucursal de la zona del cliente no tiene stock de un producto, ese producto se trae de otra sucursal que sí tenga. El pedido se acepta, suma la demora de traslado de Reglas de venta y sigue a cargo de la sucursal de la zona.",
+  },
+  {
+    value: "no",
+    label: "No, informar que no hay stock",
+    description:
+      "Si a la sucursal de la zona le falta stock de algún producto, el checkout lo informa y el cliente debe quitarlo para continuar. Cada sucursal sólo vende lo que tiene.",
+  },
 ]
 
 const TITULO_SECCION = "text-xs font-semibold uppercase tracking-wider"
@@ -184,20 +194,20 @@ export function EnviosSucursalesCard() {
             <h3 className={TITULO_SECCION} style={{ color: "var(--ink-faint)" }}>
               Respaldo
             </h3>
-            <Field
-              label="Envío con respaldo de otra sucursal"
-              hint="Si la sucursal de la zona del cliente no tiene stock, el pedido se despacha desde otra sucursal con stock."
-              error={errores.respaldoEnvio}
-            >
-              <Select
-                options={OPCIONES_RESPALDO}
-                value={respaldo}
-                onValueChange={(v) => {
-                  setRespaldo(v as "si" | "no")
-                  setErrores((e) => ({ ...e, respaldoEnvio: "" }))
-                }}
-              />
-            </Field>
+            <RadioGroup
+              legend="Si la sucursal de la zona no tiene stock"
+              options={OPCIONES_RESPALDO}
+              value={respaldo}
+              onValueChange={(v) => {
+                setRespaldo(v as "si" | "no")
+                setErrores((e) => ({ ...e, respaldoEnvio: "" }))
+              }}
+            />
+            {errores.respaldoEnvio && (
+              <p className="text-sm" role="alert" style={{ color: "var(--red)" }}>
+                {errores.respaldoEnvio}
+              </p>
+            )}
           </section>
 
           <div>

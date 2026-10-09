@@ -106,8 +106,8 @@ describe("PagoMercadoPago: props del Brick estables", () => {
     expect(fuente).toMatch(/customization=\{customization\}/);
   });
 
-  it("el monto del Brick queda congelado: cambiar las cuotas no lo remonta ni borra la tarjeta", () => {
-    expect(fuente).toMatch(/const \[montoBrick\] = useState\(monto\)/);
+  it("el monto del Brick queda congelado: cambiar las cuotas no lo remonta (solo cambia al recotizar otra forma) ni borra la tarjeta", () => {
+    expect(fuente).toMatch(/const \[montoBrick, setMontoBrick\] = useState\(monto\)/);
     expect(fuente).toMatch(/amount: montoBrick/);
   });
 

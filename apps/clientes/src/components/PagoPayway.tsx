@@ -27,7 +27,7 @@ import { enviarCobro } from "@/lib/pagos/payway-cobro-cliente";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { AvisoProcesador } from "@/components/AvisoProcesador";
 import { modalidadesPaywayHabilitadas } from "@/components/pago-opciones";
-import { asegurarCuotasDelPedido } from "@/lib/checkout-cuotas-cliente";
+import { asegurarCuotasDelPedido, cambiarFormaDelPedido } from "@/lib/checkout-cuotas-cliente";
 import {
   avisoCuotasNoDisponibles,
   claveDelPedido,
@@ -81,8 +81,10 @@ interface Props {
   cuotasPedido: number | null;
   /** Lo elegido en el desplegable, para el resumen lateral (null al salir del formulario). Estable. */
   onEleccionCuotas?: (e: EleccionCuotas | null) => void;
-  /** El pedido pasó a otras cuotas (y otro total) antes de cobrar. */
-  onPedidoActualizado?: (p: { cuotas: number | null; total: number }) => void;
+  /** Forma de pago congelada en el pedido (crédito o débito); null = el medio no tiene precios por forma. */
+  formaCobroPedido?: OpcionCobro | null;
+  /** El pedido pasó a otras cuotas, otra modalidad (y otro total) antes de cobrar. */
+  onPedidoActualizado?: (p: { cuotas: number | null; total: number; formaCobro?: OpcionCobro | null }) => void;
   /**
    * Formas de pago habilitadas para el medio en el admin (migración 0073 del CRM). Sin valor, crédito
    * y débito. Las deshabilitadas no se muestran; el servidor igual las rechaza.
@@ -121,6 +123,7 @@ export function PagoPayway({
   monto,
   pagoMetodo,
   cuotasPedido,
+  formaCobroPedido = null,
   onEleccionCuotas,
   onPedidoActualizado,
   opcionesCobro,
@@ -145,8 +148,14 @@ export function PagoPayway({
   const [titular, setTitular] = useState("");
   const [doc, setDoc] = useState("");
   const habilitadas = modalidadesPaywayHabilitadas(opcionesCobro);
-  // Arranca en la primera modalidad habilitada (el débito pasa el pedido a 1 pago al cobrar).
-  const [modalidad, setModalidad] = useState<ModalidadTarjeta>(() => habilitadas[0] ?? "credito");
+  // Arranca en la modalidad del pedido (si el medio tiene precios por forma) o en la primera habilitada
+  // (el débito pasa el pedido a 1 pago al cobrar).
+  const [modalidad, setModalidad] = useState<ModalidadTarjeta>(
+    () => habilitadas.find((m) => m === formaCobroPedido) ?? habilitadas[0] ?? "credito",
+  );
+  /** Se está recotizando el pedido para otra modalidad: nada se cobra ni se cambia hasta que el servidor conteste. */
+  const [recotizando, setRecotizando] = useState(false);
+  const [errorForma, setErrorForma] = useState<string | null>(null);
   // null = se usa la sugerencia por el prefijo del número.
   const [marcaElegida, setMarcaElegida] = useState<Marca | null>(null);
   // La marca se detecta por el número: el selector aparece sólo si no se reconoce o si la quiere cambiar.
@@ -220,6 +229,32 @@ export function PagoPayway({
   const avisoMarca = conSeisDigitos && marcaNoAceptada ? validarMarcaDelConvenio(marca, modalidad) : null;
   const mostrarSelectorMarca = cambiarMarca || sinReconocer || marcaElegida !== null || Boolean(errores.marca);
 
+  /**
+   * Con precios por forma de pago, cambiar de modalidad recotiza el pedido ANTES de mostrar la nueva: el
+   * total y el resumen son los de la lista de esa modalidad, y las cuotas vuelven a 1 pago (el débito no
+   * admite cuotas). Si el servidor no lo acepta (cobro en vuelo, demasiados cambios), la modalidad no cambia.
+   */
+  async function elegirModalidad(nueva: ModalidadTarjeta) {
+    if (nueva === modalidad || estado.fase === "procesando" || recotizando) return;
+    if (formaCobroPedido == null || nueva === formaCobroPedido) {
+      setErrorForma(null);
+      setModalidad(nueva);
+      return;
+    }
+    setRecotizando(true);
+    setErrorForma(null);
+    const r = await cambiarFormaDelPedido({ pedidoId, pagoMetodo, forma: nueva });
+    setRecotizando(false);
+    if (!r.ok) {
+      setErrorForma(r.error);
+      return;
+    }
+    setClaveCuotas(null);
+    onPedidoActualizado?.({ cuotas: r.cuotas, total: r.total, formaCobro: r.formaCobro });
+    setModalidad(nueva);
+    cuotas.recargar();
+  }
+
   function validar(): Errores {
     const e: Errores = {};
     const p = validarPan(pan, marca);
@@ -264,7 +299,9 @@ export function PagoPayway({
       pagoMetodo,
       cuotas: elegida.pedidoCuotas,
       totalVisto: datosCuotas ? elegida.total : undefined,
-      actual: { cuotas: cuotasPedido, total: monto },
+      actual: { cuotas: cuotasPedido, total: monto, formaCobro: formaCobroPedido },
+      // La modalidad que se va a cobrar: sin ella el servidor volvería a la forma por defecto del medio.
+      forma: modalidad,
     });
     if (!asegurado.ok) {
       cuotas.recargar();
@@ -272,7 +309,7 @@ export function PagoPayway({
       setEstado({ fase: "rechazado", mensaje: asegurado.error });
       return;
     }
-    if (asegurado.cambio) onPedidoActualizado?.({ cuotas: asegurado.cuotas, total: asegurado.total });
+    if (asegurado.cambio) onPedidoActualizado?.({ cuotas: asegurado.cuotas, total: asegurado.total, formaCobro: asegurado.formaCobro });
 
     const v = formatearVenc(venc).split("/");
     const solicitud = armarSolicitudToken({
@@ -480,7 +517,7 @@ export function PagoPayway({
         />
       )}
 
-      <Button type="submit" size="lg" loading={procesando} disabled={procesando || config === null}>
+      <Button type="submit" size="lg" loading={procesando} disabled={procesando || recotizando || config === null}>
         <IconoCandado />
         {procesando ? (
           "Procesando su pago…"
@@ -514,7 +551,7 @@ export function PagoPayway({
         : { description: textoMarcasPayway("credito") }),
       icon: <IconoTarjeta />,
       content: campos,
-      disabled: procesando && modalidad !== "credito",
+      disabled: (procesando && modalidad !== "credito") || recotizando,
     },
     {
       value: "debito",
@@ -524,7 +561,7 @@ export function PagoPayway({
         : { description: textoMarcasPayway("debito") }),
       icon: <IconoTarjetaDebito />,
       content: campos,
-      disabled: procesando && modalidad !== "debito",
+      disabled: (procesando && modalidad !== "debito") || recotizando,
     },
   ];
   const opciones = todas.filter((o) => habilitadas.includes(o.value as ModalidadTarjeta));
@@ -537,13 +574,19 @@ export function PagoPayway({
         </Alert>
       )}
 
+      {errorForma && (
+        <Alert tone="danger" title="No se pudo cambiar la forma de pago">
+          {errorForma}
+        </Alert>
+      )}
+
       <TituloComoPagar />
       <RadioGroup
         legend="¿Cómo quiere pagar?"
         hideLegend
         options={opciones}
         value={modalidad}
-        onValueChange={(v) => setModalidad(v as ModalidadTarjeta)}
+        onValueChange={(v) => void elegirModalidad(v as ModalidadTarjeta)}
       />
 
       <AvisoProcesador>Payway procesa el pago. Los datos de su tarjeta van directo a Payway y no se guardan en nuestro sitio.</AvisoProcesador>

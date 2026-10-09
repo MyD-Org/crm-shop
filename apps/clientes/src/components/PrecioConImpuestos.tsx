@@ -44,7 +44,7 @@ export function PrecioConImpuestos({ price, precioFinal, preciosMedios }: Props)
       {conMedios ? (
         <ul className="mt-4 space-y-1.5">
           {preciosMedios!.map((m) => (
-            <li key={m.slug} className="font-display text-[22px] font-bold leading-tight tracking-tight text-accent tabular-nums lg:text-[24px]">
+            <li key={`${m.slug}:${m.forma ?? ""}`} className="font-display text-[22px] font-bold leading-tight tracking-tight text-accent tabular-nums lg:text-[24px]">
               {textoConMedio(m)}
             </li>
           ))}

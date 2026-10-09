@@ -10,7 +10,8 @@ import { useRouter } from "next/navigation";
 import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, Stepper, type PaymentLogo } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
-import { pagoParaCotizar } from "@/lib/lista-medio";
+import { formaInicialDelMedio, pagoParaCotizar } from "@/lib/lista-medio";
+import { leerFormaCobro, type OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { contenidoDistinto, COPY_CARRITO, type CartItem } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { PagoPayway } from "@/components/PagoPayway";
@@ -322,6 +323,7 @@ type PedidoRescatado = {
   total: number;
   cuotas: number | null;
   pagoMetodo?: string;
+  formaCobro?: OpcionCobro | null;
   lineas?: { id: string; qty: number }[];
   /** Ya hay un cobro enviado al procesador y sin resolver: se retoma en "Estamos confirmando su pago". */
   pagoEnCurso?: boolean;
@@ -567,6 +569,8 @@ export function CheckoutClient({
     procesador?: string | null;
     /** Medio de pago del pedido (slug). */
     pagoMetodo?: string;
+    /** Forma de pago congelada (precios por forma); null = el medio no tiene precios por forma. */
+    formaCobro?: OpcionCobro | null;
     /** Mercado Pago: public key de la cuenta que cobra el pedido y esa cuenta (los manda el servidor). */
     mpPublicKey?: string;
     mpCuenta?: string;
@@ -680,6 +684,7 @@ export function CheckoutClient({
       // El servidor manda el medio del pedido; sin él (respuesta anterior) era Mercado Pago.
       procesador: procesadorDeMedio(pedido.pagoMetodo ?? SLUG_MERCADOPAGO),
       pagoMetodo: pedido.pagoMetodo ?? SLUG_MERCADOPAGO,
+      formaCobro: leerFormaCobro(pedido.formaCobro),
       ...(pedido.mpPublicKey ? { mpPublicKey: pedido.mpPublicKey } : {}),
       ...(pedido.mpCuenta ? { mpCuenta: pedido.mpCuenta } : {}),
     });
@@ -762,6 +767,9 @@ export function CheckoutClient({
   // Cuotas sin interés: el medio de cobro en línea con condiciones las pide al servidor, que sólo
   // devuelve opciones con el flag `cuotas-cobro` prendido. Sin opciones no hay selector ni cuotas.
   const pideCuotas = Boolean(medioSel?.cobroOnline && (medioSel.condicionesCuotas?.length ?? 0) > 0);
+  // Medio con precios distintos por forma de pago: el pedido nace en la primera forma que ofrece y el
+  // total que se ve ya es el de su lista (después se cambia de pestaña o modalidad en el pago).
+  const formaDelMedio = medioSel && !esCuentaCorriente ? formaInicialDelMedio(medioSel) : null;
   // Las cuotas se eligen dentro del formulario de pago (Mercado Pago y Payway), según la tarjeta
   // (`SelectorCuotas`). El pedido se crea en 1 pago y acá sólo queda la meta "Sume $X más…".
 
@@ -785,6 +793,8 @@ export function CheckoutClient({
     ...(() => {
       // Cuenta corriente: ni lista ni cuotas por medio (el servidor tampoco las aplica).
       const base = pagoParaCotizar(mediosPago, entrega, esCuentaCorriente ? null : medioSel);
+      // Con precios por forma, la clave de refetch incluye la forma y viaja el slug del propio medio.
+      if (formaDelMedio && medioSel) return { listaKey: `${medioSel.slug}:${formaDelMedio}`, pagoMetodo: medioSel.slug, forma: formaDelMedio };
       // Con cuotas la cotización depende también de la cantidad: el slug viaja siempre y la clave de
       // refetch incluye la lista (o el medio, si no tiene lista de pago único).
       return pideCuotas && medioSel ? { listaKey: base.listaKey || medioSel.slug, pagoMetodo: medioSel.slug } : base;
@@ -800,8 +810,8 @@ export function CheckoutClient({
   /** Lo elegido en el formulario de pago (para el resumen); null fuera de él. */
   const [eleccionCuotas, setEleccionCuotas] = useState<EleccionCuotas | null>(null);
   /** El formulario pasó el pedido a otras cuotas antes de cobrar: total y cuotas nuevos. */
-  const alActualizarPedido = useCallback((p: { cuotas: number | null; total: number }) => {
-    setConfirmado((c) => (c ? { ...c, cuotas: p.cuotas, total: p.total } : c));
+  const alActualizarPedido = useCallback((p: { cuotas: number | null; total: number; formaCobro?: OpcionCobro | null }) => {
+    setConfirmado((c) => (c ? { ...c, cuotas: p.cuotas, total: p.total, ...(p.formaCobro !== undefined ? { formaCobro: p.formaCobro } : {}) } : c));
   }, []);
 
   // Flag `disponibilidad-sucursal`: de la disponibilidad por modalidad que devolvió la cotización,
@@ -878,6 +888,7 @@ export function CheckoutClient({
         body: JSON.stringify({
           pagoMetodo: pagoParaEnviar,
           cuotas: pideCuotas && opcionesCuotas.length > 0 ? 1 : undefined,
+          ...(formaDelMedio ? { forma: formaDelMedio } : {}),
           totalVisto: cotizacion?.total,
         }),
       });
@@ -900,6 +911,7 @@ export function CheckoutClient({
           pagoEnLinea: enLinea,
           procesador: procesadorDeMedio(pagoParaEnviar),
           pagoMetodo: pagoParaEnviar,
+          formaCobro: leerFormaCobro(json.formaCobro),
           ...(typeof json.mpPublicKey === "string" ? { mpPublicKey: json.mpPublicKey } : {}),
           ...(typeof json.mpCuenta === "string" ? { mpCuenta: json.mpCuenta } : {}),
           contacto: json.contacto ?? null,
@@ -965,6 +977,7 @@ export function CheckoutClient({
           pagoMetodo: pagoParaEnviar,
           // Sólo si el servidor ofreció cuotas: la cantidad elegida (1 = un pago). El monto no viaja.
           cuotas: pideCuotas && opcionesCuotas.length > 0 ? 1 : undefined,
+          ...(formaDelMedio ? { forma: formaDelMedio } : {}),
           notas,
           complementoFacturacion: complementoFacturacion ?? undefined,
           // Sólo con el flag `sucursales` (props presentes): local de retiro y provincia de entrega.
@@ -1026,6 +1039,7 @@ export function CheckoutClient({
         pagoEnLinea: esPagoEnLinea(pagoParaEnviar),
         procesador: procesadorDeMedio(pagoParaEnviar),
         pagoMetodo: pagoParaEnviar,
+        formaCobro: leerFormaCobro(json.formaCobro),
         ...(typeof json.mpPublicKey === "string" ? { mpPublicKey: json.mpPublicKey } : {}),
         ...(typeof json.mpCuenta === "string" ? { mpCuenta: json.mpCuenta } : {}),
         contacto: json.contacto ?? null,
@@ -1186,6 +1200,7 @@ export function CheckoutClient({
               monto={confirmado.total}
               pagoMetodo={confirmado.pagoMetodo ?? SLUG_PAYWAY}
               cuotasPedido={confirmado.cuotas}
+              formaCobroPedido={confirmado.formaCobro ?? null}
               onEleccionCuotas={setEleccionCuotas}
               onPedidoActualizado={alActualizarPedido}
               opcionesCobro={opcionesCobroDe(confirmado.procesador)}
@@ -1208,6 +1223,7 @@ export function CheckoutClient({
               emailComprador={emailCliente}
               pagoMetodo={confirmado.pagoMetodo ?? SLUG_MERCADOPAGO}
               cuotasPedido={confirmado.cuotas}
+              formaCobroPedido={confirmado.formaCobro ?? null}
               publicKey={confirmado.mpPublicKey}
               cuenta={confirmado.mpCuenta}
               onEleccionCuotas={setEleccionCuotas}

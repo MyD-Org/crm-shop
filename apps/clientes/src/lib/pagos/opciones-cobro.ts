@@ -63,6 +63,11 @@ export function opcionDelCobro(datos: {
   return id.startsWith("deb") || id === "maestro" ? "debito" : "credito";
 }
 
+/** Lectura tolerante de una forma que llega de una respuesta del servidor: la conocida o `null`. */
+export function leerFormaCobro(v: unknown): OpcionCobro | null {
+  return typeof v === "string" && (OPCIONES_COBRO as readonly string[]).includes(v) ? (v as OpcionCobro) : null;
+}
+
 /** ¿El medio acepta esa opción? */
 export function opcionHabilitada(
   procesadorId: string,

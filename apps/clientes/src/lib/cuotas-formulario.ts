@@ -8,6 +8,7 @@ import type { CuotasRestringidas, OpcionCuotasPedido } from "./cuotas-pedido";
 import { montoPorCuota } from "./cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "./cuotas-textos";
 import { nombreDeMarca } from "./pagos/marcas";
+import type { OpcionCobro } from "./pagos/opciones-cobro";
 
 export type { OpcionCuotasPedido };
 
@@ -153,8 +154,18 @@ export function resumenCuotas(o: OpcionCuotasPedido, precioUnPago: number): Resu
   return { total: o.total };
 }
 
-/** El pedido tiene que pasar a otras cuotas antes de cobrar esta opción (null = 1 pago). */
-export function hayQueRecongelar(pedidoCuotas: number, cuotasDelPedido: number | null): boolean {
+/**
+ * El pedido tiene que pasar a otras cuotas (null = 1 pago) o a otra forma de pago antes de cobrar esta
+ * opción. La forma solo cuenta si el pedido ya tiene una congelada (hay precios por forma): un pedido
+ * sin forma no se recotiza por ella.
+ */
+export function hayQueRecongelar(
+  pedidoCuotas: number,
+  cuotasDelPedido: number | null,
+  forma?: OpcionCobro | null,
+  formaDelPedido?: OpcionCobro | null,
+): boolean {
+  if (formaDelPedido != null && forma != null && forma !== formaDelPedido) return true;
   return pedidoCuotas !== (cuotasDelPedido ?? 1);
 }
 

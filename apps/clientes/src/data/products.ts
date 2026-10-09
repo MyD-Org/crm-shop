@@ -1,5 +1,6 @@
 import type { AtributosEstructurados } from "@/lib/catalogo-caracteristicas";
 import type { CuotasProducto } from "@/lib/cuotas-sin-interes";
+import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import type { ProductStock } from "@myd-org/ui";
 
 /**
@@ -34,6 +35,11 @@ export interface PrecioMedio {
   price: number;
   /** Con IVA, si se conoce. */
   precioFinal?: number;
+  /**
+   * Forma de pago a la que corresponde el precio (change `listas-por-forma-de-pago`). Ausente = el
+   * precio del medio, igual para todas sus formas.
+   */
+  forma?: OpcionCobro;
 }
 
 /** Una fila de la tabla de especificaciones de la ficha. */

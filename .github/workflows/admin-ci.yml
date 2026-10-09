@@ -44,9 +44,11 @@ jobs:
 
     # Los tests de integración corren contra un Postgres real. El global-setup crea la DB
     # crm_test y le aplica las migraciones de drizzle solo; acá solo hace falta el servidor.
+    # Imagen oficial desde el espejo público de ECR: Docker Hub corta las descargas anónimas de
+    # los runners compartidos (toomanyrequests) y el job fallaba antes de correr un solo test.
     services:
       postgres:
-        image: postgres:16
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:

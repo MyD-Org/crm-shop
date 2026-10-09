@@ -276,6 +276,9 @@ export const crmTenants = publico.table("tenants", {
   name: text("name").notNull(),
   whatsappNumber: text("whatsapp_number").notNull(),
   receiptsEmail: text("receipts_email").notNull(),
+  /** Textos del chat (0078 del CRM, GRANT por columna). '' / [] = usar los del Shop. */
+  chatEmptyState: text("chat_empty_state").notNull(),
+  chatSuggestions: jsonb("chat_suggestions").$type<string[]>().notNull(),
 });
 
 /**

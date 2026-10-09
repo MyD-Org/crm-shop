@@ -8,7 +8,7 @@ import { useCart } from "@/context/CartContext";
 import type { PropsChatIa } from "@/lib/chat-ia";
 import { hrefWhatsApp, mensajeTraspaso } from "@/lib/chat-ia-handoff";
 import { lineasAItems, type ProductoResuelto } from "@/lib/chat-ia-productos";
-import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT, SUGERENCIAS_CHAT } from "@/lib/chat-ia-textos";
+import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "@/lib/chat-ia-textos";
 import { useChatIa } from "@/hooks/useChatIa";
 import { useSenalesIniciativa } from "@/hooks/useSenalesIniciativa";
 import { contextoParaChat } from "@/lib/chat-ia-puente";
@@ -117,7 +117,7 @@ function nombreEnPantalla(): string | undefined {
   return document.querySelector("main h1")?.textContent?.trim() || undefined;
 }
 
-export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
+export default function ChatIaWidget({ agentId, titulo, textoVacio, sugerencias }: PropsChatIa) {
   const router = useRouter();
   const pathname = usePathname();
   const { addItems, items, updateQty, removeItem, cambio } = useCart();
@@ -261,10 +261,11 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
     <ChatDrawer
       config={config}
       branding={{ title: titulo, subtitle: SUBTITULO_CHAT, primaryColor: COLOR_CHAT }}
-      labels={{ ...ETIQUETAS_CHAT, headerTitle: titulo }}
+      // Texto del chat vacío y preguntas sugeridas: del admin del CRM, o los de chat-ia-textos.ts (propsChatIa).
+      labels={{ ...ETIQUETAS_CHAT, headerTitle: titulo, emptyState: textoVacio }}
       theme="light"
       enableHistory
-      suggestions={SUGERENCIAS_CHAT}
+      suggestions={sugerencias}
       commerce={commerce}
       open={abierto}
       onOpenChange={cambiarAbierto}

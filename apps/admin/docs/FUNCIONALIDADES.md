@@ -1243,6 +1243,21 @@ nunca en el repo.
 
 ---
 
+## Chat de la tienda (textos del asistente del Shop)
+
+`/admin/chat-tienda` (grupo Datos, admin+): el texto del chat vacío y hasta 4 preguntas sugeridas
+del asistente del Shop. Se guardan en `tenants.chat_empty_state` y `tenants.chat_suggestions`
+(0078, `GET/PUT /api/admin/settings/chat-tienda`, validación en `src/lib/chat-tienda.ts`).
+
+- **Vacíos = textos por defecto del Shop** (`apps/clientes/src/lib/chat-ia-textos.ts`), campo por campo.
+- **Registro neutro**: se muestran en la UI del chat, que no usa usted ni vos (CLAUDE.md, excepción
+  del asistente). La pantalla lo indica; no se valida.
+- **Lectura del Shop**: `shop_app` tiene `SELECT` sólo de esas dos columnas (GRANT de la 0078) y las
+  lee por request en `propsChatIa`: lo guardado se ve en la próxima página, sin avisarle al Shop.
+  Contrato: `platform/contracts/crm-shop-base/v1/README.md`.
+
+---
+
 ## Correo compartido (lectura)
 
 Detrás del flag `correo` (Vercel Flags). Las casillas de Resend Inboxes son **solapas dentro de Mensajes** (`/admin/inbox`), junto a las de canal; `/admin/correo` solo redirige. Con el flag apagado Mensajes queda idéntico.

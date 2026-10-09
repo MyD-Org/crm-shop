@@ -134,7 +134,7 @@ describe("cuenta que factura: la calculada", () => {
     const res = await cuentaDto(p.id)
     expect(res.status).toBe(200)
     const dto = await res.json()
-    expect(dto.efectiva).toMatchObject({ slug: "mdp", nombre: "Mar del Plata SA", motivo: "despacho", texto: "Sucursal que despacha" })
+    expect(dto.efectiva).toMatchObject({ slug: "mdp", nombre: "Mar del Plata", motivo: "despacho", texto: "Sucursal que despacha" })
     expect(dto.cruzada).toBe(false)
     expect(dto.editable).toBe(true)
     expect(dto.cuentas.map((c: { slug: string }) => c.slug).sort()).toEqual(["mdp", "principal"])
@@ -147,7 +147,7 @@ describe("cuenta que factura: la calculada", () => {
     const dto = await (await cuentaDto(p.id)).json()
     expect(dto.efectiva).toMatchObject({ slug: "principal", motivo: "zona", texto: "Por zona Misiones" })
     expect(dto.cruzada).toBe(true)
-    expect(dto.despacha).toMatchObject({ sucursal: "Mar del Plata", cuentaNombre: "Mar del Plata SA" })
+    expect(dto.despacha).toMatchObject({ sucursal: "Mar del Plata", cuentaNombre: "Mar del Plata" })
   })
 
   it("pedido anterior a las sucursales: la cuenta principal", async () => {
@@ -215,7 +215,7 @@ describe("emitir factura por la cuenta que corresponde", () => {
     })
     expect(f.overrideEn).toBeInstanceOf(Date)
     const dto = await (await cuentaDto(p.id)).json()
-    expect(dto.override).toMatchObject({ por: "Admin A", anterior: "Mar del Plata SA" })
+    expect(dto.override).toMatchObject({ por: "Admin A", anterior: "Mar del Plata" })
   })
 
   it("elegir la misma cuenta que ya correspondía no ensucia la auditoría", async () => {

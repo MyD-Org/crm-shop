@@ -54,6 +54,7 @@ function Fila({ label, children }: { label: string; children: React.ReactNode })
 export function VincularFacturaControl({ pedido, onChanged, onConflicto }: Props) {
   const { toast } = useToast()
   const [numero, setNumero] = useState("")
+  const [verBuscar, setVerBuscar] = useState(false)
   const [buscando, setBuscando] = useState(false)
   const [encontrada, setEncontrada] = useState<FacturaEncontrada | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -199,7 +200,18 @@ export function VincularFacturaControl({ pedido, onChanged, onConflicto }: Props
 
   return (
     <div className="flex flex-col gap-3">
-      <form
+      {!verBuscar && (
+        <Button
+          variant="link"
+          size="sm"
+          className="self-start"
+          aria-expanded={false}
+          onClick={() => setVerBuscar(true)}
+        >
+          Vincular una existente
+        </Button>
+      )}
+      {verBuscar && <form
         className="flex flex-col gap-2 sm:flex-row sm:items-end"
         onSubmit={(e) => {
           e.preventDefault()
@@ -223,7 +235,7 @@ export function VincularFacturaControl({ pedido, onChanged, onConflicto }: Props
         <Button type="submit" loading={buscando} disabled={!numero.trim()}>
           Buscar
         </Button>
-      </form>
+      </form>}
 
       <Dialog
         open={encontrada !== null}

@@ -2,17 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CardPayment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
-import { Button, PaymentLogos, RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
+import { Alert, Button, PaymentLogos, RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
 import { customizacionBrick, type CustomizacionSdk, type TipoTarjeta } from "./pago-brick";
-import { opcionesMercadoPagoHabilitadas as opcionesHabilitadas, type OpcionMercadoPago } from "./pago-opciones";
+import {
+  formaDeOpcionMercadoPago,
+  opcionDeFormaMercadoPago,
+  opcionesMercadoPagoHabilitadas as opcionesHabilitadas,
+  type OpcionMercadoPago,
+} from "./pago-opciones";
 import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { AvisoProcesador } from "./AvisoProcesador";
 import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "./PagoIconos";
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
 import type { TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
-import { asegurarCuotasDelPedido } from "@/lib/checkout-cuotas-cliente";
+import { asegurarCuotasDelPedido, cambiarFormaDelPedido } from "@/lib/checkout-cuotas-cliente";
 import {
   avisoCuotasNoDisponibles,
   claveDelPedido,
@@ -87,8 +92,10 @@ interface Props {
   cuenta?: string;
   /** Lo elegido en el desplegable, para el resumen lateral (null al salir del formulario). Estable. */
   onEleccionCuotas?: (e: EleccionCuotas | null) => void;
-  /** El pedido pasó a otras cuotas (y otro total) antes de cobrar. */
-  onPedidoActualizado?: (p: { cuotas: number | null; total: number }) => void;
+  /** Forma de pago congelada en el pedido (crédito, débito, cuenta MP); null = el medio no tiene precios por forma. */
+  formaCobroPedido?: OpcionCobro | null;
+  /** El pedido pasó a otras cuotas, otra forma de pago (y otro total) antes de cobrar. */
+  onPedidoActualizado?: (p: { cuotas: number | null; total: number; formaCobro?: OpcionCobro | null }) => void;
   /**
    * Formas de pago habilitadas para el medio en el admin (migración 0073 del CRM). Sin valor, todas.
    * Las deshabilitadas no se muestran; el servidor igual las rechaza.
@@ -131,6 +138,7 @@ export function PagoMercadoPago({
   emailComprador,
   pagoMetodo,
   cuotasPedido,
+  formaCobroPedido = null,
   publicKey,
   cuenta,
   onEleccionCuotas,
@@ -146,8 +154,12 @@ export function PagoMercadoPago({
   tarjetas,
 }: Props) {
   const habilitadas = opcionesHabilitadas(opcionesCobro);
-  // Arranca en la primera forma habilitada (el débito y la cuenta pasan el pedido a 1 pago al cobrar).
-  const [opcion, setOpcion] = useState<Opcion>(() => habilitadas[0] ?? "credito");
+  // Arranca en la forma del pedido (si el medio tiene precios por forma) o en la primera habilitada (el
+  // débito y la cuenta pasan el pedido a 1 pago al cobrar).
+  const [opcion, setOpcion] = useState<Opcion>(() => opcionDeFormaMercadoPago(formaCobroPedido, habilitadas) ?? habilitadas[0] ?? "credito");
+  /** Se está recotizando el pedido para otra pestaña: nada se cobra ni se cambia hasta que el servidor conteste. */
+  const [recotizando, setRecotizando] = useState(false);
+  const [errorForma, setErrorForma] = useState<string | null>(null);
   const [estado, setEstado] = useState<Estado>(
     iniciarEnConfirmacion ? { fase: "pendiente" } : opcion === "cuenta" ? { fase: "formulario" } : { fase: "cargando" },
   );
@@ -220,13 +232,15 @@ export function PagoMercadoPago({
       pagoMetodo,
       cuotas: cuotasDelPedido,
       totalVisto: datosCuotas ? (cuotasDelPedido > 1 ? totalOpcion : precioUnPago) : undefined,
-      actual: { cuotas: cuotasPedido, total: monto },
+      actual: { cuotas: cuotasPedido, total: monto, formaCobro: formaCobroPedido },
+      // La forma que se va a cobrar: sin ella el servidor volvería a la forma por defecto del medio.
+      forma: formaDeOpcionMercadoPago(opcion),
     });
     if (!r.ok) {
       cuotas.recargar();
       return r.error;
     }
-    if (r.cambio) onPedidoActualizado?.({ cuotas: r.cuotas, total: r.total });
+    if (r.cambio) onPedidoActualizado?.({ cuotas: r.cuotas, total: r.total, formaCobro: r.formaCobro });
     return null;
   }
 
@@ -244,7 +258,7 @@ export function PagoMercadoPago({
    */
   // El monto del Brick queda congelado: elegir otras cuotas cambia el total del pedido, pero un monto
   // nuevo remontaría el Brick y borraría la tarjeta. El Brick no cobra: cobra el servidor con el pedido.
-  const [montoBrick] = useState(monto);
+  const [montoBrick, setMontoBrick] = useState(monto);
   const initialization = useMemo(
     () => ({
       amount: montoBrick,
@@ -449,8 +463,7 @@ export function PagoMercadoPago({
   }
 
   /** Otra opción: una tarjeta monta su Brick de cero; la cuenta no tiene nada que cargar. */
-  function elegir(nueva: Opcion) {
-    if (nueva === opcion || estado.fase === "procesando") return;
+  function aplicarOpcion(nueva: Opcion) {
     setOpcion(nueva);
     if (nueva === "cuenta") {
       setEstado({ fase: "formulario" });
@@ -458,6 +471,34 @@ export function PagoMercadoPago({
       remontarBrick();
       setEstado({ fase: "cargando" });
     }
+  }
+
+  /**
+   * Con precios por forma de pago, cambiar de pestaña recotiza el pedido ANTES de mostrar la nueva: el
+   * total, el resumen y el monto del Brick son los de la lista de esa forma, y las cuotas vuelven a 1
+   * pago. Si el servidor no lo acepta (cobro en vuelo, demasiados cambios), la pestaña no cambia.
+   */
+  async function elegir(nueva: Opcion) {
+    if (nueva === opcion || estado.fase === "procesando" || recotizando) return;
+    const forma = formaDeOpcionMercadoPago(nueva);
+    if (formaCobroPedido == null || forma === formaCobroPedido) {
+      setErrorForma(null);
+      aplicarOpcion(nueva);
+      return;
+    }
+    setRecotizando(true);
+    setErrorForma(null);
+    const r = await cambiarFormaDelPedido({ pedidoId, pagoMetodo, forma });
+    setRecotizando(false);
+    if (!r.ok) {
+      setErrorForma(r.error);
+      return;
+    }
+    setMontoBrick(r.total);
+    setClaveCuotas(null);
+    onPedidoActualizado?.({ cuotas: r.cuotas, total: r.total, formaCobro: r.formaCobro });
+    aplicarOpcion(nueva);
+    cuotas.recargar();
   }
 
   if (faltaKey) {
@@ -583,7 +624,7 @@ export function PagoMercadoPago({
       )}
       {estado.fase !== "cargando" && (
         <div className="mt-4 flex flex-col">
-          <Button size="lg" onClick={pagarConTarjeta} loading={procesando} disabled={procesando}>
+          <Button size="lg" onClick={pagarConTarjeta} loading={procesando} disabled={procesando || recotizando}>
             <IconoCandado />
             {procesando ? (
               "Procesando su pago…"
@@ -613,7 +654,7 @@ export function PagoMercadoPago({
         : { description: "Visa, Mastercard, American Express y más" }),
       icon: <IconoTarjeta />,
       content: formularioTarjeta,
-      disabled: procesando && opcion !== "credito",
+      disabled: (procesando && opcion !== "credito") || recotizando,
     },
     {
       value: "debito",
@@ -623,15 +664,15 @@ export function PagoMercadoPago({
         : { description: "Visa Débito, Maestro y más" }),
       icon: <IconoTarjetaDebito />,
       content: formularioTarjeta,
-      disabled: procesando && opcion !== "debito",
+      disabled: (procesando && opcion !== "debito") || recotizando,
     },
     {
       value: "cuenta",
       label: "Cuenta de Mercado Pago",
-      description: "Dinero disponible o tarjetas guardadas en su cuenta",
+      description: "Con el dinero disponible en su cuenta",
       icon: <IconoBilletera />,
       content: <PagoCuentaMercadoPago pedidoId={pedidoId} antesDeIr={() => asegurarCuotas(1, unPago.total)} />,
-      disabled: procesando,
+      disabled: procesando || recotizando,
     },
   ];
   const opciones = todas.filter((o) => habilitadas.includes(o.value as Opcion));
@@ -642,6 +683,11 @@ export function PagoMercadoPago({
       {estado.fase === "rechazado" && (
 <AvisoPagoRechazado mensaje={estado.mensaje} />
       )}
+      {errorForma && (
+        <Alert tone="danger" title="No se pudo cambiar la forma de pago">
+          {errorForma}
+        </Alert>
+      )}
 
       <TituloComoPagar />
       <RadioGroup
@@ -649,7 +695,7 @@ export function PagoMercadoPago({
         hideLegend
         options={opciones}
         value={opcion}
-        onValueChange={(v) => elegir(v as Opcion)}
+        onValueChange={(v) => void elegir(v as Opcion)}
       />
 
       <AvisoProcesador>Mercado Pago procesa el pago. Los datos de su tarjeta no pasan por nuestro sitio.</AvisoProcesador>

@@ -18,9 +18,8 @@ import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
-import { BotonCompartirCarrito } from "@/components/carrito/BotonCompartirCarrito";
-import { useChatIa } from "@/hooks/useChatIa";
-import { MENSAJES_AL_CHAT, TEXTOS_CARRITO_ASESOR } from "@/lib/iniciativa/textos";
+import { BotonCompartirLista } from "@/components/BotonCompartirLista";
+import { hrefCompartido, MENSAJE_CARRITO } from "@/lib/carrito-compartido";
 
 function LightbulbIcon({ className }: { className?: string }) {
   return (
@@ -95,8 +94,6 @@ export function CarritoClient({
   ubicacionConocida?: boolean;
 }) {
   const { items, updateQty, removeItem: remove, restoreItem, ready } = useCart();
-  // "¿Le falta algo?": sólo con el chat montado (spec catálogo asistido fase 2, §3).
-  const chat = useChatIa();
   // Líneas que se están yendo: colapsan SALIDA_MS antes de salir del carrito.
   const [saliendo, setSaliendo] = useState<ReadonlySet<string>>(new Set());
   // Bajas que el aviso puede deshacer. Varias seguidas se agrupan en un solo
@@ -289,7 +286,15 @@ export function CarritoClient({
             </span>
           </div>
           <div className="ml-auto">
-            <BotonCompartirCarrito items={items} />
+            <BotonCompartirLista
+              href={hrefCompartido(items)}
+              label="Compartir carrito"
+              mensaje={MENSAJE_CARRITO}
+              toast={{
+                title: "Enlace copiado",
+                description: "Ya puede pegarlo donde quiera compartir su carrito.",
+              }}
+            />
           </div>
         </div>
 
@@ -522,20 +527,6 @@ export function CarritoClient({
               <Link href="/catalogo" className="block text-center text-sm font-semibold text-accent hover:underline">
                 Seguir comprando
               </Link>
-              {/* Enlace discreto al asesor: abre el chat pidiéndole que revise
-                  el carrito (el contexto de pantalla ya lleva las líneas). */}
-              {chat.disponible && items.length > 0 && (
-                <p className="text-center text-sm text-muted">
-                  {TEXTOS_CARRITO_ASESOR.pregunta}{" "}
-                  <button
-                    type="button"
-                    onClick={() => chat.conversar(MENSAJES_AL_CHAT.carrito)}
-                    className="font-semibold text-text underline decoration-border underline-offset-4 transition-colors hover:text-accent hover:decoration-accent"
-                  >
-                    {TEXTOS_CARRITO_ASESOR.accion}
-                  </button>
-                </p>
-              )}
             </div>
 
             <EntregaProducto

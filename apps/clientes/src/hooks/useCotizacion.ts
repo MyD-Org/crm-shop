@@ -85,6 +85,7 @@ interface Resultado {
   sucursalRetiro: string;
   listaKey: string;
   pagoMetodo: string;
+  forma: string;
   cuotas: number;
   conCuotas: boolean;
   conProgresoCuotas: boolean;
@@ -115,6 +116,11 @@ export function useCotizacion(opts: {
   listaKey?: string;
   /** Slug canónico del medio para esa lista (ver `pagoParaCotizar`); el servidor resuelve la lista desde él. */
   pagoMetodo?: string;
+  /**
+   * Forma de pago con la que nace el pedido (medio con precios distintos por forma): el total que se ve
+   * es el de su lista. Cambiarla recotiza. Sin ella, rige la lista del medio.
+   */
+  forma?: string;
   /** Cuotas sin interés elegidas (1 = un pago). Cambiarlas recotiza: cada cantidad es otra lista. */
   cuotas?: number;
   /** Pide también el total y la cuota de cada cantidad (selector de cuotas del checkout). */
@@ -135,6 +141,7 @@ export function useCotizacion(opts: {
   const sucursalRetiro = conCuenta && opts.entregaTipo === "retiro" ? (opts.sucursalRetiro ?? "") : "";
   const listaKey = opts.listaKey ?? "";
   const pagoMetodo = listaKey ? (opts.pagoMetodo ?? "") : "";
+  const forma = pagoMetodo ? (opts.forma ?? "") : "";
   const cuotas = opts.cuotas ?? 1;
   const conCuotas = opts.conCuotas ?? false;
   const conProgresoCuotas = opts.conProgresoCuotas ?? false;
@@ -166,7 +173,7 @@ export function useCotizacion(opts: {
 
     const lineas = JSON.parse(clave) as [string, number][];
     const ctrl = new AbortController();
-    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, cuotas, conCuotas, conProgresoCuotas };
+    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas };
     let reintento: ReturnType<typeof setTimeout> | undefined;
 
     const timer = setTimeout(async () => {
@@ -184,6 +191,7 @@ export function useCotizacion(opts: {
             conCuenta: conCuenta || undefined,
             sucursalRetiro: sucursalRetiro || undefined,
             pagoMetodo: pagoMetodo || undefined,
+            forma: forma || undefined,
             cuotas: cuotas > 1 ? cuotas : undefined,
             conCuotas: conCuotas || undefined,
             progresoCuotas: conProgresoCuotas || undefined,
@@ -240,7 +248,7 @@ export function useCotizacion(opts: {
       clearTimeout(reintento);
       ctrl.abort();
     };
-  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, cuotas, conCuotas, conProgresoCuotas, nonce]);
+  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, nonce]);
 
   // Estado DERIVADO de los inputs actuales vs. los del último resultado. Nada
   // de esto vive en useState: setear estado desde un efecto para algo que ya se
@@ -256,6 +264,7 @@ export function useCotizacion(opts: {
     res.sucursalRetiro === sucursalRetiro &&
     res.listaKey === listaKey &&
     res.pagoMetodo === pagoMetodo &&
+    res.forma === forma &&
     res.cuotas === cuotas &&
     res.conCuotas === conCuotas &&
     res.conProgresoCuotas === conProgresoCuotas;

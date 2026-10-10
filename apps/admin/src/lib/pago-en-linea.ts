@@ -4,6 +4,9 @@
 // `pago_info` es un jsonb que escribe el Shop (`InfoPago` en apps/clientes/src/lib/pagos/tipos.ts):
 // se lee campo por campo y lo que no tenga la forma esperada se descarta.
 
+/** Forma de pago con la que el Shop congeló el total del pedido (`orders.forma_cobro`). */
+export type FormaElegida = "credito" | "debito" | "cuenta_mp"
+
 export type TipoMedioPago = "credito" | "debito" | "prepaga" | "dinero_en_cuenta"
 
 export interface InfoPagoDto {
@@ -43,6 +46,8 @@ export interface PagoEnLineaDto {
   info: InfoPagoDto
   /** Cuenta de cobro; null en pagos anteriores a que el Shop la registrara. */
   cuenta: CuentaCobroDto | null
+  /** Forma de pago elegida al congelar el total; ausente = pedido anterior o sin precios por forma. */
+  formaElegida?: FormaElegida
 }
 
 const TIPOS: readonly TipoMedioPago[] = ["credito", "debito", "prepaga", "dinero_en_cuenta"]

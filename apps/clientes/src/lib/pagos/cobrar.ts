@@ -249,6 +249,21 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
   if (rechazoOpcion) return rechazoOpcion;
 
   /**
+   * Forma congelada (listas de precio por forma de pago): el precio del pedido es el de la forma con que
+   * se cotizó; la que declara el navegador (en Payway, la modalidad del `payment_method_id`) tiene que
+   * ser esa. Se rechaza ANTES de reservar el intento y de contactar al procesador (con `cuenta_mp`
+   * congelada, cualquier tarjeta cae acá). Sin `forma_cobro` (pedido viejo o sin precios por forma) no se
+   * valida. NO se consulta el BIN: el Brick filtra el tipo en el navegador y el control final es
+   * `registrarCobroTx` con el tipo real del pago.
+   */
+  if (pedido.formaCobro && opcion !== pedido.formaCobro) {
+    return NextResponse.json(
+      { error: MENSAJE_RECHAZO.forma_distinta, motivo: "forma_distinta" },
+      { status: 409 },
+    );
+  }
+
+  /**
    * Cuotas (ver `validarCuotasPago`): 1 pago; las sin interés congeladas en el pedido, con una tarjeta de
    * las marcas de esa condición; o las con interés que Mercado Pago ofrece para el BIN (consultadas acá,
    * con el total del pedido). Un rechazo corta ACÁ, sin reservar el intento ni llamar al procesador: el

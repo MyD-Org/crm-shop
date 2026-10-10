@@ -141,3 +141,89 @@ export function cambiosDeCuotas(
 function clave(marcas: readonly string[] | null | undefined): string {
   return marcas ? `:${ordenarMarcas(marcas).join(",")}` : ""
 }
+
+// --- Listas por forma de pago (0076, sólo Mercado Pago y Payway) ---
+
+/** Valor del selector de una forma que usa la lista del medio (hereda la fila de todas las formas). */
+export const LISTA_IGUAL_QUE_EL_MEDIO = "__igual__"
+
+/** Lista elegida por forma: el id de la lista o `LISTA_IGUAL_QUE_EL_MEDIO`. Una forma ausente = sin lista propia. */
+export type ListasPorFormaForm = Partial<Record<OpcionCobro, string>>
+
+/** Estado inicial del editor a partir de lo guardado en el medio. */
+export function listasPorFormaDesdeDto(guardadas: readonly { forma: OpcionCobro; listaId: string }[]): ListasPorFormaForm {
+  return Object.fromEntries(guardadas.map((g) => [g.forma, g.listaId]))
+}
+
+/**
+ * Cambios de precios (`setCondicion` con forma) que llevan las listas por forma actuales a las deseadas:
+ * altas y cambios primero, bajas (`listaId: null`) al final. Lo que no cambia no genera nada. Una forma
+ * ausente o en `LISTA_IGUAL_QUE_EL_MEDIO` es "sin fila propia".
+ */
+export function cambiosDeListasPorForma(
+  medioSlug: string,
+  actuales: ListasPorFormaForm,
+  deseadas: ListasPorFormaForm,
+) {
+  const propia = (v: string | undefined) => (v && v !== LISTA_IGUAL_QUE_EL_MEDIO ? v : null)
+  const altas: { op: "setCondicion"; medioSlug: string; cuotas: null; forma: OpcionCobro; listaId: string | null }[] = []
+  const bajas: typeof altas = []
+  for (const forma of OPCIONES_COBRO) {
+    const antes = propia(actuales[forma])
+    const despues = propia(deseadas[forma])
+    if (antes === despues) continue
+    const cambio = { op: "setCondicion" as const, medioSlug, cuotas: null, forma, listaId: despues }
+    if (despues === null) bajas.push(cambio)
+    else altas.push(cambio)
+  }
+  return [...altas, ...bajas]
+}
+
+// --- Lista por forma de pago, un solo selector por forma (modal rediseñado) ---
+
+/**
+ * En un medio con cobro en línea no hay "lista del medio" editable: cada forma tiene su lista y
+ * el medio guarda la de crédito (si está ofrecida) o, si no, la de la primera forma ofrecida.
+ * Devuelve lo que se guarda: la lista del medio (`LISTA_POR_DEFECTO` si es la de referencia) y las
+ * filas por forma, sólo para formas ofrecidas con una lista distinta de la del medio.
+ * `listaDeForma` trae el id de lista de cada forma (la de referencia incluida, con su id real).
+ */
+export function mapearListasDeFormas(args: {
+  /** Formas del procesador, en el orden en que se muestran (credito, debito, cuenta_mp). */
+  formas: readonly OpcionCobro[]
+  /** Formas que se ofrecen (tildadas). */
+  ofrecidas: readonly OpcionCobro[]
+  listaDeForma: ListasPorFormaForm
+  referenciaId: string | null
+}): { listaOnlineId: string; listasPorForma: ListasPorFormaForm } {
+  const { formas, ofrecidas, listaDeForma, referenciaId } = args
+  const efectiva = (o: OpcionCobro) => {
+    const v = listaDeForma[o]
+    return !v || v === LISTA_POR_DEFECTO || v === LISTA_IGUAL_QUE_EL_MEDIO ? (referenciaId ?? LISTA_POR_DEFECTO) : v
+  }
+  // Sin ninguna forma ofrecida (medio inactivo) se conserva la de la primera forma, para no perder la lista.
+  const candidatas = formas.filter((o) => ofrecidas.includes(o))
+  const baseForma = candidatas.includes("credito") ? "credito" : (candidatas[0] ?? formas[0])
+  const delMedio = baseForma ? efectiva(baseForma) : LISTA_POR_DEFECTO
+  const listasPorForma: ListasPorFormaForm = {}
+  for (const o of candidatas) if (efectiva(o) !== delMedio) listasPorForma[o] = efectiva(o)
+  return { listaOnlineId: delMedio === referenciaId ? LISTA_POR_DEFECTO : delMedio, listasPorForma }
+}
+
+/** ¿Alguna lista efectiva difiere de la de referencia? Si no, no hay precio distinto que destacar ni mostrar. */
+export function hayPrecioDistinto(listaIds: readonly string[], referenciaId: string | null): boolean {
+  return listaIds.some((id) => id !== LISTA_POR_DEFECTO && id !== LISTA_IGUAL_QUE_EL_MEDIO && id !== referenciaId)
+}
+
+export type PestanaMedio = "general" | "precios" | "cuotas"
+
+/** Pestaña del primer campo con error, para saltar a ella al guardar; null si el error es general. */
+export function pestanaDeError(errores: Record<string, string>): PestanaMedio | null {
+  const claves = Object.keys(errores)
+  const general = ["nombre", "slug", "instrucciones", "chips", "aplicaRetiro", "aplicaEnvio", "audiencia", "activo"]
+  const precios = ["listaOnlineId", "destacarEnCatalogo", "mostrarEnFicha", "opcionesCobro", "listasPorForma"]
+  if (claves.some((k) => general.includes(k))) return "general"
+  if (claves.some((k) => precios.includes(k))) return "precios"
+  if (claves.includes("cuotas")) return "cuotas"
+  return null
+}

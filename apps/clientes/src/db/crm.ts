@@ -276,6 +276,9 @@ export const crmTenants = publico.table("tenants", {
   name: text("name").notNull(),
   whatsappNumber: text("whatsapp_number").notNull(),
   receiptsEmail: text("receipts_email").notNull(),
+  /** Textos del chat (0078 del CRM, GRANT por columna). '' / [] = usar los del Shop. */
+  chatEmptyState: text("chat_empty_state").notNull(),
+  chatSuggestions: jsonb("chat_suggestions").$type<string[]>().notNull(),
 });
 
 /**
@@ -516,6 +519,10 @@ export const crmListaPrecioCondiciones = publico.table("lista_precio_condiciones
   // `cuotas-en-el-formulario`): ids canónicos de `lib/pagos/marcas.ts`; NULL = todas. Se lee en una
   // consulta aparte, tolerante a la columna ausente (`marcasDeLasCondiciones`).
   marcas: text("marcas").array(),
+  // Forma de pago a la que aplica la lista del pago único (migración 0076 del CRM, change
+  // `listas-por-forma-de-pago`): credito | debito | cuenta_mp; NULL = todas. Se lee en una consulta
+  // aparte, tolerante a la columna ausente (`formasDeLasCondiciones`).
+  forma: text("forma"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

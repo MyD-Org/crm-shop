@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  esOrden,
   alternarCategoria,
   itemsDeFaceta,
   anuncioResultados,
@@ -521,5 +522,14 @@ describe("ordenesPara", () => {
   it("el orden vigente siempre está entre las opciones", () => {
     expect(etiquetas({ query: undefined, orden: "relevancia" })).toContain("Relevancia");
     expect(etiquetas({ query: "led", orden: "destacados" })).toContain("Destacados");
+  });
+});
+
+describe("esOrden", () => {
+  it("acepta los órdenes ofrecidos y rechaza el vacío que a veces avisa el Select al navegar", () => {
+    expect(esOrden("precio-asc")).toBe(true);
+    expect(esOrden("relevancia")).toBe(true);
+    expect(esOrden("")).toBe(false);
+    expect(esOrden("cualquiera")).toBe(false);
   });
 });

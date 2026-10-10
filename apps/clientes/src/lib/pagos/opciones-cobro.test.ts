@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  leerFormaCobro,
   leerOpcionesCobro,
   opcionDelCobro,
   opcionHabilitada,
@@ -61,5 +62,13 @@ describe("opcionHabilitada", () => {
     expect(opcionHabilitada("mercadopago", undefined, "cuenta_mp")).toBe(true);
     expect(opcionHabilitada("mercadopago", ["debito"], "credito")).toBe(false);
     expect(opcionHabilitada("payway", ["cuenta_mp"], "cuenta_mp")).toBe(false);
+  });
+});
+
+describe("leerFormaCobro", () => {
+  it("devuelve la forma conocida; cualquier otra cosa, null", () => {
+    expect(leerFormaCobro("debito")).toBe("debito");
+    expect(leerFormaCobro("cuenta_mp")).toBe("cuenta_mp");
+    for (const v of ["efectivo", "", null, undefined, 3, {}]) expect(leerFormaCobro(v)).toBeNull();
   });
 });

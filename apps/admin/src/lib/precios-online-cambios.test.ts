@@ -219,3 +219,45 @@ describe("validarCambios: lista privada y enlace con la lista de Alegra", () => 
     expect(m({ listaId: undefined })).toMatchObject({ ok: false })
   })
 })
+
+describe("validarCambios: setCondicion por forma de pago (0076)", () => {
+  const cond = (extra: Record<string, unknown>) => [{ op: "setCondicion", medioSlug: "mercadopago", cuotas: null, listaId: ID, ...extra }]
+
+  it("acepta credito, debito y cuenta_mp en Mercado Pago y las incluye en el cambio", () => {
+    for (const forma of ["credito", "debito", "cuenta_mp"]) {
+      expect(validarCambios(cond({ forma }))).toMatchObject({ ok: true, cambios: [{ op: "setCondicion", forma }] })
+    }
+  })
+  it("acepta credito y debito en Payway, pero no cuenta_mp", () => {
+    expect(validarCambios(cond({ medioSlug: "payway", forma: "debito" }))).toMatchObject({ ok: true })
+    expect(validarCambios(cond({ medioSlug: "payway", forma: "credito" }))).toMatchObject({ ok: true })
+    expect(validarCambios(cond({ medioSlug: "payway", forma: "cuenta_mp" }))).toEqual({
+      ok: false,
+      campo: "cambios[0].forma",
+      error: "Payway no admite la forma Cuenta de Mercado Pago.",
+    })
+  })
+  it("rechaza la forma en otros medios", () => {
+    expect(validarCambios(cond({ medioSlug: "transferencia", forma: "debito" }))).toEqual({
+      ok: false,
+      campo: "cambios[0].forma",
+      error: "Las listas por forma de pago solo aplican a Mercado Pago y Payway.",
+    })
+  })
+  it("rechaza la forma con cuotas y los valores desconocidos", () => {
+    expect(validarCambios(cond({ cuotas: 6, forma: "credito" }))).toEqual({
+      ok: false,
+      campo: "cambios[0].forma",
+      error: "La forma de pago solo se elige para el pago único.",
+    })
+    expect(validarCambios(cond({ forma: "efectivo" }))).toMatchObject({ ok: false, campo: "cambios[0].forma" })
+  })
+  it("sin forma (o null) el cambio queda idéntico al de siempre", () => {
+    expect(validarCambios(cond({ forma: null }))).toMatchObject({
+      ok: true,
+      cambios: [{ op: "setCondicion", medioSlug: "mercadopago", cuotas: null, listaId: ID, montoMinimo: null, marcas: null }],
+    })
+    const r = validarCambios(cond({}))
+    expect(r.ok && "forma" in r.cambios[0]).toBe(false)
+  })
+})

@@ -2,8 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { Button, DropdownMenu, useToast } from "@myd-org/ui";
-import type { LineaCarrito } from "@/lib/carrito-cliente";
-import { hrefCompartido, hrefWhatsApp, mensajeCompartido } from "@/lib/carrito-compartido";
+import { hrefWhatsApp, mensajeCompartido } from "@/lib/carrito-compartido";
 
 function IconoCompartir() {
   return (
@@ -42,16 +41,41 @@ function IconoMas() {
 
 const sinSuscripcion = () => () => {};
 
+export interface TextosToastCompartir {
+  title: string;
+  description: string;
+}
+
 /**
- * Compartir el carrito con un menú propio: WhatsApp (el canal de casi todos),
- * copiar el enlace y, sólo donde existe `navigator.share`, "Más opciones" para
- * abrir la hoja del sistema a pedido. No se abre la hoja nativa de entrada: en
- * escritorio ofrece AirDrop, Notas o Recordatorios y no WhatsApp.
+ * Compartir una lista (carrito, pedido, favoritos) con un menú propio:
+ * WhatsApp (el canal de casi todos), copiar el enlace y, sólo donde existe
+ * `navigator.share`, "Más opciones" para abrir la hoja del sistema a pedido. No
+ * se abre la hoja nativa de entrada: en escritorio ofrece AirDrop, Notas o
+ * Recordatorios y no WhatsApp.
  *
- * El enlace lleva sólo `id:qty` (ver src/lib/carrito-compartido.ts): quien lo
- * abre ve los precios de SU lista y decide si lo carga.
+ * `href` es la ruta relativa a compartir (ver src/lib/carrito-compartido.ts):
+ * quien la abre ve los precios de SU lista. `mensaje` es el encabezado del
+ * texto que se manda a un tercero; vive en lib.
  */
-export function BotonCompartirCarrito({ items }: { items: readonly LineaCarrito[] }) {
+export function BotonCompartirLista({
+  href,
+  label,
+  mensaje,
+  toast: textosToast,
+  aviso,
+  disabled = false,
+  size = "sm",
+}: {
+  href: string;
+  label: string;
+  mensaje: string;
+  toast: TextosToastCompartir;
+  /** Texto extra para el toast (p. ej. un recorte de líneas). */
+  aviso?: string;
+  disabled?: boolean;
+  /** Igual que el resto de la fila de acciones donde se lo pone. */
+  size?: "sm" | "md";
+}) {
   const { toast } = useToast();
   // false en el servidor: el ítem aparece recién en el navegador que la tenga.
   const conHojaNativa = useSyncExternalStore(
@@ -60,10 +84,11 @@ export function BotonCompartirCarrito({ items }: { items: readonly LineaCarrito[
     () => false,
   );
 
-  const urlCompartida = () => `${window.location.origin}${hrefCompartido(items)}`;
+  const urlCompartida = () => `${window.location.origin}${href}`;
 
   function porWhatsApp() {
-    window.open(hrefWhatsApp(urlCompartida()), "_blank", "noopener,noreferrer");
+    window.open(hrefWhatsApp(urlCompartida(), mensaje), "_blank", "noopener,noreferrer");
+    if (aviso) toast({ title: aviso, tone: "neutral" });
   }
 
   async function copiar() {
@@ -71,8 +96,8 @@ export function BotonCompartirCarrito({ items }: { items: readonly LineaCarrito[
     try {
       await navigator.clipboard.writeText(url);
       toast({
-        title: "Enlace copiado",
-        description: "Ya puede pegarlo donde quiera compartir su carrito.",
+        title: textosToast.title,
+        description: aviso ? `${textosToast.description} ${aviso}` : textosToast.description,
         tone: "success",
       });
     } catch {
@@ -83,7 +108,7 @@ export function BotonCompartirCarrito({ items }: { items: readonly LineaCarrito[
   async function masOpciones() {
     const url = urlCompartida();
     try {
-      await navigator.share({ text: mensajeCompartido(url), url });
+      await navigator.share({ text: mensajeCompartido(url, mensaje), url });
     } catch {
       // Cerrar la hoja sin elegir nada no es un error: no se avisa nada.
     }
@@ -104,9 +129,9 @@ export function BotonCompartirCarrito({ items }: { items: readonly LineaCarrito[
           : []),
       ]}
     >
-      <Button type="button" variant="outline" size="sm">
+      <Button type="button" variant="outline" size={size} disabled={disabled}>
         <IconoCompartir />
-        Compartir carrito
+        {label}
       </Button>
     </DropdownMenu>
   );

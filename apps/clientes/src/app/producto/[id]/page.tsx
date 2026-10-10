@@ -37,7 +37,7 @@ const productoDe = cache(async (id: string) => {
     dispCatalogo(),
     usarAtributosEstructurados(),
   ]);
-  return productoPublico(id, soloVisibles, disp, estructurados, mediosPrecio?.ficha, mediosPrecio?.cuotas);
+  return productoPublico(id, soloVisibles, disp, estructurados, mediosPrecio?.ficha, mediosPrecio?.cuotas, mediosPrecio?.modal);
 });
 
 /** Vista previa del link (WhatsApp, Google…). Ver src/lib/producto-metadata.ts. */

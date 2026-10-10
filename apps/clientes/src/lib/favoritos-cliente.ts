@@ -66,3 +66,28 @@ export function visiblesEnLista<T extends { id: string }>(
 ): T[] {
   return ready ? productos.filter((p) => esFavorito(p.id)) : [...productos];
 }
+
+/** Respuesta del alta masiva (`POST /api/mi-cuenta/favoritos/lote`). */
+export interface ResultadoLote {
+  agregados: number;
+  yaEstaban: number;
+  sinLugar: number;
+  noDisponibles: number;
+}
+
+const MAX_TEXTO = 200;
+
+/** Texto del toast tras el alta masiva, en usted. */
+export function mensajeResultadoLote(r: ResultadoLote): string {
+  const plural = (n: number) => (n === 1 ? "1 producto" : `${n} productos`);
+  if (r.agregados === 0 && r.sinLugar > 0) {
+    return `No se agregó ninguno: alcanzó el máximo de ${MAX_TEXTO} favoritos.`;
+  }
+  if (r.agregados === 0) {
+    return r.yaEstaban > 0 ? "Ya los tenía todos en sus favoritos." : "No había productos para agregar.";
+  }
+  if (r.sinLugar > 0) {
+    return `Se agregaron ${r.agregados}. No hubo lugar para ${r.sinLugar}: alcanzó el máximo de ${MAX_TEXTO} favoritos.`;
+  }
+  return `Se agregaron ${plural(r.agregados)} a sus favoritos.`;
+}

@@ -79,6 +79,8 @@ export async function GET(req: Request) {
           precioFinal: propio.precioFinal,
           precioMedio: undefined,
           preciosMedios: undefined,
+          preciosFormaModal: undefined,
+          preciosOfflineModal: undefined,
           cuotasSinInteres: undefined,
         }),
       ];

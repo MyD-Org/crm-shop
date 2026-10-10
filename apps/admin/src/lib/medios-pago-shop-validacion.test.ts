@@ -4,6 +4,9 @@ import {
   SLUG_MERCADOPAGO,
   SLUGS_COBRO,
   esSlugCobro,
+  esMedioDelSistema,
+  SLUGS_SISTEMA,
+  slugReservadoEnAlta,
   MSG_SIN_ENTREGA,
   validarMedioPagoCambios,
   validarMedioPagoNuevo,
@@ -81,6 +84,23 @@ describe("fila fija Mercado Pago", () => {
       cambios: { activo: true, orden: 4, aplicaEnvio: false },
     })
     expect(validarMedioPagoCambios({ cobroOnline: true })).toMatchObject({ ok: false, campo: "cobroOnline" })
+  })
+})
+
+describe("medios del sistema", () => {
+  it("incluyen cobro en línea, transferencia y efectivo", () => {
+    expect(SLUGS_SISTEMA).toEqual(["mercadopago", "payway", "transferencia", "efectivo"])
+    expect(esMedioDelSistema("transferencia")).toBe(true)
+    expect(esMedioDelSistema("efectivo")).toBe(true)
+    expect(esMedioDelSistema("tarjeta-local")).toBe(false)
+  })
+
+  it("el alta rechaza un identificador del sistema y deja pasar los demás", () => {
+    for (const slug of SLUGS_SISTEMA) {
+      expect(slugReservadoEnAlta({ slug, nombre: "X" })).toEqual({ ok: false, campo: "slug", error: "Ese identificador está reservado." })
+    }
+    expect(slugReservadoEnAlta({ slug: "tarjeta-local" })).toBeNull()
+    expect(slugReservadoEnAlta(null)).toBeNull()
   })
 })
 

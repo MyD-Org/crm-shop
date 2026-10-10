@@ -13,7 +13,8 @@ import { fmtFechaPedido } from "./format"
 export function textoVentaEntreEmpresas(d: Pick<CuentaFacturaDto, "despacha" | "efectiva" | "emitida">): string {
   const factura = d.emitida?.nombre ?? d.efectiva?.nombre ?? "otra cuenta"
   const desde = d.despacha.sucursal ?? "la sucursal del pedido"
-  const cuentaDespacha = d.despacha.cuentaNombre ? ` (${d.despacha.cuentaNombre})` : ""
+  const cuentaDespacha =
+    d.despacha.cuentaNombre && d.despacha.cuentaNombre !== d.despacha.sucursal ? ` (${d.despacha.cuentaNombre})` : ""
   return (
     `La mercadería sale de ${desde}${cuentaDespacha}, pero se factura con la cuenta de ${factura}. ` +
     "El stock lo sigue descontando la sucursal que despacha: el ajuste entre las dos empresas se hace por fuera."
@@ -43,15 +44,12 @@ export function CuentaFacturaInfo({ pedido }: { pedido: PedidoDetalleDto }) {
   return (
     <div className="mb-3 flex flex-col gap-2 border-b pb-3" style={{ borderColor: "var(--border)" }}>
       <div>
-        <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
-          {dto.emitida ? "Facturada con la cuenta de" : "Cuenta que factura"}
-        </p>
+        {dto.emitida && (
+          <p className="text-xs" style={{ color: "var(--ink-faint)" }}>Facturada con la cuenta de</p>
+        )}
         <p className="text-sm" style={{ color: "var(--ink)" }}>
           {cuenta ? cuenta.nombre : "Sin cuenta asignada"}
         </p>
-        {!dto.emitida && dto.efectiva && (
-          <p className="text-xs" style={{ color: "var(--ink-soft)" }}>{dto.efectiva.texto}</p>
-        )}
         {dto.override && (
           <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
             Elegida por {dto.override.por ?? "un operador"} el {fmtFechaPedido(dto.override.en)}

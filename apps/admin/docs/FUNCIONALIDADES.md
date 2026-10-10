@@ -1179,6 +1179,24 @@ Shop ofrece salen de esta tabla; ya no existen los flags `pagos` ni `pedido-a-co
   referencia (el mayor mínimo configurado, con piso de $100.000): si una cantidad no se ofrece a ese
   monto, tampoco se avisa. La cuenta sale de `clavesPublicasMP()` (hoy una sola), preparada para una
   cuenta por sucursal.
+- **Modal Agregar / Editar medio** (change `modal-medios-pago`): título «Editar {nombre}» con el
+  identificador debajo (solo editable al crear) y el interruptor «Activo» arriba a la derecha, visible
+  en todas las pestañas. Pestañas del DS: **General** (nombre, instrucciones, etiquetas, retiro, envío
+  y «Solo cuentas corrientes», este último solo en medios sin cobro en línea), **Precios** (solo al
+  editar) y **Cuotas** (solo en medios con cobro en línea que no son Mercado Pago). Al guardar con
+  errores salta a la pestaña del primer campo con error. En **Precios**, un medio común tiene un único
+  selector «Lista de precios»; Mercado Pago y Payway con cobro en línea no tienen «lista del medio»:
+  una fila por forma de pago con su casilla (ofrecerla) y su lista (obligatoria; la de referencia
+  también se elige con su nombre). Al guardar, la lista del medio es la de crédito (si se ofrece) o la
+  de la primera forma ofrecida (la de referencia = sin lista), y solo se guardan filas por forma para
+  las formas ofrecidas cuya lista difiere de la del medio (`mapearListasDeFormas`). Luego «Mostrar el
+  precio»: «Destacar en el catálogo» y «Destacar en la ficha», deshabilitados si todas las listas
+  efectivas son la de referencia o el medio es solo para cuentas corrientes.
+- **Medios del sistema** (migración `0077`): `mercadopago`, `payway`, `transferencia` y `efectivo`
+  (`SLUGS_SISTEMA`) tienen identificador fijo: no se pueden crear con ese identificador («Ese
+  identificador está reservado.», 400) ni eliminar (409; el botón Eliminar no se muestra), solo
+  desactivar. La 0077 repone por tenant `transferencia` y `efectivo` si faltaban, **desactivados**
+  (no aparecen solos en el checkout), sin tocar los existentes. Se aplica a mano antes del merge.
 - **Sin medios aplicables** a la modalidad elegida, el pedido queda "a coordinar".
 - **Solo cuentas corrientes** (change `listas-cuenta-corriente`, rebanada B, migración `0069`):
   `medios_pago_shop.audiencia` (`publico` por defecto, o `cuenta_corriente`). Al editar un medio, el
@@ -1225,6 +1243,21 @@ nunca en el repo.
 
 ---
 
+## Chat de la tienda (textos del asistente del Shop)
+
+`/admin/chat-tienda` (grupo Datos, admin+): el texto del chat vacío y hasta 4 preguntas sugeridas
+del asistente del Shop. Se guardan en `tenants.chat_empty_state` y `tenants.chat_suggestions`
+(0078, `GET/PUT /api/admin/settings/chat-tienda`, validación en `src/lib/chat-tienda.ts`).
+
+- **Vacíos = textos por defecto del Shop** (`apps/clientes/src/lib/chat-ia-textos.ts`), campo por campo.
+- **Registro neutro**: se muestran en la UI del chat, que no usa usted ni vos (CLAUDE.md, excepción
+  del asistente). La pantalla lo indica; no se valida.
+- **Lectura del Shop**: `shop_app` tiene `SELECT` sólo de esas dos columnas (GRANT de la 0078) y las
+  lee por request en `propsChatIa`: lo guardado se ve en la próxima página, sin avisarle al Shop.
+  Contrato: `platform/contracts/crm-shop-base/v1/README.md`.
+
+---
+
 ## Correo compartido (lectura)
 
 Detrás del flag `correo` (Vercel Flags). Las casillas de Resend Inboxes son **solapas dentro de Mensajes** (`/admin/inbox`), junto a las de canal; `/admin/correo` solo redirige. Con el flag apagado Mensajes queda idéntico.
@@ -1246,7 +1279,7 @@ Botones **Responder / Responder a todos / Reenviar** en la conversación y **Red
 
 ## Precios online (listas por coeficiente)
 
-Change `listas-precio-online`, rebanada B (migración `0064`). **Precio = costo sin IVA × coeficiente**, definido en el admin: Catálogo → solapa **Precios online**. Las listas de precio de Alegra nunca participan del cálculo (solo se muestran como referencia informativa, por cuenta, en la grilla). Desde la rebanada C (migración `0065`) el Shop SÍ los lee: la vista `catalog_products_shop` emite los precios online en la columna `precios_alegra`, y la tabla `lista_precio_condiciones` dice qué lista rige para cada medio de pago (y, desde la rebanada D, cada cantidad de cuotas). El enlace se cambia desde **Configuración → Medios de pago** y pasa por la vista previa y el historial de Precios online (tipo `condicion`, se puede revertir). Una lista enlazada a un medio no se puede eliminar. Un medio sin enlace usa la lista de referencia.
+Change `listas-precio-online`, rebanada B (migración `0064`). **Precio = costo sin IVA × coeficiente**, definido en el admin: Catálogo → solapa **Precios online**. Las listas de precio de Alegra nunca participan del cálculo (solo se muestran como referencia informativa, por cuenta, en la grilla). Desde la rebanada C (migración `0065`) el Shop SÍ los lee: la vista `catalog_products_shop` emite los precios online en la columna `precios_alegra`, y la tabla `lista_precio_condiciones` dice qué lista rige para cada medio de pago (y, desde la rebanada D, cada cantidad de cuotas). El enlace se cambia desde **Configuración → Medios de pago** y pasa por la vista previa y el historial de Precios online (tipo `condicion`, se puede revertir). Una lista enlazada a un medio no se puede eliminar. Un medio sin enlace usa la lista de referencia. Desde la migración `0076` (change `listas-por-forma-de-pago`) la condición de pago único tiene además `forma` (`credito`, `debito` o `cuenta_mp`; NULL = todas las formas): sirve para que Mercado Pago y Payway (este solo crédito y débito) tengan una lista distinta por forma de pago. Una fila con forma exige `cuotas` NULL (CHECK) y no es la lista del medio: las lecturas de pago único del admin filtran `forma IS NULL`. Se carga desde **Configuración → Medios de pago**, al editar Mercado Pago o Payway: la pestaña Precios muestra una fila por forma de pago (Payway nunca ofrece cuenta de Mercado Pago) con su casilla «ofrecer» y su selector de lista, siempre obligatorio. La lista del medio se deriva al guardar (la de crédito, o la de la primera forma ofrecida) y solo las formas ofrecidas con otra lista llevan fila propia; las demás filas se borran. Los cambios van en el mismo cambio de precios que la lista y las cuotas (vista previa, aplicar, historial); la clave del historial lleva la forma (`condicion:mercadopago:0:debito`) y revertir restaura solo esa fila. Asignar una lista a una forma no habilitada se rechaza («Habilite esa forma de pago en el medio antes de asignarle una lista.»); quitarla siempre se permite. **Advertencia de promoción:** este selector es el único modo de crear filas por forma, así que el PR de esta pantalla se promueve a `main` al final, después de las guardas de cobro y la exhibición del Shop; antes de eso, con filas cargadas habría un hueco de control.
 
 - **Cálculo en SQL**: `calcular_precios_online(tenant, ids)` (no escribe) y `aplicar_precios_online(tenant, ids, modo)` (escribe solo lo que difiere; modo `config` o `costo`). Neto, `round` half-up a 2 decimales sobre `costo_aplicado`. Precedencia: override de marca > override de categoría (la más profunda entre la categoría del producto y sus ancestros; empate = mayor coeficiente) > general de la lista. Sin costo no hay precio (nunca 0). El oráculo en TypeScript (`lib/precios-online-oraculo.ts`) solo lo usan los tests.
 - **Listas y ajustes**: tablas `listas_precio_online` (coeficiente ≥ 1; una sola referencia activa por tenant) y `lista_precio_overrides`. Resultado materializado en `catalog_products.precios_online` (+ `precio_online_ref`).

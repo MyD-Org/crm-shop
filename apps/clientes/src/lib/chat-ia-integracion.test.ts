@@ -111,24 +111,3 @@ describe("deshacer la navegación del agente", () => {
     expect(mismaUrlCatalogo("/catalogo?q=luz+calida", "/catalogo?q=luz%20calida")).toBe(true);
   });
 });
-
-describe("launcher oculto en mobile", () => {
-  it("oculta en todo el checkout y no en otras rutas", async () => {
-    const { ocultarLauncherEnRuta } = await import("./chat-ia-integracion");
-    for (const r of ["/checkout", "/checkout/", "/checkout/pago", "/checkout/pedido/abc"]) {
-      expect(ocultarLauncherEnRuta(r)).toBe(true);
-    }
-    for (const r of ["/", "/catalogo", "/carrito", "/checkoutx", "/mi-cuenta/checkout"]) {
-      expect(ocultarLauncherEnRuta(r)).toBe(false);
-    }
-  });
-
-  it("globals.css oculta por los dos atributos con el mismo corte que BREAKPOINT_MOBILE", async () => {
-    const { readFileSync } = await import("node:fs");
-    const { ATRIBUTO_OCULTO, ATRIBUTO_FILTROS_ABIERTOS, BREAKPOINT_MOBILE } = await import("./chat-ia-integracion");
-    const css = readFileSync("src/app/globals.css", "utf8");
-    expect(css).toContain(`html[${ATRIBUTO_OCULTO}]`);
-    expect(css).toContain(`html[${ATRIBUTO_FILTROS_ABIERTOS}]`);
-    expect(css).toContain(`(max-width: ${BREAKPOINT_MOBILE - 0.02}px)`);
-  });
-});

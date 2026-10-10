@@ -27,11 +27,6 @@ export const TEXTOS_CUENTENOS = {
   buscarEjemplo: (ejemplo: string) => `Buscar ${ejemplo}`,
 } as const;
 
-export const TEXTOS_CARRITO_ASESOR = {
-  pregunta: "¿Le falta algo?",
-  accion: "Consultar al asesor",
-} as const;
-
 /** Frases del teaser (usted, tabla de la spec) y sus dos acciones. */
 export const TEXTOS_TEASER = {
   sinResultados: "¿No encontró lo que buscaba? Puedo ayudarle a elegir.",
@@ -44,10 +39,9 @@ export const TEXTOS_TEASER = {
 /**
  * Primeros mensajes que se envían al chat en nombre del visitante (su voz, en
  * vos: ver el comentario del módulo). El contexto de pantalla ya lleva la
- * ficha, el catálogo o el carrito: el mensaje no repite datos.
+ * ficha o el catálogo: el mensaje no repite datos.
  */
 export const MENSAJES_AL_CHAT = {
-  carrito: "Revisá mi carrito y decime si me falta algo para la instalación",
   sinResultados: (consulta: string) => `Busqué «${consulta}» y no encontré resultados. ¿Me ayudás a elegir?`,
   busquedas: (consultas: readonly string[]) =>
     `Estoy buscando y no lo encuentro. Probé con: ${consultas.map((c) => `«${c}»`).join(", ")}. ¿Me ayudás?`,

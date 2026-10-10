@@ -185,3 +185,69 @@ describe("cambiarMedioPedido", () => {
     expect(!c || (Array.isArray(c.items) && c.items.length === 0)).toBe(true);
   });
 });
+
+// --- Forma de pago congelada (migración 0036, change `listas-por-forma-de-pago`, rebanada C) ---
+const formaDe = async (id: string) =>
+  ((await getDb().execute(sql`select forma_cobro, pago_revision from shop.orders where id = ${id}`)) as unknown as {
+    forma_cobro: string | null;
+    pago_revision: string | null;
+  }[])[0];
+
+describe("forma_cobro del pedido", () => {
+  it("crearPedido congela la forma y la devuelve; sin forma queda NULL (pedido viejo)", async () => {
+    const conForma = await crear({ formaCobro: "credito" });
+    expect(conForma.formaCobro).toBe("credito");
+    expect((await formaDe(conForma.id)).forma_cobro).toBe("credito");
+    const sinForma = await crear();
+    expect(sinForma.formaCobro).toBeNull();
+    expect((await formaDe(sinForma.id)).forma_cobro).toBeNull();
+  });
+
+  it("cambiarMedioPedido recotiza y recongela total y forma_cobro (crédito -> débito)", async () => {
+    const p = await crear({ formaCobro: "credito" });
+    const r = await cambiarMedioPedido(p.id, dueno, {
+      pagoMetodo: "mercadopago",
+      cuotas: null,
+      formaCobro: "debito",
+      idPriceList: "lista-debito",
+      cotizacion: cot(900),
+    });
+    expect(r).toMatchObject({ ok: true, id: p.id, total: 2178, formaCobro: "debito" });
+    const f = await fila(p.id);
+    expect(Number(f.total)).toBe(2178);
+    expect(f.id_price_list).toBe("lista-debito");
+    expect((await formaDe(p.id)).forma_cobro).toBe("debito");
+  });
+
+  it("cambiar a un medio sin precios por forma deja la forma en NULL", async () => {
+    const p = await crear({ formaCobro: "debito" });
+    await cambiarMedioPedido(p.id, dueno, { pagoMetodo: "transferencia", cuotas: null, idPriceList: null, cotizacion: cot(900) });
+    expect((await formaDe(p.id)).forma_cobro).toBeNull();
+  });
+
+  it("un pedido con el pago en revisión no se recotiza: pago_en_revision y nada cambia", async () => {
+    const p = await crear({ formaCobro: "credito" });
+    await getDb().execute(sql`update shop.orders set pago_revision = 'forma_distinta' where id = ${p.id}`);
+    const r = await cambiarMedioPedido(p.id, dueno, {
+      pagoMetodo: "mercadopago",
+      cuotas: null,
+      formaCobro: "debito",
+      idPriceList: null,
+      cotizacion: cot(900),
+    });
+    expect(r).toEqual({ ok: false, motivo: "pago_en_revision" });
+    expect((await formaDe(p.id)).forma_cobro).toBe("credito");
+    expect(Number((await fila(p.id)).total)).toBe(2420);
+  });
+
+  it("el CHECK admite 'forma_distinta' y las tres formas, y rechaza otras", async () => {
+    const p = await crear();
+    for (const forma of ["credito", "debito", "cuenta_mp"]) {
+      await getDb().execute(sql`update shop.orders set forma_cobro = ${forma} where id = ${p.id}`);
+    }
+    await getDb().execute(sql`update shop.orders set pago_revision = 'forma_distinta' where id = ${p.id}`);
+    expect((await formaDe(p.id)).pago_revision).toBe("forma_distinta");
+    await expect(getDb().execute(sql`update shop.orders set forma_cobro = 'efectivo' where id = ${p.id}`)).rejects.toThrow();
+    await expect(getDb().execute(sql`update shop.orders set pago_revision = 'otra' where id = ${p.id}`)).rejects.toThrow();
+  });
+});

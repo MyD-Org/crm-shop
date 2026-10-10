@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, EmptyState, FadeScroll, Pagination } from "@myd-org/ui";
-import { CatalogoAvisoLocal } from "@/components/catalogo/CatalogoAvisoLocal";
 import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
 import { CatalogoControles } from "@/components/catalogo/CatalogoControles";
 import { CatalogoEncabezado } from "@/components/catalogo/CatalogoEncabezado";
@@ -60,7 +59,6 @@ export function CatalogoClient({
   busquedaIa,
   etapa,
   conCaracteristicas = true,
-  localRecordado,
 }: {
   /** Sólo la página actual, nunca el catálogo entero. */
   productos: Product[];
@@ -100,11 +98,6 @@ export function CatalogoClient({
    * dibuja `facetas.porClave`. `false`: `car` de la URL se ignora.
    */
   conCaracteristicas?: boolean;
-  /**
-   * Nombre del local cuando el filtro "Con stock en <local>" se aplicó solo, por el local recordado
-   * (cookie) y no por una elección de esta visita: se muestra un aviso con la salida.
-   */
-  localRecordado?: string;
 }) {
   const router = useRouter();
   // Con Cache Components Next no desmonta el catálogo al salir (logo, nav de la home, un
@@ -268,10 +261,6 @@ export function CatalogoClient({
         locales={facetas.locales}
         ir={ir}
       />
-
-      {localRecordado && estado.retiroEn ? (
-        <CatalogoAvisoLocal local={localRecordado} quitar={quitarLocal} />
-      ) : null}
 
       <div className="mt-8 flex gap-6">
         {/*

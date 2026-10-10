@@ -253,6 +253,13 @@
       "when": 1791507216848,
       "tag": "0035_pago_intentos_cuenta",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791568239741,
+      "tag": "0036_orders_forma_cobro",
+      "breakpoints": true
     }
   ]
 }

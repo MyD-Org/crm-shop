@@ -1,12 +1,19 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Badge, Button, Card, Checkbox, Dialog, Field, Input, Select, Switch, Table, Textarea, useToast } from "@myd-org/ui"
+import { Badge, Button, Card, Checkbox, Dialog, Field, Input, Select, Switch, Table, Tabs, Textarea, useToast } from "@myd-org/ui"
 import type { MedioPagoConAvisos } from "@/lib/medios-pago-shop-repo"
 import {
   LISTA_POR_DEFECTO,
   aplicarMedioGuardado,
   cambiosDeCuotas,
+  cambiosDeListasPorForma,
+  mapearListasDeFormas,
+  hayPrecioDistinto,
+  pestanaDeError,
+  type PestanaMedio,
+  listasPorFormaDesdeDto,
+  type ListasPorFormaForm,
   cuerpoDeOpciones,
   cuerpoDePrecios,
   validarFilasCuotas,
@@ -21,10 +28,11 @@ import {
   OPCIONES_COBRO,
   ROTULO_OPCION,
   errorDeOpcionesResultantes,
+  opcionesAplicables,
   opcionesDelMedio,
   type OpcionCobro,
 } from "@/lib/medios-pago-shop-opciones"
-import { esSlugCobro, validarMedioPagoCambios, validarMedioPagoNuevo } from "@/lib/medios-pago-shop-validacion"
+import { esMedioDelSistema, esSlugCobro, validarMedioPagoCambios, validarMedioPagoNuevo } from "@/lib/medios-pago-shop-validacion"
 
 // Configuración → Sucursales y ventas: medios de pago que el checkout del Shop ofrece. Cada
 // guardado avisa al Shop (best-effort): si el aviso no llegó, el cambio igual quedó guardado y la
@@ -44,6 +52,8 @@ type Form = {
   listaOnlineId: string
   /** Cuotas sin interés (medio con cobro en línea): cantidad y lista de cada condición. */
   cuotasFilas: FilaCuotasForm[]
+  /** Lista por forma de pago (sólo Mercado Pago y Payway): id de lista o "igual que el medio". */
+  listasPorForma: ListasPorFormaForm
   destacarEnCatalogo: boolean
   mostrarEnFicha: boolean
   /** "Solo cuentas corrientes": el público no ve este medio (a lo sumo uno por tenant). */
@@ -67,6 +77,7 @@ const formVacio: Form = {
   activo: true,
   listaOnlineId: LISTA_POR_DEFECTO,
   cuotasFilas: [],
+  listasPorForma: {},
   destacarEnCatalogo: false,
   mostrarEnFicha: false,
   soloCuentaCorriente: false,
@@ -74,7 +85,7 @@ const formVacio: Form = {
   opcionesCobro: [...OPCIONES_COBRO],
 }
 
-const desdeDto = (m: MedioPagoDto): Form => ({
+const desdeDto = (m: MedioPagoDto, refId: string | null): Form => ({
   editandoSlug: m.slug,
   slug: m.slug,
   nombre: m.nombre,
@@ -89,6 +100,13 @@ const desdeDto = (m: MedioPagoDto): Form => ({
     montoMinimo: c.montoMinimo === null ? "" : String(Number(c.montoMinimo)),
     marcas: c.marcas,
   })),
+  // Cada forma arranca con su lista propia o, si no tiene, con la del medio (o la de referencia).
+  listasPorForma: Object.fromEntries(
+    opcionesDelMedio(m.slug).map((o) => [
+      o,
+      m.listasPorForma?.find((x) => x.forma === o)?.listaId ?? m.listaOnlineId ?? refId ?? LISTA_POR_DEFECTO,
+    ]),
+  ),
   destacarEnCatalogo: m.destacarEnCatalogo,
   mostrarEnFicha: m.mostrarEnFicha,
   soloCuentaCorriente: m.audiencia === "cuenta_corriente",
@@ -119,6 +137,9 @@ const nombreDeLista = (m: MedioPagoDto) => m.listaOnlineNombre
  * tal como vienen de allá): en el admin sólo se elige la lista de precios del medio.
  */
 const cuotasEnElProcesador = (slug: string | null) => slug === "mercadopago"
+
+/** Sólo Mercado Pago y Payway pueden tener una lista distinta por forma de pago. */
+const admiteListasPorForma = (slug: string | null) => slug === "mercadopago" || slug === "payway"
 
 async function enviar(url: string, method: string, body?: unknown) {
   const res = await fetch(url, {
@@ -156,8 +177,46 @@ export function MediosPagoShopCard() {
   const [borrar, setBorrar] = useState<MedioPagoDto | null>(null)
   const [errores, setErrores] = useState<Errores>({})
   const [guardando, setGuardando] = useState(false)
+  const [pestana, setPestana] = useState<PestanaMedio>("general")
   const { toast } = useToast()
   const nombreReferencia = listaReferencia?.nombre ?? "Lista de referencia"
+  const referenciaId = listaReferencia?.id ?? null
+
+  // Al guardar con errores, salta a la pestaña del primer campo con error.
+  const marcarErrores = (e: Errores) => {
+    setErrores(e)
+    const p = pestanaDeError(e)
+    if (p) setPestana(p)
+  }
+
+  const medioEditado = form?.editandoSlug ? medios?.find((m) => m.slug === form.editandoSlug) : undefined
+  const cobroOnline = Boolean(medioEditado?.cobroOnline)
+  // Mercado Pago y Payway con cobro en línea eligen la lista por forma de pago, sin "lista del medio".
+  const porForma = Boolean(form?.editandoSlug && admiteListasPorForma(form.editandoSlug) && cobroOnline)
+  const hayCuotas = Boolean(form?.editandoSlug && cobroOnline && !cuotasEnElProcesador(form.editandoSlug))
+  const pestanas = [
+    { value: "general", label: "General" },
+    ...(form?.editandoSlug ? [{ value: "precios", label: "Precios" }] : []),
+    ...(hayCuotas ? [{ value: "cuotas", label: "Cuotas" }] : []),
+  ]
+  const pestanaActual: PestanaMedio = pestanas.some((t) => t.value === pestana) ? pestana : "general"
+  // Sin precio distinto del de referencia no hay nada que destacar ni mostrar en la ficha.
+  const listasEfectivas = form
+    ? porForma && form.editandoSlug
+      ? opcionesAplicables(form.editandoSlug, form.opcionesCobro).map((o) => form.listasPorForma[o] ?? LISTA_POR_DEFECTO)
+      : [form.listaOnlineId]
+    : []
+  const puedeMostrarPrecio = Boolean(form && !form.soloCuentaCorriente && hayPrecioDistinto(listasEfectivas, referenciaId))
+
+  /** Opciones del selector de lista: todas las listas (la de referencia con su nombre); una desactivada se ve hasta elegir otra. */
+  const opcionesDeLista = (valor: string) => [
+    ...(referenciaId === null ? [{ value: LISTA_POR_DEFECTO, label: nombreReferencia }] : []),
+    ...(listaReferencia && !listas.some((l) => l.id === listaReferencia.id) ? [{ value: listaReferencia.id, label: listaReferencia.nombre }] : []),
+    ...listas.map((l) => ({ value: l.id, label: l.nombre })),
+    ...(valor !== LISTA_POR_DEFECTO && valor !== referenciaId && !listas.some((l) => l.id === valor)
+      ? [{ value: valor, label: "Lista desactivada" }]
+      : []),
+  ]
 
   useEffect(() => {
     let vivo = true
@@ -214,11 +273,11 @@ export function MediosPagoShopCard() {
 
   function manejarError(status: number, json: Record<string, unknown> | null) {
     const mensaje = typeof json?.error === "string" ? json.error : undefined
-    if (status === 404) setErrores({ general: "No encontramos ese registro. Recargue la página." })
+    if (status === 404) marcarErrores({ general: "No encontramos ese registro. Recargue la página." })
     else if ((status === 400 || status === 409) && mensaje) {
       const campo = typeof json?.campo === "string" && json.campo !== "body" ? json.campo : "general"
-      setErrores({ [campo]: mensaje })
-    } else setErrores({ general: mensaje ?? "No pudimos guardar. Inténtelo nuevamente." })
+      marcarErrores({ [campo]: mensaje })
+    } else marcarErrores({ general: mensaje ?? "No pudimos guardar. Inténtelo nuevamente." })
   }
 
   async function guardar() {
@@ -227,20 +286,21 @@ export function MediosPagoShopCard() {
     const actual = form.editandoSlug ? medios?.find((m) => m.slug === form.editandoSlug) : undefined
     const c = {
       ...cuerpo(form),
+      ...(form.editandoSlug && !puedeMostrarPrecio ? { destacarEnCatalogo: false, mostrarEnFicha: false } : {}),
       ...(actual?.cobroOnline ? cuerpoDeOpciones(form.opcionesCobro, actual.opcionesCobro ?? OPCIONES_COBRO) : {}),
     }
     const v = form.editandoSlug ? validarMedioPagoCambios(c) : validarMedioPagoNuevo(c)
-    if (!v.ok) return setErrores({ [v.campo === "body" ? "general" : v.campo]: v.error })
+    if (!v.ok) return marcarErrores({ [v.campo === "body" ? "general" : v.campo]: v.error })
     if (actual?.cobroOnline) {
       const e = errorDeOpcionesResultantes({ slug: actual.slug, activo: form.activo, cobroOnline: true, opcionesCobro: form.opcionesCobro })
-      if (e) return setErrores({ opcionesCobro: e })
+      if (e) return marcarErrores({ opcionesCobro: e })
     }
 
     // Cuotas sin interés: sólo un medio con cobro en línea las tiene; se validan antes de guardar nada.
     let cuotasDeseadas: CondicionCuotasForm[] | null = null
     if (form.editandoSlug && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline) {
       const v2 = validarFilasCuotas(form.cuotasFilas)
-      if (!v2.ok) return setErrores({ cuotas: v2.error })
+      if (!v2.ok) return marcarErrores({ cuotas: v2.error })
       cuotasDeseadas = v2.filas
     }
 
@@ -256,11 +316,26 @@ export function MediosPagoShopCard() {
       if (!res.ok || !json) return manejarError(res.status, json)
       const nuevo = json.medio as MedioPagoDto
       setMedios((prev) => aplicarMedioGuardado(prev ?? [], nuevo))
-      const listaElegida = form.listaOnlineId === LISTA_POR_DEFECTO ? null : form.listaOnlineId
+      const porFormaGuardado = admiteListasPorForma(nuevo.slug) && nuevo.cobroOnline
+      const mapeo = porFormaGuardado
+        ? mapearListasDeFormas({
+            formas: opcionesDelMedio(nuevo.slug),
+            ofrecidas: opcionesAplicables(nuevo.slug, form.opcionesCobro),
+            listaDeForma: form.listasPorForma,
+            referenciaId,
+          })
+        : null
+      const listaCodificada = mapeo ? mapeo.listaOnlineId : form.listaOnlineId
+      const listaElegida = listaCodificada === LISTA_POR_DEFECTO ? null : listaCodificada
       const cambioLista = form.editandoSlug !== null && listaElegida !== nuevo.listaOnlineId
       // Un solo cambio de precios (previa + aplicar + historial) con la lista del pago único y las cuotas.
       const cambiosPrecios: unknown[] = []
       if (cambioLista) cambiosPrecios.push({ op: "setCondicion", medioSlug: nuevo.slug, cuotas: null, listaId: listaElegida })
+      if (mapeo) {
+        cambiosPrecios.push(
+          ...cambiosDeListasPorForma(nuevo.slug, listasPorFormaDesdeDto(nuevo.listasPorForma ?? []), mapeo.listasPorForma),
+        )
+      }
       if (cuotasDeseadas) {
         cambiosPrecios.push(
           ...cambiosDeCuotas(
@@ -278,7 +353,7 @@ export function MediosPagoShopCard() {
       if (cambiosPrecios.length > 0) {
         const falla = await aplicarCambiosDePrecios(cambiosPrecios)
         if (falla) {
-          setErrores({ listaOnlineId: `Los datos del medio se guardaron, pero no se pudo cambiar la lista ni las cuotas. ${falla}` })
+          marcarErrores({ listaOnlineId: `Los datos del medio se guardaron, pero no se pudo cambiar la lista ni las cuotas. ${falla}` })
           void recargarAvisos()
           return
         }
@@ -287,7 +362,7 @@ export function MediosPagoShopCard() {
       if (nuevo.destacarEnCatalogo || cambiosPrecios.length > 0) void recargarAvisos()
       avisar(form.editandoSlug ? "Medio de pago actualizado" : "Medio de pago agregado", json.propagado)
     } catch {
-      setErrores({ general: "Error de conexión. Inténtelo nuevamente." })
+      marcarErrores({ general: "Error de conexión. Inténtelo nuevamente." })
     } finally {
       setGuardando(false)
     }
@@ -417,7 +492,7 @@ export function MediosPagoShopCard() {
                     <div className="flex flex-col gap-0.5">
                       <span>{lista ?? nombreReferencia}</span>
                       {m.destacarEnCatalogo && <Badge tone="info">Destacado en catálogo</Badge>}
-                      {m.mostrarEnFicha && <span className="text-xs" style={{ color: "var(--ink-soft)" }}>Se muestra en la ficha</span>}
+                      {m.mostrarEnFicha && <span className="text-xs" style={{ color: "var(--ink-soft)" }}>Destacado en la ficha</span>}
                       {m.avisos.map((a) => (
                         <span key={a} className="text-xs" role="note" style={{ color: "var(--amber, var(--ink-soft))" }}>
                           {a}
@@ -453,13 +528,13 @@ export function MediosPagoShopCard() {
                       <Button size="sm" variant="ghost" disabled={guardando || i === medios.length - 1} aria-label={`Bajar ${m.nombre}`} onClick={() => void mover(m.slug, 1)}>
                         Bajar
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => { setErrores({}); setForm(desdeDto(m)) }}>
+                      <Button size="sm" variant="ghost" onClick={() => { setErrores({}); setForm(desdeDto(m, listaReferencia?.id ?? null)); setPestana("general") }}>
                         Editar
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => void alternarActivo(m)}>
                         {m.activo ? "Desactivar" : "Activar"}
                       </Button>
-                      {!esSlugCobro(m.slug) && (
+                      {!esMedioDelSistema(m.slug) && (
                         <Button size="sm" variant="ghost" onClick={() => setBorrar(m)}>
                           Eliminar
                         </Button>
@@ -471,7 +546,7 @@ export function MediosPagoShopCard() {
             ]}
           />
           <div>
-            <Button variant="secondary" onClick={() => { setErrores({}); setForm({ ...formVacio }) }}>
+            <Button variant="secondary" onClick={() => { setErrores({}); setForm({ ...formVacio }); setPestana("general") }}>
               Agregar medio de pago
             </Button>
           </div>
@@ -480,11 +555,12 @@ export function MediosPagoShopCard() {
 
       <Dialog
         dismissible={false}
+        size="lg"
         open={form !== null}
         onOpenChange={(open) => {
           if (!open) setForm(null)
         }}
-        title={form?.editandoSlug ? "Editar medio de pago" : "Agregar medio de pago"}
+        title={form?.editandoSlug ? `Editar ${form.nombre || form.editandoSlug}` : "Agregar medio de pago"}
         footer={
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" onClick={() => setForm(null)}>Cancelar</Button>
@@ -493,129 +569,169 @@ export function MediosPagoShopCard() {
         }
       >
         {form && (
-          <div className="flex flex-col gap-3">
-            <Field label="Nombre" hint="Es el nombre que ve el cliente." error={errores.nombre}>
-              <Input value={form.nombre} onChange={(e) => cambiar({ nombre: e.target.value })} aria-invalid={Boolean(errores.nombre)} />
-            </Field>
-            <Field
-              label="Identificador"
-              hint="De 2 a 30 caracteres: letras, números o guiones (se pasa a minúsculas y los espacios a guiones). Queda registrado en los pedidos y no se puede cambiar después."
-              error={errores.slug}
-            >
-              <Input
-                value={form.slug}
-                disabled={Boolean(form.editandoSlug)}
-                onChange={(e) => cambiar({ slug: normalizarIdentificador(e.target.value) })}
-                aria-invalid={Boolean(errores.slug)}
-              />
-            </Field>
-            <Field
-              label="Instrucciones para el cliente"
-              hint="Se muestran al elegir este medio de pago. No incluya datos que no quiera dejar visibles en la tienda."
-              error={errores.instrucciones}
-            >
-              <Textarea rows={4} value={form.instrucciones} onChange={(e) => cambiar({ instrucciones: e.target.value })} aria-invalid={Boolean(errores.instrucciones)} />
-            </Field>
-            <EditorChipsMedio chips={form.chips} onChange={(chips) => cambiar({ chips })} error={errores.chips} />
-            {form.editandoSlug && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                {form.editandoSlug ? `Identificador: ${form.editandoSlug}` : "Nuevo medio de pago"}
+              </p>
+              <Switch id="medio-activo" label="Activo" checked={form.activo} onCheckedChange={(v) => cambiar({ activo: v })} />
+            </div>
+            {pestanas.length > 1 && (
+              <Tabs ariaLabel="Secciones del medio de pago" items={pestanas} value={pestanaActual} onValueChange={(v) => setPestana(v as PestanaMedio)} />
+            )}
+
+            {pestanaActual === "general" && (
               <div className="flex flex-col gap-3">
-                <Field
-                  label="Lista de precios"
-                  hint={`Si el cliente elige este medio, se le cobra el precio de esta lista cuando es menor que el de «${nombreReferencia}», la lista de referencia, que es la que rige si no elige otra. El cambio queda en el historial de Precios online.`}
-                  error={errores.listaOnlineId}
-                >
-                  <Select
-                    aria-label="Lista de precios"
-                    value={form.listaOnlineId}
-                    onValueChange={(v) => {
-                      // Sin lista no hay precio distinto: se apagan el destacado y la ficha.
-                      cambiar(v === LISTA_POR_DEFECTO ? { listaOnlineId: v, destacarEnCatalogo: false, mostrarEnFicha: false } : { listaOnlineId: v })
-                    }}
-                    options={[
-                      { value: LISTA_POR_DEFECTO, label: nombreReferencia },
-                      // La de referencia ya es la opción por defecto: no se repite, salvo que esté enlazada.
-                      ...listas
-                        .filter((l) => l.id !== listaReferencia?.id || l.id === form.listaOnlineId)
-                        .map((l) => ({ value: l.id, label: l.nombre })),
-                      // Una lista desactivada se sigue viendo hasta que se elija otra.
-                      ...(form.listaOnlineId !== LISTA_POR_DEFECTO && !listas.some((l) => l.id === form.listaOnlineId)
-                        ? [{ value: form.listaOnlineId, label: `${medios?.find((m) => m.slug === form.editandoSlug)?.listaOnlineNombre ?? "Lista"} (desactivada)` }]
-                        : []),
-                    ]}
-                  />
+                <Field label="Nombre" hint="Es el nombre que ve el cliente." error={errores.nombre}>
+                  <Input value={form.nombre} onChange={(e) => cambiar({ nombre: e.target.value })} aria-invalid={Boolean(errores.nombre)} />
                 </Field>
-                <Switch
-                  id="medio-destacar"
-                  label="Destacar en catálogo"
-                  checked={form.destacarEnCatalogo}
-                  disabled={form.listaOnlineId === LISTA_POR_DEFECTO || form.soloCuentaCorriente}
-                  onCheckedChange={(v) => cambiar({ destacarEnCatalogo: v })}
-                />
-                <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
-                  Las tarjetas del catálogo muestran &quot;con {form.nombre || "este medio"}&quot; bajo el precio. Sólo un medio puede estar destacado: si destaca este, se quita del anterior.
-                </p>
-                <Switch
-                  id="medio-ficha"
-                  label="Mostrar en ficha"
-                  checked={form.mostrarEnFicha}
-                  disabled={form.listaOnlineId === LISTA_POR_DEFECTO || form.soloCuentaCorriente}
-                  onCheckedChange={(v) => cambiar({ mostrarEnFicha: v })}
-                />
-                <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
-                  La ficha del producto muestra una línea con el precio de este medio. Puede marcar todos los que quiera.
-                </p>
-                {errores.destacarEnCatalogo && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.destacarEnCatalogo}</p>}
-              </div>
-            )}
-            {form.editandoSlug && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline && (
-              <div className="flex flex-col gap-2">
-                <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>Formas de pago</p>
-                <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
-                  Lo que el cliente puede usar para pagar con este medio en el checkout. Un medio activo necesita al
-                  menos una.
-                </p>
-                {opcionesDelMedio(form.editandoSlug).map((o) => (
-                  <CheckboxLabel
-                    key={o}
-                    id={`medio-opcion-${o}`}
-                    checked={form.opcionesCobro.includes(o)}
-                    onChange={(v) =>
-                      cambiar({ opcionesCobro: v ? [...form.opcionesCobro, o] : form.opcionesCobro.filter((x) => x !== o) })
-                    }
-                    label={ROTULO_OPCION[o]}
-                  />
-                ))}
-                {errores.opcionesCobro && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.opcionesCobro}</p>}
-              </div>
-            )}
-            {form.editandoSlug && cuotasEnElProcesador(form.editandoSlug) && form.cuotasFilas.length > 0 && (
-              <div className="flex flex-col gap-2" role="note">
-                <p className="text-sm" style={{ color: "var(--ink)" }}>
-                  Las cuotas de Mercado Pago se configuran en su cuenta de Mercado Pago. Este medio tiene{" "}
-                  {form.cuotasFilas.length === 1 ? "una condición de cuotas cargada" : `${form.cuotasFilas.length} condiciones de cuotas cargadas`}{" "}
-                  en el admin que siguen aplicando en la tienda.
-                </p>
-                <div>
-                  <Button size="sm" variant="secondary" onClick={() => cambiar({ cuotasFilas: [] })}>
-                    Quitar las cuotas del admin
-                  </Button>
+                {!form.editandoSlug && (
+                  <Field
+                    label="Identificador"
+                    hint="De 2 a 30 caracteres: letras, números o guiones. Queda en los pedidos y no se puede cambiar."
+                    error={errores.slug}
+                  >
+                    <Input
+                      value={form.slug}
+                      onChange={(e) => cambiar({ slug: normalizarIdentificador(e.target.value) })}
+                      aria-invalid={Boolean(errores.slug)}
+                    />
+                  </Field>
+                )}
+                <Field label="Instrucciones para el cliente" hint="Se muestran al elegir este medio. No incluya datos que no quiera dejar visibles." error={errores.instrucciones}>
+                  <Textarea rows={3} value={form.instrucciones} onChange={(e) => cambiar({ instrucciones: e.target.value })} aria-invalid={Boolean(errores.instrucciones)} />
+                </Field>
+                <EditorChipsMedio chips={form.chips} onChange={(chips) => cambiar({ chips })} error={errores.chips} />
+                <div className="flex flex-col gap-2">
+                  <CheckboxLabel id="medio-retiro" checked={form.aplicaRetiro} disabled={form.soloCuentaCorriente} onChange={(v) => cambiar({ aplicaRetiro: v })} label="Retiro en el local" />
+                  <CheckboxLabel id="medio-envio" checked={form.aplicaEnvio} disabled={form.soloCuentaCorriente} onChange={(v) => cambiar({ aplicaEnvio: v })} label="Envío a domicilio" />
+                  {errores.aplicaRetiro && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.aplicaRetiro}</p>}
+                  {!cobroOnline && (
+                    <CheckboxLabel
+                      id="medio-solo-cc"
+                      checked={form.soloCuentaCorriente}
+                      hint="Solo lo ven los clientes con cuenta corriente. Puede haber uno solo."
+                      onChange={(v) =>
+                        // Un medio solo para cuentas corrientes aplica a retiro y a envío y no se destaca ni va en la ficha.
+                        cambiar(
+                          v
+                            ? { soloCuentaCorriente: true, aplicaRetiro: true, aplicaEnvio: true, destacarEnCatalogo: false, mostrarEnFicha: false }
+                            : { soloCuentaCorriente: false },
+                        )
+                      }
+                      label="Solo cuentas corrientes"
+                    />
+                  )}
+                  {errores.audiencia && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.audiencia}</p>}
                 </div>
               </div>
             )}
-            {form.editandoSlug && !cuotasEnElProcesador(form.editandoSlug) && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline && (
-              <div className="flex flex-col gap-2">
-                <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>Cuotas sin interés</p>
+
+            {pestanaActual === "precios" && form.editandoSlug && (
+              <div className="flex flex-col gap-4">
+                {porForma ? (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>Formas de pago</p>
+                      <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                        Tilde las que ofrece y elija la lista de precios de cada una. Un medio activo necesita al menos una.
+                      </p>
+                    </div>
+                    {opcionesDelMedio(form.editandoSlug).map((o) => {
+                      const ofrecida = form.opcionesCobro.includes(o)
+                      const valor = form.listasPorForma[o] ?? LISTA_POR_DEFECTO
+                      return (
+                        <div key={o} className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:items-center">
+                          <CheckboxLabel
+                            id={`medio-opcion-${o}`}
+                            checked={ofrecida}
+                            onChange={(v) =>
+                              cambiar({ opcionesCobro: v ? [...form.opcionesCobro, o] : form.opcionesCobro.filter((x) => x !== o) })
+                            }
+                            label={ROTULO_OPCION[o]}
+                          />
+                          <Select
+                            aria-label={`Lista de precios con ${ROTULO_OPCION[o]}`}
+                            value={valor}
+                            disabled={!ofrecida}
+                            onValueChange={(v) => cambiar({ listasPorForma: { ...form.listasPorForma, [o]: v } })}
+                            options={opcionesDeLista(valor)}
+                          />
+                        </div>
+                      )
+                    })}
+                    {errores.opcionesCobro && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.opcionesCobro}</p>}
+                    {errores.listaOnlineId && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.listaOnlineId}</p>}
+                  </div>
+                ) : (
+                  <Field
+                    label="Lista de precios"
+                    hint={`Se cobra el precio de esta lista si es menor que el de «${nombreReferencia}», la de referencia.`}
+                    error={errores.listaOnlineId}
+                  >
+                    <Select
+                      aria-label="Lista de precios"
+                      value={form.listaOnlineId}
+                      onValueChange={(v) => cambiar({ listaOnlineId: v })}
+                      options={opcionesDeLista(form.listaOnlineId)}
+                    />
+                  </Field>
+                )}
+
+                {cuotasEnElProcesador(form.editandoSlug) && form.cuotasFilas.length > 0 && (
+                  <div className="flex flex-col gap-2" role="note">
+                    <p className="text-sm" style={{ color: "var(--ink)" }}>
+                      Las cuotas de Mercado Pago se configuran en su cuenta. Hay{" "}
+                      {form.cuotasFilas.length === 1 ? "una condición cargada" : `${form.cuotasFilas.length} condiciones cargadas`} en el admin que siguen aplicando.
+                    </p>
+                    <div>
+                      <Button size="sm" variant="secondary" onClick={() => cambiar({ cuotasFilas: [] })}>
+                        Quitar las cuotas del admin
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3">
+                  <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>Mostrar el precio</p>
+                  <div className="flex flex-col gap-1">
+                    <Switch
+                      id="medio-destacar"
+                      label="Destacar en el catálogo"
+                      checked={form.destacarEnCatalogo && puedeMostrarPrecio}
+                      disabled={!puedeMostrarPrecio}
+                      onCheckedChange={(v) => cambiar({ destacarEnCatalogo: v })}
+                    />
+                    <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                      Muestra «con {form.nombre || "este medio"}» bajo el precio en el catálogo. Solo un medio puede estar destacado.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Switch
+                      id="medio-ficha"
+                      label="Destacar en la ficha"
+                      checked={form.mostrarEnFicha && puedeMostrarPrecio}
+                      disabled={!puedeMostrarPrecio}
+                      onCheckedChange={(v) => cambiar({ mostrarEnFicha: v })}
+                    />
+                    <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                      Agrega una línea con el precio de este medio en la ficha.
+                    </p>
+                  </div>
+                  {errores.destacarEnCatalogo && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.destacarEnCatalogo}</p>}
+                </div>
+              </div>
+            )}
+
+            {pestanaActual === "cuotas" && form.editandoSlug && (
+              <div className="flex flex-col gap-3">
                 <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
-                  Cada cantidad de cuotas cobra el precio de la lista elegida dividido en esa cantidad, sin recargo: el costo
-                  financiero queda dentro del coeficiente de la lista. La tienda las ofrece sólo con el cobro en cuotas
-                  habilitado, y tienen que estar activadas en su cuenta del procesador de cobro. Con «Desde $» la tienda
-                  ofrece esa cantidad de cuotas sólo si el total del pedido, con impuestos y al precio de pago único, alcanza
-                  ese monto; vacío significa sin mínimo. En «Tarjetas» puede limitar cada cantidad de cuotas a algunas
-                  tarjetas. El cambio queda en el historial de Precios online.
+                  Cada cantidad cobra el precio de su lista dividido en cuotas, sin recargo. Deben estar activadas en su cuenta del procesador.
+                  «Desde $» exige ese total mínimo con impuestos (vacío: sin mínimo). Con «Tarjetas» puede limitarlas a algunas marcas.
                 </p>
                 {form.cuotasFilas.map((f, i) => (
                   <div key={i} className="flex flex-col gap-2">
-                    <div className="flex flex-wrap items-end gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-[5rem_1fr_1fr_7rem_auto] gap-2 items-end">
                       <Field label="Cuotas">
                         <Input
                           inputMode="numeric"
@@ -644,7 +760,7 @@ export function MediosPagoShopCard() {
                           ]}
                         />
                       </Field>
-                      <Field label="Desde $ (con impuestos, opcional)">
+                      <Field label="Desde $">
                         <Input
                           inputMode="decimal"
                           value={f.montoMinimo ?? ""}
@@ -674,6 +790,7 @@ export function MediosPagoShopCard() {
                       <Button
                         size="sm"
                         variant="ghost"
+                        aria-label={`Quitar la fila ${i + 1}`}
                         onClick={() => cambiar({ cuotasFilas: form.cuotasFilas.filter((_, j) => j !== i) })}
                       >
                         Quitar
@@ -714,34 +831,7 @@ export function MediosPagoShopCard() {
                 {errores.cuotas && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.cuotas}</p>}
               </div>
             )}
-            <div className="flex flex-col gap-1">
-              <Switch
-                id="medio-solo-cc"
-                label="Solo cuentas corrientes"
-                checked={form.soloCuentaCorriente}
-                disabled={Boolean(form.editandoSlug && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline)}
-                onCheckedChange={(v) =>
-                  // Un medio solo para cuentas corrientes aplica a retiro y a envío y no se destaca ni va en la ficha.
-                  cambiar(
-                    v
-                      ? { soloCuentaCorriente: true, aplicaRetiro: true, aplicaEnvio: true, destacarEnCatalogo: false, mostrarEnFicha: false }
-                      : { soloCuentaCorriente: false },
-                  )
-                }
-              />
-              <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
-                Solo lo ofrece la tienda a los clientes con cuenta corriente; el público no lo ve. Solo puede haber uno.
-                No se usa con cobro en línea, ni se destaca en el catálogo ni se muestra en la ficha.
-              </p>
-              {errores.audiencia && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.audiencia}</p>}
-            </div>
-            <div className="flex flex-col gap-2">
-              <CheckboxLabel id="medio-retiro" checked={form.aplicaRetiro} disabled={form.soloCuentaCorriente} onChange={(v) => cambiar({ aplicaRetiro: v })} label="Disponible para retiro en el local" />
-              <CheckboxLabel id="medio-envio" checked={form.aplicaEnvio} disabled={form.soloCuentaCorriente} onChange={(v) => cambiar({ aplicaEnvio: v })} label="Disponible para envío" />
-              {errores.aplicaRetiro && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.aplicaRetiro}</p>}
-              <CheckboxLabel id="medio-online" checked={false} disabled onChange={() => {}} label="Cobro online" hint="Próximamente." />
-              <CheckboxLabel id="medio-activo" checked={form.activo} onChange={(v) => cambiar({ activo: v })} label="Activo" hint="Un medio inactivo no se ofrece en el checkout." />
-            </div>
+
             {errores.general && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.general}</p>}
           </div>
         )}

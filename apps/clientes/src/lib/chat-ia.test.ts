@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultLabels } from "@myd-org/ai-widget/preset";
 import { setFlag } from "@/test/flags";
-import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "./chat-ia-textos";
+import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT, SUGERENCIAS_CHAT } from "./chat-ia-textos";
 
 const datosTenant = vi.fn();
 const identidad = vi.fn();
+const textosChat = vi.fn();
 vi.mock("./cuenta-corriente/tenant-cc", () => ({ datosTenant: () => datosTenant() }));
+vi.mock("./chat-ia-textos-tenant", () => ({ textosChatTenant: () => textosChat() }));
 vi.mock("./auth", () => ({ identidadActual: () => identidad() }));
 
 import { propsChatIa } from "./chat-ia";
@@ -25,6 +27,8 @@ describe("propsChatIa", () => {
     vi.stubEnv("AI_AGENT_ID", "agente-1");
     datosTenant.mockReset();
     datosTenant.mockResolvedValue({ id: "t", nombre: "Tienda Demo", whatsapp: null, mailComprobantes: null });
+    textosChat.mockReset();
+    textosChat.mockResolvedValue({ emptyState: "Consultas de la tienda", suggestions: ["Ver ofertas"] });
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -33,6 +37,7 @@ describe("propsChatIa", () => {
   it("flag apagado ⇒ null sin leer el tenant", async () => {
     expect(await propsChatIa()).toBeNull();
     expect(datosTenant).not.toHaveBeenCalled();
+    expect(textosChat).not.toHaveBeenCalled();
   });
 
   it("flag prendido sin config ⇒ null", async () => {
@@ -41,10 +46,15 @@ describe("propsChatIa", () => {
     expect(await propsChatIa()).toBeNull();
   });
 
-  it("prendido ⇒ sólo datos públicos (agente y nombre del tenant), nunca la key", async () => {
+  it("prendido ⇒ sólo datos públicos (agente, nombre del tenant y textos del chat), nunca la key", async () => {
     setFlag("chat-ia", true);
     const props = await propsChatIa();
-    expect(props).toEqual({ agentId: "agente-1", titulo: "Tienda Demo" });
+    expect(props).toEqual({
+      agentId: "agente-1",
+      titulo: "Tienda Demo",
+      textoVacio: "Consultas de la tienda",
+      sugerencias: ["Ver ofertas"],
+    });
     expect(JSON.stringify(props)).not.toContain("clave-secreta");
   });
 
@@ -70,7 +80,7 @@ describe("propsChatIa", () => {
     setFlag("chat-ia", true);
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     datosTenant.mockRejectedValue(new Error("db caída"));
-    expect(await propsChatIa()).toEqual({ agentId: "agente-1", titulo: "Asistente" });
+    expect(await propsChatIa()).toMatchObject({ agentId: "agente-1", titulo: "Asistente" });
     log.mockRestore();
   });
 });
@@ -81,7 +91,7 @@ describe("textos del widget", () => {
   });
 
   it("en registro neutro: sin voseo, sin tuteo y sin usted", () => {
-    for (const texto of [...Object.values(ETIQUETAS_CHAT), SUBTITULO_CHAT]) {
+    for (const texto of [...Object.values(ETIQUETAS_CHAT), SUBTITULO_CHAT, ...SUGERENCIAS_CHAT]) {
       expect(texto).not.toMatch(REGISTRO);
       expect(texto).not.toMatch(VOSEO_A);
       expect(texto).not.toMatch(/Escribí|Recargá|Probá|Intentá/);

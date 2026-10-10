@@ -57,6 +57,8 @@ export function aplicarEstadoPrecio(p: Product, estado: EstadoPrecioCuenta | und
   const sinMedios = {
     precioMedio: undefined,
     preciosMedios: undefined,
+    preciosFormaModal: undefined,
+    preciosOfflineModal: undefined,
     cuotasSinInteres: undefined,
     oldPrice: undefined,
     discount: undefined,

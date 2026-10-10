@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   armarCuentaFacturaDto,
   avisoCobroDelPedido,
+  nombreVisibleCuenta,
   resolverParaPedido,
   type ContextoCuentaFactura,
 } from "./pedido-factura-cuenta-repo"
@@ -62,7 +63,7 @@ describe("avisoCobroDelPedido", () => {
   it("se factura con otra cuenta → aviso con quién cobró y con quién se factura", () => {
     expect(avisoCobroDelPedido(pedido(), ctx(), cuentaIgz())).toEqual({
       cobradoCon: { slug: "mdp", nombre: "Mar del Plata" },
-      facturaCon: { slug: "principal", nombre: "Iguazú SA" },
+      facturaCon: { slug: "principal", nombre: "Iguazú" },
     })
   })
 
@@ -110,7 +111,7 @@ describe("armarCuentaFacturaDto: avisoCobro", () => {
     expect(dto.efectiva?.slug).toBe("principal")
     expect(dto.avisoCobro).toEqual({
       cobradoCon: { slug: "mdp", nombre: "Mar del Plata" },
-      facturaCon: { slug: "principal", nombre: "Iguazú SA" },
+      facturaCon: { slug: "principal", nombre: "Iguazú" },
     })
   })
 
@@ -140,5 +141,18 @@ describe("cuentasAlegraRepetidas (invariante sucursal ↔ cuenta de Alegra 1 a 1
       { slug: "b", cuentaAlegraId: null },
     ]
     expect(cuentasAlegraRepetidas(s)).toEqual([])
+  })
+})
+
+describe("nombreVisibleCuenta", () => {
+  it("muestra el nombre de la sucursal que tiene la cuenta asignada", () => {
+    const c = ctx()
+    expect(nombreVisibleCuenta(c, c.cuentas[0])).toBe("Iguazú")
+    expect(nombreVisibleCuenta(c, c.cuentas[1])).toBe("Mar del Plata")
+  })
+
+  it("sin sucursal asignada, cae al nombre de la cuenta", () => {
+    const c = ctx({ sucursales: [] })
+    expect(nombreVisibleCuenta(c, c.cuentas[0])).toBe("Iguazú SA")
   })
 })

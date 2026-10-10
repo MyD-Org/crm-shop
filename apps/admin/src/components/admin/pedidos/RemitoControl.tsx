@@ -38,6 +38,7 @@ export function RemitoControl({ pedido, onChanged, onConflicto, esAdminPlus }: P
 
   // Vincular remito existente
   const [numero, setNumero] = useState("")
+  const [verBuscar, setVerBuscar] = useState(false)
   const [buscando, setBuscando] = useState(false)
   const [encontrada, setEncontrada] = useState<RemisionEncontrada | null>(null)
   const [vinculando, setVinculando] = useState(false)
@@ -229,7 +230,18 @@ export function RemitoControl({ pedido, onChanged, onConflicto, esAdminPlus }: P
         </Button>
       </div>
 
-      <form
+      {!verBuscar && (
+        <Button
+          variant="link"
+          size="sm"
+          className="self-start"
+          aria-expanded={false}
+          onClick={() => setVerBuscar(true)}
+        >
+          Vincular uno existente
+        </Button>
+      )}
+      {verBuscar && <form
         className="flex flex-col gap-2 sm:flex-row sm:items-end"
         onSubmit={(e) => {
           e.preventDefault()
@@ -247,7 +259,7 @@ export function RemitoControl({ pedido, onChanged, onConflicto, esAdminPlus }: P
         <Button type="submit" loading={buscando} disabled={!numero.trim()}>
           Buscar
         </Button>
-      </form>
+      </form>}
 
       <Dialog
         open={encontrada !== null}

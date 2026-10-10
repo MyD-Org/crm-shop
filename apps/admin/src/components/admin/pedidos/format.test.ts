@@ -11,6 +11,7 @@ import {
   fmtMoneda,
   pagoEstadoLabel,
   pagoMetodoLabel,
+  PAGO_REVISION_INFO,
   revisionInfo,
   textoEvento,
   textoUltimoCambio,
@@ -303,5 +304,20 @@ describe("textoEvento", () => {
     expect(textoEvento(evento({ tipo: "estado", detalle: { hacia: 123 as unknown as string } }))).toBe(
       "Estado: cambió, por el cliente",
     )
+  })
+})
+
+describe("PAGO_REVISION_INFO forma_distinta", () => {
+  it("tiene etiqueta y detalle en usted", () => {
+    const i = PAGO_REVISION_INFO.forma_distinta
+    expect(i.label).toBe("Forma de pago distinta")
+    expect(i.detalle).toContain("El pedido quedó pendiente")
+    expect(i.detalle).toContain("Revise el pago")
+  })
+
+  it("ningún texto de revisión tutea ni vosea", () => {
+    for (const { label, detalle } of Object.values(PAGO_REVISION_INFO)) {
+      expect(`${label} ${detalle}`).not.toMatch(/\b(tu|tus|vos|probá|Ojo|revisá|devolvelo)\b/i)
+    }
   })
 })

@@ -61,19 +61,19 @@ describe("medios_pago_shop", () => {
   })
 
   it("borra si ningún pedido lo usa; si un pedido del tenant lo eligió → conflict; el de otro tenant no cuenta", async () => {
-    await crearMedioPago(A, { slug: "efectivo", nombre: "Efectivo" })
-    await crearMedioPago(A, { slug: "transferencia", nombre: "Transferencia" })
-    await crearMedioPago(B, { slug: "transferencia", nombre: "Transferencia" })
-    await seedShopOrder(A, { pagoMetodo: "transferencia" })
+    await crearMedioPago(A, { slug: "cheque", nombre: "Efectivo" })
+    await crearMedioPago(A, { slug: "deposito", nombre: "Transferencia" })
+    await crearMedioPago(B, { slug: "deposito", nombre: "Transferencia" })
+    await seedShopOrder(A, { pagoMetodo: "deposito" })
 
-    expect(await eliminarMedioPago(A, "efectivo")).toEqual({ kind: "ok" })
-    expect(await eliminarMedioPago(A, "efectivo")).toEqual({ kind: "not_found" })
-    expect(await eliminarMedioPago(A, "transferencia")).toEqual({
+    expect(await eliminarMedioPago(A, "cheque")).toEqual({ kind: "ok" })
+    expect(await eliminarMedioPago(A, "cheque")).toEqual({ kind: "not_found" })
+    expect(await eliminarMedioPago(A, "deposito")).toEqual({
       kind: "conflict",
       error: "Hay pedidos que eligieron este medio de pago. Desactívelo en lugar de eliminarlo.",
     })
     // El pedido es del tenant A: no bloquea el borrado del mismo slug en B.
-    expect(await eliminarMedioPago(B, "transferencia")).toEqual({ kind: "ok" })
+    expect(await eliminarMedioPago(B, "deposito")).toEqual({ kind: "ok" })
   })
 
   it("el CHECK de la base rechaza un slug fuera del patrón", async () => {
@@ -109,7 +109,7 @@ describe("fila fija mercadopago (migración 0057)", () => {
 
     const a = await listarMediosPago(A)
     expect(a.filter((m) => m.slug === "mercadopago")).toEqual([
-      { slug: "mercadopago", nombre: "Mercado Pago", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6, listaOnlineId: null, listaOnlineNombre: null, listaOnlineActiva: false, condicionesCuotas: [], destacarEnCatalogo: false, mostrarEnFicha: false, audiencia: "publico", chips: [], opcionesCobro: ["credito", "debito", "cuenta_mp"] },
+      { slug: "mercadopago", nombre: "Mercado Pago", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6, listaOnlineId: null, listaOnlineNombre: null, listaOnlineActiva: false, condicionesCuotas: [], destacarEnCatalogo: false, mostrarEnFicha: false, audiencia: "publico", chips: [], opcionesCobro: ["credito", "debito", "cuenta_mp"], listasPorForma: [] },
     ])
     expect((await listarMediosPago(B)).filter((m) => m.slug === "mercadopago")).toHaveLength(1)
   })
@@ -151,7 +151,7 @@ describe("fila fija payway (migración 0067)", () => {
 
     const a = await listarMediosPago(A)
     expect(a.filter((m) => m.slug === "payway")).toEqual([
-      { slug: "payway", nombre: "Tarjeta de crédito o débito - Payway", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6, listaOnlineId: null, listaOnlineNombre: null, listaOnlineActiva: false, condicionesCuotas: [], destacarEnCatalogo: false, mostrarEnFicha: false, audiencia: "publico", chips: [], opcionesCobro: ["credito", "debito", "cuenta_mp"] },
+      { slug: "payway", nombre: "Tarjeta de crédito o débito - Payway", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6, listaOnlineId: null, listaOnlineNombre: null, listaOnlineActiva: false, condicionesCuotas: [], destacarEnCatalogo: false, mostrarEnFicha: false, audiencia: "publico", chips: [], opcionesCobro: ["credito", "debito", "cuenta_mp"], listasPorForma: [] },
     ])
     expect((await listarMediosPago(B)).filter((m) => m.slug === "payway")).toHaveLength(1)
   })

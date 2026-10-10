@@ -6,7 +6,7 @@ import { permitirAsync } from "@/lib/rate-limit";
 import { crearPreferencia } from "@/lib/pagos/mercadopago";
 import { procesadorConfigurado } from "@/lib/pagos";
 import { candidatasDelPedido } from "@/lib/pagos/cuentas-sucursales";
-import { esCredencialRechazada } from "@/lib/pagos/tipos";
+import { MENSAJE_RECHAZO, esCredencialRechazada } from "@/lib/pagos/tipos";
 import { armarPreferencia } from "@/lib/pagos/mercadopago-preferencia";
 import { rechazoPorOpcionDeCobro } from "@/lib/pagos/opcion-cobro-guard";
 
@@ -68,6 +68,14 @@ export async function POST(req: Request) {
   // La cuenta de Mercado Pago puede estar deshabilitada para el medio en el admin (migración 0073).
   const rechazoOpcion = await rechazoPorOpcionDeCobro(pedido.pagoMetodo, "mercadopago", "cuenta_mp");
   if (rechazoOpcion) return rechazoOpcion;
+  // Forma congelada (listas de precio por forma): la cuenta de Mercado Pago solo cobra un pedido
+  // cotizado con esa forma (o sin forma congelada). Con crédito/débito congelado, no.
+  if (pedido.formaCobro && pedido.formaCobro !== "cuenta_mp") {
+    return NextResponse.json(
+      { error: MENSAJE_RECHAZO.forma_distinta, motivo: "forma_distinta" },
+      { status: 409 },
+    );
+  }
   /**
    * Cuentas usables, la prevista primero (`candidatasDelPedido`). Acá no hay tarjeta tokenizada: si Mercado
    * Pago rechaza las credenciales de una cuenta (401/403), se prueba la siguiente en el mismo request, sin
@@ -87,7 +95,6 @@ export async function POST(req: Request) {
           total: pedido.total,
           origen: new URL(req.url).origin,
           emailComprador: pedido.clienteEmail ?? cliente?.email ?? email ?? undefined,
-          cuotas: pedido.cuotas,
           venceEn: new Date(pedido.creadoEn.getTime() + VENTANA_PAGO_MS),
         }),
       );

@@ -156,6 +156,18 @@ describe("hayQueRecongelar", () => {
     expect(hayQueRecongelar(3, null)).toBe(true);
     expect(hayQueRecongelar(1, 6)).toBe(true);
   });
+
+  it("con forma congelada, también si la forma que se cobra es otra", () => {
+    expect(hayQueRecongelar(1, null, "debito", "credito")).toBe(true);
+    expect(hayQueRecongelar(1, 1, "cuenta_mp", "debito")).toBe(true);
+    expect(hayQueRecongelar(1, null, "credito", "credito")).toBe(false);
+  });
+
+  it("sin forma congelada (pedido viejo o medio sin precios por forma) la forma no recotiza", () => {
+    expect(hayQueRecongelar(1, null, "debito", null)).toBe(false);
+    expect(hayQueRecongelar(1, null, "debito", undefined)).toBe(false);
+    expect(hayQueRecongelar(1, null, null, "credito")).toBe(false);
+  });
 });
 
 describe("opcionesDeRespaldo (no se pudieron consultar las cuotas)", () => {

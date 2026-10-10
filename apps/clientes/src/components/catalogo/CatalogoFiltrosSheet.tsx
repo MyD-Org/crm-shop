@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Badge, Button, Dialog, Divider, Select } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
 import {
@@ -9,10 +9,9 @@ import {
   hrefAlElegirCategoria,
   limpiarBorrador,
 } from "@/lib/catalogo-borrador";
-import { hrefCatalogo, type EstadoCatalogo, type OrdenCatalogo } from "@/lib/catalogo-url";
-import { ordenesPara, contarFiltrosActivos, etiquetaBotonFiltros } from "@/lib/catalogo-vista";
+import { hrefCatalogo, type EstadoCatalogo } from "@/lib/catalogo-url";
+import { esOrden, ordenesPara, contarFiltrosActivos, etiquetaBotonFiltros } from "@/lib/catalogo-vista";
 import { CatalogoFiltros } from "./CatalogoFiltros";
-import { ATRIBUTO_FILTROS_ABIERTOS } from "@/lib/chat-ia-integracion";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 /**
@@ -66,14 +65,6 @@ export function CatalogoFiltrosSheet({
   // que con la X): al volver, los filtros son los de la URL.
   useAlOcultar(() => setAbierto(false));
   const activos = contarFiltrosActivos(estado);
-
-  // Mientras la hoja está abierta, el launcher del chat se oculta en mobile (globals.css).
-  useEffect(() => {
-    const html = document.documentElement;
-    if (abierto) html.setAttribute(ATRIBUTO_FILTROS_ABIERTOS, "");
-    else html.removeAttribute(ATRIBUTO_FILTROS_ABIERTOS);
-    return () => html.removeAttribute(ATRIBUTO_FILTROS_ABIERTOS);
-  }, [abierto]);
 
   const abrir = () => {
     setBorrador(estado);
@@ -138,9 +129,9 @@ export function CatalogoFiltrosSheet({
             <Select
               options={ordenesPara(borrador)}
               value={borrador.orden}
-              onValueChange={(v) =>
-                setBorrador((b) => cambiarBorrador(b, { orden: v as OrdenCatalogo }))
-              }
+              onValueChange={(v) => {
+                if (esOrden(v)) setBorrador((b) => cambiarBorrador(b, { orden: v }));
+              }}
               aria-label="Ordenar productos"
             />
           </section>

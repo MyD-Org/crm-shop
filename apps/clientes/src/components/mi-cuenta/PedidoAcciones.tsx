@@ -8,6 +8,9 @@ import { useCart } from "@/context/CartContext";
 import type { OrderItem } from "@/data/orders";
 import { hrefPedido } from "@/lib/mi-cuenta-nav";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
+import { BotonCompartirLista } from "@/components/BotonCompartirLista";
+import { MENSAJE_PEDIDO } from "@/lib/carrito-compartido";
+import { AVISO_PEDIDO_RECORTADO, pedidoCompartible } from "@/lib/pedido-compartir";
 import { IconoDescarga, IconoFlecha, IconoRefresh } from "./iconos";
 
 /**
@@ -26,6 +29,7 @@ export function PedidoAcciones({
   reintentarPago = false,
   mostrarDetalle = true,
   alPie = false,
+  compartir = false,
   extra,
 }: {
   pedidoId: string;
@@ -37,6 +41,8 @@ export function PedidoAcciones({
   mostrarDetalle?: boolean;
   /** Al pie de una card (con separador): una fila en escritorio, apiladas a lo ancho en mobile. */
   alPie?: boolean;
+  /** Ofrece "Compartir pedido" (link al carrito compartido con las mismas líneas). */
+  compartir?: boolean;
   /** Acción a la derecha de la fila (p. ej. cancelar el pedido); sólo con `alPie`. */
   extra?: ReactNode;
 }) {
@@ -51,6 +57,7 @@ export function PedidoAcciones({
   useAlOcultar(() => setAgregando(false));
   const [verFactura, setVerFactura] = useState(false);
   const urlFactura = `/api/mi-cuenta/pedidos/${pedidoId}/factura/pdf`;
+  const paraCompartir = compartir ? pedidoCompartible(items) : null;
   const tituloFactura = facturaNumero ? `Factura ${facturaNumero}` : "Factura";
 
   function volverAComprar() {
@@ -97,6 +104,19 @@ export function PedidoAcciones({
       <Button variant="outline" loading={agregando} onClick={volverAComprar}>
         <IconoRefresh /> Volver a comprar
       </Button>
+      {paraCompartir && paraCompartir.lineas > 0 && (
+        <BotonCompartirLista
+          href={paraCompartir.href}
+          label="Compartir pedido"
+          size="md"
+          mensaje={MENSAJE_PEDIDO}
+          toast={{
+            title: "Enlace copiado",
+            description: "Ya puede pegarlo donde quiera compartir su pedido.",
+          }}
+          aviso={paraCompartir.recortado ? AVISO_PEDIDO_RECORTADO : undefined}
+        />
+      )}
       {facturaId && (
         <>
           <Button variant="outline" onClick={() => setVerFactura(true)}>

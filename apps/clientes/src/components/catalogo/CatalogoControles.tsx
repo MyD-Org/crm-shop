@@ -1,8 +1,8 @@
 "use client";
 
 import { SegmentedControl, Select } from "@myd-org/ui";
-import type { EstadoCatalogo, OrdenCatalogo, VistaCatalogo } from "@/lib/catalogo-url";
-import { ordenesPara } from "@/lib/catalogo-vista";
+import type { EstadoCatalogo, VistaCatalogo } from "@/lib/catalogo-url";
+import { esOrden, ordenesPara } from "@/lib/catalogo-vista";
 import { GridIcon, ListIcon } from "./iconos";
 
 const VISTAS = [
@@ -38,7 +38,9 @@ export function CatalogoControles({
         <Select
           options={ordenesPara(estado)}
           value={estado.orden}
-          onValueChange={(v) => ir({ orden: v as OrdenCatalogo })}
+          onValueChange={(v) => {
+            if (esOrden(v)) ir({ orden: v });
+          }}
           aria-label="Ordenar productos"
           className="w-52"
         />

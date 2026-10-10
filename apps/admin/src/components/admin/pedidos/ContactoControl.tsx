@@ -69,15 +69,12 @@ export function ContactoControl({ pedidoId, estado, creadoEn }: { pedidoId: stri
 
   const vencido = datos.umbralHoras > 0 && ahora - new Date(creadoEn).getTime() > datos.umbralHoras * 3_600_000
   return (
-    <div className="mb-3 flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {vencido ? <Badge tone="danger">{textoSinContactar(new Date(creadoEn), new Date(ahora))}</Badge> : <Badge tone="neutral">Sin contactar</Badge>}
-      </div>
-      <div>
-        <Button variant="secondary" size="sm" loading={guardando} onClick={() => void marcar()}>
-          Marcar contactado
-        </Button>
-      </div>
+    // El botón ya dice que falta contactar: el badge sólo aparece cuando pasó el umbral, para el aviso de demora.
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <Button variant="secondary" size="sm" loading={guardando} onClick={() => void marcar()}>
+        Marcar contactado
+      </Button>
+      {vencido && <Badge tone="danger">{textoSinContactar(new Date(creadoEn), new Date(ahora))}</Badge>}
     </div>
   )
 }

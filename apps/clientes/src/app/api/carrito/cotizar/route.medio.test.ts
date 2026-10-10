@@ -122,3 +122,41 @@ describe("POST /api/carrito/cotizar con pagoMetodo", () => {
     expect(opciones().idListaMedio).toBeUndefined();
   });
 });
+
+describe("POST /api/carrito/cotizar con forma de pago (listas por forma)", () => {
+  const mp = (slug = "mercadopago") =>
+    medio({ slug, cobroOnline: true, idListaPrecios: "9", listasPorForma: { debito: "7" } });
+
+  it("forma débito: cotiza con la lista de débito", async () => {
+    medios = [mp()];
+    expect((await pedir({ pagoMetodo: "mercadopago", forma: "debito" })).status).toBe(200);
+    expect(opciones().idListaMedio).toBe("7");
+  });
+
+  it("forma crédito, o sin forma: la lista del medio (como hoy)", async () => {
+    medios = [mp()];
+    await pedir({ pagoMetodo: "mercadopago", forma: "credito" });
+    await pedir({ pagoMetodo: "mercadopago" });
+    expect(opciones(0).idListaMedio).toBe("9");
+    expect(opciones(1).idListaMedio).toBe("9");
+  });
+
+  it("Payway: débito con su lista; cuenta_mp es 400 en usted", async () => {
+    medios = [mp("payway")];
+    await pedir({ pagoMetodo: "payway", forma: "debito" });
+    expect(opciones().idListaMedio).toBe("7");
+    const r = await pedir({ pagoMetodo: "payway", forma: "cuenta_mp" });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toBe("Esa forma de pago no está disponible para este medio.");
+  });
+
+  it("la forma no cambia nada en un medio sin cobro en línea ni con lista privada", async () => {
+    medios = [medio({ listasPorForma: { debito: "7" } })];
+    await pedir({ pagoMetodo: "transferencia", forma: "debito" });
+    expect(opciones().idListaMedio).toBe("9");
+    cliente = { codigocliente: "42" };
+    listaPrivada = "lista-privada-a";
+    await pedir({ pagoMetodo: "transferencia", forma: "debito" });
+    expect(opciones(1).idListaMedio).toBeUndefined();
+  });
+});

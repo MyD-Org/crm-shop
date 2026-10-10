@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MedioPago } from "./medios-pago";
-import { idListaDelMedio, pagoParaCotizar } from "./lista-medio";
+import { formaInicialDelMedio, hayPreciosPorForma, idListaDelMedio, listaDelPagoUnico, pagoParaCotizar, resolverForma } from "./lista-medio";
 
 const medio = (o: Partial<MedioPago>): MedioPago => ({
   slug: "transferencia",
@@ -114,5 +114,152 @@ describe("idListaDelMedio con cuotas sin interés (rebanada D)", () => {
 
   it("sin credenciales de Mercado Pago el medio no aplica: sin lista", () => {
     expect(idListaDelMedio([mp], "retiro", "mercadopago", { mpDisponible: false }, 6)).toBeUndefined();
+  });
+});
+
+// --- Listas por forma de pago (change `listas-por-forma-de-pago`, rebanada C) ---
+
+const mp = (o: Partial<MedioPago> = {}): MedioPago =>
+  medio({ slug: "mercadopago", nombre: "Mercado Pago", cobroOnline: true, idListaPrecios: "A", ...o });
+const payway = (o: Partial<MedioPago> = {}): MedioPago =>
+  medio({ slug: "payway", nombre: "Payway", cobroOnline: true, idListaPrecios: "A", ...o });
+
+describe("listaDelPagoUnico / idListaDelMedio con forma", () => {
+  const m = mp({ listasPorForma: { debito: "B" } });
+
+  it("precedencia: la de la forma > la del medio (forma NULL) > la general", () => {
+    expect(listaDelPagoUnico(m, "debito")).toBe("B");
+    expect(listaDelPagoUnico(m, "credito")).toBe("A");
+    expect(listaDelPagoUnico(mp({ idListaPrecios: null }), "credito")).toBeUndefined();
+  });
+
+  it("sin forma NUNCA toma una lista por forma", () => {
+    expect(listaDelPagoUnico(m)).toBe("A");
+    expect(listaDelPagoUnico(m, null)).toBe("A");
+    expect(idListaDelMedio([m], "retiro", "mercadopago")).toBe("A");
+  });
+
+  it("idListaDelMedio con forma: débito B, crédito A", () => {
+    expect(idListaDelMedio([m], "retiro", "mercadopago", undefined, 1, "debito")).toBe("B");
+    expect(idListaDelMedio([m], "retiro", "mercadopago", undefined, 1, "credito")).toBe("A");
+  });
+
+  it("las cuotas (N >= 2) ignoran la forma", () => {
+    const conCuotas = mp({
+      listasPorForma: { debito: "B" },
+      condicionesCuotas: [{ cuotas: 3, idListaPrecios: "C" } as never],
+    });
+    expect(idListaDelMedio([conCuotas], "retiro", "mercadopago", undefined, 3, "debito")).toBe("C");
+  });
+
+  it("Payway débito usa su lista; crédito la del medio", () => {
+    const p = payway({ listasPorForma: { debito: "B" } });
+    expect(idListaDelMedio([p], "retiro", "payway", undefined, 1, "debito")).toBe("B");
+    expect(idListaDelMedio([p], "retiro", "payway", undefined, 1, "credito")).toBe("A");
+  });
+});
+
+describe("hayPreciosPorForma", () => {
+  it("false sin listas por forma, MP y Payway", () => {
+    expect(hayPreciosPorForma(mp())).toBe(false);
+    expect(hayPreciosPorForma(payway())).toBe(false);
+  });
+
+  it("true si alguna forma tiene una lista distinta de la del medio", () => {
+    expect(hayPreciosPorForma(mp({ listasPorForma: { debito: "B" } }))).toBe(true);
+    expect(hayPreciosPorForma(payway({ listasPorForma: { debito: "B" } }))).toBe(true);
+  });
+
+  it("false si la forma apunta a la misma lista del medio", () => {
+    expect(hayPreciosPorForma(mp({ listasPorForma: { debito: "A" } }))).toBe(false);
+  });
+
+  it("solo cuentan las formas habilitadas del medio", () => {
+    // Solo crédito habilitado: la fila de débito no se ofrece, no hay dos precios posibles.
+    expect(hayPreciosPorForma(mp({ opcionesCobro: ["credito"], listasPorForma: { debito: "B" } }))).toBe(false);
+  });
+
+  it("Payway ignora una fila cuenta_mp", () => {
+    expect(hayPreciosPorForma(payway({ listasPorForma: { cuenta_mp: "B" } }))).toBe(false);
+  });
+
+  it("false para un medio que no es de Mercado Pago ni de Payway", () => {
+    expect(hayPreciosPorForma(medio({ listasPorForma: { debito: "B" } }))).toBe(false);
+  });
+});
+
+describe("resolverForma", () => {
+  const conPrecios = mp({ listasPorForma: { debito: "B" } });
+
+  it("sin precios por forma: forma null (también con una forma válida pedida)", () => {
+    expect(resolverForma(mp(), undefined)).toEqual({ ok: true, forma: null, pedida: null });
+    expect(resolverForma(mp(), "debito")).toEqual({ ok: true, forma: null, pedida: "debito" });
+  });
+
+  it("con precios: la pedida", () => {
+    expect(resolverForma(conPrecios, "debito")).toEqual({ ok: true, forma: "debito", pedida: "debito" });
+  });
+
+  it("con precios y sin forma pedida: la primera que ofrece el medio (crédito)", () => {
+    expect(resolverForma(conPrecios, undefined)).toEqual({ ok: true, forma: "credito", pedida: null });
+    const sinCredito = mp({ opcionesCobro: ["debito", "cuenta_mp"], listasPorForma: { debito: "B" } });
+    expect(resolverForma(sinCredito, null)).toMatchObject({ ok: true, forma: "debito" });
+  });
+
+  it("forma inválida o no habilitada: rechazada", () => {
+    expect(resolverForma(conPrecios, "efectivo")).toEqual({ ok: false });
+    expect(resolverForma(conPrecios, 3)).toEqual({ ok: false });
+    expect(resolverForma(mp({ opcionesCobro: ["credito", "debito"], listasPorForma: { debito: "B" } }), "cuenta_mp")).toEqual({
+      ok: false,
+    });
+  });
+
+  it("Payway: cuenta_mp rechazada siempre; crédito y débito válidas", () => {
+    const p = payway({ listasPorForma: { debito: "B" } });
+    expect(resolverForma(p, "cuenta_mp")).toEqual({ ok: false });
+    expect(resolverForma(payway(), "cuenta_mp")).toEqual({ ok: false });
+    expect(resolverForma(p, "debito")).toMatchObject({ ok: true, forma: "debito" });
+    expect(resolverForma(p, "credito")).toMatchObject({ ok: true, forma: "credito" });
+  });
+
+  it("un medio que no es de Mercado Pago ni de Payway ignora la forma", () => {
+    expect(resolverForma(medio({}), "debito")).toEqual({ ok: true, forma: null, pedida: null });
+    expect(resolverForma(medio({}), "efectivo")).toEqual({ ok: true, forma: null, pedida: null });
+  });
+});
+
+describe("pagoParaCotizar con forma", () => {
+  const m = mp({ listasPorForma: { debito: "B" } });
+
+  it("la clave sigue a la lista de la forma; la forma viaja solo si su lista difiere de la del medio", () => {
+    expect(pagoParaCotizar([m], "retiro", m, undefined, "debito")).toEqual({
+      listaKey: "B",
+      pagoMetodo: "mercadopago",
+      formaKey: "debito",
+    });
+    const credito = pagoParaCotizar([m], "retiro", m, undefined, "credito");
+    expect(credito).toEqual({ listaKey: "A", pagoMetodo: "mercadopago" });
+    expect(credito.formaKey).toBeUndefined();
+  });
+
+  it("sin forma, igual que antes", () => {
+    expect(pagoParaCotizar([m], "retiro", m)).toEqual({ listaKey: "A", pagoMetodo: "mercadopago" });
+  });
+});
+
+describe("formaInicialDelMedio (la forma con la que nace el pedido)", () => {
+  it("sin precios distintos por forma: null (el pedido no valida la forma)", () => {
+    expect(formaInicialDelMedio(mp())).toBeNull();
+    expect(formaInicialDelMedio(mp({ listasPorForma: { debito: "A" } }))).toBeNull();
+  });
+
+  it("con precios distintos: la primera forma que el medio ofrece, la misma que elige resolverForma", () => {
+    const m = mp({ listasPorForma: { debito: "B" } });
+    expect(formaInicialDelMedio(m)).toBe("credito");
+    expect(resolverForma(m, undefined)).toMatchObject({ ok: true, forma: formaInicialDelMedio(m) });
+    const soloDebito = mp({ opcionesCobro: ["debito", "cuenta_mp"], listasPorForma: { cuenta_mp: "B" } });
+    expect(formaInicialDelMedio(soloDebito)).toBe("debito");
+    expect(resolverForma(soloDebito, undefined)).toMatchObject({ ok: true, forma: "debito" });
+    expect(formaInicialDelMedio(payway({ listasPorForma: { debito: "B" } }))).toBe("credito");
   });
 });

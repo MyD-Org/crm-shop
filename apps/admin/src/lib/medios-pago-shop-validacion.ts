@@ -22,6 +22,30 @@ export function esSlugCobro(slug: string): boolean {
   return SLUGS_COBRO.includes(slug)
 }
 
+/**
+ * Medios del sistema (sembrados por las migraciones 0046/0057/0067/0077): identificador fijo; no se
+ * crean con ese identificador ni se eliminan (se desactivan).
+ */
+export const SLUGS_SISTEMA: readonly string[] = [...SLUGS_COBRO, "transferencia", "efectivo"]
+
+export const MSG_SLUG_RESERVADO = "Ese identificador está reservado."
+
+/**
+ * Alta desde el admin: además de validar el cuerpo, rechaza los identificadores de los medios del
+ * sistema (transferencia y efectivo ya existen como filas fijas). Lo usa la ruta POST; el repo sigue
+ * pudiendo sembrarlos.
+ */
+export function slugReservadoEnAlta(body: unknown): Invalido | null {
+  const slug = body && typeof body === "object" ? (body as Record<string, unknown>).slug : undefined
+  return typeof slug === "string" && esMedioDelSistema(slug.trim())
+    ? { ok: false, campo: "slug", error: MSG_SLUG_RESERVADO }
+    : null
+}
+
+export function esMedioDelSistema(slug: string): boolean {
+  return SLUGS_SISTEMA.includes(slug)
+}
+
 /** Quién puede pagar con el medio. `cuenta_corriente` = solo clientes con cuenta corriente (migración 0069). */
 export type AudienciaMedio = "publico" | "cuenta_corriente"
 export const AUDIENCIA_CUENTA_CORRIENTE: AudienciaMedio = "cuenta_corriente"
@@ -138,7 +162,7 @@ export function validarMedioPagoNuevo(body: unknown): { ok: true; valor: MedioPa
   if (!SLUG_MEDIO_RE.test(slug)) {
     return invalido("slug", "El identificador debe tener de 2 a 30 caracteres: minúsculas, números o guiones.")
   }
-  if (esSlugCobro(slug)) return invalido("slug", "Ese identificador está reservado.")
+  if (esSlugCobro(slug)) return invalido("slug", MSG_SLUG_RESERVADO)
   if (typeof body.nombre !== "string" || body.nombre.trim() === "") return invalido("nombre", "Ingrese el nombre.")
 
   const c = validarCampos(body)

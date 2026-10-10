@@ -10,6 +10,7 @@ import { getDb } from "@/db";
 import { favorites } from "@/db/schema";
 import type { Product } from "@/data/products";
 import { getProductosPorIds } from "./catalog";
+import { planificarLote } from "./favoritos-lote";
 import type { MediosPrecio } from "./medios-precio";
 import { shopTenantId } from "./tenant";
 
@@ -76,6 +77,59 @@ export async function agregarFavorito(clerkUserId: string, alegraItemId: string)
     .onConflictDoNothing({
       target: [favorites.tenantId, favorites.clerkUserId, favorites.alegraItemId],
     });
+}
+
+/**
+ * Alta masiva (la lista compartida de otra persona). Idempotente y atómica:
+ * una transacción con un lock por usuario serializa lotes y altas, así que el
+ * tope de `MAX_FAVORITOS` es exacto. Los que ya estaban no consumen cupo; si no
+ * entran todos, se guardan los primeros en el orden recibido y el resto es
+ * `sinLugar` (no es un error). Devuelve además los ids resultantes, del más
+ * nuevo al más viejo, para que el navegador se resincronice sin otro GET.
+ *
+ * El `created_at` se escalona de a 1 ms hacia atrás para que el orden de la
+ * lista compartida se conserve en "del más nuevo al más viejo".
+ */
+export async function agregarFavoritosLote(
+  clerkUserId: string,
+  ids: readonly string[],
+): Promise<{ agregados: string[]; yaEstaban: number; sinLugar: number; ids: string[] }> {
+  const tenantId = shopTenantId();
+  return getDb().transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`favoritos:${tenantId}:${clerkUserId}`}))`);
+
+    const existentes = (
+      await tx
+        .select({ alegraItemId: favorites.alegraItemId })
+        .from(favorites)
+        .where(deEsteUsuario(clerkUserId))
+        .orderBy(desc(favorites.createdAt))
+    ).map((f) => f.alegraItemId);
+
+    const plan = planificarLote(existentes, ids, MAX_FAVORITOS);
+    if (plan.aEscribir.length > 0) {
+      const ahora = Date.now();
+      await tx
+        .insert(favorites)
+        .values(
+          plan.aEscribir.map((alegraItemId, i) => ({
+            tenantId,
+            clerkUserId,
+            alegraItemId,
+            createdAt: new Date(ahora - i),
+          })),
+        )
+        .onConflictDoNothing({
+          target: [favorites.tenantId, favorites.clerkUserId, favorites.alegraItemId],
+        });
+    }
+    return {
+      agregados: plan.aEscribir,
+      yaEstaban: plan.yaEstaban,
+      sinLugar: plan.sinLugar,
+      ids: [...plan.aEscribir, ...existentes],
+    };
+  });
 }
 
 /** Quita un favorito. Idempotente: si no estaba, no pasa nada. */

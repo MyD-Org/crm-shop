@@ -32,6 +32,7 @@ vi.mock("@/lib/facturacion-db", () => ({
   perfilCompleto: () => true,
 }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => true }));
+vi.mock("@/lib/pagos", () => ({ procesadorConfigurado: () => true }));
 vi.mock("@/lib/contacto-pedido-repo", () => ({ contactoDelPedido: async () => null }));
 
 let medios: unknown[] = [];
@@ -118,5 +119,40 @@ describe("POST /api/pedidos — lista del medio de pago", () => {
   it("totalVisto igual al total del medio: crea el pedido", async () => {
     expect((await post({ totalVisto: 200000 })).status).toBe(201);
     expect(crearPedido).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("POST /api/pedidos — forma de pago (listas por forma)", () => {
+  beforeEach(() => {
+    medios = [
+      medio("mercadopago", { cobroOnline: true, idListaPrecios: "9", listasPorForma: { debito: "7" } }),
+      medio("payway", { cobroOnline: true, idListaPrecios: "9", listasPorForma: { debito: "7" } }),
+      medio("transferencia", { idListaPrecios: "9" }),
+    ];
+  });
+
+  it("débito: cotiza con la lista de débito, la guarda y congela la forma", async () => {
+    expect((await post({ pagoMetodo: "mercadopago", forma: "debito" })).status).toBe(201);
+    expect(opcionesCotizar().idListaMedio).toBe("7");
+    expect(crearPedido.mock.calls[0][0].idPriceList).toBe("7");
+    expect(crearPedido.mock.calls[0][1].formaCobro).toBe("debito");
+  });
+
+  it("sin forma en el body: nace con crédito y la lista del medio", async () => {
+    await post({ pagoMetodo: "mercadopago" });
+    expect(opcionesCotizar().idListaMedio).toBe("9");
+    expect(crearPedido.mock.calls[0][1].formaCobro).toBe("credito");
+  });
+
+  it("forma no disponible: 400 en usted y no crea el pedido", async () => {
+    const r = await post({ pagoMetodo: "payway", forma: "cuenta_mp" });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toBe("Esa forma de pago no está disponible para este medio.");
+    expect(crearPedido).not.toHaveBeenCalled();
+  });
+
+  it("medio sin cobro en línea: ignora la forma (forma_cobro null)", async () => {
+    await post({ pagoMetodo: "transferencia", forma: "debito" });
+    expect(crearPedido.mock.calls[0][1].formaCobro).toBeNull();
   });
 });

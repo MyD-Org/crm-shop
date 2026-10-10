@@ -74,6 +74,19 @@ export const ETIQUETAS_CHAT = {
   peekResultsLabel: "Ver resultados",
 } as const;
 
+/**
+ * Preguntas sugeridas del chat vacío (registro neutro): cada una se envía al tocarla.
+ * Por defecto: el equipo las cambia en el admin del CRM (chat-ia-textos-tenant.ts).
+ */
+export const SUGERENCIAS_CHAT = [
+  "¿Qué lámpara conviene para un living?",
+  "Reflectores para exterior",
+  "Estado de un pedido",
+];
+
+/** Botón del header que abre y cierra el chat (BotonAsistente). */
+export const ETIQUETA_BOTON_ASISTENTE = "Asistente";
+
 export const SUBTITULO_CHAT = "Consultas sobre productos y pedidos";
 
 /** Color de marca del widget: token del DS, nunca un literal. */

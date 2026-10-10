@@ -18,7 +18,7 @@ import { shopTenantId } from "./tenant";
 import type { CondicionCuotas } from "./cuotas-sin-interes";
 import type { AudienciaMedio, MedioPago } from "./medios-pago";
 import { leerChipsMedio } from "./medios-pago-chips";
-import { leerOpcionesCobro, type OpcionCobro } from "./pagos/opciones-cobro";
+import { OPCIONES_COBRO, leerOpcionesCobro, type OpcionCobro } from "./pagos/opciones-cobro";
 import { leerMarcas } from "./pagos/marcas";
 
 /** Lo mínimo que hace falta de una conexión o transacción de drizzle. */
@@ -67,6 +67,33 @@ async function opcionesCobroDeLosMedios(db: Ejecutor): Promise<Map<string, Opcio
 }
 
 /**
+ * Condiciones del pago único con forma de pago (migración 0076 del CRM): id de la condición ->
+ * {forma, ...}. Consulta APARTE, como las opciones de cobro: columna ausente => lista vacía (ninguna
+ * fila por forma, comportamiento de antes de la columna); otro error tira. Hace falta saber qué filas
+ * tienen forma para NO tomarlas como la lista del medio (`forma` NULL = todas las formas).
+ */
+async function formasDeLasCondiciones(
+  db: Ejecutor,
+): Promise<{ id: string; medioSlug: string; listaId: string; forma: string }[]> {
+  try {
+    const filas = await db
+      .select({
+        id: crmListaPrecioCondiciones.id,
+        medioSlug: crmListaPrecioCondiciones.medioSlug,
+        listaId: crmListaPrecioCondiciones.listaId,
+        forma: crmListaPrecioCondiciones.forma,
+      })
+      .from(crmListaPrecioCondiciones)
+      .where(and(eq(crmListaPrecioCondiciones.tenantId, shopTenantId()), isNotNull(crmListaPrecioCondiciones.forma)));
+    return filas.flatMap((f) => (f.forma === null ? [] : [{ ...f, forma: f.forma }]));
+  } catch (err) {
+    if (!esColumnaAusente(err)) throw err;
+    console.warn("[medios-pago] la migración 0076 del CRM no está aplicada; no hay listas por forma de pago.");
+    return [];
+  }
+}
+
+/**
  * Tarjetas de cada condición de cuotas (migración 0074 del CRM): "slug:cuotas" -> marcas. Consulta
  * APARTE, como las opciones de cobro: columna ausente => mapa vacío (todas las tarjetas, como antes
  * de la columna); otro error tira. Una restricción que queda vacía tras descartar las marcas que el
@@ -101,6 +128,8 @@ interface CondicionesDelMedio {
   idListaPrecios: string | null;
   /** Condiciones de N >= 2 cuotas sin interés, ascendentes. */
   condicionesCuotas: CondicionCuotas[];
+  /** Listas del pago único por forma de pago (migración 0076); vacío = ninguna. */
+  listasPorForma: Partial<Record<OpcionCobro, string>>;
 }
 
 /**
@@ -112,6 +141,10 @@ interface CondicionesDelMedio {
  * Tolera que la migración 0065 del CRM no esté aplicada (tabla inexistente o sin permiso): ningún
  * medio tiene lista y rige la de referencia, que es lo correcto antes de enlazar nada.
  */
+function vacio(): CondicionesDelMedio {
+  return { idListaPrecios: null, condicionesCuotas: [], listasPorForma: {} };
+}
+
 async function condicionesDeLosMedios(db: Ejecutor): Promise<Map<string, CondicionesDelMedio>> {
   const porMedio = new Map<string, CondicionesDelMedio>();
   try {
@@ -121,11 +154,16 @@ async function condicionesDeLosMedios(db: Ejecutor): Promise<Map<string, Condici
         listaId: crmListaPrecioCondiciones.listaId,
         cuotas: crmListaPrecioCondiciones.cuotas,
         montoMinimo: crmListaPrecioCondiciones.montoMinimo,
+        id: crmListaPrecioCondiciones.id,
       })
       .from(crmListaPrecioCondiciones)
       .where(eq(crmListaPrecioCondiciones.tenantId, shopTenantId()));
+    const conForma = await formasDeLasCondiciones(db);
+    const idsConForma = new Set(conForma.map((c) => c.id));
     for (const f of filas) {
-      const m = porMedio.get(f.medioSlug) ?? { idListaPrecios: null, condicionesCuotas: [] };
+      // Una fila con forma NUNCA es la lista del medio: va aparte (más abajo).
+      if (idsConForma.has(f.id)) continue;
+      const m = porMedio.get(f.medioSlug) ?? vacio();
       if (f.cuotas === null) m.idListaPrecios = f.listaId;
       else {
         // numeric llega como texto; null = sin mínimo (columna de la migración 0066 del CRM).
@@ -137,6 +175,13 @@ async function condicionesDeLosMedios(db: Ejecutor): Promise<Map<string, Condici
         });
       }
       porMedio.set(f.medioSlug, m);
+    }
+    for (const c of conForma) {
+      const forma = OPCIONES_COBRO.find((o) => o === c.forma);
+      if (!forma) continue; // forma desconocida: se ignora
+      const m = porMedio.get(c.medioSlug) ?? vacio();
+      m.listasPorForma[forma] = c.listaId;
+      porMedio.set(c.medioSlug, m);
     }
     if (filas.some((f) => f.cuotas !== null)) await aplicarMarcas(db, porMedio);
     for (const m of porMedio.values()) m.condicionesCuotas.sort((a, b) => a.cuotas - b.cuotas);
@@ -195,6 +240,10 @@ export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[
     chips: leerChipsMedio(f.chips),
     idListaPrecios: condiciones.get(f.slug)?.idListaPrecios ?? null,
     condicionesCuotas: condiciones.get(f.slug)?.condicionesCuotas ?? [],
+    // Sólo si hay alguna: sin filas por forma el medio queda idéntico a antes.
+    ...(Object.keys(condiciones.get(f.slug)?.listasPorForma ?? {}).length > 0
+      ? { listasPorForma: condiciones.get(f.slug)?.listasPorForma }
+      : {}),
     // Sin dato (columna ausente) el campo no va: rigen las formas de pago del procesador.
     ...(opciones.has(f.slug) ? { opcionesCobro: opciones.get(f.slug) } : {}),
   }));

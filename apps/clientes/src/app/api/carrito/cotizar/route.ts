@@ -18,7 +18,8 @@ import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { condicionAlcanzada, cuotasElegidas, montoPorCuota, progresoCuotas, proximoEscalon } from "@/lib/cuotas-sin-interes";
 import { baseParaCuotasCon, opcionesSinInteresCotizadas } from "@/lib/cuotas-opciones";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
-import { idListaDelMedio } from "@/lib/lista-medio";
+import { idListaDelMedio, resolverForma } from "@/lib/lista-medio";
+import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { procesadorConfigurado } from "@/lib/pagos";
 import { esCompradorCuentaCorriente, mediosParaModalidad } from "@/lib/medios-pago";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
@@ -98,6 +99,7 @@ export async function POST(req: Request) {
     progresoCuotas?: unknown;
     precioLineas?: unknown;
     conCuotas?: unknown;
+    forma?: unknown;
   };
   try {
     body = await req.json();
@@ -143,6 +145,26 @@ export async function POST(req: Request) {
     // Cuotas sin interés: sólo con el flag y un medio con cobro en línea. Cada cantidad es otra lista.
     const medioCobro = mediosParaModalidad(mediosCrm, entregaTipo).find((m) => m.slug === pagoMetodo);
     const conCuotas = Boolean(conMedio && medioCobro?.cobroOnline && (await cuotasHabilitadas()));
+    // Forma de pago de la pestaña o modalidad activa (change `listas-por-forma-de-pago`): solo con un
+    // medio de cobro en línea. Sin forma, o sin precios distintos por forma, rige la lista del medio.
+    let forma: OpcionCobro | null = null;
+    if (conMedio && medioCobro?.cobroOnline) {
+      const f = resolverForma(medioCobro, body.forma);
+      if (!f.ok) {
+        return NextResponse.json(
+          { error: "Esa forma de pago no está disponible para este medio.", motivo: "forma_no_disponible" },
+          { status: 400 },
+        );
+      }
+      forma = f.forma;
+      // Las cuotas sin interés son de crédito.
+      if (typeof body.cuotas === "number" && body.cuotas >= 2 && f.pedida && f.pedida !== "credito") {
+        return NextResponse.json(
+          { error: TEXTOS_CUOTAS.cuotasNoDisponibles, motivo: "cuotas_no_disponibles" },
+          { status: 422 },
+        );
+      }
+    }
     // Flag `disponibilidad-sucursal`: stock por sucursal (unión) y disponibilidad por modalidad.
     const base = await dispDelVisitante();
     const provincia = provinciaTexto ? claveProvincia(provinciaTexto) : "";
@@ -157,14 +179,15 @@ export async function POST(req: Request) {
     // tiene o un producto no tiene precio en ella), a la de referencia. null = no se pudo calcular:
     // nunca se promete con base 0.
     const cotizarConLista = (idListaMedio: string | undefined) => cotizar(lineas, { ...opcionesCotizar, idListaMedio });
-    const baseDelMedio = (medios: typeof mediosCrm, slug: string): Promise<number | null> =>
-      baseParaCuotasCon(cotizarConLista, idListaDelMedio(medios, entregaTipo, slug, undefined, 1), "/api/carrito/cotizar");
+    const baseDelMedio = (medios: typeof mediosCrm, slug: string, formaBase?: OpcionCobro | null): Promise<number | null> =>
+      baseParaCuotasCon(cotizarConLista, idListaDelMedio(medios, entregaTipo, slug, undefined, 1, formaBase), "/api/carrito/cotizar");
     // `totalBase` valida el mínimo (0 si no se pudo: sólo las cantidades sin mínimo); `baseValida`
     // habilita barra y "sume": sólo con una base real.
     let totalBase: number | undefined;
     let baseValida = false;
     if (conCuotas && hayMinimos && (pideCuotas || body.conCuotas === true)) {
-      const b = await baseDelMedio(mediosCrm, pagoMetodo);
+      // Las cuotas son de crédito: su mínimo se mide sobre el pago único de esa forma.
+      const b = await baseDelMedio(mediosCrm, pagoMetodo, forma ? "credito" : null);
       totalBase = b ?? 0;
       baseValida = b !== null;
     }
@@ -179,7 +202,7 @@ export async function POST(req: Request) {
       }
       cuotas = elegidas.cuotas;
     }
-    const idListaMedio = conMedio ? idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotas) : undefined;
+    const idListaMedio = conMedio ? idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotas, forma) : undefined;
     const cotizacion = await cotizar(lineas, { ...opcionesCotizar, idListaMedio });
     // Selector del checkout: el total de cada cantidad de cuotas es el de SU lista (varias cotizaciones
     // en paralelo, sólo con `conCuotas`). Los montos salen del servidor, nunca del navegador. Sólo las
@@ -189,7 +212,7 @@ export async function POST(req: Request) {
         ? await opcionesSinInteresCotizadas({
             condiciones: medioCobro.condicionesCuotas,
             // Un pago: la lista del pago único del medio (o la de referencia si no tiene).
-            idListaUnPago: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1),
+            idListaUnPago: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1, forma),
             totalBase,
             cotizarConLista,
           })

@@ -1,6 +1,19 @@
 import { describe, it, expect } from "vitest"
 import type { MedioPagoConAvisos } from "@/lib/medios-pago-shop-repo"
-import { aplicarMedioGuardado, cambiosDeCuotas, cuerpoDeOpciones, cuerpoDePrecios, validarFilasCuotas } from "@/lib/medios-pago-shop-form"
+import {
+  aplicarMedioGuardado,
+  cambiosDeCuotas,
+  cambiosDeListasPorForma,
+  mapearListasDeFormas,
+  hayPrecioDistinto,
+  pestanaDeError,
+  LISTA_POR_DEFECTO,
+  LISTA_IGUAL_QUE_EL_MEDIO,
+  listasPorFormaDesdeDto,
+  cuerpoDeOpciones,
+  cuerpoDePrecios,
+  validarFilasCuotas,
+} from "@/lib/medios-pago-shop-form"
 
 const medio = (slug: string, extra: Partial<MedioPagoConAvisos> = {}): MedioPagoConAvisos => ({
   slug,
@@ -20,6 +33,7 @@ const medio = (slug: string, extra: Partial<MedioPagoConAvisos> = {}): MedioPago
   audiencia: "publico",
   chips: [],
   opcionesCobro: ["credito", "debito", "cuenta_mp"],
+  listasPorForma: [],
   avisos: [],
   ...extra,
 })
@@ -202,5 +216,103 @@ describe("cuerpoDeOpciones", () => {
       opcionesCobro: ["credito", "cuenta_mp"],
     })
     expect(cuerpoDeOpciones([], ["debito"])).toEqual({ opcionesCobro: [] })
+  })
+})
+
+describe("cambiosDeListasPorForma", () => {
+  const B = "00000000-0000-4000-8000-00000000000b"
+  const C = "00000000-0000-4000-8000-00000000000c"
+
+  it("sin cambios no genera nada, y 'igual que el medio' equivale a ausente", () => {
+    expect(cambiosDeListasPorForma("mercadopago", { debito: B }, { debito: B })).toEqual([])
+    expect(cambiosDeListasPorForma("mercadopago", {}, { debito: LISTA_IGUAL_QUE_EL_MEDIO })).toEqual([])
+  })
+
+  it("alta y cambio llevan la forma y cuotas null; la baja va al final con listaId null", () => {
+    const cambios = cambiosDeListasPorForma("payway", { credito: B, debito: B }, { credito: LISTA_IGUAL_QUE_EL_MEDIO, debito: C })
+    expect(cambios).toEqual([
+      { op: "setCondicion", medioSlug: "payway", cuotas: null, forma: "debito", listaId: C },
+      { op: "setCondicion", medioSlug: "payway", cuotas: null, forma: "credito", listaId: null },
+    ])
+  })
+
+  it("listasPorFormaDesdeDto arma el estado inicial", () => {
+    expect(listasPorFormaDesdeDto([{ forma: "debito", listaId: B }])).toEqual({ debito: B })
+  })
+})
+
+describe("mapearListasDeFormas", () => {
+  const REF = "00000000-0000-4000-8000-0000000000aa"
+  const B = "00000000-0000-4000-8000-00000000000b"
+  const C = "00000000-0000-4000-8000-00000000000c"
+  const formas = ["credito", "debito", "cuenta_mp"] as const
+  const todas = ["credito", "debito", "cuenta_mp"] as const
+
+  it("la lista del medio es la de crédito; las otras formas sólo llevan fila si difieren", () => {
+    expect(
+      mapearListasDeFormas({ formas, ofrecidas: todas, listaDeForma: { credito: B, debito: B, cuenta_mp: C }, referenciaId: REF }),
+    ).toEqual({ listaOnlineId: B, listasPorForma: { cuenta_mp: C } })
+  })
+
+  it("si el crédito usa la de referencia, el medio queda sin lista (por defecto) y las demás llevan fila", () => {
+    expect(
+      mapearListasDeFormas({ formas, ofrecidas: todas, listaDeForma: { credito: REF, debito: B, cuenta_mp: REF }, referenciaId: REF }),
+    ).toEqual({ listaOnlineId: LISTA_POR_DEFECTO, listasPorForma: { debito: B } })
+  })
+
+  it("sin crédito ofrecido, el medio toma la primera forma ofrecida en orden", () => {
+    expect(
+      mapearListasDeFormas({ formas, ofrecidas: ["cuenta_mp", "debito"], listaDeForma: { credito: C, debito: B, cuenta_mp: REF }, referenciaId: REF }),
+    ).toEqual({ listaOnlineId: B, listasPorForma: { cuenta_mp: REF } })
+  })
+
+  it("las formas no ofrecidas no dejan fila (se borra la que hubiera)", () => {
+    expect(
+      mapearListasDeFormas({ formas, ofrecidas: ["credito"], listaDeForma: { credito: B, debito: C, cuenta_mp: C }, referenciaId: REF }),
+    ).toEqual({ listaOnlineId: B, listasPorForma: {} })
+  })
+
+  it("todas en la referencia: sin lista del medio ni filas", () => {
+    expect(
+      mapearListasDeFormas({ formas, ofrecidas: todas, listaDeForma: { credito: REF, debito: REF, cuenta_mp: REF }, referenciaId: REF }),
+    ).toEqual({ listaOnlineId: LISTA_POR_DEFECTO, listasPorForma: {} })
+  })
+
+  it("sin lista de referencia definida, LISTA_POR_DEFECTO hace de referencia", () => {
+    expect(
+      mapearListasDeFormas({ formas: ["credito", "debito"], ofrecidas: ["credito", "debito"], listaDeForma: { credito: LISTA_POR_DEFECTO, debito: B }, referenciaId: null }),
+    ).toEqual({ listaOnlineId: LISTA_POR_DEFECTO, listasPorForma: { debito: B } })
+  })
+
+  it("sin ninguna forma ofrecida conserva la lista de la primera forma", () => {
+    expect(
+      mapearListasDeFormas({ formas, ofrecidas: [], listaDeForma: { credito: B, debito: C }, referenciaId: REF }),
+    ).toEqual({ listaOnlineId: B, listasPorForma: {} })
+  })
+
+  it("el resultado alimenta cambiosDeListasPorForma: borra la fila que ya no hace falta", () => {
+    const m = mapearListasDeFormas({ formas, ofrecidas: ["credito", "debito"], listaDeForma: { credito: B, debito: B }, referenciaId: REF })
+    expect(cambiosDeListasPorForma("mercadopago", { debito: C }, m.listasPorForma)).toEqual([
+      { op: "setCondicion", medioSlug: "mercadopago", cuotas: null, forma: "debito", listaId: null },
+    ])
+  })
+})
+
+describe("hayPrecioDistinto", () => {
+  it("es falso si todas las listas son la de referencia", () => {
+    expect(hayPrecioDistinto(["r", "r", LISTA_POR_DEFECTO], "r")).toBe(false)
+    expect(hayPrecioDistinto([], "r")).toBe(false)
+  })
+  it("es verdadero si alguna difiere", () => {
+    expect(hayPrecioDistinto(["r", "b"], "r")).toBe(true)
+  })
+})
+
+describe("pestanaDeError", () => {
+  it("lleva a la pestaña del primer campo con error", () => {
+    expect(pestanaDeError({ nombre: "x" })).toBe("general")
+    expect(pestanaDeError({ listaOnlineId: "x", cuotas: "y" })).toBe("precios")
+    expect(pestanaDeError({ cuotas: "y" })).toBe("cuotas")
+    expect(pestanaDeError({ general: "z" })).toBeNull()
   })
 })

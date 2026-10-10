@@ -5,7 +5,7 @@ import { Alert, Button } from "@myd-org/ui";
 import { IconoSalida } from "./PagoIconos";
 
 /**
- * Pagar con la cuenta de Mercado Pago (dinero disponible o tarjetas guardadas): el contenido de esa
+ * Pagar con la cuenta de Mercado Pago (sólo dinero disponible: la preferencia excluye las tarjetas): el contenido de esa
  * opción en "¿Cómo quiere pagar?". Se lleva al comprador al sitio de Mercado Pago y vuelve a
  * `/checkout?pedido=<id>` al terminar (ver `/api/pagos/mercadopago/preferencia`). El botón dice a dónde
  * va, cosa que el Brick no permite.

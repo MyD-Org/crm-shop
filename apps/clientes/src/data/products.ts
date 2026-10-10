@@ -1,5 +1,6 @@
 import type { AtributosEstructurados } from "@/lib/catalogo-caracteristicas";
 import type { CuotasProducto } from "@/lib/cuotas-sin-interes";
+import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import type { ProductStock } from "@myd-org/ui";
 
 /**
@@ -34,6 +35,18 @@ export interface PrecioMedio {
   price: number;
   /** Con IVA, si se conoce. */
   precioFinal?: number;
+  /**
+   * Forma de pago a la que corresponde el precio (change `listas-por-forma-de-pago`). Ausente = el
+   * precio del medio, igual para todas sus formas.
+   */
+  forma?: OpcionCobro;
+}
+
+/** Precio en 1 pago (con IVA) de un medio sin cobro en línea, para el modal "Ver medios de pago". */
+export interface PrecioOffline {
+  slug: string;
+  nombre: string;
+  precioFinal: number;
 }
 
 /** Una fila de la tabla de especificaciones de la ficha. */
@@ -87,6 +100,10 @@ export interface Product {
   precioMedio?: PrecioMedio;
   /** Medios de la ficha, en orden. Vacío/undefined = ninguno califica. */
   preciosMedios?: PrecioMedio[];
+  /** Líneas por forma (débito/crédito) para el modal de medios de pago; independiente de la ficha. */
+  preciosFormaModal?: PrecioMedio[];
+  /** Medios sin cobro en línea (transferencia, efectivo…) con su precio, para el modal; independiente de la ficha. */
+  preciosOfflineModal?: PrecioOffline[];
   /**
    * Cuotas sin interés del medio de cobro en línea (opciones ascendentes), con el total de la lista de
    * cada cantidad. Sólo con el flag `cuotas-cobro` y si hay condiciones (src/lib/cuotas-sin-interes.ts).

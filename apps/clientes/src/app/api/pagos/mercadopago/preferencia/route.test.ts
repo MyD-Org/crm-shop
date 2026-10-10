@@ -83,7 +83,9 @@ describe("POST /api/pagos/mercadopago/preferencia", () => {
     expect(pref.items[0].unit_price).toBe(120000);
     expect(pref.external_reference).toBe("p1");
     expect(pref.purpose).toBe("wallet_purchase");
-    expect(pref.payment_methods).toEqual({ installments: 1, excluded_payment_methods: [{ id: "consumer_credits" }] });
+    expect(pref.payment_methods.installments).toBe(1);
+    expect(pref.payment_methods.excluded_payment_types).toContainEqual({ id: "credit_card" });
+    expect(pref.payment_methods.excluded_payment_types).toContainEqual({ id: "debit_card" });
     expect(pref.back_urls.success).toBe("https://tienda.example/checkout?pedido=p1&pago=mp");
   });
 
@@ -97,10 +99,10 @@ describe("POST /api/pagos/mercadopago/preferencia", () => {
     expect((await pedir()).status).toBe(200);
   });
 
-  it("con cuotas congeladas: la ofrece con ese tope de cuotas", async () => {
+  it("con cuotas congeladas igual va en un pago: dinero en cuenta no tiene cuotas", async () => {
     pedido!.cuotas = 3;
     expect((await pedir()).status).toBe(200);
-    expect(crearPreferencia.mock.calls[0][1].payment_methods.installments).toBe(3);
+    expect(crearPreferencia.mock.calls[0][1].payment_methods.installments).toBe(1);
   });
 
   it("sin sesión: 401", async () => {
@@ -206,6 +208,29 @@ describe("POST /api/pagos/mercadopago/preferencia — forma de pago (migración 
   it("medio que no se puede leer: 502 sin crear la preferencia", async () => {
     medios = [];
     expect((await pedir()).status).toBe(502);
+    expect(crearPreferencia).not.toHaveBeenCalled();
+  });
+
+  it.each(["credito", "debito"] as const)("forma congelada %s: 409 forma_distinta sin crear la preferencia", async (forma) => {
+    pedido!.formaCobro = forma;
+    const res = await pedir();
+    expect(res.status).toBe(409);
+    expect((await res.json()).motivo).toBe("forma_distinta");
+    expect(crearPreferencia).not.toHaveBeenCalled();
+  });
+
+  it("forma congelada cuenta_mp: crea la preferencia con el total congelado", async () => {
+    pedido!.formaCobro = "cuenta_mp";
+    expect((await pedir()).status).toBe(200);
+    expect(crearPreferencia.mock.calls[0][1].items[0].unit_price).toBe(120000);
+  });
+
+  it("pedido con pago en revisión: 409 sin crear la preferencia", async () => {
+    pedido!.formaCobro = "cuenta_mp";
+    pedido!.pagoRevision = "forma_distinta";
+    const res = await pedir();
+    expect(res.status).toBe(409);
+    expect((await res.json()).motivo).toBe("pedido_no_cobrable");
     expect(crearPreferencia).not.toHaveBeenCalled();
   });
 });

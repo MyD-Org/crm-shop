@@ -58,7 +58,9 @@
     "id": "text",
     "name": "text",
     "whatsapp_number": "text",
-    "receipts_email": "text"
+    "receipts_email": "text",
+    "chat_empty_state": "text",
+    "chat_suggestions": "jsonb"
   },
   "public.client_commercial_conditions": {
     "id": "uuid",

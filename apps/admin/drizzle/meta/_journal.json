@@ -547,6 +547,13 @@
       "when": 1793102000000,
       "tag": "0077_medios_sistema",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793188400000,
+      "tag": "0078_chat_tienda_textos",
+      "breakpoints": true
     }
   ]
 }

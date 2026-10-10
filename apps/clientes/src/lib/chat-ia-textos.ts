@@ -74,7 +74,10 @@ export const ETIQUETAS_CHAT = {
   peekResultsLabel: "Ver resultados",
 } as const;
 
-/** Preguntas sugeridas del chat vacío (registro neutro): cada una se envía al tocarla. */
+/**
+ * Preguntas sugeridas del chat vacío (registro neutro): cada una se envía al tocarla.
+ * Por defecto: el equipo las cambia en el admin del CRM (chat-ia-textos-tenant.ts).
+ */
 export const SUGERENCIAS_CHAT = [
   "¿Qué lámpara conviene para un living?",
   "Reflectores para exterior",

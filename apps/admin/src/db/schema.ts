@@ -72,6 +72,10 @@ export const tenants = pgTable("tenants", {
   scheduleExceptions: jsonb("schedule_exceptions").$type<ScheduleException[]>().notNull().default(sql`'[]'::jsonb`),
   // Condiciones de pago mostradas por el agente. Ej: [{ method: "Transferencia", discount: "5%" }]
   paymentConditions: jsonb("payment_conditions").notNull().default([]),
+  // Chat del Shop (0078), editables en Datos → Chat de la tienda. Vacíos = el Shop usa sus
+  // textos por defecto (apps/clientes/src/lib/chat-ia-textos.ts). Validación: src/lib/chat-tienda.ts.
+  chatEmptyState: text("chat_empty_state").notNull().default(""),
+  chatSuggestions: jsonb("chat_suggestions").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })

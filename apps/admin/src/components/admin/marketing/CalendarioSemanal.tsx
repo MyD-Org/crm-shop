@@ -5,6 +5,7 @@ import { useState } from "react"
 import { Badge, Button, useToast, type RenderLink } from "@myd-org/ui"
 import type { PiezaDto } from "@/lib/marketing/tipos"
 import { ETIQUETA_ESTADO, ETIQUETA_FORMATO, TONO_ESTADO } from "./etiquetas"
+import { mensajeDeError, pedirJson } from "./pedir-json"
 
 const NOMBRE_DIA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
@@ -28,13 +29,11 @@ export function CalendarioSemanal({ dias, grupos }: { dias: string[]; grupos: Re
   async function llamar(url: string, body: unknown, ok: string) {
     setOcupado(true)
     try {
-      const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
-      const datos = await res.json()
-      if (!res.ok) throw new Error(datos.error ?? "No se pudo completar la acción")
+      await pedirJson(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
       toast({ title: ok, tone: "success" })
       router.refresh()
     } catch (e) {
-      toast({ title: e instanceof Error ? e.message : "No se pudo completar la acción", tone: "danger" })
+      toast({ title: mensajeDeError(e), tone: "danger" })
     } finally {
       setOcupado(false)
     }
@@ -50,18 +49,18 @@ export function CalendarioSemanal({ dias, grupos }: { dias: string[]; grupos: Re
           Planificar semana
         </Button>
         <Button disabled={ocupado || storiesEnRevision === 0} onClick={() => llamar("/api/admin/marketing/piezas/aprobar-stories", { desde: dias[0], hasta: corrida(dias[6], 1) }, "Stories aprobadas")}>
-          Aprobar {storiesEnRevision} stories
+          {storiesEnRevision === 1 ? "Aprobar 1 story" : `Aprobar ${storiesEnRevision} stories`}
         </Button>
       </div>
 
       {(grupos.sin_fecha?.length ?? 0) > 0 && (
         <section>
           <h2 className="mb-2 text-sm font-semibold" style={{ color: "var(--ink)" }}>Esperando material</h2>
-          <div className="flex flex-wrap gap-2">{grupos.sin_fecha.map((p) => <TarjetaPieza key={p.id} pieza={p} />)}</div>
+          <div className="flex flex-wrap gap-2">{grupos.sin_fecha.map((p) => <div key={p.id} className="w-44"><TarjetaPieza pieza={p} /></div>)}</div>
         </section>
       )}
 
-      <div className="grid gap-3 md:grid-cols-7">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4 lg:grid-cols-7">
         {dias.map((dia, i) => (
           <section key={dia} className="rounded-lg border p-2" style={{ borderColor: "var(--line)" }}>
             <h2 className="mb-2 text-xs font-semibold" style={{ color: "var(--ink-soft)" }}>{NOMBRE_DIA[i]} {dia.slice(8)}/{dia.slice(5, 7)}</h2>
@@ -81,15 +80,15 @@ function TarjetaPieza({ pieza }: { pieza: PiezaDto }) {
     <Link href={`/admin/marketing/${pieza.id}`} className="block rounded-md border p-2 hover:opacity-90" style={{ borderColor: "var(--line)" }}>
       {pieza.portadaUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={pieza.portadaUrl} alt="" className="mb-2 aspect-[4/5] w-full rounded object-cover" />
+        <img src={pieza.portadaUrl} alt="Vista previa de la pieza" className="mb-2 aspect-[4/5] w-full rounded object-cover" />
       ) : (
         <div className="mb-2 flex aspect-[4/5] w-full items-center justify-center rounded text-xs" style={{ background: "var(--surface-2)", color: "var(--ink-soft)" }}>
           Sin vista previa
         </div>
       )}
       <div className="flex flex-wrap gap-1">
-        <Badge tone={TONO_ESTADO[pieza.estado]}>{ETIQUETA_ESTADO[pieza.estado] ?? pieza.estado}</Badge>
-        <Badge tone="neutral">{ETIQUETA_FORMATO[pieza.formato]}</Badge>
+        <Badge tone={TONO_ESTADO[pieza.estado] ?? "neutral"}>{ETIQUETA_ESTADO[pieza.estado] ?? pieza.estado}</Badge>
+        <Badge tone="neutral">{ETIQUETA_FORMATO[pieza.formato] ?? pieza.formato}</Badge>
         {pieza.alertas.length > 0 && <Badge tone="danger">{pieza.alertas.length} alerta(s)</Badge>}
       </div>
       <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--ink)" }}>{pieza.caption || pieza.plantilla}</p>

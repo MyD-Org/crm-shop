@@ -50,6 +50,9 @@
  * módulos DIN de un gabinete, caja o tablero: "p/12 Mod DIN", "12 polos", "10 bocas"; NO los módulos de bastidor de una caja de
  * mecanismos, que son otra unidad). Ver `dimerizableDeTexto` y `modulosDeNombre`.
  *
+ * Migración 0079: irc, vida_util_h, factor_potencia y equivalencia_w (lámparas y luminarias). Sólo se leen de la ficha PDF o
+ * se cargan a mano: el nombre no los trae de forma confiable ("EQ 60W" choca con la potencia real).
+ *
  * Módulo puro (sin DB): lo usan la sync de Alegra, el backfill y la normalización de lo que lee el
  * PDF o carga el panel (`normalizarAtributos`).
  */
@@ -80,6 +83,10 @@ export const CLAVES_ATRIBUTO = [
   "ancho_mm",
   "dimerizable",
   "modulos",
+  "irc",
+  "vida_util_h",
+  "factor_potencia",
+  "equivalencia_w",
 ] as const
 export type ClaveAtributo = (typeof CLAVES_ATRIBUTO)[number]
 
@@ -175,6 +182,10 @@ export const DEFINICION_ATRIBUTOS: Record<ClaveAtributo, DefinicionAtributo> = {
   ancho_mm: { tipo: "num", etiqueta: "Ancho (mm)", rango: [30, 1000], entero: true, pista: "150" },
   dimerizable: { tipo: "texto", etiqueta: "Dimerizable", pista: DIMERIZABLES.join(" o ") },
   modulos: { tipo: "num", etiqueta: "Módulos DIN", rango: [1, 200], entero: true, pista: "12" },
+  irc: { tipo: "num", etiqueta: "IRC (Ra)", rango: [50, 100], entero: true, pista: "80" },
+  vida_util_h: { tipo: "num", etiqueta: "Vida útil (h)", rango: [1000, 200_000], entero: true, pista: "25000" },
+  factor_potencia: { tipo: "num", etiqueta: "Factor de potencia", rango: [0.3, 1], pista: "0,9" },
+  equivalencia_w: { tipo: "num", etiqueta: "Equivalencia (W)", rango: [10, 2000], entero: true, pista: "60" },
 }
 
 /** Etiquetas para el admin (el Shop tiene las suyas). Derivado de `DEFINICION_ATRIBUTOS`. */

@@ -4,6 +4,7 @@ import {
   atributosParaAgente,
   caracteristicasDe,
   CLAVES_ESTRUCTURADAS,
+  eficienciaLmW,
   ETIQUETA,
   etiquetasTecnicas,
   formatoValor,
@@ -43,12 +44,16 @@ const MUESTRA: Record<ClaveEstructurada, { n: number | null; t: string | null }>
   ancho_mm: n(150),
   dimerizable: t("si"),
   modulos: n(12),
+  irc: n(80),
+  vida_util_h: n(25000),
+  factor_potencia: n(0.9),
+  equivalencia_w: n(60),
 };
 
 describe("paridad con el contrato de claves (fixture compartido con el CRM)", () => {
   it("CLAVES_ESTRUCTURADAS = fixture.claves, en el mismo orden", () => {
     expect([...CLAVES_ESTRUCTURADAS]).toEqual(fixture.claves);
-    expect(CLAVES_ESTRUCTURADAS).toHaveLength(25);
+    expect(CLAVES_ESTRUCTURADAS).toHaveLength(29);
   });
 
   it("ETIQUETA y TIPO cubren exactamente las claves del fixture, con el tipo del fixture", () => {
@@ -195,7 +200,7 @@ describe("solo se muestra lo que el producto tiene", () => {
     ]);
   });
 
-  it("producto con sólo las 7 claves previas: idéntico al de antes", () => {
+  it("producto con sólo las 7 claves previas: las mismas filas y la eficiencia después del flujo", () => {
     expect(
       caracteristicasDe({ potencia_w: n(9), temperatura_k: n(3000), tono: t("calido"), ip: n(65), flujo_lm: n(800), tension_v: n(220), zocalo: t("e27") }),
     ).toEqual([
@@ -204,6 +209,7 @@ describe("solo se muestra lo que el producto tiene", () => {
       { etiqueta: "Tipo de luz", valor: "Cálida" },
       { etiqueta: "Protección", valor: "IP65" },
       { etiqueta: "Flujo luminoso", valor: "800 lm" },
+      { etiqueta: "Eficiencia", valor: "88,9 lm/W" },
       { etiqueta: "Tensión", valor: "220 V" },
       { etiqueta: "Base / zócalo", valor: "E27" },
     ]);
@@ -225,7 +231,8 @@ describe("solo se muestra lo que el producto tiene", () => {
 
   it("ningún texto tiene null, undefined, guion ni 'No informado'", () => {
     const filas = caracteristicasDe(MUESTRA);
-    expect(filas).toHaveLength(25);
+    // 29 claves + la eficiencia (900 lm / 12 W), que se calcula.
+    expect(filas).toHaveLength(30);
     for (const f of filas) {
       expect(`${f.etiqueta} ${f.valor}`).not.toMatch(/null|undefined|No informado/i);
       expect(f.valor.trim()).not.toBe("-");
@@ -317,5 +324,54 @@ describe("corriente con rango de regulación (relé térmico, guardamotor)", () 
   it("al modelo del chat le llega el rango como texto; una térmica, el número", () => {
     expect(atributosParaAgente({ corriente_a: rele })).toEqual({ corriente_a: "4-6" });
     expect(atributosParaAgente({ corriente_a: n(16) })).toEqual({ corriente_a: 16 });
+  });
+});
+
+describe("iluminación: IRC, vida útil, factor de potencia, equivalencia y eficiencia (CRM 0079)", () => {
+  it("formato de las claves nuevas", () => {
+    expect(formatoValor("irc", n(80))).toBe("Ra 80");
+    expect(formatoValor("vida_util_h", n(25000))).toBe("25.000 h");
+    expect(formatoValor("factor_potencia", n(0.9))).toBe("0,9");
+    expect(formatoValor("factor_potencia", n(0.95))).toBe("0,95");
+    expect(formatoValor("equivalencia_w", n(60))).toBe("60 W (incandescente)");
+    expect(formatoValor("irc", t("x"))).toBeNull();
+  });
+
+  it("la ficha de una lámpara: todas las filas en orden, con la eficiencia calculada", () => {
+    expect(
+      caracteristicasDe({
+        potencia_w: n(9),
+        flujo_lm: n(810),
+        angulo_grados: n(36),
+        irc: n(80),
+        vida_util_h: n(25000),
+        factor_potencia: n(0.5),
+        equivalencia_w: n(60),
+      }),
+    ).toEqual([
+      { etiqueta: "Potencia", valor: "9 W" },
+      { etiqueta: "Flujo luminoso", valor: "810 lm" },
+      { etiqueta: "Eficiencia", valor: "90 lm/W" },
+      { etiqueta: "Ángulo", valor: "36°" },
+      { etiqueta: "Reproducción cromática (IRC)", valor: "Ra 80" },
+      { etiqueta: "Vida útil", valor: "25.000 h" },
+      { etiqueta: "Factor de potencia", valor: "0,5" },
+      { etiqueta: "Equivalencia", valor: "60 W (incandescente)" },
+    ]);
+  });
+
+  it("eficiencia: sólo con flujo y potencia y en un rango de luz plausible", () => {
+    expect(eficienciaLmW({ potencia_w: n(10), flujo_lm: n(1000) })).toBe(100);
+    expect(eficienciaLmW({ flujo_lm: n(1000) })).toBeNull();
+    expect(eficienciaLmW({ potencia_w: n(0), flujo_lm: n(1000) })).toBeNull();
+    // Flujo por metro de una tira contra la potencia del rollo: no describen lo mismo.
+    expect(eficienciaLmW({ potencia_w: n(72), flujo_lm: n(1000) })).toBeNull();
+    expect(eficienciaLmW({ potencia_w: n(1), flujo_lm: n(1000) })).toBeNull();
+    expect(caracteristicasDe({ potencia_w: n(72), flujo_lm: n(1000) }).map((f) => f.etiqueta)).toEqual(["Potencia", "Flujo luminoso"]);
+  });
+
+  it("no son chips de la card ni cambian lo que ya recibía el agente", () => {
+    expect(etiquetasTecnicas({ irc: n(80), vida_util_h: n(25000), factor_potencia: n(0.9), equivalencia_w: n(60) })).toEqual([]);
+    expect(atributosParaAgente({ irc: n(80), equivalencia_w: n(60) })).toEqual({ irc: 80, equivalencia_w: 60 });
   });
 });

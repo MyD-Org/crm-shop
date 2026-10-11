@@ -554,6 +554,13 @@
       "when": 1793188400000,
       "tag": "0078_chat_tienda_textos",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1793193400000,
+      "tag": "0079_atributos_iluminacion",
+      "breakpoints": true
     }
   ]
 }

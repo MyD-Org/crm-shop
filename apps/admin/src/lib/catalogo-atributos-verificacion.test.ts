@@ -821,3 +821,105 @@ describe("angulo_grados: sólo el ángulo de luz", () => {
     expect(motivos(ang(350, [["Giro", 150, 720], ["350°", 150, 700]]))).toEqual(["angulo_grados:angulo_no_es_de_luz"])
   })
 })
+
+describe("iluminación (0079): IRC, vida útil, factor de potencia y equivalencia", () => {
+  const ficha = (celdas: Celda[], parte: Partial<ContextoVerificacion> = {}) =>
+    ctx([RELLENO, ...celdas], { unicoProducto: true, nombre: "LAMPARA LED BULBO 9W E27", code: "LB-009-XYZ", ...parte })
+  const leer = (atributos: LecturaCruda["atributos"], celdas: Celda[], fila: string | null = null, parte: Partial<ContextoVerificacion> = {}) =>
+    verificarLectura(lectura(fila, atributos), ficha(celdas, parte))
+
+  it("terminosEn: IRC y FP pegados a su rótulo; vida útil con miles; equivalencia sólo en su frase", () => {
+    expect(terminosEn("irc", "IRC >80 Y RA≥90")).toEqual(["80", "90"])
+    expect(terminosEn("irc", "MODELO 80")).toEqual([])
+    expect(terminosEn("factor_potencia", "FP > 0,9 Y PF 0.5")).toEqual(["0.9", "0.5"])
+    expect(terminosEn("vida_util_h", "VIDA UTIL 25.000 H")).toEqual(["25000"])
+    expect(terminosEn("equivalencia_w", "9W EQUIVALE A 60W")).toEqual(["60"])
+    expect(terminosEn("potencia_w", "9W EQUIVALE A 60W")).toEqual(["9"])
+  })
+
+  it("IRC: con el rótulo en la celda, en la fila o en el encabezado de la columna", () => {
+    expect(aceptados(leer({ irc: { valor: 80 } }, [["IRC > 80", 40, 700]]))).toEqual([["irc", 80]])
+    expect(aceptados(leer({ irc: { valor: 80 } }, [["CRI", 40, 700], [">80", 150, 700]]))).toEqual([["irc", 80]])
+    expect(aceptados(leer({ irc: { valor: 90 } }, [["Ra", 150, 720], ["90", 150, 700]]))).toEqual([["irc", 90]])
+  })
+
+  it("IRC: un número suelto sin rótulo no es el IRC; fuera de 50–100 es inválido", () => {
+    expect(motivos(leer({ irc: { valor: 80 } }, [["Modelo", 40, 700], ["80", 150, 700]]))).toEqual(["irc:unidad_no_en_texto"])
+    expect(motivos(leer({ irc: { valor: 40 } }, [["IRC 40", 40, 700]]))).toEqual(["irc:valor_invalido"])
+  })
+
+  it("vida útil: horas con separador de miles", () => {
+    expect(aceptados(leer({ vida_util_h: { valor: 25000 } }, [["Vida útil", 40, 700], ["25.000 h", 150, 700]]))).toEqual([["vida_util_h", 25000]])
+    expect(aceptados(leer({ vida_util_h: { valor: 30000 } }, [["Duración: 30000 horas", 40, 700]]))).toEqual([["vida_util_h", 30000]])
+    // Garantía en años, no vida útil.
+    expect(motivos(leer({ vida_util_h: { valor: 3000 } }, [["Garantía", 40, 700], ["3000 días", 150, 700]]))).toEqual(["vida_util_h:unidad_no_en_texto"])
+  })
+
+  it("factor de potencia: decimal pegado a FP / PF / cos φ", () => {
+    expect(aceptados(leer({ factor_potencia: { valor: 0.9 } }, [["Factor de potencia", 40, 700], ["> 0,9", 150, 700]]))).toEqual([["factor_potencia", 0.9]])
+    expect(aceptados(leer({ factor_potencia: { valor: 0.5 } }, [["PF≥0.5", 40, 700]]))).toEqual([["factor_potencia", 0.5]])
+    expect(motivos(leer({ factor_potencia: { valor: 0.9 } }, [["0,95", 40, 700], ["FP", 150, 690]]))).toEqual(["factor_potencia:valor_no_en_texto"])
+  })
+
+  it("equivalencia: sólo con 'equivale' / 'reemplaza' / encabezado de equivalencia", () => {
+    expect(aceptados(leer({ equivalencia_w: { valor: 60 } }, [["Potencia 9W (equivale a 60W)", 40, 700]]))).toEqual([["equivalencia_w", 60]])
+    expect(aceptados(leer({ equivalencia_w: { valor: 60 } }, [["Equivalencia", 40, 700], ["60W", 150, 700]]))).toEqual([["equivalencia_w", 60]])
+    expect(motivos(leer({ equivalencia_w: { valor: 12 } }, [["Potencia", 40, 700], ["12W", 150, 700]]))).toEqual(["equivalencia_w:unidad_no_en_texto"])
+  })
+
+  it("potencia: la equivalente no es la potencia del producto", () => {
+    // Frase en la misma celda: el 9 es la potencia, el 60 la equivalencia.
+    const celda: Celda[] = [["Potencia 9W (equivale a 60W)", 40, 700]]
+    expect(aceptados(leer({ potencia_w: { valor: 9 } }, celda))).toEqual([["potencia_w", 9]])
+    expect(motivos(leer({ potencia_w: { valor: 60 } }, celda, null, { nombre: "LAMPARA LED BULBO E27" }))).toEqual(["potencia_w:potencia_equivalente"])
+    // Rótulo de la fila y encabezado de la columna.
+    expect(motivos(leer({ potencia_w: { valor: 60 } }, [["Equivalencia", 40, 700], ["60W", 150, 700]], null, { nombre: "LAMPARA LED BULBO E27" }))).toEqual([
+      "potencia_w:potencia_equivalente",
+    ])
+  })
+
+  it("tabla con columnas Potencia y Equivalencia: cada valor en su clave, por la fila del producto", () => {
+    const tabla: Celda[] = [
+      ["Modelo", 40, 720], ["Potencia", 120, 720], ["Equivalencia", 200, 720], ["CRI", 300, 720], ["Vida útil", 360, 720],
+      ["LB-009", 40, 700], ["9W", 120, 700], ["60W", 200, 700], [">80", 300, 700], ["25000H", 360, 700],
+      ["LB-012", 40, 680], ["12W", 120, 680], ["75W", 200, 680], [">80", 300, 680], ["25000H", 360, 680],
+    ]
+    const r = leer(
+      { potencia_w: { valor: 9 }, equivalencia_w: { valor: 60 }, irc: { valor: 80 }, vida_util_h: { valor: 25000 } },
+      tabla,
+      "LB-009",
+      { unicoProducto: false },
+    )
+    expect(aceptados(r)).toEqual([["potencia_w", 9], ["equivalencia_w", 60], ["irc", 80], ["vida_util_h", 25000]])
+    expect(motivos(leer({ potencia_w: { valor: 60 } }, tabla, "LB-009", { unicoProducto: false, nombre: "LAMPARA LED BULBO E27" }))).toEqual([
+      "potencia_w:potencia_equivalente",
+    ])
+  })
+})
+
+describe("ajustes del piloto de lámparas (0079)", () => {
+  const ficha = (celdas: Celda[]) => ctx([RELLENO, ...celdas], { unicoProducto: true, nombre: "LAMPARA FILAMENTO E27", code: "BF-014-XYZ" })
+  const leer = (atributos: LecturaCruda["atributos"], celdas: Celda[]) => verificarLectura(lectura(null, atributos), ficha(celdas))
+
+  it("la temperatura de operación no es otro ángulo", () => {
+    expect(terminosEn("angulo_grados", "TEMPERATURA DE OPERACION -20° +40°")).toEqual([])
+    expect(terminosEn("angulo_grados", "45°C Y 360°")).toEqual(["360"])
+    const celdas: Celda[] = [["Ángulo de apertura", 40, 700], ["360°", 200, 700], ["Temperatura de operación", 40, 680], ["-20° +40°", 200, 680]]
+    expect(aceptados(leer({ angulo_grados: { valor: 360 } }, celdas))).toEqual([["angulo_grados", 360]])
+  })
+
+  it("un valor fuera del rango de la clave no cuenta como otro valor", () => {
+    expect(terminosEn("tension_v", "AC180-265V Y 1500V")).toEqual(["180-265"])
+    const celdas: Celda[] = [["Tensión", 40, 700], ["AC180-265V", 200, 700], ["Anti-High-Volt", 40, 680], ["1500V", 200, 680]]
+    expect(aceptados(leer({ tension_v: { valor: "180-265" } }, celdas))).toEqual([["tension_v", 220]])
+  })
+
+  it("'Factor potencia' sin 'de'", () => {
+    expect(aceptados(leer({ factor_potencia: { valor: 0.5 } }, [["Factor potencia", 40, 700], ["0.5", 200, 700]]))).toEqual([["factor_potencia", 0.5]])
+  })
+
+  it("medidas con asterisco", () => {
+    expect(normalizarCita("45*80mm")).toBe("45X80MM")
+    expect(aceptados(leer({ medidas_mm: { valor: "45x80" } }, [["Tamaño", 40, 700], ["45*80mm", 200, 700]]))).toEqual([["medidas_mm", "45x80"]])
+  })
+})

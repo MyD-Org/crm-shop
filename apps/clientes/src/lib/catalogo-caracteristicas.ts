@@ -33,6 +33,10 @@ export const CLAVES_ESTRUCTURADAS = [
   "ancho_mm",
   "dimerizable",
   "modulos",
+  "irc",
+  "vida_util_h",
+  "factor_potencia",
+  "equivalencia_w",
 ] as const;
 export type ClaveEstructurada = (typeof CLAVES_ESTRUCTURADAS)[number];
 
@@ -67,6 +71,10 @@ export const TIPO: Record<ClaveEstructurada, "num" | "texto"> = {
   ancho_mm: "num",
   dimerizable: "texto",
   modulos: "num",
+  irc: "num",
+  vida_util_h: "num",
+  factor_potencia: "num",
+  equivalencia_w: "num",
 };
 
 /**
@@ -142,6 +150,10 @@ export const ETIQUETA: Record<ClaveEstructurada, string> = {
   ancho_mm: "Ancho",
   dimerizable: "Dimerizable",
   modulos: "Módulos",
+  irc: "Reproducción cromática (IRC)",
+  vida_util_h: "Vida útil",
+  factor_potencia: "Factor de potencia",
+  equivalencia_w: "Equivalencia",
 };
 
 /** Tipo de luz (clave `tono`): blanca, de color o RGB. Mismo vocabulario que el CRM. */
@@ -251,15 +263,38 @@ export function formatoValor(clave: ClaveEstructurada, v: ValorEstructurado | un
       return v.t === "si" ? "Sí" : v.t === "no" ? "No" : null;
     case "modulos":
       return v.n != null && Number.isInteger(v.n) && v.n >= 1 ? (v.n === 1 ? "1 módulo" : `${num(v.n)} módulos`) : null;
+    case "irc":
+      return v.n != null ? `Ra ${Math.round(v.n)}` : null;
+    case "vida_util_h":
+      return v.n != null ? `${Math.round(v.n).toLocaleString("es-AR")} h` : null;
+    case "factor_potencia":
+      return v.n != null ? num2(v.n) : null;
+    case "equivalencia_w":
+      return v.n != null ? `${num(v.n)} W (incandescente)` : null;
   }
 }
 
-/** Filas de la tabla "Características" de la ficha, en el orden de las claves. */
+/**
+ * Eficiencia luminosa (lm/W) de una fuente de luz: no es una clave de `catalog_atributos`, se calcula de flujo y potencia.
+ * Sólo si da un valor de luz plausible (20–250 lm/W): fuera de eso los dos datos no describen lo mismo (p. ej. el flujo por
+ * metro de una tira contra la potencia del rollo) y no se muestra.
+ */
+export function eficienciaLmW(a: AtributosEstructurados | undefined): number | null {
+  const flujo = a?.flujo_lm?.n;
+  const potencia = a?.potencia_w?.n;
+  if (flujo == null || potencia == null || potencia <= 0) return null;
+  const e = flujo / potencia;
+  return e >= 20 && e <= 250 ? e : null;
+}
+
+/** Filas de la tabla "Características" de la ficha, en el orden de las claves; la eficiencia va después del flujo. */
 export function caracteristicasDe(a: AtributosEstructurados | undefined): { etiqueta: string; valor: string }[] {
   if (!a) return [];
+  const eficiencia = eficienciaLmW(a);
   return CLAVES_ESTRUCTURADAS.flatMap((c) => {
     const valor = formatoValor(c, a[c]);
-    return valor ? [{ etiqueta: ETIQUETA[c], valor }] : [];
+    const fila = valor ? [{ etiqueta: ETIQUETA[c], valor }] : [];
+    return c === "flujo_lm" && eficiencia != null ? [...fila, { etiqueta: "Eficiencia", valor: `${num(eficiencia)} lm/W` }] : fila;
   });
 }
 

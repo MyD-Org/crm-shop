@@ -33,7 +33,8 @@ const TOKENS_PROMPT = 1600
 
 /** Texto que lee el modelo para cada clave (una línea por clave; vive acá y no en el módulo del panel). */
 export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
-  potencia_w: "Potencia nominal en watts (número). Si hay varias variantes, null.",
+  potencia_w:
+    'Potencia nominal en watts (número). Si hay varias variantes, null. NO la potencia equivalente de una lámpara ("equivale a 60W", "reemplaza 50W halógena"): ésa va en equivalencia_w.',
   temperatura_k: "Temperatura de color en kelvin (número, p. ej. 3000). Si es regulable o hay varias, null.",
   tono:
     'Tipo de luz: "calido", "neutro" o "frio" (luz blanca), o el color de la luz: "rojo", "verde", "azul", "amarillo", "naranja", "ambar", "violeta" o "rosa" (p. ej. "Tipo de luz: Verde"), o "rgb" / "rgbw". null si no aplica o no se indica. No es el color del producto.',
@@ -68,6 +69,13 @@ export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
     '"si" o "no": si la ficha dice que ESTE producto (lámpara, panel, tira LED o driver) es dimerizable ("Dimerizable: Sí", "Dimmable", "regulable con dimmer TRIAC") o que no lo es ("No dimerizable"). null si no lo dice. No lo de un dimmer ni "compatible con dimmer" de otro producto.',
   modulos:
     'Cantidad de módulos DIN (entero, p. ej. 12 o 36) de un gabinete, caja o tablero ("12 módulos DIN", "p/12 polos", "10 bocas"). null para cualquier otro producto; no son los módulos de una caja de teclas y tomas.',
+  irc: 'Índice de reproducción cromática (IRC, CRI o Ra), entero de 50 a 100 ("IRC > 80" → 80, "Ra≥90" → 90). null si no se indica.',
+  vida_util_h:
+    'Vida útil en horas (entero, p. ej. 25000 para "25.000 h"). SOLO la vida útil o duración de la lámpara o luminaria; no la garantía en años ni ciclos de encendido.',
+  factor_potencia:
+    'Factor de potencia (FP, PF o cos φ) como decimal entre 0,3 y 1 ("FP > 0.9" → 0.9, "PF ≥ 0,5" → 0.5). null si no se indica.',
+  equivalencia_w:
+    'Potencia incandescente o halógena EQUIVALENTE en watts (entero) de una lámpara LED ("equivale a 60W", "reemplaza 50W", "equivalencia 100W"). SOLO con esa palabra; la potencia real del LED va en potencia_w.',
 }
 
 /**

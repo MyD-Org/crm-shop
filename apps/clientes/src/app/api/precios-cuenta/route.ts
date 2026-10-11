@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
-import { esIdAlegra } from "@/lib/alegra";
+import { esIdProducto } from "@/lib/id-producto";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { preciosCuentaPorIds } from "@/lib/precios-privados-repo";
 import { permitirAsync } from "@/lib/rate-limit";
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     }
 
     const ids = [
-      ...new Set((new URL(req.url).searchParams.get("ids") ?? "").split(",").filter(esIdAlegra)),
+      ...new Set((new URL(req.url).searchParams.get("ids") ?? "").split(",").filter(esIdProducto)),
     ].slice(0, MAX_IDS);
 
     return json({ conLista: true, precios: await preciosCuentaPorIds(listaId, ids) });

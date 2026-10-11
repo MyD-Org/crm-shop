@@ -43,8 +43,13 @@ export function parsearCompartido(raw: string | null | undefined): LineaCarrito[
   if (!raw) return [];
   const lineas: LineaCarrito[] = [];
   for (const par of raw.split(",", MAX_ENTRADAS_BODY)) {
-    const [id, qtyTexto, ...resto] = par.trim().split(":");
-    if (resto.length > 0 || !esIdValido(id) || !/^\d+$/.test(qtyTexto ?? "")) continue;
+    // La cantidad es lo posterior al ÚLTIMO ":": el id puede llevar uno (`mdp:12:3`).
+    const texto = par.trim();
+    const corte = texto.lastIndexOf(":");
+    if (corte < 0) continue;
+    const id = texto.slice(0, corte);
+    const qtyTexto = texto.slice(corte + 1);
+    if (!esIdValido(id) || !/^\d+$/.test(qtyTexto)) continue;
     const qty = Number(qtyTexto);
     if (qty > 0) lineas.push({ id, qty });
   }

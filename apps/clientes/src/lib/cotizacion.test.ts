@@ -12,6 +12,16 @@ describe("normalizarLineas", () => {
     expect(normalizarLineas([{ id: "101", qty: 2 }])).toEqual([{ id: "101", qty: 2 }]);
   });
 
+  it("acepta ids de cuenta secundaria y rechaza los malformados", () => {
+    expect(normalizarLineas([
+      { id: "mdp:12", qty: 2 },
+      { id: "mdp:", qty: 1 },
+      { id: "1;drop", qty: 1 },
+      { id: "MDP:1", qty: 1 },
+      { id: "mdp:12:3", qty: 1 },
+    ])).toEqual([{ id: "mdp:12", qty: 2 }]);
+  });
+
   it("devuelve vacío si no es un array", () => {
     for (const basura of [null, undefined, "abc", 42, {}]) {
       expect(normalizarLineas(basura)).toEqual([]);

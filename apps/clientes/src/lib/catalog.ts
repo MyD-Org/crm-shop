@@ -43,7 +43,8 @@ import {
   type FichaTecnicaCrm,
   type FotoCrm,
 } from "@/db/crm";
-import { esIdAlegra, mapPrecios, precioDeLista } from "./alegra";
+import { mapPrecios, precioDeLista } from "./alegra";
+import { esIdProducto } from "./id-producto";
 import { activoSql, preciosSql, stockSql } from "./stock-disponible";
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
@@ -1523,8 +1524,8 @@ export async function getProducto(
     mediosPrecio?: MediosPrecio;
   },
 ): Promise<Product | null> {
-  // Un id que no es de Alegra no es un producto: ni se consulta.
-  if (!esIdAlegra(id)) return null;
+  // Un id que no es de producto (entero o `slug:entero`) no se consulta.
+  if (!esIdProducto(id)) return null;
   const productos = await getProductosPorIds([id], {
     idPriceList: opts.idPriceList,
     soloActivos: true,

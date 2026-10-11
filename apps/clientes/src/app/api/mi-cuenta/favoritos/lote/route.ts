@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { agregarFavoritosLote, MAX_FAVORITOS } from "@/lib/favoritos";
-import { esIdAlegra } from "@/lib/alegra";
+import { esIdProducto } from "@/lib/id-producto";
 import { getProductosPorIds } from "@/lib/catalog";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { permitirAsync } from "@/lib/rate-limit";
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     ...new Set(
       crudos.flatMap((x) => {
         const id = typeof x === "string" ? x.trim() : "";
-        return esIdAlegra(id) && id.length <= MAX_LARGO_ID ? [id] : [];
+        return esIdProducto(id) && id.length <= MAX_LARGO_ID ? [id] : [];
       }),
     ),
   ];

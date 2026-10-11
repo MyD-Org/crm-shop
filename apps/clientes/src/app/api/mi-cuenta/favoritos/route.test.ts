@@ -100,6 +100,17 @@ describe("PUT", () => {
     expect(agregarFavorito).not.toHaveBeenCalled();
   });
 
+  it("guarda un id de cuenta secundaria", async () => {
+    const res = await PUT(conBody("PUT", { alegraItemId: "mdp:12" }));
+    expect(res.status).toBe(200);
+    expect(agregarFavorito).toHaveBeenCalledWith("user_1", "mdp:12");
+  });
+
+  it.each(["mdp:", "MDP:1", "mdp:12:3"])("400 con id malformado %j", async (alegraItemId) => {
+    await esperaError(await PUT(conBody("PUT", { alegraItemId })), 400, "Indique el producto.");
+    expect(agregarFavorito).not.toHaveBeenCalled();
+  });
+
   it("64 caracteres todavía es válido", async () => {
     const res = await PUT(conBody("PUT", { alegraItemId: "1".repeat(64) }));
     expect(res.status).toBe(200);

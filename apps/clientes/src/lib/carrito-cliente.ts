@@ -7,7 +7,9 @@
  * del carrito vive acá para poder testearla en node, sin DOM.
  */
 
-/** Lo único que se guarda en la base: id de Alegra y cantidad. */
+import { ID_PRODUCTO_RE } from "./id-producto";
+
+/** Lo único que se guarda en la base: id de producto del espejo y cantidad. */
 export type LineaCarrito = { id: string; qty: number };
 
 export interface CartItem {
@@ -72,11 +74,12 @@ export const COPY_CARRITO = {
 } as const;
 
 /**
- * Mismo criterio que `esIdAlegra` (src/lib/alegra.ts): enteros positivos. Se
- * repite acá porque aquel módulo es sólo de servidor.
+ * Id de producto del carrito: entero o `<slug>:<entero>` (producto de una cuenta
+ * secundaria), ver `esIdProducto` (lib/id-producto.ts). No es `esIdAlegra`, que
+ * sigue estricto donde el id arma rutas de Alegra.
  */
 export function esIdValido(id: unknown): id is string {
-  return typeof id === "string" && id.length <= ID_MAX_LARGO && /^\d+$/.test(id);
+  return typeof id === "string" && id.length <= ID_MAX_LARGO && ID_PRODUCTO_RE.test(id);
 }
 
 function sumarAviso(avisos: AvisoCarrito[], aviso: AvisoCarrito) {

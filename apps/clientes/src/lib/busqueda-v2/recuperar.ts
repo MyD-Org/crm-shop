@@ -30,7 +30,7 @@
 import { and, or, sql, type SQL } from "drizzle-orm";
 import { esMedidaId } from "../catalogo-atributos-medida";
 import { PESO_MINIMO_RECUPERAR } from "./plan";
-import { gruposDeOriginales } from "./ordenar";
+import { cubiertoPorCategoria, gruposDeOriginales } from "./ordenar";
 import { patronTermino, type CriterioPlan, type PiezasBusqueda } from "./piezas";
 
 /** Términos del plan que recuperan (los de contexto y las medidas sólo ordenan). */
@@ -93,6 +93,10 @@ export function condicionRecuperar(plan: CriterioPlan, p: PiezasBusqueda): SQL |
  *
  * `condicion`: la recuperación por términos (o `undefined`: entonces la categoría entera, como
  * cuando la categoría era un filtro y ninguna palabra recuperaba). Sin deducidas, la misma condición.
+ *
+ * Si lo pedido es la categoría misma (cada palabra significativa, o un sinónimo suyo, está en el nombre
+ * de cada deducida: "colgante" con "Colgantes"), la categoría entra ENTERA: ahí todo es lo que se pidió,
+ * se llame como se llame el producto. Es lo mismo que muestra el filtro de esa categoría en el panel.
  */
 export function acotarPorDeducidas(plan: CriterioPlan, p: PiezasBusqueda, condicion: SQL | undefined): SQL | undefined {
   if (!plan.deducidas?.length) return condicion;
@@ -103,7 +107,9 @@ export function acotarPorDeducidas(plan: CriterioPlan, p: PiezasBusqueda, condic
     ? and(...grupos.map((g) => or(...g.map((t) => sql`${p.texto} ~ ${patronTermino(t)}`))))
     : undefined;
   const ancla = todas ? or(p.enCategorias(plan.deducidas), todas) : p.enCategorias(plan.deducidas);
-  return condicion ? and(ancla, condicion) : ancla;
+  const pedidos = gruposDeOriginales(originales, plan.blandos.terminos);
+  const esLaCategoria = pedidos.length > 0 && plan.deducidas.every((d) => pedidos.every((g) => cubiertoPorCategoria(g, [d])));
+  return condicion && !esLaCategoria ? and(ancla, condicion) : ancla;
 }
 
 function debiles(plan: CriterioPlan, p: PiezasBusqueda): SQL[] {

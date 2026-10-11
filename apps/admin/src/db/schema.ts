@@ -1654,7 +1654,7 @@ export const preciosOnlineRetenciones = pgTable(
   ],
 )
 
-// ── Marketing (plataforma de marketing, iteración 1; migración 0079) ───────────────────
+// ── Marketing (plataforma de marketing, iteración 1; migración 0080) ───────────────────
 // Cada pieza es una fila con estado: el studio, la rutina y ai-api la toman por la API interna.
 // Los "enums" son text con CHECK en el SQL (drift sólo en SQL). Ver src/lib/marketing/.
 

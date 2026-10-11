@@ -1279,7 +1279,7 @@ publique, una pieza aprobada se descarga y se marca como publicada a mano.
   `cambios_pedidos`, `aprobada`, `programada`, `publicada`, `fallida`, `descartada`; cada cliente
   (usuario, rutina, studio, ai-api) sólo mueve las aristas que le corresponden. Editar el contenido
   de una pieza la vuelve a borrador para re-renderizar.
-- **Datos**: tablas `marketing_*` (migración 0079, `src/db/schema.ts`), lógica en
+- **Datos**: tablas `marketing_*` (migración 0080, `src/db/schema.ts`), lógica en
   `src/lib/marketing/`, rutas de la pantalla en `/api/admin/marketing/*`.
 - **Variables de entorno** (API interna y ping al studio): `docs/DEPLOY.md`, sección Marketing.
 

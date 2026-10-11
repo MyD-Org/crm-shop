@@ -122,7 +122,7 @@ API responde 503 `not_configured`; sin el secreto de un cliente, ese cliente rec
 | `MARKETING_AIAPI_SECRET` | Secreto de ai-api |
 | `MARKETING_STUDIO_URL` | Base URL del studio (ej. `https://studio.example`). Al quedar una pieza en `borrador` el CRM hace `POST {MARKETING_STUDIO_URL}/ping` sin payload; sin la var (o sin `MARKETING_STUDIO_SECRET`) el ping es no-op y el studio igual consulta cada 60 s |
 
-La migración `0079` (tablas `marketing_*`) se aplica a mano antes de mergear (ver `AGENTS.md`).
+La migración `0080` (tablas `marketing_*`) se aplica a mano antes de mergear (ver `AGENTS.md`).
 
 ### Tenant `central-led`
 | Var | Valor |

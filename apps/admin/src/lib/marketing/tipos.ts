@@ -1,4 +1,4 @@
-// Valores válidos de las columnas "enum" de marketing (espejo de los CHECK de la 0079).
+// Valores válidos de las columnas "enum" de marketing (espejo de los CHECK de la 0080).
 export const CANALES = ["instagram", "google_business"] as const
 export const FORMATOS = ["reel", "carrusel", "story", "post", "novedad_google"] as const
 export const PUBLICOS = ["profesional", "consumidor", "ambos"] as const

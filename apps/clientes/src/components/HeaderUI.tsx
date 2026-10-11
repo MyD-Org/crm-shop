@@ -15,8 +15,7 @@ import { CartPreview } from "./CartPreview";
 import { linkNext } from "./catalogo/link-next";
 import { MenuUsuario } from "./MenuUsuario";
 import { BotonAsistente } from "./chat/BotonAsistente";
-import logoCompleto from "@/assets/central-led-logo.png";
-import logoMarca from "@/assets/central-led-logo-marca.png";
+import logo from "@/assets/central-led-logo.svg";
 
 function UserIcon() {
   return (
@@ -184,15 +183,10 @@ function HeaderVista({
         brandName="Central"
         brandAccent="Led"
         brandSub="Iluminación · Electricidad"
-        // Logo en imagen: completo desde lg y sin el descriptor debajo (a ese
-        // tamaño no se lee). La barra compacta sólo se ve desde lg.
-        brandLogo={
-          <>
-            <Image src={logoCompleto} alt="Central Led" priority className="h-10 w-auto max-lg:hidden" />
-            <Image src={logoMarca} alt="Central Led" priority className="h-5 w-auto lg:hidden" />
-          </>
-        }
-        compactBrandLogo={<Image src={logoMarca} alt="Central Led" className="h-[22px] w-auto" />}
+        // Logo en SVG (letras en trazos, no depende de ninguna fuente): el
+        // mismo archivo en las tres barras. La compacta sólo se ve desde lg.
+        brandLogo={<Image src={logo} alt="Central Led" priority className="h-6 w-auto lg:h-8" />}
+        compactBrandLogo={<Image src={logo} alt="Central Led" className="h-[26px] w-auto" />}
         // En mobile (la búsqueda ocupa su propia fila) el "Enviar a" va en una línea debajo.
         // La barra compacta lleva sólo el buscador.
         search={

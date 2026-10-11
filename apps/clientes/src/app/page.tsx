@@ -43,7 +43,6 @@ export default async function Home() {
               label={label}
               cantidad={cantidad}
               skus={skus}
-              imagenes={secDestacados.imagenes ?? []}
             />
           </Suspense>
         }

@@ -31,16 +31,10 @@ function LightbulbIcon({ className }: { className?: string }) {
  * Card de producto dentro de un `ProductosCarrusel` (destacados de la home y
  * "Más de…" de la ficha). La card entera es un link a la ficha.
  *
- * Prioridad de la imagen: la foto real del producto (overlay del CRM) > la
- * decorativa que pase el que llama > el ícono de siempre.
+ * Imagen: la foto real del producto (overlay del CRM) o, si no tiene, el
+ * ícono de siempre.
  */
-export function TarjetaProductoCarrusel({
-  producto,
-  imagenDecorativa,
-}: {
-  producto: Product;
-  imagenDecorativa?: string;
-}) {
+export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
   // Precio de la lista privada de la cuenta: todas las tarjetas se piden en una sola tanda.
   const p = aplicarEstadoPrecio(producto, usePreciosCuenta([producto.id]).get(producto.id));
   const fotoReal = p.images?.[0];
@@ -99,14 +93,6 @@ export function TarjetaProductoCarrusel({
               fill
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
               className="object-contain p-4"
-            />
-          ) : imagenDecorativa ? (
-            <Image
-              src={imagenDecorativa}
-              alt={nombreParaMostrar}
-              fill
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-              className="object-cover"
             />
           ) : (
             <LightbulbIcon className="h-12 w-12 text-muted/40" />

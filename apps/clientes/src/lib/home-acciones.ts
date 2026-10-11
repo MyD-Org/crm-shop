@@ -5,6 +5,7 @@ import { updateTag } from "next/cache";
 import { TAG_HOME } from "@/lib/cache-tags";
 import { esAdmin } from "@/lib/auth";
 import { buscarEnShop } from "@/lib/busqueda-v2/motor-servidor";
+import { getProductosPorSkus } from "@/lib/catalog";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import {
   KEY_LEGAL,
@@ -59,6 +60,8 @@ const TTL_FIRMA_S = 600;
 const MAX_BYTES_VARIANTE = 5 * 1024 * 1024;
 /** Tope de resultados del selector: alcanza para elegir a mano, sin paginar. */
 const LIMITE_BUSQUEDA_PRODUCTOS = 20;
+/** Tope de destacados (el mismo que `cantidad` en el editor). */
+const LIMITE_SKUS_ELEGIDOS = 24;
 
 function esSeccionValida(seccion: string): boolean {
   return (SECCIONES_HOME as readonly string[]).includes(seccion);
@@ -276,6 +279,34 @@ export async function buscarProductosHome(q: string): Promise<ResultadoBusquedaP
     };
   } catch (err) {
     console.error("[home-acciones] no se pudo buscar productos:", err);
+    return { ok: false, errores: [ERROR_BUSQUEDA] };
+  }
+}
+
+/**
+ * Nombre y foto de los SKUs ya elegidos como destacados, para que el selector
+ * los muestre al abrir el editor (y no el código suelto). Solo admin. Un SKU
+ * que no está en el catálogo visible no vuelve: el selector lo marca. Nunca lanza.
+ */
+export async function resolverProductosHome(skus: string[]): Promise<ResultadoBusquedaProductos> {
+  if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO] };
+
+  const pedidos = Array.isArray(skus)
+    ? skus.filter((s): s is string => typeof s === "string" && !!s.trim()).slice(0, LIMITE_SKUS_ELEGIDOS)
+    : [];
+  if (pedidos.length === 0) return { ok: true, productos: [] };
+
+  try {
+    const { soloVisibles } = await flagsPublicos();
+    const productos = await getProductosPorSkus(pedidos, { soloVisibles });
+    return {
+      ok: true,
+      productos: productos
+        .filter((p): p is typeof p & { sku: string } => !!p.sku)
+        .map((p) => ({ sku: p.sku, nombre: p.name, foto: p.images?.[0]?.url })),
+    };
+  } catch (err) {
+    console.error("[home-acciones] no se pudieron resolver los destacados:", err);
     return { ok: false, errores: [ERROR_BUSQUEDA] };
   }
 }

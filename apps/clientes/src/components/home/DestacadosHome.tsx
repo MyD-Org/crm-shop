@@ -17,7 +17,7 @@ interface PropsCarrusel {
  * Productos destacados de la home: hueco por request dentro del shell (los
  * flags `catalogo-solo-visibles` y `cuotas` se evalúan acá, nunca en el
  * shell). Lo que viene del contenido cacheado de la home (SKUs curados,
- * cantidad, imágenes propias) lo pasa el padre por props.
+ * cantidad) lo pasa el padre por props.
  *
  * Los productos salen de `destacadosHome` (caché compartida, tag `catalogo`:
  * se renueva al terminar la sync del CRM o a los 15 minutos) y la oferta de
@@ -29,11 +29,8 @@ export async function DestacadosHome({
   label,
   cantidad,
   skus,
-  imagenes,
 }: PropsCarrusel & {
   skus: string[];
-  /** Imágenes propias de la sección, por posición. */
-  imagenes: string[];
 }) {
   // Por request (flags): sin lecturas en el prerender.
   await connection();
@@ -51,9 +48,8 @@ export async function DestacadosHome({
 
   return (
     <ProductosCarrusel label={label}>
-      {destacados.map((p, i) => (
-        // La imagen decorativa de la sección es por posición (ver home-defaults.ts).
-        <TarjetaProductoCarrusel key={p.id} producto={p} imagenDecorativa={imagenes[i]} />
+      {destacados.map((p) => (
+        <TarjetaProductoCarrusel key={p.id} producto={p} />
       ))}
     </ProductosCarrusel>
   );

@@ -726,6 +726,48 @@ export async function getProductosPorIds(
   );
 }
 
+/**
+ * Productos del catálogo por código, para los destacados que el admin elige a
+ * mano en la home. Compara contra `code` o `name` de Alegra sin distinguir
+ * mayúsculas (el código vive en cualquiera de los dos según el ítem, ver `sku`
+ * en `mapFilaToProduct`). Mismos filtros que la lista pública: un producto que
+ * el visitante no vería no sale. Sin orden: lo decide quien llama.
+ */
+export async function getProductosPorSkus(
+  skus: readonly string[],
+  opts: {
+    soloVisibles: boolean;
+    disp?: ContextoDisponibilidad;
+    /** "$X con <Medio>" (ver `mapFilaToProduct`). */
+    mediosPrecio?: MediosPrecio;
+  },
+): Promise<Product[]> {
+  const codigos = [...new Set(skus.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+  if (codigos.length === 0) return [];
+
+  const filas = await getDb()
+    .select(columnasCatalogo(opts.disp))
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(...joinStock(opts.disp))
+    .where(
+      and(
+        enTenantCatalogo(),
+        activoSql,
+        conPrecioSql,
+        soloVisiblesSql(opts.soloVisibles),
+        visibleEnZonaSql(opts.disp),
+        or(
+          inArray(sql`upper(btrim(${crmCatalogo.code}))`, codigos),
+          inArray(sql`upper(btrim(${crmCatalogo.name}))`, codigos),
+        ),
+      ),
+    );
+
+  return filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, opts.mediosPrecio));
+}
+
 // ---------------------------------------------------------------------------
 // Catálogo paginado (filtros, orden y conteo en el servidor)
 // ---------------------------------------------------------------------------

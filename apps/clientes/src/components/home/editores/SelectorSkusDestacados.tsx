@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Alert, Button, Input, SearchInput, Spinner } from "@myd-org/ui";
-import { buscarProductosHome, type ProductoBusqueda } from "@/lib/home-acciones";
+import { buscarProductosHome, resolverProductosHome, type ProductoBusqueda } from "@/lib/home-acciones";
 import { ListaEditable } from "../ListaEditable";
 
 const DEBOUNCE_MS = 300;
 const ERROR_BUSQUEDA = "No se pudo buscar productos. Inténtelo de nuevo.";
+const NO_ENCONTRADO = "No hay un producto visible con este código: no se muestra en la tienda.";
+
+/** Clave del cache local: el código sin espacios ni mayúsculas (como compara la home). */
+const clave = (sku: string) => sku.trim().toUpperCase();
 
 /**
  * Selector de SKUs curados para "Destacados" (rebanada D, opcional): busca en
@@ -19,7 +23,9 @@ const ERROR_BUSQUEDA = "No se pudo buscar productos. Inténtelo de nuevo.";
  *
  * Los resultados de cada búsqueda se acumulan en un cache local (`sku` →
  * nombre/foto) para poder mostrar nombre y foto de los SKUs ya elegidos aunque
- * el cuadro de búsqueda ya no los tenga entre sus resultados vigentes.
+ * el cuadro de búsqueda ya no los tenga entre sus resultados vigentes. Al
+ * abrir el editor, los ya guardados se resuelven con `resolverProductosHome`;
+ * el que no vuelve queda marcado como no encontrado.
  */
 export function SelectorSkusDestacados({ skus, onChange }: { skus: string[]; onChange: (skus: string[]) => void }) {
   const [busqueda, setBusqueda] = useState("");
@@ -27,6 +33,34 @@ export function SelectorSkusDestacados({ skus, onChange }: { skus: string[]; onC
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cache, setCache] = useState<Record<string, ProductoBusqueda>>({});
+  // Códigos ya consultados al servidor (encontrados o no), para marcar los que faltan.
+  const [resueltos, setResueltos] = useState<ReadonlySet<string>>(new Set());
+
+  const pendientes = skus.map(clave).filter((k) => k && !cache[k] && !resueltos.has(k)).join("\n");
+
+  // Con debounce: los códigos escritos a mano cambian en cada tecla.
+  useEffect(() => {
+    if (!pendientes) return;
+    const lista = pendientes.split("\n");
+    let vigente = true;
+    const id = setTimeout(() => {
+      resolverProductosHome(lista)
+        .then((r) => {
+          if (!vigente || !r.ok) return;
+          setCache((prev) => {
+            const copia = { ...prev };
+            for (const p of r.productos) copia[clave(p.sku)] = p;
+            return copia;
+          });
+          setResueltos((prev) => new Set([...prev, ...lista]));
+        })
+        .catch(() => {});
+    }, DEBOUNCE_MS);
+    return () => {
+      vigente = false;
+      clearTimeout(id);
+    };
+  }, [pendientes]);
 
   const consultaVigente = busqueda.trim().length > 0;
 
@@ -54,7 +88,7 @@ export function SelectorSkusDestacados({ skus, onChange }: { skus: string[]; onC
           setResultados(r.productos);
           setCache((prev) => {
             const copia = { ...prev };
-            for (const p of r.productos) copia[p.sku] = p;
+            for (const p of r.productos) copia[clave(p.sku)] = p;
             return copia;
           });
         })
@@ -83,7 +117,7 @@ export function SelectorSkusDestacados({ skus, onChange }: { skus: string[]; onC
         value={busqueda}
         onValueChange={setBusqueda}
         onClear={() => setBusqueda("")}
-        placeholder="Buscar producto por nombre o SKU"
+        placeholder="Buscar producto por nombre o código"
       />
       {consultaVigente && cargando ? <Spinner /> : null}
       {consultaVigente && error ? <Alert tone="danger">{error}</Alert> : null}
@@ -117,23 +151,30 @@ export function SelectorSkusDestacados({ skus, onChange }: { skus: string[]; onC
           items={skus}
           onChange={onChange}
           nuevo={() => ""}
-          etiquetaAgregar="Agregar SKU manualmente"
-          renderItem={(sku, onItem) =>
-            cache[sku] ? (
-              <div className="flex items-center gap-2">
-                {cache[sku].foto ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- foto del catálogo, tamaño fijo chico
-                  <img src={cache[sku].foto} alt="" className="h-10 w-10 rounded object-cover" />
-                ) : null}
-                <div>
-                  <p className="text-sm font-medium text-text">{cache[sku].nombre}</p>
-                  <p className="text-xs text-muted">{sku}</p>
+          etiquetaAgregar="Agregar por código"
+          renderItem={(sku, onItem) => {
+            const producto = cache[clave(sku)];
+            if (producto) {
+              return (
+                <div className="flex items-center gap-2">
+                  {producto.foto ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- foto del catálogo, tamaño fijo chico
+                    <img src={producto.foto} alt="" className="h-10 w-10 rounded object-cover" />
+                  ) : null}
+                  <div>
+                    <p className="text-sm font-medium text-text">{producto.nombre}</p>
+                    <p className="text-xs text-muted">{producto.sku}</p>
+                  </div>
                 </div>
+              );
+            }
+            return (
+              <div className="flex flex-col gap-1">
+                <Input value={sku} onChange={(e) => onItem(e.target.value)} placeholder="Código (por ejemplo ADM-D8-BCO-CO)" />
+                {resueltos.has(clave(sku)) ? <p className="text-xs text-danger">{NO_ENCONTRADO}</p> : null}
               </div>
-            ) : (
-              <Input value={sku} onChange={(e) => onItem(e.target.value)} placeholder="SKU (por ejemplo ADM-D8-BCO-CO)" />
-            )
-          }
+            );
+          }}
         />
       </div>
     </div>

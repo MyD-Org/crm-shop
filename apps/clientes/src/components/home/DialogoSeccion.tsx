@@ -7,7 +7,6 @@ import {
   cambiarVisibilidadSeccion,
   guardarSeccion,
   leerSeccionParaEditar,
-  restablecerSeccion,
 } from "@/lib/home-acciones";
 import { normalizarPayload, TITULOS_SECCION } from "@/lib/home-editor";
 import { EDITORES } from "./editores";
@@ -16,8 +15,8 @@ import { OPCIONES_VISIBILIDAD } from "./editores/SelectorVisibilidad";
 /**
  * Dialog genérico por sección: al abrirse pide los datos de la sección con
  * `leerSeccionParaEditar` (la home no los manda en su payload), monta el
- * editor del registro `EDITORES`, guarda con la server action `guardarSeccion`
- * y ofrece "Restablecer valores originales". El refresco visual lo hace la
+ * editor del registro `EDITORES` y guarda con la server action
+ * `guardarSeccion`. El refresco visual lo hace la
  * invalidación del tag `home` dentro de cada action (`updateTag`): este
  * componente NUNCA llama `router.refresh()`.
  *
@@ -42,11 +41,14 @@ type Carga = { estado: "cargando" } | { estado: "lista" } | { estado: "error"; m
 
 export function DialogoSeccion({
   seccion,
+  titulo,
   visibilidad,
   open,
   onOpenChange,
 }: {
   seccion: SeccionHome;
+  /** Cómo se llama la sección en la tienda; sin él, su nombre interno. */
+  titulo?: string;
   visibilidad: Visibilidad;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -116,19 +118,6 @@ export function DialogoSeccion({
     });
   }
 
-  function restablecer() {
-    if (!window.confirm("¿Desea restablecer los valores originales de esta sección?")) return;
-    startTransition(async () => {
-      const r = await restablecerSeccion(seccion);
-      if (!r.ok) {
-        setErrores(r.errores);
-        return;
-      }
-      toast({ title: "Sección restablecida", tone: "success" });
-      onOpenChange(false);
-    });
-  }
-
   function cambiarVisibilidad(nueva: Visibilidad) {
     if (nueva === visibilidadVista) return;
     startTransition(async () => {
@@ -146,13 +135,10 @@ export function DialogoSeccion({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title={TITULOS_SECCION[seccion]}
+      title={titulo ?? TITULOS_SECCION[seccion]}
       size="lg"
       footer={
         <>
-          <Button type="button" variant="outline" onClick={restablecer} disabled={pending}>
-            Restablecer valores originales
-          </Button>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
             Cancelar
           </Button>

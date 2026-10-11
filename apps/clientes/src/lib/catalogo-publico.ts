@@ -40,6 +40,7 @@ import type { Product } from "@/data/products";
 import { esIdAlegra } from "./alegra";
 import {
   getCatalogo,
+  getProductosPorSkus,
   getCategoriaExacta,
   getCategorias,
   getFacetas,
@@ -64,8 +65,6 @@ import { SIN_MEDIOS_PRECIO, type MedioPrecio } from "./medios-precio";
 
 /** Categoría de Alegra que alimenta los destacados de la home. */
 const CATEGORIA_DESTACADOS = "ILUMINACION";
-/** Respaldo para SKUs curados que no sean de esa categoría. */
-const LIMITE_RESPALDO_DESTACADOS = 300;
 
 /**
  * ¿Vale la pena cachear esta combinación de filtros? No con búsqueda por
@@ -363,7 +362,9 @@ async function leerDestacados(args: ArgsDestacados): Promise<{ productos: Produc
     fallo = true;
     console.error("[catalogo-publico] no se pudieron cargar los destacados:", err);
   };
-  const [iluminacion, general] = await Promise.all([
+  // Los curados se piden por código: buscarlos en una tanda del catálogo
+  // dejaba afuera, sin aviso, a casi todos los productos.
+  const [iluminacion, curados] = await Promise.all([
     getPaginaCatalogo({ filtros: { categorias: [CATEGORIA_DESTACADOS] }, orden: "destacados", pagina: 1, soloVisibles, disp, mediosPrecio }).catch(
       (err: unknown): { productos: Product[] } => {
         registrar(err);
@@ -371,14 +372,14 @@ async function leerDestacados(args: ArgsDestacados): Promise<{ productos: Produc
       },
     ),
     skus.length
-      ? getCatalogo({ limit: LIMITE_RESPALDO_DESTACADOS, soloVisibles, disp, mediosPrecio }).catch((err: unknown): Product[] => {
+      ? getProductosPorSkus(skus, { soloVisibles, disp, mediosPrecio }).catch((err: unknown): Product[] => {
           registrar(err);
           return [];
         })
       : Promise.resolve([] as Product[]),
   ]);
   const vistos = new Set(iluminacion.productos.map((p) => p.id));
-  const pool = [...iluminacion.productos, ...general.filter((p) => !vistos.has(p.id))];
+  const pool = [...iluminacion.productos, ...curados.filter((p) => !vistos.has(p.id))];
   return { productos: elegirDestacados(pool, skus, cantidad), fallo };
 }
 

@@ -81,6 +81,13 @@ que el encabezado y el valor no son texto contiguo: por eso no se exige la cita 
    dimmer o "para lámparas dimerizables" en un driver no es el dato del producto; una lámpara que no menciona el tema queda sin dato.
    **Módulos** (`modulos`, migración 0072): módulos DIN de un gabinete, caja o tablero ("12 módulos DIN", "p/12 polos", "10 bocas");
    no los módulos de bastidor de una caja de teclas y tomas, ni los polos de una bornera o un seccionador.
+   **Iluminación** (`irc`, `vida_util_h`, `factor_potencia`, `equivalencia_w`, migración 0079): el IRC y el factor de potencia tienen
+   que estar PEGADOS a su rótulo ("IRC >80", "CRI 80Ra", "Factor potencia 0.5", "PF≥0,9") en la celda o con el rótulo de su línea, o ser
+   una celda sola bajo un encabezado de columna con ese rótulo; un número suelto no alcanza (`unidad_no_en_texto`). La vida útil va en
+   horas ("25.000 h", "50000 hs"; "25.000" es veinticinco mil). La equivalencia sólo vale con "equivale", "reemplaza", "eq." o bajo un
+   rótulo/encabezado de equivalencia; y al revés, una potencia en esa frase o columna nunca es `potencia_w` (`potencia_equivalente`).
+   Al contar si un valor es el único de su magnitud no cuentan: las temperaturas de operación como ángulo ("-20° +40°"), los valores
+   fuera del rango de la clave ("Anti-High-Volt 1500V" no es otra tensión) ni la potencia equivalente. "16*56mm" es una medida.
    Una potencia o corriente "máxima" (carga admitida de un riel, controlador o tecla: "200W Máx", "Carga máxima 200W",
    "Potencia máxima de lámpara: 60W", "hasta 60W") no es la del producto: si "máx", "máximo/a", "maximum" o "hasta" está en su
    celda, en el rótulo de su fila o columna o en la celda pegada de la misma línea, se descarta (`valor_maximo`).
@@ -103,6 +110,7 @@ del PDF que lo respalda), `pagina` y `citaEnTexto` (si la cita del modelo aparec
 ## Comandos (parado en `apps/admin`)
 
 ```
+npx tsx --env-file-if-exists=.env.local scripts/descargar-fichas-catalogo.ts --tenant <id> --dir <dir> --categoria "Lámparas" [--sin-clave <clave>]
 npx tsx scripts/verificar-atributos-pdf.ts --dir <dir>
 npx tsx --env-file-if-exists=.env.local scripts/aplicar-atributos-pdf.ts --desde <dir>/lectura/aceptados.jsonl --tenant <id>            # dry-run
 npx tsx --env-file-if-exists=.env.local scripts/aplicar-atributos-pdf.ts --desde <dir>/lectura/aceptados.jsonl --tenant <id> --aplicar

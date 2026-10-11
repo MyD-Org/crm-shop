@@ -24,7 +24,11 @@
     "diametro_mm",
     "ancho_mm",
     "dimerizable",
-    "modulos"
+    "modulos",
+    "irc",
+    "vida_util_h",
+    "factor_potencia",
+    "equivalencia_w"
   ],
   "tipos": {
     "potencia_w": "num",
@@ -51,7 +55,11 @@
     "diametro_mm": "num",
     "ancho_mm": "num",
     "dimerizable": "texto",
-    "modulos": "num"
+    "modulos": "num",
+    "irc": "num",
+    "vida_util_h": "num",
+    "factor_potencia": "num",
+    "equivalencia_w": "num"
   },
   "rangos_solo_faceta": {
     "diametro_mm": [5, 200],

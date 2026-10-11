@@ -33,6 +33,10 @@ export const RANGOS_PLAUSIBLES: Partial<Record<ClaveAtributo, [number, number]>>
   diametro_mm: [10, 160],
   ancho_mm: [50, 600],
   modulos: [2, 150],
+  irc: [65, 100],
+  vida_util_h: [3000, 100_000],
+  factor_potencia: [0.4, 1],
+  equivalencia_w: [15, 500],
 }
 
 export interface FilaAuditada {

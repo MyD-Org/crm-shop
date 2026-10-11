@@ -57,6 +57,7 @@ export const MOTIVOS = [
   "tono_en_accesorio",
   "montaje_fuera_de_rotulo",
   "angulo_no_es_de_luz",
+  "potencia_equivalente",
   "valor_no_en_texto",
   "unidad_no_en_texto",
   "contradice_nombre",
@@ -129,6 +130,8 @@ export function normalizarCita(s: string): string {
     .toUpperCase()
     .replace(/[‐-―−]/g, "-")
     .replace(/×/g, "X")
+    // "16*56mm": el asterisco entre números es el "por" de una medida.
+    .replace(/(\d)\s?\*\s?(?=\d)/g, "$1X")
     .replace(/\s+/g, " ")
     .trim()
 }
@@ -260,6 +263,43 @@ const EVIDENCIA_NUM: Partial<Record<ClaveAtributo, { unidad: string; palabra: st
   ancho_mm: { unidad: "\\s?(?:MM|MILIMETROS?)(?![A-Z0-9²])", palabra: "ANCHO" },
   // Módulos DIN de un gabinete o caja (0072): "12 módulos", "12 Mod. DIN", "12 polos", "10 bocas"; o la palabra del campo con el número.
   modulos: { unidad: "\\s?(?:MODULOS?|MODS?\\.?|POLOS?|BOCAS?|P\\.)(?![A-Z0-9])", palabra: "MODULOS|CAPACIDAD|BOCAS" },
+  // Vida útil (0079): "25.000 h", "50000 hs", "30.000 horas"; o la palabra del campo con el número.
+  vida_util_h: { unidad: "\\s?(?:H|HS|HRS|HORAS?|HOURS?)(?![A-Z0-9])", palabra: "VIDA|DURACION|LIFE" },
+}
+
+// ───────────────────────── iluminación (0079): IRC, factor de potencia, equivalencia ─────────────────────────
+
+/** Rótulo del IRC y del factor de potencia, PEGADO al número ("IRC >80", "Ra≥90", "FP: 0,9", "cos φ > 0.95"). */
+const ROTULO_PEGADO: Partial<Record<ClaveAtributo, string>> = {
+  irc: "(?<![A-Z])(?:IRC|CRI|RA)(?![A-Z])",
+  factor_potencia: "(?<![A-Z])(?:FP|PF|COS ?Φ?|FACTOR (?:DE )?POTENCIA|POWER FACTOR)(?![A-Z])",
+}
+/** Sólo como encabezado de columna (celda sola con el número debajo): las mismas palabras y sus formas largas. */
+const ROTULO_COLUMNA: Partial<Record<ClaveAtributo, RegExp>> = {
+  irc: /(?<![A-Z])(?:IRC|CRI|RA)(?![A-Z])|REPRODUCCION (?:CROMATICA|DE(?:L)? COLOR)|RENDIMIENTO DE COLOR|COLOR RENDERING/,
+  factor_potencia: /(?<![A-Z])(?:FP|PF|COS ?Φ?)(?![A-Z])|FACTOR (?:DE )?POTENCIA|POWER FACTOR/,
+  vida_util_h: /VIDA|DURACION|LIFE/,
+  equivalencia_w: /EQUIVAL|REEMPLAZ|SUSTITU|(?<![A-Z])EQ\.?(?![A-Z])|REPLACE/,
+}
+const SEP_PEGADO = "[^0-9A-Z]{0,5}"
+
+/** "Equivale a 60W", "reemplaza lámpara de 50W", "Eq. 100W", "Replaces 60W": la potencia equivalente, no la real. */
+const RE_PALABRA_EQUIVALENCIA = "(?<![A-Z])(?:EQUIVAL[A-Z]*|REEMPLAZ[A-Z]*|SUSTITU[A-Z]*|EQUIV\\.?|EQ\\.?|REPLACES?)(?![A-Z])"
+const fraseEquivalencia = (num: string, flags = "") =>
+  new RegExp(`${RE_PALABRA_EQUIVALENCIA}[^0-9]{0,40}?(?<![0-9.,])(${num})\\s?(?:W|WATTS?)(?![A-Z])`, flags)
+
+/** Evidencia de las claves de iluminación sin unidad propia; null = usar la regla general. */
+function evidenciaIluminacion(clave: ClaveAtributo, n: number, cita: string, nums: Set<number>): EvidenciaValor | null {
+  const rotulo = ROTULO_PEGADO[clave]
+  if (rotulo) {
+    if (new RegExp(`${rotulo}${SEP_PEGADO}${altNumero(n)}(?![0-9])(?![.,]\\d)`).test(cita)) return "ok"
+    return nums.has(n) ? "unidad_no_en_texto" : "valor_no_en_texto"
+  }
+  if (clave === "equivalencia_w") {
+    if (fraseEquivalencia(altNumero(n)).test(cita)) return "ok"
+    return nums.has(n) ? "unidad_no_en_texto" : "valor_no_en_texto"
+  }
+  return null
 }
 
 const POLOS_PALABRA: Record<string, number> = { UNIPOLAR: 1, MONOPOLAR: 1, BIPOLAR: 2, TRIPOLAR: 3, TETRAPOLAR: 4 }
@@ -288,6 +328,8 @@ function evidenciaNumerica(clave: ClaveAtributo, a: AtributoExtraido, cita: stri
   }
   const n = a.valorNum
   if (n == null) return "valor_no_en_texto"
+  const iluminacion = evidenciaIluminacion(clave, n, cita, nums)
+  if (iluminacion) return iluminacion
   if (clave === "polos") {
     for (const [pal, v] of Object.entries(POLOS_PALABRA)) if (v === n && new RegExp(`(?<![A-Z])${pal}`).test(cita)) return "ok"
   }
@@ -496,7 +538,46 @@ const RE_ROTULO_DE_LUZ = /(?<![A-Z0-9])(?:LUZ|TONO|LIGHT)(?![A-Z0-9])/
 const bajoRotuloDeLuz = (c: { celda: Celda | null; texto: string }): boolean =>
   RE_ROTULO_DE_LUZ.test(c.texto) || (!!c.celda?.rotulo && RE_ROTULO_DE_LUZ.test(c.celda.rotulo.norm))
 
-/** Dónde aparece el valor: celdas (con rótulo) y, si ninguna lo tiene entero, líneas completas. */
+/** Una celda que es sólo un valor ("80", ">80", "0,9", "25.000 HS", "9W"): no sirve de rótulo. */
+const RE_CELDA_VALOR = /^[>≥=~ ]{0,3}\d[\d.,]*\s?[A-Z]{0,5}$/
+
+/**
+ * Encabezado de la columna de una celda: la primera celda con texto (no un valor) por encima, en la misma
+ * página y superpuesta en `x`. Sube hasta 60 líneas (una tabla de catálogo puede tener muchas filas).
+ */
+function encabezadoDeColumna(c: Celda, doc: Doc): Celda | null {
+  for (let i = c.linea - 1; i >= 0 && c.linea - i <= 60; i--) {
+    if (doc.lineas[i][0].pag !== c.pag) break
+    const h = doc.lineas[i].find((x) => x.norm.length < 40 && x.x <= c.x + c.w && c.x <= x.x + x.w && !RE_CELDA_VALOR.test(x.norm))
+    if (h) return h
+  }
+  return null
+}
+
+/** Unidad opcional de una celda "pelada" bajo el encabezado de su columna (claves de iluminación, 0079). */
+const UNIDAD_PELADA: Partial<Record<ClaveAtributo, string>> = {
+  irc: "",
+  factor_potencia: "",
+  vida_util_h: "(?:\\s?(?:H|HS|HRS|HORAS?|HOURS?))?",
+  equivalencia_w: "(?:\\s?(?:W|WATTS?))?",
+}
+
+/** IRC, FP, vida útil y equivalencia en una tabla: la celda es sólo el número y el rótulo está en el encabezado de la columna. */
+function candidatosPorEncabezado(a: AtributoExtraido, doc: Doc): Candidato[] {
+  const rotulo = ROTULO_COLUMNA[a.clave]
+  const unidad = UNIDAD_PELADA[a.clave]
+  if (!rotulo || unidad == null || a.valorNum == null) return []
+  const pelado = new RegExp(`^[>≥=~ ]{0,3}${altNumero(a.valorNum)}${unidad}$`)
+  const out: Candidato[] = []
+  for (const c of doc.celdas) {
+    if (!pelado.test(c.norm)) continue
+    const h = encabezadoDeColumna(c, doc)
+    if (h && rotulo.test(h.norm)) out.push({ celda: c, pag: c.pag, y: c.y, texto: `${h.norm} ${c.norm}` })
+  }
+  return out
+}
+
+/** Dónde aparece el valor: celdas (con rótulo o encabezado de columna) y, si ninguna lo tiene entero, líneas completas. */
 function candidatos(a: AtributoExtraido, doc: Doc): Candidato[] {
   const out: Candidato[] = []
   for (const c of doc.celdas) {
@@ -504,6 +585,8 @@ function candidatos(a: AtributoExtraido, doc: Doc): Candidato[] {
     const texto = textosDe(c).find((t) => valorEnCita(a, t) === "ok" && !(c.rotulo && t !== c.norm && valorEnCita(a, c.rotulo.norm) === "ok"))
     if (texto) out.push({ celda: c, pag: c.pag, y: c.y, texto })
   }
+  const vistos = new Set(out.map((c) => c.celda))
+  out.push(...candidatosPorEncabezado(a, doc).filter((c) => !vistos.has(c.celda)))
   if (out.length) return out
   for (const ln of doc.lineas) {
     const texto = ln.map((c) => c.norm).join(" ")
@@ -574,6 +657,34 @@ function esAnguloDeLuz(cand: Candidato, doc: Doc): boolean {
   return false
 }
 
+/** Rótulo de potencia real ("Potencia", "Consumo", "W" solo de encabezado): decide que NO es la equivalente. */
+const RE_ROTULO_POTENCIA = /POTENCIA|CONSUMO|POWER|(?<![A-Z0-9])WATTS?(?![A-Z])|^W$/
+
+/**
+ * ¿La potencia leída es la EQUIVALENTE de una lámpara ("Equivale a 60W", columna "Equivalencia")? Mira la frase
+ * dentro del texto del candidato y, si no, el rótulo: las celdas de texto anteriores de su línea (de derecha a
+ * izquierda; los valores de otras columnas no cuentan) y el encabezado de su columna. La celda propia no decide
+ * por sí sola: "9W equivale a 60W" tiene la potencia real (9) y la equivalente (60).
+ */
+function esPotenciaEquivalente(cand: Candidato, doc: Doc, n: number): boolean {
+  if (fraseEquivalencia(altNumero(n)).test(cand.texto)) return true
+  return !!cand.celda && bajoRotuloDeEquivalencia(cand.celda, doc)
+}
+
+/** ¿El rótulo de la celda (texto anterior de su línea o encabezado de su columna) es de equivalencia y no de potencia? */
+function bajoRotuloDeEquivalencia(c: Celda, doc: Doc): boolean {
+  const equivalencia = ROTULO_COLUMNA.equivalencia_w!
+  const decide = (t: string): boolean | null => (equivalencia.test(t) ? true : RE_ROTULO_POTENCIA.test(t) ? false : null)
+  const ln = doc.lineas[c.linea]
+  for (let i = ln.indexOf(c) - 1; i >= 0; i--) {
+    if (RE_CELDA_VALOR.test(ln[i].norm)) continue
+    const d = decide(ln[i].norm)
+    if (d != null) return d
+  }
+  const h = encabezadoDeColumna(c, doc)
+  return h ? (decide(h.norm) ?? false) : false
+}
+
 // ───────────────────────── color de la luz ─────────────────────────
 
 const RE_LUZ = /(?<![A-Z])(LUZ|LIGHT)(?![A-Z])/
@@ -639,10 +750,15 @@ export function terminosEn(clave: ClaveAtributo, texto: string): string[] {
     const v = extraerAtributosDeNombre(sinonimosDePdf(clave, texto)).find((x) => x.clave === clave)?.valorTexto
     return v ? [v.toLowerCase()] : []
   }
+  // Iluminación (0079): IRC y FP sólo pegados a su rótulo; la equivalencia sólo en su frase.
+  const rotulo = ROTULO_PEGADO[clave]
+  if (rotulo) return [...texto.matchAll(new RegExp(`${rotulo}${SEP_PEGADO}(${RE_NUM})`, "g"))].map((m) => String(aNumero(m[1], false)))
+  if (clave === "equivalencia_w") return [...texto.matchAll(fraseEquivalencia(RE_NUM, "g"))].map((m) => String(aNumero(m[1], false)))
   const ev = EVIDENCIA_NUM[clave]
   if (!ev) return []
   const out: string[] = []
-  let resto = texto
+  // La potencia equivalente ("equivale a 60W") no es otra potencia del producto.
+  let resto = clave === "potencia_w" ? texto.replace(fraseEquivalencia(RE_NUM, "g"), " ") : texto
   if (clave === "tension_v") {
     const rango = new RegExp(`(?<![0-9.,])(\\d+)\\s?([-/])\\s?(\\d+)${ev.unidad}`, "g")
     resto = resto.replace(rango, (_m, a: string, sep: string, b: string) => {
@@ -654,8 +770,13 @@ export function terminosEn(clave: ClaveAtributo, texto: string): string[] {
   if (clave === "polos") {
     for (const [pal, v] of Object.entries(POLOS_PALABRA)) if (new RegExp(`(?<![A-Z])${pal}`).test(resto)) out.push(String(v))
   }
+  // Una temperatura de operación ("-20° +40°", "45°C") no es un ángulo.
+  if (clave === "angulo_grados") resto = resto.replace(/[-+]\s?\d+(?:[.,]\d+)?\s?[°º]\s?C?|\d+(?:[.,]\d+)?\s?[°º]\s?C(?![A-Z])/g, " ")
+  const rango = DEFINICION_ATRIBUTOS[clave].rango
   for (const m of resto.matchAll(new RegExp(`(?<![0-9.,])(${RE_NUM})${ev.unidad}`, "g"))) {
-    out.push(String(aNumero(m[1], clave === "flujo_lm")))
+    const v = aNumero(m[1], clave === "flujo_lm" || clave === "vida_util_h")
+    // Fuera del rango válido de la clave no es un valor posible de esa magnitud ("Anti-High-Volt 1500V" no es otra tensión).
+    if (!rango || (v >= rango[0] && v <= rango[1])) out.push(String(v))
   }
   return out
 }
@@ -895,6 +1016,15 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
       }
       cands = propios
     }
+    // 1-septies. La potencia "equivalente" de una lámpara ("equivale a 60W", columna "Equivalencia") no es su potencia (0079).
+    if (clave === "potencia_w" && valido.valorNum != null) {
+      const reales = cands.filter((c) => !esPotenciaEquivalente(c, doc, valido.valorNum!))
+      if (reales.length === 0) {
+        descartar(clave, "potencia_equivalente", entrada)
+        continue
+      }
+      cands = reales
+    }
     // 1a. Potencia, corriente y flujo "por metro" no son el valor del producto.
     if (valido.valorNum != null && cands.every((c) => esPorMetro(clave, valido.valorNum!, c.texto))) {
       descartar(clave, "valor_por_metro", entrada)
@@ -914,7 +1044,9 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
     }
     // 2. ¿Es el único valor de esa magnitud en el PDF?
     const esVocabulario = DEFINICION_ATRIBUTOS[clave].tipo === "texto" && clave !== "medidas_mm"
-    const terminos = new Set(doc.celdas.flatMap((c) => textosDe(c).flatMap((t) => terminosEn(clave, t))))
+    // Para la potencia, una celda bajo el rótulo de equivalencia no es otra potencia del producto (0079).
+    const cuenta = (c: Celda) => clave !== "potencia_w" || !bajoRotuloDeEquivalencia(c, doc)
+    const terminos = new Set(doc.celdas.filter(cuenta).flatMap((c) => textosDe(c).flatMap((t) => terminosEn(clave, t))))
     const unico = terminos.size === 0 || (terminos.size === 1 && terminos.has(canonico(valido)))
     let regla: ReglaAceptacion
     let cand: Candidato = cands[0]
@@ -961,7 +1093,7 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
             if (!pertenece) continue
             // Más de un valor de la misma magnitud en la fila/columna (subcolumnas cálido/frío): sólo si el
             // nombre desambigua explícitamente.
-            const distintos = new Set(ap.celdas.flatMap((x) => textosDe(x).flatMap((t) => terminosEn(clave, t))))
+            const distintos = new Set(ap.celdas.filter(cuenta).flatMap((x) => textosDe(x).flatMap((t) => terminosEn(clave, t))))
             if (distintos.size > 1 && !desambiguaElNombre(clave, valido, c, ap.celdas, delNombre)) {
               ambiguo = true
               continue

@@ -133,6 +133,14 @@ function HeaderVista({
   const nombre = cuenta.estado === "resuelta" ? cuenta.nombre : null;
   const esCuentaCorriente = cuenta.estado === "resuelta" && cuenta.esCuentaCorriente;
 
+  // Un solo texto para los dos buscadores (el del header y el de la barra
+  // compacta): si no, al scrollear se veía lo último tipeado en uno y en el
+  // otro, una búsqueda vieja.
+  const [busqueda, setBusqueda] = useState("");
+  const buscador = (
+    <SearchAutocomplete busquedaIa={busquedaIa} extra={<BotonAsistente />} query={busqueda} setQuery={setBusqueda} />
+  );
+
   // Cuenta: ingresar, avatar con menú o el lugar neutro mientras se resuelve. Va dos veces
   // (desktop en las acciones, mobile a la izquierda de la marca); CSS muestra una sola.
   const cuentaNodo = (alinear: "start" | "end") =>
@@ -192,11 +200,11 @@ function HeaderVista({
         search={
           <div className="flex w-full flex-col">
             {/* El chat se abre desde el buscador: el widget no tiene burbuja flotante. */}
-            <SearchAutocomplete busquedaIa={busquedaIa} extra={<BotonAsistente />} />
+            {buscador}
             {ubicacionEnLinea ? <div className="mt-2.5 flex lg:hidden">{ubicacionEnLinea}</div> : null}
           </div>
         }
-        compactSearch={<SearchAutocomplete busquedaIa={busquedaIa} extra={<BotonAsistente />} />}
+        compactSearch={buscador}
         // Debajo de lg: cuenta a la izquierda, marca al centro y carrito a la derecha.
         mobileStart={cuentaNodo("start")}
         nav={nav}

@@ -44,6 +44,8 @@ export function CalendarioSemanal({ dias, grupos }: { dias: string[]; grupos: Re
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="secondary" href={`/admin/marketing?semana=${corrida(dias[0], -7)}`} renderLink={renderLink}>← Semana anterior</Button>
         <Button variant="secondary" href={`/admin/marketing?semana=${corrida(dias[0], 7)}`} renderLink={renderLink}>Semana siguiente →</Button>
+        <Button variant="secondary" href="/admin/marketing/comentarios" renderLink={renderLink}>Comentarios</Button>
+        <Button variant="secondary" href="/admin/marketing/marca" renderLink={renderLink}>Marca</Button>
         <div className="flex-1" />
         <Button variant="secondary" disabled={ocupado} onClick={() => llamar("/api/admin/marketing/solicitudes", { tipo: "plan_semana" }, "Se pidió un nuevo plan. Aparecerá en la próxima corrida del planificador.")}>
           Planificar semana

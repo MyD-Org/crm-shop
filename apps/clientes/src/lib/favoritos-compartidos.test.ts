@@ -21,6 +21,12 @@ describe("favoritos compartidos", () => {
     expect(parsearIdsFavoritos(href.split("i=")[1])).toEqual(["12", "34", "56"]);
   });
 
+  it("guarda y lee ids de cuenta secundaria", () => {
+    const href = hrefFavoritosCompartidos(["12", "mdp:34", "mdp:"]);
+    expect(href).toBe("/favoritos/compartido?i=12,mdp:34");
+    expect(parsearIdsFavoritos("12,mdp:34,mdp:,MDP:1")).toEqual(["12", "mdp:34"]);
+  });
+
   it("descarta duplicados e inválidos conservando el orden", () => {
     expect(parsearIdsFavoritos("12,12,abc,,34,<script>")).toEqual(["12", "34"]);
   });

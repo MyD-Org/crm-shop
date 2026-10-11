@@ -37,7 +37,7 @@
  */
 import { cacheLife, cacheTag } from "next/cache";
 import type { Product } from "@/data/products";
-import { esIdAlegra } from "./alegra";
+import { esIdProducto } from "./id-producto";
 import {
   getCatalogo,
   getProductosPorSkus,
@@ -254,7 +254,7 @@ export function productoPublico(
   /** Medios del modal de medios de pago (`flagsPublicos().mediosPrecio.modal`). */
   modal: readonly MedioPrecio[] = [],
 ): Promise<Product | null> {
-  if (!esIdAlegra(id)) return Promise.resolve(null);
+  if (!esIdProducto(id)) return Promise.resolve(null);
   const cacheada = () =>
     ficha.length || cuotas?.length || modal.length
       ? productoCacheado(id, soloVisibles, disp, estructurados, ficha, cuotas, modal)

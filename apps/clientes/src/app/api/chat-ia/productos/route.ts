@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
-import { esIdAlegra } from "@/lib/alegra";
+import { esIdProducto } from "@/lib/id-producto";
 import { getProductosPorIds } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoResuelto, MAX_IDS_RESOLVER } from "@/lib/chat-ia-productos";
@@ -44,7 +44,7 @@ export async function GET(req: Request) {
   }
 
   const ids = [
-    ...new Set((new URL(req.url).searchParams.get("ids") ?? "").split(",").filter(esIdAlegra)),
+    ...new Set((new URL(req.url).searchParams.get("ids") ?? "").split(",").filter(esIdProducto)),
   ].slice(0, MAX_IDS_RESOLVER);
   if (ids.length === 0) return json([]);
 

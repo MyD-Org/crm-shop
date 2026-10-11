@@ -22,13 +22,13 @@ import { getDb } from "@/db";
 import { stockReservado } from "@/db/schema";
 import { crmCatalogo, crmCategoriasAlegra, crmOverlay } from "@/db/crm";
 import {
-  esIdAlegra,
   ivaDeItem,
   mapPrecios,
   marcaDeCustomFields,
   resolverPrecio,
   type AlegraItem,
 } from "./alegra";
+import { esIdProducto } from "./id-producto";
 import { activoSql, estadoSql, joinReserva, preciosSql, stockSql } from "./stock-disponible";
 import { stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
@@ -107,8 +107,8 @@ export function normalizarLineas(raw: unknown): LineaPedida[] {
   for (const item of raw) {
     const id = String((item as LineaPedida)?.id ?? "").trim();
     const qty = Math.floor(Number((item as LineaPedida)?.qty));
-    // Solo ids numéricos: el id termina en una ruta de Alegra (ver esIdAlegra).
-    if (!esIdAlegra(id) || !Number.isFinite(qty) || qty <= 0) continue;
+    // Id numérico o de cuenta secundaria (`mdp:12`): ver esIdProducto.
+    if (!esIdProducto(id) || !Number.isFinite(qty) || qty <= 0) continue;
     porId.set(id, Math.min((porId.get(id) ?? 0) + qty, QTY_MAX));
   }
 

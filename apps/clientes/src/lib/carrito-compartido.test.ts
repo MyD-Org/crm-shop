@@ -44,6 +44,38 @@ describe("codificar / parsear", () => {
     expect(parsearCompartido(raw)).toEqual([]);
   });
 
+  it("links viejos con ids numéricos dan el mismo carrito", () => {
+    expect(parsearCompartido("4521:2,4530:1")).toEqual([
+      { id: "4521", qty: 2 },
+      { id: "4530", qty: 1 },
+    ]);
+  });
+
+  it("ida y vuelta con un id de cuenta secundaria", () => {
+    const lineas = [
+      { id: "4521", qty: 2 },
+      { id: "mdp:12", qty: 3 },
+    ];
+    expect(codificarCompartido(lineas)).toBe("4521:2,mdp:12:3");
+    expect(parsearCompartido(codificarCompartido(lineas))).toEqual(lineas);
+  });
+
+  it("una línea corrupta descarta sólo esa línea", () => {
+    expect(parsearCompartido("4521:2,zz:1,mdp:12:3,MDP:1:1,mdp::2,mdp:12")).toEqual([
+      { id: "4521", qty: 2 },
+      { id: "mdp:12", qty: 3 },
+    ]);
+  });
+
+  it("un par cortado (mdp:12, sin cantidad) se descarta", () => {
+    expect(parsearCompartido("mdp:12")).toEqual([]);
+    expect(parsearCompartido("mdp:12:")).toEqual([]);
+  });
+
+  it("ids duplicados suman, también los de cuenta secundaria", () => {
+    expect(parsearCompartido("mdp:12:1,mdp:12:2")).toEqual([{ id: "mdp:12", qty: 3 }]);
+  });
+
   it("descarta los pares inválidos y se queda con los válidos", () => {
     // Link truncado por el chat, negativos, decimales, ids no numéricos.
     expect(parsearCompartido("12:3,1:-2,2:1.5,x:1,3:0,45:,9:2")).toEqual([

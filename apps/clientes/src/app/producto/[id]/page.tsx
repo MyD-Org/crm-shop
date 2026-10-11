@@ -3,6 +3,7 @@ import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
 import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { idDeRuta } from "@/lib/id-producto";
 import { productoPublico, rutaCategoriaPublica } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { metadataProducto } from "@/lib/producto-metadata";
@@ -42,13 +43,13 @@ const productoDe = cache(async (id: string) => {
 
 /** Vista previa del link (WhatsApp, Google…). Ver src/lib/producto-metadata.ts. */
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const producto = await productoDe((await params).id);
+  const producto = await productoDe(idDeRuta((await params).id));
   if (!producto) return {};
   return metadataProducto(producto, Boolean(process.env.NEXT_PUBLIC_SITE_URL));
 }
 
 export default async function ProductoPage({ params }: Props) {
-  const { id } = await params;
+  const id = idDeRuta((await params).id);
   const [producto, reglas, { soloVisibles, mediosPrecio }, disp, dispEntrega, tarjetas] = await Promise.all([
     productoDe(id),
     reglasVentaCacheadas(),

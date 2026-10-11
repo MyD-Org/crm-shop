@@ -52,4 +52,39 @@ describe("repos auxiliares de marketing", () => {
     expect(repetida).toMatchObject({ id: i.id, estado: "aprobada", respuestaFinal: "¡Te escribimos por privado!" })
     expect(await listarInteracciones(T, "aprobada")).toHaveLength(1)
   })
+  const inter = { origen: "comentario", externoId: "c2", autor: "@bea", texto: "Hola", categoria: "consulta", sentimiento: "neutro", respuestaSugerida: "Sugerida" } as const
+
+  it("aprobar dos veces devuelve null y conserva la respuesta editada", async () => {
+    const i = await guardarInteraccion(T, inter)
+    await actualizarInteraccion(T, i.id, "aprobar", "Texto editado")
+    expect(await actualizarInteraccion(T, i.id, "aprobar")).toBeNull()
+    const [a] = await listarInteracciones(T, "aprobada")
+    expect(a.respuestaFinal).toBe("Texto editado")
+  })
+
+  it("marcar_respondida sólo desde aprobada", async () => {
+    const i = await guardarInteraccion(T, inter)
+    expect(await actualizarInteraccion(T, i.id, "marcar_respondida")).toBeNull()
+    await actualizarInteraccion(T, i.id, "aprobar")
+    expect(await actualizarInteraccion(T, i.id, "marcar_respondida")).toMatchObject({ estado: "respondida" })
+  })
+
+  it("ocultar e ignorar sólo desde pendiente", async () => {
+    const i = await guardarInteraccion(T, inter)
+    await actualizarInteraccion(T, i.id, "aprobar")
+    expect(await actualizarInteraccion(T, i.id, "ocultar")).toBeNull()
+    expect(await actualizarInteraccion(T, i.id, "ignorar")).toBeNull()
+    expect((await listarInteracciones(T, "aprobada"))).toHaveLength(1)
+  })
+
+  it("un lote de métricas con clave repetida guarda una sola fila (gana la última)", async () => {
+    const n = await guardarMetricas(T, [
+      { ambito: "cuenta_ig", refId: "ig", fecha: "2026-10-13", metricas: { seguidores: 1 } },
+      { ambito: "cuenta_ig", refId: "ig", fecha: "2026-10-13", metricas: { seguidores: 2 } },
+    ])
+    expect(n).toBe(1)
+    const m = await listarMetricas(T, "2026-10-13", "2026-10-13")
+    expect(m).toHaveLength(1)
+    expect(m[0].metricas).toEqual({ seguidores: 2 })
+  })
 })

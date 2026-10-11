@@ -1,5 +1,5 @@
 // src/lib/marketing/otros-repo.ts
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { marketingInteracciones, marketingMaterial, marketingMetricas, marketingMusica, marketingSolicitudes } from "@/db/schema"
 import { urlPublicaFoto } from "@/lib/shop-media"
@@ -49,7 +49,11 @@ export async function registrarMaterial(
   const [f] = await getDb().insert(marketingMaterial).values({ tenantId, ...input }).returning()
   if (input.piezaId) {
     const pieza = await obtenerPieza(tenantId, input.piezaId)
-    if (pieza?.estado === "esperando_material") await transicionar(tenantId, input.piezaId, "borrador", "usuario", { nombreActor: "material", nota: "material subido" })
+    if (pieza?.estado === "esperando_material") {
+      const r = await transicionar(tenantId, input.piezaId, "borrador", "usuario", { nombreActor: "material", nota: "material subido" })
+      // El archivo ya quedó registrado: no se falla la subida, pero se deja rastro de que la pieza no avanzó.
+      if (!r.ok) console.warn(`[marketing] material subido pero la pieza ${input.piezaId} no pasó a borrador: ${r.code}`)
+    }
   }
   return materialDto(f)
 }
@@ -76,14 +80,18 @@ export async function guardarMetricas(
   filas: { ambito: "pieza" | "cuenta_ig" | "ficha_google"; refId: string; fecha: string; metricas: Record<string, number> }[],
 ): Promise<number> {
   if (filas.length === 0) return 0
+  // Una misma clave repetida en el lote rompería el ON CONFLICT (no puede afectar la fila dos veces): gana la última.
+  const porClave = new Map<string, (typeof filas)[number]>()
+  for (const f of filas) porClave.set(`${f.ambito}\u0000${f.refId}\u0000${f.fecha}`, f)
+  const unicas = [...porClave.values()]
   await getDb()
     .insert(marketingMetricas)
-    .values(filas.map((f) => ({ tenantId, ...f })))
+    .values(unicas.map((f) => ({ tenantId, ...f })))
     .onConflictDoUpdate({
       target: [marketingMetricas.tenantId, marketingMetricas.ambito, marketingMetricas.refId, marketingMetricas.fecha],
       set: { metricas: sql`excluded.metricas`, updatedAt: new Date() },
     })
-  return filas.length
+  return unicas.length
 }
 
 export async function listarMetricas(tenantId: string, desde: string, hasta: string): Promise<MetricaDto[]> {
@@ -150,6 +158,15 @@ const DESTINO: Record<"aprobar" | "ocultar" | "ignorar" | "marcar_respondida", s
   marcar_respondida: "respondida",
 }
 
+// Estados desde los que cada acción es válida: evita que un doble clic o una acción tardía regrese el estado
+// (respondida → oculta) o pise la respuesta editada al volver a aprobar.
+const DESDE: Record<"aprobar" | "ocultar" | "ignorar" | "marcar_respondida", string[]> = {
+  aprobar: ["pendiente"],
+  ocultar: ["pendiente"],
+  ignorar: ["pendiente"],
+  marcar_respondida: ["aprobada"],
+}
+
 export async function actualizarInteraccion(
   tenantId: string,
   id: string,
@@ -164,7 +181,7 @@ export async function actualizarInteraccion(
       ...(accion === "aprobar" ? { respuestaFinal: respuesta?.trim() || sql`${marketingInteracciones.respuestaSugerida}` } : {}),
       updatedAt: new Date(),
     })
-    .where(and(eq(marketingInteracciones.tenantId, tenantId), eq(marketingInteracciones.id, id)))
+    .where(and(eq(marketingInteracciones.tenantId, tenantId), eq(marketingInteracciones.id, id), inArray(marketingInteracciones.estado, DESDE[accion])))
     .returning()
   return f ? interaccionDto(f) : null
 }

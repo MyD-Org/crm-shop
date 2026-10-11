@@ -230,7 +230,7 @@ export function HomeClient({
         </div>
       </div>
 
-      <SeccionEditable seccion="marquee" visibilidad={vis("marquee")}>
+      <SeccionEditable seccion="marquee" visibilidad={vis("marquee")} botonTop="top-[calc(clamp(28px,4vw,48px)+0.5rem)]">
         <PorTamano items={marquee.items}>
           {(items) => (
             <Marquee
@@ -247,7 +247,7 @@ export function HomeClient({
 
         {/* Ambientes */}
         <Reveal>
-          <SeccionEditable seccion="ambientes" visibilidad={vis("ambientes")}>
+          <SeccionEditable seccion="ambientes" titulo={ambientes.titulo} visibilidad={vis("ambientes")} botonTop="top-[calc(clamp(56px,7vw,96px)-2.5rem)]">
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={ambientes} linkTodos={ambientes.linkTodos} />
               {/* Tiles a la altura del diseño aprobado (guía §4): el DS usa
@@ -261,7 +261,7 @@ export function HomeClient({
 
         {/* Destacados: productos reales del catálogo (precio y cuotas vivos). */}
         <Reveal>
-          <SeccionEditable seccion="destacados" visibilidad={vis("destacados")}>
+          <SeccionEditable seccion="destacados" titulo={secDestacados.titulo} visibilidad={vis("destacados")} botonTop="top-[calc(clamp(56px,7vw,96px)-2.5rem)]">
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={secDestacados} linkTodos={secDestacados.linkTodos} />
               {destacados}
@@ -271,7 +271,7 @@ export function HomeClient({
 
         {/* Banner decorativo */}
         <Reveal>
-          <SeccionEditable seccion="bannerDeco" visibilidad={vis("bannerDeco")}>
+          <SeccionEditable seccion="bannerDeco" visibilidad={vis("bannerDeco")} botonTop="top-[calc(clamp(56px,7vw,96px)+0.5rem)]">
             <PromoBanner
               className="mt-[clamp(56px,7vw,96px)] [&_em]:not-italic [&_h2]:font-bold"
               eyebrow={bannerDeco.eyebrow}
@@ -296,7 +296,7 @@ export function HomeClient({
 
         {/* Deco grid */}
         <Reveal>
-          <SeccionEditable seccion="decoGrid" visibilidad={vis("decoGrid")}>
+          <SeccionEditable seccion="decoGrid" titulo={decoGrid.titulo} visibilidad={vis("decoGrid")} botonTop="top-[calc(clamp(56px,7vw,96px)-2.5rem)]">
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={decoGrid} linkTodos={decoGrid.linkTodos} />
               {/* Mobile: apiladas, se despegan al scrollear. Desde lg, la grilla. */}
@@ -314,7 +314,7 @@ export function HomeClient({
 
         {/* Servicios */}
         <Reveal>
-          <SeccionEditable seccion="servicios" visibilidad={vis("servicios")}>
+          <SeccionEditable seccion="servicios" visibilidad={vis("servicios")} botonTop="top-[calc(clamp(56px,7vw,96px)+0.5rem)]">
             <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
               {servicios.items.map((s, i) => {
                 if (s.visibilidad === "nunca") return null;

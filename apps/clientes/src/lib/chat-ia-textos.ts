@@ -89,5 +89,8 @@ export const ETIQUETA_BOTON_ASISTENTE = "Asistente";
 
 export const SUBTITULO_CHAT = "Consultas sobre productos y pedidos";
 
+/** Logo de la cabecera del chat (public/images: fuera del gate del proxy). En la hoja mobile el widget no lo dibuja. */
+export const AVATAR_CHAT = "/images/central-led/avatar.jpg";
+
 /** Color de marca del widget: token del DS, nunca un literal. */
 export const COLOR_CHAT = "var(--color-primary)";

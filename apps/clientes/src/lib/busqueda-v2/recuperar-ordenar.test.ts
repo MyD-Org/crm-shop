@@ -361,20 +361,38 @@ describe("acotarPorDeducidas: la categoría deducida acota sin filtro ni chip", 
   });
 
   it("acota a la categoría O a lo que tiene TODAS las palabras significativas (o un sinónimo de cada una)", () => {
-    const p = conDeducida([
+    const p = { ...conDeducida([
       { texto: "dicroica", peso: 1 },
       { texto: "mr16", peso: 0.4 },
       { texto: "dicro", peso: 0.7 },
-    ]);
+    ]), deducidas: ["Lámparas"] };
     const { sql: texto, params } = render(acotarPorDeducidas(p, piezas, sql`RECUPERAR`)!);
     expect(texto).toBe("((EN_CATEGORIAS($1) or ((TEXTO ~ $2 or TEXTO ~ $3) and TEXTO ~ $4)) and RECUPERAR)");
-    expect(params).toEqual(["Dicroicas", patronTermino("dicroica"), patronTermino("dicro"), patronTermino("mr16")]);
+    expect(params).toEqual(["Lámparas", patronTermino("dicroica"), patronTermino("dicro"), patronTermino("mr16")]);
   });
 
   it("con una sola palabra pedida no hay escape: sólo la categoría (\"pilas\" no trae \"pilastra\")", () => {
-    const p = { ...conDeducida([{ texto: "pilas", peso: 1 }, { texto: "bateria", peso: 0.7 }]), deducidas: ["Pilas y baterias"] };
+    const p = { ...conDeducida([{ texto: "pilas", peso: 1 }, { texto: "bateria", peso: 0.7 }]), deducidas: ["Accesorios"] };
     const { sql: texto } = render(acotarPorDeducidas(p, piezas, sql`RECUPERAR`)!);
     expect(texto).toBe("(EN_CATEGORIAS($1) and RECUPERAR)");
+  });
+
+  it("si lo pedido es la categoría misma, entra entera: lo que muestra su filtro (\"colgante\" en \"Colgantes\")", () => {
+    const p = { ...conDeducida([{ texto: "colgante", peso: 1 }]), deducidas: ["Colgantes"] };
+    const { sql: texto, params } = render(acotarPorDeducidas(p, piezas, sql`RECUPERAR`)!);
+    expect(texto).toBe("EN_CATEGORIAS($1)");
+    expect(params).toEqual(["Colgantes"]);
+  });
+
+  it("también por un sinónimo de lo pedido (\"foco\" en \"Lámparas\")", () => {
+    const p = { ...conDeducida([{ texto: "foco", peso: 1 }, { texto: "lampara", peso: 0.7 }]), deducidas: ["Lámparas"] };
+    expect(render(acotarPorDeducidas(p, piezas, sql`RECUPERAR`)!).sql).toBe("EN_CATEGORIAS($1)");
+  });
+
+  it("con otra palabra que la categoría no nombra, sigue acotando (\"colgante negro\")", () => {
+    const p = { ...conDeducida([{ texto: "colgante", peso: 1 }, { texto: "negro", peso: 1 }]), deducidas: ["Colgantes"] };
+    const { sql: texto } = render(acotarPorDeducidas(p, piezas, sql`RECUPERAR`)!);
+    expect(texto).toBe("((EN_CATEGORIAS($1) or (TEXTO ~ $2 and TEXTO ~ $3)) and RECUPERAR)");
   });
 
   it("sin nada que recupere, la categoría deducida entera (como cuando era filtro)", () => {

@@ -109,7 +109,7 @@ const algunoEn = (campo: SQL, grupo: readonly string[]) =>
  * ¿El grupo ya lo resuelve una categoría filtrada (de la URL)? Con "foco smart" filtrado en
  * "Lámparas", todo es un foco: lo que distingue es "smart".
  */
-const cubiertoPorCategoria = (grupo: readonly string[], categorias: readonly string[]) =>
+export const cubiertoPorCategoria = (grupo: readonly string[], categorias: readonly string[]) =>
   categorias.some((c) => {
     const nombre = normalizarConsulta(c) ?? "";
     return grupo.some((t) => new RegExp(patronTermino(t)).test(nombre));

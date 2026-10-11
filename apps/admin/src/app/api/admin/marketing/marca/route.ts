@@ -1,7 +1,8 @@
 import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { NO_STORE } from "@/lib/catalogo-admin"
 import { guardarMarca, obtenerMarca, type MarcaEditable } from "@/lib/marketing/marca-repo"
-import { validarPatron } from "@/lib/marketing/reglas"
+import { validarFrases } from "@/lib/marketing/reglas"
+import { esHorarios, esListaHashtags, esPoliticaComentarios, esReglaMarca, esReparto, MAX_REGLAS, MAX_VOZ } from "@/lib/marketing/validar"
 
 export const dynamic = "force-dynamic"
 
@@ -16,20 +17,37 @@ export async function PUT(req: Request) {
   if (!guard.ok) return guard.response
   const b = (await req.json().catch(() => null)) as Partial<MarcaEditable> | null
   if (!b) return Response.json({ error: "Datos inválidos", code: "invalid_json" }, { status: 400, headers: NO_STORE })
+  const rechazo = (error: string, code: string) => Response.json({ error, code }, { status: 400, headers: NO_STORE })
   const cambios: Partial<MarcaEditable> = {}
-  if (typeof b.voz === "string") cambios.voz = b.voz.slice(0, 4000)
-  if (Array.isArray(b.reglas)) {
-    const validas = b.reglas.every((r) => r && typeof r.id === "string" && typeof r.texto === "string" && (r.severidad === "alta" || r.severidad === "media") && (r.patron === undefined || typeof r.patron === "string"))
-    if (!validas) return Response.json({ error: "Revise las reglas de marca", code: "invalid_reglas" }, { status: 400, headers: NO_STORE })
+  if (b.voz !== undefined) {
+    if (typeof b.voz !== "string" || b.voz.length > MAX_VOZ) return rechazo(`La voz de marca debe ser un texto de hasta ${MAX_VOZ} caracteres`, "invalid_voz")
+    cambios.voz = b.voz
+  }
+  if (b.reglas !== undefined) {
+    if (!Array.isArray(b.reglas) || b.reglas.length > MAX_REGLAS || !b.reglas.every(esReglaMarca)) {
+      return rechazo(`Revise las reglas de marca: hasta ${MAX_REGLAS}, con identificador, texto y severidad`, "invalid_reglas")
+    }
     for (const r of b.reglas) {
-      const motivo = r.patron === undefined ? null : validarPatron(r.patron)
-      if (motivo) return Response.json({ error: `Regla «${r.texto}»: ${motivo}`, code: "invalid_patron" }, { status: 400, headers: NO_STORE })
+      const motivo = r.patron === undefined ? null : validarFrases(r.patron)
+      if (motivo) return rechazo(`Regla «${r.texto}»: ${motivo}`, "invalid_patron")
     }
     cambios.reglas = b.reglas
   }
-  if (Array.isArray(b.hashtagsBase)) cambios.hashtagsBase = b.hashtagsBase.map(String).slice(0, 30)
-  if (b.horariosPreferidos && typeof b.horariosPreferidos === "object") cambios.horariosPreferidos = b.horariosPreferidos
-  if (b.reparto && typeof b.reparto === "object") cambios.reparto = b.reparto
-  if (b.politicaComentarios && typeof b.politicaComentarios === "object") cambios.politicaComentarios = b.politicaComentarios
+  if (b.hashtagsBase !== undefined) {
+    if (!esListaHashtags(b.hashtagsBase)) return rechazo("Los hashtags deben ser hasta 30 textos de hasta 50 caracteres", "invalid_hashtags")
+    cambios.hashtagsBase = b.hashtagsBase
+  }
+  if (b.horariosPreferidos !== undefined) {
+    if (!esHorarios(b.horariosPreferidos)) return rechazo("Revise los horarios: día de la semana y horas con formato HH:MM, hasta 6 por día", "invalid_horarios")
+    cambios.horariosPreferidos = b.horariosPreferidos
+  }
+  if (b.reparto !== undefined) {
+    if (!esReparto(b.reparto)) return rechazo("Revise el reparto: porcentajes de 0 a 100 por público y por tema", "invalid_reparto")
+    cambios.reparto = b.reparto
+  }
+  if (b.politicaComentarios !== undefined) {
+    if (!esPoliticaComentarios(b.politicaComentarios)) return rechazo("Revise la política de comentarios", "invalid_politica")
+    cambios.politicaComentarios = b.politicaComentarios
+  }
   return Response.json(await guardarMarca(guard.tenantId, cambios), { headers: NO_STORE })
 }

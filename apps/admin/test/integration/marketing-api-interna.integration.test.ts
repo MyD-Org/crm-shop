@@ -102,7 +102,7 @@ describe("API interna de marketing: piezas", () => {
     return (await (await piezas.POST(req("/piezas", SECRETOS.planificador, { method: "POST", body: cuerpo }))).json()) as { id: string }
   }
   const patch = (id: string, secreto: string, body: unknown) => pieza.PATCH(req(`/piezas/${id}`, secreto, { method: "PATCH", body }), ctx(id))
-  const regla = { id: "abierta", texto: "No decir que la tienda está abierta", patron: "ya est[aá] abierta", severidad: "alta" as const }
+  const regla = { id: "abierta", texto: "No decir que la tienda está abierta", patron: "ya está abierta", severidad: "alta" as const }
 
   describe("revisión: control y efectos", () => {
     it("PATCH tardío del studio tras un claim vencido: 409 y la pieza no cambia", async () => {

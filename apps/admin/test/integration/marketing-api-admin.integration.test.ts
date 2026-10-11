@@ -3,7 +3,7 @@
 import { NextRequest } from "next/server"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { invalidateTenantRegistry } from "@/lib/tenants"
-import { guardarInteraccion, listarSolicitudes } from "@/lib/marketing/otros-repo"
+import { crearSolicitud, guardarInteraccion, listarSolicitudes } from "@/lib/marketing/otros-repo"
 import { crearPieza, obtenerPieza, reclamarPieza, transicionar } from "@/lib/marketing/piezas-repo"
 import { obtenerMarca } from "@/lib/marketing/marca-repo"
 import { seedOperator, seedTenant, truncateAll } from "./helpers"
@@ -15,6 +15,11 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-tenant-id": "tenant-a" }),
 }))
 vi.mock("iron-session", () => ({ getIronSession: async () => session }))
+// Passthrough con espía: permite simular que la cola de solicitudes falla.
+vi.mock("@/lib/marketing/otros-repo", async (importOriginal) => {
+  const m = await importOriginal<typeof import("@/lib/marketing/otros-repo")>()
+  return { ...m, crearSolicitud: vi.fn(m.crearSolicitud) }
+})
 
 const piezas = await import("@/app/api/admin/marketing/piezas/route")
 const piezaAdmin = await import("@/app/api/admin/marketing/piezas/[id]/route")
@@ -89,6 +94,69 @@ describe("API admin de marketing", () => {
       const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "pedir_cambios", nota: "Tarde" }), ctx(p.id))
       expect(r.status).toBe(409)
       expect(await listarSolicitudes(T, "pendiente")).toEqual([])
+    })
+
+    it("si falla la cola tras pedir cambios: 500, y al reintentar se encola y responde 200", async () => {
+      const p = await enRevision()
+      vi.mocked(crearSolicitud).mockRejectedValueOnce(new Error("db caída"))
+      const r1 = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "pedir_cambios", nota: "Otra foto" }), ctx(p.id))
+      expect(r1.status).toBe(500)
+      expect((await obtenerPieza(T, p.id))?.estado).toBe("cambios_pedidos")
+      expect(await listarSolicitudes(T, "pendiente")).toEqual([])
+      const r2 = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "pedir_cambios", nota: "Otra foto" }), ctx(p.id))
+      expect(r2.status).toBe(200)
+      expect((await r2.json()).estado).toBe("cambios_pedidos")
+      expect(await listarSolicitudes(T, "pendiente")).toMatchObject([{ tipo: "cambios", piezaId: p.id, nota: "Otra foto" }])
+    })
+
+    it("pedir cambios sobre una pieza ya en cambios_pedidos sin solicitud: 200 y la encola", async () => {
+      const p = await enRevision()
+      await transicionar(T, p.id, "cambios_pedidos", "usuario", { nombreActor: "Ana", nota: "Otra foto" })
+      const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "pedir_cambios", nota: "Otra foto" }), ctx(p.id))
+      expect(r.status).toBe(200)
+      expect(await listarSolicitudes(T, "pendiente")).toMatchObject([{ tipo: "cambios", piezaId: p.id }])
+    })
+
+    it("pedir cambios dos veces no duplica la solicitud: la segunda es 409", async () => {
+      const p = await enRevision()
+      await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "pedir_cambios", nota: "Otra foto" }), ctx(p.id))
+      const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "pedir_cambios", nota: "Otra foto" }), ctx(p.id))
+      expect(r.status).toBe(409)
+      expect(await listarSolicitudes(T, "pendiente")).toHaveLength(1)
+    })
+
+    it("editar sin nada que cambiar: 400 empty_edit", async () => {
+      const p = await enRevision()
+      const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "editar" }), ctx(p.id))
+      expect(r.status).toBe(400)
+      expect(await r.json()).toEqual({ error: "Indique qué quiere cambiar", code: "empty_edit" })
+      expect((await obtenerPieza(T, p.id))?.estado).toBe("para_revisar")
+    })
+
+    it("editar rechaza hashtags que no son texto o son demasiado largos", async () => {
+      const p = await enRevision()
+      for (const hashtags of [[1, 2], ["#" + "a".repeat(50)], Array.from({ length: 31 }, () => "#a")]) {
+        const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "editar", hashtags }), ctx(p.id))
+        expect(r.status).toBe(400)
+        expect((await r.json()).code).toBe("invalid_hashtags")
+      }
+    })
+
+    it("editar rechaza un caption que no es texto o supera 2200 caracteres", async () => {
+      const p = await enRevision()
+      for (const caption of [5, "c".repeat(2201)]) {
+        const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "editar", caption }), ctx(p.id))
+        expect(r.status).toBe(400)
+        expect((await r.json()).code).toBe("invalid_caption")
+      }
+    })
+
+    it("marcar publicada rechaza un permalink de más de 500 caracteres", async () => {
+      const p = await enRevision()
+      await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "aprobar" }), ctx(p.id))
+      const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "marcar_publicada", permalink: "https://x.example/" + "a".repeat(500) }), ctx(p.id))
+      expect(r.status).toBe(400)
+      expect((await r.json()).code).toBe("invalid_permalink")
     })
 
     it("409 con mensaje en usted si la transición no es válida", async () => {
@@ -215,21 +283,74 @@ describe("API admin de marketing", () => {
 
   describe("marca", () => {
     it("guarda voz y reglas y las devuelve", async () => {
-      const reglas = [{ id: "dir", texto: "Sin dirección exacta", patron: "alberti\\s*\\d+", severidad: "alta" }]
+      const reglas = [{ id: "dir", texto: "Sin dirección exacta", patron: "alberti 4221", severidad: "alta" }]
       const r = await marca.PUT(req("/marca", { voz: "Cercana", reglas, hashtagsBase: ["#mdp"] }, "PUT"))
       expect(r.status).toBe(200)
       expect(await r.json()).toMatchObject({ voz: "Cercana", reglas, hashtagsBase: ["#mdp"] })
       expect((await (await marca.GET(req("/marca"))).json()).voz).toBe("Cercana")
     })
 
-    it("rechaza una regla con patrón inseguro: 400 invalid_patron y no guarda nada", async () => {
-      const reglas = [{ id: "mala", texto: "Mala", patron: "(a+)+$", severidad: "media" }]
-      const r = await marca.PUT(req("/marca", { voz: "No debe guardarse", reglas }, "PUT"))
-      expect(r.status).toBe(400)
-      const cuerpo = await r.json()
-      expect(cuerpo.code).toBe("invalid_patron")
-      expect(typeof cuerpo.error).toBe("string")
+    it("rechaza una regla con frases inválidas: 400 invalid_patron y no guarda nada", async () => {
+      const muchas = Array.from({ length: 21 }, (_, k) => `frase ${k}`).join("|")
+      for (const patron of [muchas, "a", " | ", "x".repeat(81)]) {
+        const reglas = [{ id: "mala", texto: "Mala", patron, severidad: "media" }]
+        const r = await marca.PUT(req("/marca", { voz: "No debe guardarse", reglas }, "PUT"))
+        expect(r.status).toBe(400)
+        const cuerpo = await r.json()
+        expect(cuerpo.code).toBe("invalid_patron")
+        expect(typeof cuerpo.error).toBe("string")
+      }
       expect((await obtenerMarca(T)).voz).toBe("")
+    })
+
+    it("una regla con aspecto de regex se guarda como frase literal", async () => {
+      const reglas = [{ id: "lit", texto: "Literal", patron: "((a+))+$", severidad: "media" }]
+      expect((await marca.PUT(req("/marca", { reglas }, "PUT"))).status).toBe(200)
+    })
+
+    it("topes de recursos: reglas, id, texto, voz y hashtags", async () => {
+      const regla = (extra: object = {}) => ({ id: "r", texto: "R", severidad: "media", ...extra })
+      const casos: [string, unknown, string][] = [
+        ["51 reglas", { reglas: Array.from({ length: 51 }, (_, k) => regla({ id: `r${k}` })) }, "invalid_reglas"],
+        ["id vacío", { reglas: [regla({ id: "" })] }, "invalid_reglas"],
+        ["id largo", { reglas: [regla({ id: "i".repeat(61) })] }, "invalid_reglas"],
+        ["texto vacío", { reglas: [regla({ texto: "" })] }, "invalid_reglas"],
+        ["texto largo", { reglas: [regla({ texto: "t".repeat(301) })] }, "invalid_reglas"],
+        ["regla no objeto", { reglas: ["x"] }, "invalid_reglas"],
+        ["voz larga", { voz: "v".repeat(4001) }, "invalid_voz"],
+        ["31 hashtags", { hashtagsBase: Array.from({ length: 31 }, () => "#a") }, "invalid_hashtags"],
+        ["hashtag largo", { hashtagsBase: ["#" + "a".repeat(50)] }, "invalid_hashtags"],
+        ["hashtag no texto", { hashtagsBase: [1] }, "invalid_hashtags"],
+      ]
+      for (const [nombre, cuerpo, code] of casos) {
+        const r = await marca.PUT(req("/marca", cuerpo, "PUT"))
+        expect(r.status, nombre).toBe(400)
+        expect((await r.json()).code, nombre).toBe(code)
+      }
+    })
+
+    it("valida la forma de reparto, horarios y política de comentarios", async () => {
+      const casos: [string, unknown, string][] = [
+        ["reparto con clave ajena", { reparto: { publico: { amigos: 10 } } }, "invalid_reparto"],
+        ["reparto fuera de rango", { reparto: { tema: { producto: 101 } } }, "invalid_reparto"],
+        ["reparto no numérico", { reparto: { publico: { ambos: "10" } } }, "invalid_reparto"],
+        ["reparto con otra sección", { reparto: { otro: {} } }, "invalid_reparto"],
+        ["reparto arreglo", { reparto: [] }, "invalid_reparto"],
+        ["horario día inválido", { horariosPreferidos: { festivo: ["10:00"] } }, "invalid_horarios"],
+        ["horario hora inválida", { horariosPreferidos: { lunes: ["25:00"] } }, "invalid_horarios"],
+        ["más de 6 horarios", { horariosPreferidos: { lunes: Array.from({ length: 7 }, () => "10:00") } }, "invalid_horarios"],
+        ["política categoría ajena", { politicaComentarios: { otra: "auto" } }, "invalid_politica"],
+        ["política valor ajeno", { politicaComentarios: { queja: "borrar" } }, "invalid_politica"],
+      ]
+      for (const [nombre, cuerpo, code] of casos) {
+        const r = await marca.PUT(req("/marca", cuerpo, "PUT"))
+        expect(r.status, nombre).toBe(400)
+        expect((await r.json()).code, nombre).toBe(code)
+      }
+      const ok = await marca.PUT(
+        req("/marca", { reparto: { publico: { profesional: 60, consumidor: 40 }, tema: { tecnico: 30 } }, horariosPreferidos: { lunes: ["10:00", "19:30"] }, politicaComentarios: { queja: "derivar", spam: "ocultar" } }, "PUT"),
+      )
+      expect(ok.status).toBe(200)
     })
 
     it("rechaza reglas mal formadas", async () => {

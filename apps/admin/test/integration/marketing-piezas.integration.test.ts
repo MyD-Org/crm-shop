@@ -36,7 +36,7 @@ describe("repo de piezas", () => {
   })
 
   it("aplica las reglas de marca al crear", async () => {
-    await guardarMarca(T, { reglas: [{ id: "abierta", texto: "No decir que la tienda está abierta", patron: "ya est[aá] abierta", severidad: "alta" }] })
+    await guardarMarca(T, { reglas: [{ id: "abierta", texto: "No decir que la tienda está abierta", patron: "ya está abierta", severidad: "alta" }] })
     const p = await crearPieza(T, { ...base, caption: "La tienda ya está abierta" }, planificador)
     expect(p.alertas.map((a) => a.regla)).toEqual(["abierta"])
   })

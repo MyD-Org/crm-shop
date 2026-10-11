@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { evaluarReglas, textosDePieza, validarPatron } from "./reglas"
+import { evaluarReglas, textosDePieza, validarFrases } from "./reglas"
 
 const reglas = [
-  { id: "tienda-abierta", texto: "La tienda online todavía no está abierta", patron: "ya est[aá] abierta|compr[aá] online ya", severidad: "alta" as const },
-  { id: "direccion", texto: "Sin dirección exacta hasta confirmar", patron: "alberti\\s*\\d+", severidad: "alta" as const },
+  { id: "tienda-abierta", texto: "La tienda online todavía no está abierta", patron: "ya está abierta|compra online ya", severidad: "alta" as const },
+  { id: "direccion", texto: "Sin dirección exacta hasta confirmar", patron: "alberti 4221", severidad: "alta" as const },
   { id: "sin-patron", texto: "Voseo", severidad: "media" as const },
 ]
 
@@ -22,8 +22,8 @@ describe("reglas de marca", () => {
     expect(evaluarReglas(["hola"], reglas)).toEqual([])
   })
 
-  it("una regex inválida no rompe: se reporta como regla_invalida", () => {
-    const alertas = evaluarReglas(["texto"], [{ id: "rota", texto: "Rota", patron: "([", severidad: "media" }])
+  it("un patrón sin frases válidas no rompe: se reporta como inválido", () => {
+    const alertas = evaluarReglas(["texto"], [{ id: "rota", texto: "Rota", patron: "|", severidad: "media" }])
     expect(alertas).toEqual([{ regla: "rota", mensaje: "La regla «Rota» tiene un patrón inválido", severidad: "media", fuente: "regla" }])
   })
 
@@ -36,37 +36,72 @@ describe("reglas de marca", () => {
     expect(textos).toEqual(["Caption", "#MarDelPlata", "Hola", "Todo", "lo que", "Anidado"])
   })
 
-  it("una regla con patrón inseguro se trata como inválida y no se ejecuta", () => {
-    const textos = ["a".repeat(40) + "!"]
-    const alertas = evaluarReglas(textos, [{ id: "peligrosa", texto: "Peligrosa", patron: "(a+)+$", severidad: "alta" }])
-    expect(alertas).toEqual([{ regla: "peligrosa", mensaje: "La regla «Peligrosa» tiene un patrón inválido", severidad: "alta", fuente: "regla" }])
+  it("compara sin distinguir mayúsculas, tildes ni espacios repetidos", () => {
+    expect(evaluarReglas(["YA   ESTA ABIERTA"], reglas).map((a) => a.regla)).toEqual(["tienda-abierta"])
+    expect(evaluarReglas(["Compra\nonline YA"], reglas).map((a) => a.regla)).toEqual(["tienda-abierta"])
+  })
+
+  it("una regla con varias frases salta con cualquiera de ellas", () => {
+    const r = [{ id: "m", texto: "M", patron: "gratis | sin cargo|oferta única", severidad: "media" as const }]
+    expect(evaluarReglas(["Envío SIN CARGO"], r)).toHaveLength(1)
+    expect(evaluarReglas(["oferta unica"], r)).toHaveLength(1)
+    expect(evaluarReglas(["envío pago"], r)).toEqual([])
+  })
+
+  it("un patrón con aspecto de regex se toma literalmente: no ejecuta nada y sólo coincide con ese texto", () => {
+    const r = [{ id: "lit", texto: "Lit", patron: "((a+))+$", severidad: "alta" as const }]
+    const t0 = Date.now()
+    expect(evaluarReglas(["a".repeat(40) + "!", "aaaa"], r)).toEqual([])
+    expect(Date.now() - t0).toBeLessThan(500)
+    expect(evaluarReglas(["vea ((a+))+$ acá"], r)).toHaveLength(1)
   })
 
   it("sólo prueba los primeros 5000 caracteres de cada texto", () => {
-    const largo = "x".repeat(5000) + "prohibido"
-    expect(evaluarReglas([largo], [{ id: "r", texto: "R", patron: "prohibido", severidad: "media" }])).toEqual([])
-    expect(evaluarReglas(["prohibido" + "x".repeat(6000)], [{ id: "r", texto: "R", patron: "prohibido", severidad: "media" }])).toHaveLength(1)
+    const r = [{ id: "r", texto: "R", patron: "prohibido", severidad: "media" as const }]
+    expect(evaluarReglas(["x".repeat(5000) + "prohibido"], r)).toEqual([])
+    expect(evaluarReglas(["prohibido" + "x".repeat(6000)], r)).toHaveLength(1)
+  })
+
+  it("un patrón que no pasa la validación se reporta como inválido y no lanza", () => {
+    const largo = Array.from({ length: 21 }, (_, i) => `frase ${i}`).join("|")
+    const alertas = evaluarReglas(["frase 1"], [{ id: "x", texto: "X", patron: largo, severidad: "alta" }])
+    expect(alertas).toEqual([{ regla: "x", mensaje: "La regla «X» tiene un patrón inválido", severidad: "alta", fuente: "regla" }])
+  })
+
+  it("extrae todos los textos de la pieza, incluso anidados en el contenido", () => {
+    const textos = textosDePieza({
+      caption: "Caption",
+      hashtags: ["#MarDelPlata"],
+      contenido: { titulo: "Hola", lineas: [["Todo", "lo que"]], cantidad: 3, extra: { nota: "Anidado" } },
+    })
+    expect(textos).toEqual(["Caption", "#MarDelPlata", "Hola", "Todo", "lo que", "Anidado"])
   })
 })
 
-describe("validarPatron", () => {
-  it("acepta un patrón razonable", () => {
-    expect(validarPatron("ya est[aá] abierta|alberti\\s*\\d+")).toBeNull()
+describe("validarFrases", () => {
+  it("acepta una o varias frases", () => {
+    expect(validarFrases("ya está abierta")).toBeNull()
+    expect(validarFrases("ya está abierta| compra online ya |  alberti 4221")).toBeNull()
   })
 
-  it("rechaza un patrón de más de 200 caracteres", () => {
-    expect(validarPatron("a".repeat(201))).toMatch(/200/)
+  it("rechaza un patrón sin frases", () => {
+    expect(validarFrases("")).not.toBeNull()
+    expect(validarFrases(" | ")).not.toBeNull()
   })
 
-  it("rechaza un patrón que no compila", () => {
-    expect(validarPatron("([")).toMatch(/válida|inválido/)
+  it("rechaza más de 20 frases", () => {
+    expect(validarFrases(Array.from({ length: 21 }, (_, i) => `frase ${i}`).join("|"))).toMatch(/20/)
+    expect(validarFrases(Array.from({ length: 20 }, (_, i) => `frase ${i}`).join("|"))).toBeNull()
   })
 
-  it.each(["(a+)+", "(\\w*)*", "(a|aa+)+", "(a{2,})*", "(?:a+)+b"])("rechaza cuantificadores anidados: %s", (patron) => {
-    expect(validarPatron(patron)).not.toBeNull()
+  it("rechaza una frase de menos de 2 o más de 80 caracteres", () => {
+    expect(validarFrases("ok|a")).toMatch(/2/)
+    expect(validarFrases("\u0301\u0301")).toMatch(/2/)
+    expect(validarFrases("a".repeat(81))).toMatch(/80/)
+    expect(validarFrases("a".repeat(80))).toBeNull()
   })
 
-  it("acepta un grupo cuantificado sin cuantificadores adentro", () => {
-    expect(validarPatron("(ab|cd)+")).toBeNull()
+  it("rechaza un patrón de más de 300 caracteres", () => {
+    expect(validarFrases(Array.from({ length: 10 }, () => "a".repeat(40)).join("|"))).toMatch(/300/)
   })
 })

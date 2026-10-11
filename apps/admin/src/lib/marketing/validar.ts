@@ -1,5 +1,6 @@
 import type { AlertaPieza } from "@/db/schema"
 import type { ClienteInterno } from "./auth-interna"
+import type { MarcaEditable } from "./marca-repo"
 import type { CamposTransicion, NuevaPieza } from "./piezas-repo"
 import { CANALES, esUno, FORMATOS, OBJETIVOS, PRODUCCIONES, PUBLICOS, TEMAS, type BriefGrabacion } from "./tipos"
 
@@ -174,4 +175,53 @@ export function filaMetricaValida(f: unknown): boolean {
   if (typeof f.refId !== "string" || f.refId.length === 0 || f.refId.length > MAX_REF_ID) return false
   if (!fechaValida(f.fecha)) return false
   return Object.entries(f.metricas).every(([k, v]) => k.length > 0 && k.length <= MAX_CLAVE_METRICA && typeof v === "number" && Number.isFinite(v))
+}
+
+// ── Marca (PUT admin) ──────────────────────────────────────────────────────────
+// Topes de recursos: lo que llega de la UI admin se persiste en jsonb y lo lee el studio y la rutina.
+export const MAX_REGLAS = 50
+export const MAX_VOZ = 4000
+const MAX_HASHTAG_BASE = 50
+const DIAS = ["lunes", "martes", "miercoles", "miércoles", "jueves", "viernes", "sabado", "sábado", "domingo"] as const
+const CATEGORIAS_COMENTARIO = ["consulta", "asesoramiento", "elogio", "queja", "spam", "otro"] as const
+const POLITICAS = ["sugerir", "auto", "derivar", "ocultar"] as const
+const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/** Hasta 30 hashtags de hasta 50 caracteres; todo lo que no sea string se rechaza (sin coaccionar). */
+export function esListaHashtags(v: unknown): v is string[] {
+  return Array.isArray(v) && v.length <= MAX_HASHTAGS && v.every((h) => typeof h === "string" && h.length <= MAX_HASHTAG_BASE)
+}
+
+/** Forma de una regla de marca (id 1–60, texto 1–300, severidad, patron opcional de tipo string). */
+export function esReglaMarca(r: unknown): r is { id: string; texto: string; severidad: "alta" | "media"; patron?: string } {
+  if (!esObjetoPlano(r)) return false
+  return (
+    typeof r.id === "string" && r.id.length >= 1 && r.id.length <= 60 &&
+    typeof r.texto === "string" && r.texto.length >= 1 && r.texto.length <= 300 &&
+    (r.severidad === "alta" || r.severidad === "media") &&
+    (r.patron === undefined || typeof r.patron === "string")
+  )
+}
+
+const esPorcentaje = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100
+
+function esMapaDeNumeros(v: unknown, claves: readonly string[]): boolean {
+  return esObjetoPlano(v) && Object.entries(v).every(([k, n]) => claves.includes(k) && esPorcentaje(n))
+}
+
+export function esReparto(v: unknown): v is NonNullable<MarcaEditable["reparto"]> {
+  if (!esObjetoPlano(v)) return false
+  return Object.entries(v).every(([k, m]) => (k === "publico" ? esMapaDeNumeros(m, PUBLICOS) : k === "tema" ? esMapaDeNumeros(m, TEMAS) : false))
+}
+
+export function esHorarios(v: unknown): v is MarcaEditable["horariosPreferidos"] {
+  if (!esObjetoPlano(v)) return false
+  return Object.entries(v).every(
+    ([dia, horas]) => (DIAS as readonly string[]).includes(dia) && Array.isArray(horas) && horas.length <= 6 && horas.every((h) => typeof h === "string" && HORA_RE.test(h)),
+  )
+}
+
+export function esPoliticaComentarios(v: unknown): v is MarcaEditable["politicaComentarios"] {
+  if (!esObjetoPlano(v)) return false
+  return Object.entries(v).every(([k, p]) => (CATEGORIAS_COMENTARIO as readonly string[]).includes(k) && (POLITICAS as readonly string[]).includes(p as string))
 }

@@ -25,6 +25,16 @@ export async function listarSolicitudes(tenantId: string, estado: "pendiente" | 
   return filas.map(solicitudDto)
 }
 
+export async function hayPendiente(tenantId: string, tipo: TipoSolicitud, piezaId: string): Promise<boolean> {
+  if (!UUID_RE.test(piezaId)) return false
+  const filas = await getDb()
+    .select({ id: marketingSolicitudes.id })
+    .from(marketingSolicitudes)
+    .where(and(eq(marketingSolicitudes.tenantId, tenantId), eq(marketingSolicitudes.tipo, tipo), eq(marketingSolicitudes.piezaId, piezaId), eq(marketingSolicitudes.estado, "pendiente")))
+    .limit(1)
+  return filas.length > 0
+}
+
 export async function resolverSolicitud(tenantId: string, id: string, ok: boolean, resultado = ""): Promise<SolicitudDto | null> {
   if (!UUID_RE.test(id)) return null
   const [f] = await getDb()

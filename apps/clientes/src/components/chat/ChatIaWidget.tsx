@@ -8,7 +8,7 @@ import { useCart } from "@/context/CartContext";
 import type { PropsChatIa } from "@/lib/chat-ia";
 import { hrefWhatsApp, mensajeTraspaso } from "@/lib/chat-ia-handoff";
 import { lineasAItems, type ProductoResuelto } from "@/lib/chat-ia-productos";
-import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "@/lib/chat-ia-textos";
+import { AVATAR_CHAT, COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "@/lib/chat-ia-textos";
 import { useChatIa } from "@/hooks/useChatIa";
 import { useSenalesIniciativa } from "@/hooks/useSenalesIniciativa";
 import { contextoParaChat } from "@/lib/chat-ia-puente";
@@ -260,7 +260,7 @@ export default function ChatIaWidget({ agentId, titulo, textoVacio, sugerencias 
   return (
     <ChatDrawer
       config={config}
-      branding={{ title: titulo, subtitle: SUBTITULO_CHAT, primaryColor: COLOR_CHAT }}
+      branding={{ title: titulo, subtitle: SUBTITULO_CHAT, avatarUrl: AVATAR_CHAT, primaryColor: COLOR_CHAT }}
       // Texto del chat vacío y preguntas sugeridas: del admin del CRM, o los de chat-ia-textos.ts (propsChatIa).
       labels={{ ...ETIQUETAS_CHAT, headerTitle: titulo, emptyState: textoVacio }}
       theme="light"

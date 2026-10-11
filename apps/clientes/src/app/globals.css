@@ -63,6 +63,14 @@ body {
 html[data-chat-dock="abierto"] body {
   padding-right: calc(var(--aichat-dock-width) + env(safe-area-inset-right, 0px));
 }
+/* La barra compacta del header (al scrollear) es `fixed inset-x-0`: se mide
+   contra el viewport y el padding del <body> no la corre, así que el panel
+   tapaba el buscador y el carrito. Se le recorta el mismo ancho. Sin
+   transición de `right`: el DS anima translate/opacity/visibility y pisar esa
+   lista rompe la entrada de la barra. */
+html[data-chat-dock="abierto"] .site-header > header + div {
+  right: calc(var(--aichat-dock-width) + env(safe-area-inset-right, 0px));
+}
 
 /* Hoja del chat minimizada (barra "peek" abajo, `data-chat-peek`, < 768 px):
    las barras de compra fijas de la ficha y el carrito (`data-barra-compra`,

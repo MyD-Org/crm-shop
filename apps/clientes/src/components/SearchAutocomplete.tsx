@@ -44,10 +44,23 @@ function useDebounced<T>(value: T, delay = 150): T {
  * `prefers-reduced-motion`), y al enfocar el campo vacío aparece la guía con
  * ejemplos y búsquedas frecuentes (ver GuiaBusqueda). Sin el flag, el de
  * siempre.
+ *
+ * El texto lo guarda quien lo usa: el header monta dos buscadores (el suyo y
+ * el de la barra compacta) y los dos muestran el mismo texto. El desplegable y
+ * sus sugerencias son de cada uno.
  */
-export function SearchAutocomplete({ busquedaIa = false, extra }: { busquedaIa?: boolean; extra?: ReactNode }) {
+export function SearchAutocomplete({
+  busquedaIa = false,
+  extra,
+  query,
+  setQuery,
+}: {
+  busquedaIa?: boolean;
+  extra?: ReactNode;
+  query: string;
+  setQuery: (texto: string) => void;
+}) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -69,36 +82,41 @@ export function SearchAutocomplete({ busquedaIa = false, extra }: { busquedaIa?:
   const pidioFrecuentes = useRef(false);
 
   const debouncedQuery = useDebounced(query, 250);
-  const [results, setResults] = useState<Product[]>([]);
+  // Las sugerencias recuerdan para qué texto se pidieron: el texto puede haber
+  // cambiado en el otro buscador mientras este estaba cerrado, y no se muestran
+  // las de otra búsqueda (se ve "Buscando…" hasta que llegan las nuevas).
+  const [sugeridas, setSugeridas] = useState<{ q: string; items: Product[] }>({ q: "", items: [] });
+  const qVigente = debouncedQuery.trim();
+  const results = sugeridas.q === qVigente ? sugeridas.items : [];
   // Precio de la lista privada de la cuenta (si la tiene) en las sugerencias.
   const preciosCuenta = usePreciosCuenta(results.map((p) => p.id));
-  const [loading, setLoading] = useState(false);
+  const loading = sugeridas.q !== qVigente;
 
   // Búsqueda server-side sobre el catálogo del CRM (misma regla que /catalogo:
   // por términos, con plurales y relevancia; ver `coincideTexto` en catalog.ts).
+  // Sólo con el desplegable abierto: el texto es compartido y el otro buscador
+  // del header pediría lo mismo. Cerrado, se quedan las últimas sugerencias.
   useEffect(() => {
+    if (!open) return;
     const q = debouncedQuery.trim();
     const controller = new AbortController();
     let cancelled = false;
 
     (async () => {
       if (q.length < 2) {
-        setResults([]);
-        setLoading(false);
+        setSugeridas({ q, items: [] });
         return;
       }
-      setLoading(true);
       try {
         const res = await fetch(
           `/api/shop/catalogo?q=${encodeURIComponent(q)}&limit=8`,
           { signal: controller.signal },
         );
         const data: Product[] = res.ok ? await res.json() : [];
-        if (!cancelled) setResults(Array.isArray(data) ? data : []);
+        if (!cancelled) setSugeridas({ q, items: Array.isArray(data) ? data : [] });
       } catch {
-        /* abortado o error de red: ignoramos */
-      } finally {
-        if (!cancelled) setLoading(false);
+        // Abortado: lo resuelve el pedido siguiente. Error de red: sin sugerencias.
+        if (!cancelled) setSugeridas({ q, items: [] });
       }
     })();
 
@@ -106,7 +124,7 @@ export function SearchAutocomplete({ busquedaIa = false, extra }: { busquedaIa?:
       cancelled = true;
       controller.abort();
     };
-  }, [debouncedQuery]);
+  }, [debouncedQuery, open]);
 
   useEffect(() => {
     function onMouseDown(e: MouseEvent) {

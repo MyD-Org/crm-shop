@@ -35,7 +35,6 @@ export type CamposTransicion = {
   renderKey?: string | null
   portadaKey?: string | null
   alertas?: AlertaPieza[]
-  chequeoIa?: boolean
   externoId?: string
   permalink?: string
   contenido?: Record<string, unknown>
@@ -204,7 +203,7 @@ export async function transicionar(
   if (actor === "studio" && actual.estado !== "renderizando" && puedeTransicionar(actor, "renderizando", a)) return { ok: false, code: "conflict" }
   if (!puedeTransicionar(actor, actual.estado, a)) return { ok: false, code: "invalid_transition" }
 
-  const condiciones = [eq(marketingPiezas.tenantId, tenantId), eq(marketingPiezas.id, id), eq(marketingPiezas.estado, actual.estado)]
+  const condiciones = [eq(marketingPiezas.tenantId, tenantId), eq(marketingPiezas.id, id), eq(marketingPiezas.estado, actual.estado), eq(marketingPiezas.version, actual.version)]
   // El studio sólo cierra el render que él mismo reclamó: un claim vencido y retomado por otro
   // worker (o liberado a borrador) no se pisa.
   if (actor === "studio") {
@@ -212,13 +211,34 @@ export async function transicionar(
     condiciones.push(eq(marketingPiezas.claimPor, opciones.worker))
   }
 
-  const campos = opciones.campos ?? {}
+  // Las alertas de reglas de marca y el chequeo con IA nunca los fija el cliente: el servidor
+  // recalcula las de regla desde el contenido resultante. Del studio sólo se aceptan sus propias alertas.
+  const { alertas: alertasCliente, ...campos } = opciones.campos ?? {}
+  const escribeContenido = campos.contenido !== undefined || campos.caption !== undefined || campos.hashtags !== undefined
+  const derivados: { alertas?: AlertaPieza[]; chequeoIa?: boolean } = {}
+  if (escribeContenido) {
+    const alertasDeRegla = await alertasDeReglas(tenantId, {
+      caption: campos.caption ?? actual.caption,
+      contenido: campos.contenido ?? actual.contenido,
+      hashtags: campos.hashtags ?? actual.hashtags,
+    })
+    derivados.alertas = alertasDeRegla
+    derivados.chequeoIa = false
+  } else if (actor === "studio" && alertasCliente) {
+    const alertasDeRegla = await alertasDeReglas(tenantId, actual)
+    derivados.alertas = [
+      ...alertasDeRegla,
+      ...actual.alertas.filter((a) => a.fuente === "ia"),
+      ...alertasCliente.filter((a) => a.fuente === "studio"),
+    ]
+  }
   const sale = actual.estado === "renderizando"
   return getDb().transaction(async (tx): Promise<ResultadoTransicion> => {
     const [f] = await tx
       .update(marketingPiezas)
       .set({
         ...campos,
+        ...derivados,
         estado: a,
         ...(sale ? { claimPor: null, claimHasta: null } : {}),
         ...(a === "publicada" ? { publicadaAt: new Date() } : {}),
@@ -270,5 +290,33 @@ export async function editarContenido(
     if (!f) return { ok: false, code: "conflict" }
     await registrarEvento(tenantId, id, actual.estado, destino, `usuario:${nombreActor}`, "edición de contenido", tx)
     return { ok: true, pieza: aDto(f) }
+  })
+}
+
+/**
+ * Chequeo de marca con IA de la rutina sobre una pieza en `para_revisar`: no cambia el estado.
+ * Reemplaza las alertas de fuente "ia" (conserva las demás) y marca el chequeo como hecho.
+ * Devuelve null si la pieza no existe, no está en `para_revisar` o cambió mientras tanto.
+ */
+export async function registrarChequeoIa(tenantId: string, id: string, alertasIa: AlertaPieza[]): Promise<PiezaDto | null> {
+  const actual = await obtenerPieza(tenantId, id)
+  if (!actual || actual.estado !== "para_revisar") return null
+  const alertas: AlertaPieza[] = [...actual.alertas.filter((a) => a.fuente !== "ia"), ...alertasIa.map((a) => ({ ...a, fuente: "ia" as const }))]
+  return getDb().transaction(async (tx) => {
+    const [f] = await tx
+      .update(marketingPiezas)
+      .set({ alertas, chequeoIa: true, updatedAt: new Date() })
+      .where(
+        and(
+          eq(marketingPiezas.tenantId, tenantId),
+          eq(marketingPiezas.id, id),
+          eq(marketingPiezas.estado, "para_revisar"),
+          eq(marketingPiezas.version, actual.version),
+        ),
+      )
+      .returning()
+    if (!f) return null
+    await registrarEvento(tenantId, id, "para_revisar", "para_revisar", "planificador", "chequeo IA", tx)
+    return aDto(f)
   })
 }

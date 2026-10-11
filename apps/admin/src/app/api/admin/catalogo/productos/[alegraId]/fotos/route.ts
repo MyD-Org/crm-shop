@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { avisarShop, conUrlDeFotos, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
 import { detalleProducto, guardarOverlay } from "@/lib/catalogo-overlay-repo"
-import { ANCHOS_FOTO, esAnchoValido, fotoKey, getShopMediaR2 } from "@/lib/shop-media"
+import { ANCHOS_FOTO, esAnchoValido, fotoKey, getShopMediaR2, idDeRuta, prefijoProducto } from "@/lib/shop-media"
 
 // POST /api/admin/catalogo/productos/[alegraId]/fotos — firma la subida de UNA foto.
 // PUT  /api/admin/catalogo/productos/[alegraId]/fotos — persiste la lista final (alta, orden, alt).
@@ -36,7 +36,7 @@ export async function POST(req: Request, { params }: Params) {
     )
   }
 
-  const { alegraId } = await params
+  const alegraId = idDeRuta((await params).alegraId)
   if (!(await detalleProducto(guard.tenantId, alegraId))) return adminNotFoundResponse()
 
   const body = (await req.json().catch(() => null)) as { id?: unknown; variantes?: unknown } | null
@@ -84,13 +84,18 @@ export async function PUT(req: Request, { params }: Params) {
   const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
 
-  const { alegraId } = await params
+  const alegraId = idDeRuta((await params).alegraId)
   if (!(await detalleProducto(guard.tenantId, alegraId))) return adminNotFoundResponse()
 
   const body = (await req.json().catch(() => null)) as { fotos?: unknown } | null
   if (!body || !Array.isArray(body.fotos)) return validacionResponse("Indique las fotos del producto.", "fotos")
 
-  const prefijoDelTenant = `productos/${guard.tenantId}/${alegraId}/`
+  let prefijoDelTenant: string
+  try {
+    prefijoDelTenant = prefijoProducto(guard.tenantId, alegraId)
+  } catch {
+    return adminNotFoundResponse()
+  }
   const fotos = []
   for (const f of body.fotos as { key?: unknown; w?: unknown; alt?: unknown }[]) {
     const key = typeof f?.key === "string" ? f.key : ""

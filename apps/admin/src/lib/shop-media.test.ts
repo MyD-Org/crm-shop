@@ -5,6 +5,9 @@ import {
   fichaContenidoKey,
   fichaKey,
   fotoKey,
+  idDeRuta,
+  prefijoProducto,
+  segmentoProducto,
   shaDeFichaContenidoKey,
   shopMediaConfig,
   urlPublicaFoto,
@@ -114,5 +117,57 @@ describe("fichaContenidoKey", () => {
     expect(shaDeFichaContenidoKey("t", `productos/t/9001/ficha-${UUID}.pdf`)).toBeNull()
     expect(shaDeFichaContenidoKey("t", `productos/t/fichas/${SHA}.png`)).toBeNull()
     expect(shaDeFichaContenidoKey("t", `productos/t/fichas/${"z".repeat(64)}.pdf`)).toBeNull()
+  })
+})
+
+describe("segmentoProducto", () => {
+  it("deja igual los ids numéricos y reemplaza el ':' de los de cuenta secundaria", () => {
+    expect(segmentoProducto("12")).toBe("12")
+    expect(segmentoProducto("mdp:12")).toBe("mdp_12")
+  })
+
+  it("rechaza ids malformados", () => {
+    for (const malo of ["../x", "mdp:", "MDP:1", "mdp:12:3", "", "a/b", ":12", "mdp:x"]) {
+      expect(() => segmentoProducto(malo), malo).toThrow("El identificador del producto no es válido.")
+    }
+  })
+})
+
+describe("keys de productos de cuenta secundaria", () => {
+  it("fotoKey y fichaKey con id numérico siguen idénticas a las ya guardadas", () => {
+    expect(fotoKey("central-led", "9001", UUID, 320)).toBe(`productos/central-led/9001/${UUID}-320.webp`)
+    expect(fichaKey("central-led", "9001", UUID)).toBe(`productos/central-led/9001/ficha-${UUID}.pdf`)
+  })
+
+  it("con mdp:12 la key no lleva ':' y cuelga del prefijo del producto", () => {
+    const foto = fotoKey("t", "mdp:12", UUID, 800)
+    const ficha = fichaKey("t", "mdp:12", UUID)
+    expect(foto).toBe(`productos/t/mdp_12/${UUID}-800.webp`)
+    expect(ficha).toBe(`productos/t/mdp_12/ficha-${UUID}.pdf`)
+    expect(foto.includes(":")).toBe(false)
+    expect(foto.startsWith(prefijoProducto("t", "mdp:12"))).toBe(true)
+    expect(ficha.startsWith(prefijoProducto("t", "mdp:12"))).toBe(true)
+  })
+
+  it("el prefijo de un producto no acepta keys de otro producto ni de otro tenant", () => {
+    const prefijo = prefijoProducto("t", "mdp:12")
+    expect(fotoKey("t", "mdp:120", UUID, 800).startsWith(prefijo)).toBe(false)
+    expect(fotoKey("t", "12", UUID, 800).startsWith(prefijo)).toBe(false)
+    expect(fotoKey("otro", "mdp:12", UUID, 800).startsWith(prefijo)).toBe(false)
+  })
+
+  it("rechaza ids inválidos", () => {
+    expect(() => fotoKey("t", "../x", UUID, 800)).toThrow()
+    expect(() => fichaKey("t", "mdp:", UUID)).toThrow()
+    expect(() => prefijoProducto("../t", "12")).toThrow()
+  })
+})
+
+describe("idDeRuta", () => {
+  it("decodifica el ':' codificado y deja pasar lo demás", () => {
+    expect(idDeRuta("mdp%3A12")).toBe("mdp:12")
+    expect(idDeRuta("mdp:12")).toBe("mdp:12")
+    expect(idDeRuta("12")).toBe("12")
+    expect(idDeRuta("%E0%A4%A")).toBe("%E0%A4%A")
   })
 })

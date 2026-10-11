@@ -53,6 +53,9 @@ describe("repo de piezas", () => {
     const ganadores = [a, b].filter(Boolean)
     expect(ganadores).toHaveLength(1)
     expect(ganadores[0]!.estado).toBe("renderizando")
+    const guardada = await obtenerPieza(T, p.id)
+    expect(guardada!.claimPor).toBe(ganadores[0]!.claimPor)
+    expect(["w1", "w2"]).toContain(guardada!.claimPor)
   })
 
   it("un claim vencido vuelve a borrador y el PATCH tardío del worker se rechaza", async () => {
@@ -63,6 +66,20 @@ describe("repo de piezas", () => {
     expect((await obtenerPieza(T, p.id))!.estado).toBe("borrador")
     const tarde = await transicionar(T, p.id, "para_revisar", "studio", { worker: "w1", campos: { renderKey: "marketing/x.mp4" } })
     expect(tarde).toEqual({ ok: false, code: "conflict" })
+    const despues = await obtenerPieza(T, p.id)
+    expect(despues).toMatchObject({ estado: "borrador", renderKey: null, claimPor: null })
+  })
+
+  it("un claim retomado por otro worker no se pisa con el PATCH tardío del primero", async () => {
+    const p = await crearPieza(T, base, planificador)
+    await reclamarPieza(T, p.id, "w1", 600)
+    await getDb().execute(sql`update marketing_piezas set claim_hasta = now() - interval '1 minute' where id = ${p.id}`)
+    expect(await liberarClaimsVencidos(T)).toBe(1)
+    expect((await reclamarPieza(T, p.id, "w2", 600))?.claimPor).toBe("w2")
+    const tarde = await transicionar(T, p.id, "para_revisar", "studio", { worker: "w1", campos: { renderKey: "marketing/x.mp4" } })
+    expect(tarde).toEqual({ ok: false, code: "conflict" })
+    const despues = await obtenerPieza(T, p.id)
+    expect(despues).toMatchObject({ estado: "renderizando", claimPor: "w2", renderKey: null })
   })
 
   it("el studio termina el render con su claim y la pieza pasa a revisión", async () => {
@@ -92,6 +109,19 @@ describe("repo de piezas", () => {
     if (r.ok) {
       expect(r.pieza).toMatchObject({ estado: "borrador", version: 2, renderKey: null, portadaKey: null, caption: "Nuevo caption" })
     }
+  })
+
+  it("dos ediciones concurrentes de la misma pieza: una gana y la otra recibe conflict", async () => {
+    const p = await crearPieza(T, base, planificador)
+    const [a, b] = await Promise.all([
+      editarContenido(T, p.id, { caption: "Caption A" }, "Ana"),
+      editarContenido(T, p.id, { hashtags: ["#b"] }, "Beto"),
+    ])
+    const oks = [a, b].filter((r) => r.ok)
+    expect(oks).toHaveLength(1)
+    const perdedor = [a, b].find((r) => !r.ok)
+    expect(perdedor).toEqual({ ok: false, code: "conflict" })
+    expect((await obtenerPieza(T, p.id))!.version).toBe(2)
   })
 
   it("no se edita una pieza que se está renderizando", async () => {

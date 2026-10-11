@@ -2,7 +2,7 @@
 // Acceso a marketing_piezas. Toda escritura de estado pasa por acá: valida la arista con
 // puedeTransicionar, usa `where estado = de` (concurrencia optimista) y deja un evento.
 import { and, asc, eq, gte, lt, sql } from "drizzle-orm"
-import { getDb } from "@/db"
+import { getDb, type Db } from "@/db"
 import { marketingPiezaEventos, marketingPiezas, type AlertaPieza } from "@/db/schema"
 import { urlPublicaFoto } from "@/lib/shop-media"
 import { ESTADOS_EDITABLES, esEstadoPieza, puedeTransicionar, type ActorPieza, type EstadoPieza } from "./estados"
@@ -89,8 +89,10 @@ async function alertasDeReglas(tenantId: string, p: { caption: string; contenido
   return evaluarReglas(textosDePieza(p), marca.reglas)
 }
 
-async function registrarEvento(tenantId: string, piezaId: string, de: string | null, a: string, actor: string, nota = ""): Promise<void> {
-  await getDb().insert(marketingPiezaEventos).values({ tenantId, piezaId, de, a, actor, nota })
+type Ejecutor = Pick<Db, "insert">
+
+async function registrarEvento(tenantId: string, piezaId: string, de: string | null, a: string, actor: string, nota = "", ejecutor: Ejecutor = getDb()): Promise<void> {
+  await ejecutor.insert(marketingPiezaEventos).values({ tenantId, piezaId, de, a, actor, nota })
 }
 
 export async function crearPieza(tenantId: string, input: NuevaPieza, actor: { tipo: "planificador" | "usuario"; nombre: string }): Promise<PiezaDto> {
@@ -99,33 +101,35 @@ export async function crearPieza(tenantId: string, input: NuevaPieza, actor: { t
   const hashtags = input.hashtags ?? []
   const estado: EstadoPieza = input.produccion === "auto" ? "borrador" : "esperando_material"
   const alertas = await alertasDeReglas(tenantId, { caption, contenido, hashtags })
-  const [f] = await getDb()
-    .insert(marketingPiezas)
-    .values({
-      tenantId,
-      canal: input.canal,
-      formato: input.formato,
-      plantilla: input.plantilla,
-      publico: input.publico,
-      tema: input.tema,
-      objetivo: input.objetivo,
-      produccion: input.produccion,
-      contenido,
-      caption,
-      hashtags,
-      productos: input.productos ?? [],
-      musicaId: input.musicaId ?? null,
-      sucursalId: input.sucursalId ?? null,
-      campanaId: input.campanaId ?? null,
-      briefGrabacion: input.briefGrabacion ?? null,
-      programadaPara: input.programadaPara ?? null,
-      estado,
-      alertas,
-      origen: actor.tipo,
-    })
-    .returning()
-  await registrarEvento(tenantId, f.id, null, estado, `${actor.tipo}:${actor.nombre}`)
-  return aDto(f)
+  return getDb().transaction(async (tx) => {
+    const [f] = await tx
+      .insert(marketingPiezas)
+      .values({
+        tenantId,
+        canal: input.canal,
+        formato: input.formato,
+        plantilla: input.plantilla,
+        publico: input.publico,
+        tema: input.tema,
+        objetivo: input.objetivo,
+        produccion: input.produccion,
+        contenido,
+        caption,
+        hashtags,
+        productos: input.productos ?? [],
+        musicaId: input.musicaId ?? null,
+        sucursalId: input.sucursalId ?? null,
+        campanaId: input.campanaId ?? null,
+        briefGrabacion: input.briefGrabacion ?? null,
+        programadaPara: input.programadaPara ?? null,
+        estado,
+        alertas,
+        origen: actor.tipo,
+      })
+      .returning()
+    await registrarEvento(tenantId, f.id, null, estado, `${actor.tipo}:${actor.nombre}`, "", tx)
+    return aDto(f)
+  })
 }
 
 export async function obtenerPieza(tenantId: string, id: string): Promise<PiezaDto | null> {
@@ -158,26 +162,30 @@ export async function eventosDePieza(tenantId: string, id: string) {
 }
 
 export async function liberarClaimsVencidos(tenantId: string): Promise<number> {
-  const liberadas = await getDb()
-    .update(marketingPiezas)
-    .set({ estado: "borrador", claimPor: null, claimHasta: null, updatedAt: new Date() })
-    .where(and(eq(marketingPiezas.tenantId, tenantId), eq(marketingPiezas.estado, "renderizando"), lt(marketingPiezas.claimHasta, sql`now()`)))
-    .returning({ id: marketingPiezas.id })
-  for (const { id } of liberadas) await registrarEvento(tenantId, id, "renderizando", "borrador", "sistema", "claim vencido")
-  return liberadas.length
+  return getDb().transaction(async (tx) => {
+    const liberadas = await tx
+      .update(marketingPiezas)
+      .set({ estado: "borrador", claimPor: null, claimHasta: null, updatedAt: new Date() })
+      .where(and(eq(marketingPiezas.tenantId, tenantId), eq(marketingPiezas.estado, "renderizando"), lt(marketingPiezas.claimHasta, sql`now()`)))
+      .returning({ id: marketingPiezas.id })
+    for (const { id } of liberadas) await registrarEvento(tenantId, id, "renderizando", "borrador", "sistema", "claim vencido", tx)
+    return liberadas.length
+  })
 }
 
 export async function reclamarPieza(tenantId: string, id: string, worker: string, ttlSeg: number): Promise<PiezaDto | null> {
   if (!UUID_RE.test(id)) return null
   const ttl = Math.min(Math.max(Math.trunc(ttlSeg), 60), 3600)
-  const [f] = await getDb()
-    .update(marketingPiezas)
-    .set({ estado: "renderizando", claimPor: worker, claimHasta: sql`now() + make_interval(secs => ${ttl})`, updatedAt: new Date() })
-    .where(and(eq(marketingPiezas.tenantId, tenantId), eq(marketingPiezas.id, id), eq(marketingPiezas.estado, "borrador")))
-    .returning()
-  if (!f) return null
-  await registrarEvento(tenantId, id, "borrador", "renderizando", `studio:${worker}`)
-  return aDto(f)
+  return getDb().transaction(async (tx) => {
+    const [f] = await tx
+      .update(marketingPiezas)
+      .set({ estado: "renderizando", claimPor: worker, claimHasta: sql`now() + make_interval(secs => ${ttl})`, updatedAt: new Date() })
+      .where(and(eq(marketingPiezas.tenantId, tenantId), eq(marketingPiezas.id, id), eq(marketingPiezas.estado, "borrador")))
+      .returning()
+    if (!f) return null
+    await registrarEvento(tenantId, id, "borrador", "renderizando", `studio:${worker}`, "", tx)
+    return aDto(f)
+  })
 }
 
 export async function transicionar(
@@ -206,21 +214,23 @@ export async function transicionar(
 
   const campos = opciones.campos ?? {}
   const sale = actual.estado === "renderizando"
-  const [f] = await getDb()
-    .update(marketingPiezas)
-    .set({
-      ...campos,
-      estado: a,
-      ...(sale ? { claimPor: null, claimHasta: null } : {}),
-      ...(a === "publicada" ? { publicadaAt: new Date() } : {}),
-      updatedAt: new Date(),
-    })
-    .where(and(...condiciones))
-    .returning()
-  if (!f) return { ok: false, code: "conflict" }
-  const nombre = opciones.nombreActor ?? opciones.worker
-  await registrarEvento(tenantId, id, actual.estado, a, nombre ? `${actor}:${nombre}` : actor, opciones.nota ?? "")
-  return { ok: true, pieza: aDto(f) }
+  return getDb().transaction(async (tx): Promise<ResultadoTransicion> => {
+    const [f] = await tx
+      .update(marketingPiezas)
+      .set({
+        ...campos,
+        estado: a,
+        ...(sale ? { claimPor: null, claimHasta: null } : {}),
+        ...(a === "publicada" ? { publicadaAt: new Date() } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(...condiciones))
+      .returning()
+    if (!f) return { ok: false, code: "conflict" }
+    const nombre = opciones.nombreActor ?? opciones.worker
+    await registrarEvento(tenantId, id, actual.estado, a, nombre ? `${actor}:${nombre}` : actor, opciones.nota ?? "", tx)
+    return { ok: true, pieza: aDto(f) }
+  })
 }
 
 export async function editarContenido(
@@ -240,23 +250,25 @@ export async function editarContenido(
   // Una pieza esperando material sigue esperándolo; cualquier otra vuelve a borrador para re-renderizar.
   const destino: EstadoPieza = actual.estado === "esperando_material" ? "esperando_material" : "borrador"
 
-  const [f] = await getDb()
-    .update(marketingPiezas)
-    .set({
-      contenido,
-      caption,
-      hashtags,
-      alertas,
-      chequeoIa: false,
-      estado: destino,
-      version: sql`${marketingPiezas.version} + 1`,
-      renderKey: null,
-      portadaKey: null,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(marketingPiezas.tenantId, tenantId), eq(marketingPiezas.id, id), eq(marketingPiezas.estado, actual.estado)))
-    .returning()
-  if (!f) return { ok: false, code: "conflict" }
-  await registrarEvento(tenantId, id, actual.estado, destino, `usuario:${nombreActor}`, "edición de contenido")
-  return { ok: true, pieza: aDto(f) }
+  return getDb().transaction(async (tx): Promise<ResultadoTransicion> => {
+    const [f] = await tx
+      .update(marketingPiezas)
+      .set({
+        contenido,
+        caption,
+        hashtags,
+        alertas,
+        chequeoIa: false,
+        estado: destino,
+        version: sql`${marketingPiezas.version} + 1`,
+        renderKey: null,
+        portadaKey: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(marketingPiezas.tenantId, tenantId), eq(marketingPiezas.id, id), eq(marketingPiezas.estado, actual.estado), eq(marketingPiezas.version, actual.version)))
+      .returning()
+    if (!f) return { ok: false, code: "conflict" }
+    await registrarEvento(tenantId, id, actual.estado, destino, `usuario:${nombreActor}`, "edición de contenido", tx)
+    return { ok: true, pieza: aDto(f) }
+  })
 }

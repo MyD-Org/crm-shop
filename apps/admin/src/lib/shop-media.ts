@@ -72,7 +72,9 @@ export function resetShopMediaR2(): void {
 }
 
 const TENANT_ID_RE = /^[a-z0-9-]+$/
-const ALEGRA_ID_RE = /^[A-Za-z0-9_-]+$/
+// Id del producto en el espejo: numérico/alfanumérico (cuenta principal) o `<slug>:<n>` (cuenta
+// secundaria, p. ej. `mdp:12`). El ":" NO puede ir en una key de R2 ni en un prefijo de ruta.
+const ALEGRA_ID_RE = /^(?:[A-Za-z0-9_-]+|[a-z][a-z0-9-]{1,11}:\d+)$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Los anchos que se generan por foto. El primero es el que se usa de miniatura. */
@@ -84,6 +86,32 @@ export function esAnchoValido(w: number): w is AnchoFoto {
 }
 
 /**
+ * Segmento de key para un id de producto del espejo. Los ids numéricos quedan IGUAL (las keys ya
+ * guardadas no cambian); `mdp:12` pasa a `mdp_12`. Lanza si el id no es válido.
+ */
+export function segmentoProducto(alegraId: string): string {
+  if (typeof alegraId !== "string" || !ALEGRA_ID_RE.test(alegraId)) {
+    throw new Error("El identificador del producto no es válido.")
+  }
+  return alegraId.replace(":", "_")
+}
+
+/** Prefijo `productos/{tenant}/{segmento}/` que ata una key a UN producto. */
+export function prefijoProducto(tenantId: string, alegraId: string): string {
+  if (!TENANT_ID_RE.test(tenantId)) throw new Error(`tenantId inválido para key de R2: ${JSON.stringify(tenantId)}`)
+  return `productos/${tenantId}/${segmentoProducto(alegraId)}/`
+}
+
+/** Id de producto recibido como parámetro de ruta: decodifica `mdp%3A12` -> `mdp:12` sin lanzar. */
+export function idDeRuta(param: string): string {
+  try {
+    return decodeURIComponent(param)
+  } catch {
+    return param
+  }
+}
+
+/**
  * Key de una foto: `productos/{tenant}/{alegraId}/{uuid}-{ancho}.webp`.
  *
  * El uuid es por FOTO, no por variante: las tres medidas de la misma foto lo comparten, que es lo
@@ -91,10 +119,9 @@ export function esAnchoValido(w: number): w is AnchoFoto {
  */
 export function fotoKey(tenantId: string, alegraId: string, id: string, ancho: number): string {
   if (!TENANT_ID_RE.test(tenantId)) throw new Error(`tenantId inválido para key de R2: ${JSON.stringify(tenantId)}`)
-  if (!ALEGRA_ID_RE.test(alegraId)) throw new Error(`alegraId inválido para key de R2: ${JSON.stringify(alegraId)}`)
   if (!UUID_RE.test(id)) throw new Error(`id inválido para key de R2: ${JSON.stringify(id)}`)
   if (!esAnchoValido(ancho)) throw new Error(`ancho inválido para key de R2: ${ancho}`)
-  return `productos/${tenantId}/${alegraId}/${id}-${ancho}.webp`
+  return `${prefijoProducto(tenantId, alegraId)}${id}-${ancho}.webp`
 }
 
 /**
@@ -106,9 +133,8 @@ export function fotoKey(tenantId: string, alegraId: string, id: string, ancho: n
  */
 export function fichaKey(tenantId: string, alegraId: string, id: string): string {
   if (!TENANT_ID_RE.test(tenantId)) throw new Error(`tenantId inválido para key de R2: ${JSON.stringify(tenantId)}`)
-  if (!ALEGRA_ID_RE.test(alegraId)) throw new Error(`alegraId inválido para key de R2: ${JSON.stringify(alegraId)}`)
   if (!UUID_RE.test(id)) throw new Error(`id inválido para key de R2: ${JSON.stringify(id)}`)
-  return `productos/${tenantId}/${alegraId}/ficha-${id}.pdf`
+  return `${prefijoProducto(tenantId, alegraId)}ficha-${id}.pdf`
 }
 
 const SHA256_RE = /^[0-9a-f]{64}$/

@@ -108,6 +108,22 @@ dominio ni certificado propio.
 |---|---|
 | `MP_PUBLIC_KEY` | Clave **pública** (`APP_USR-…`) de la cuenta de Mercado Pago de la tienda. No es un secreto ni un interruptor: sólo permite preguntarle a Mercado Pago si las cuotas sin interés de Medios de pago tienen interés en su cuenta. Sin ella, ese aviso no se muestra y nada más cambia. |
 
+### Marketing (API interna, opcional)
+Un secreto por cliente de la API interna `/api/internal/marketing/*` (contrato en
+`platform/contracts/marketing.md`). Generar cada uno con `openssl rand -hex 32` y cargar el mismo
+valor en el servicio que lo usa; **no** reutilizar `INTERNAL_SECRET`. Sin `MARKETING_TENANT_ID` la
+API responde 503 `not_configured`; sin el secreto de un cliente, ese cliente recibe 401.
+
+| Var | Valor |
+|---|---|
+| `MARKETING_TENANT_ID` | Id del tenant al que pertenecen las piezas (en la iteración 1 hay uno solo; el tenant sale de acá, nunca del request) |
+| `MARKETING_STUDIO_SECRET` | Secreto del studio. También es el bearer del ping CRM → studio |
+| `MARKETING_PLANNER_SECRET` | Secreto de la rutina planificadora |
+| `MARKETING_AIAPI_SECRET` | Secreto de ai-api |
+| `MARKETING_STUDIO_URL` | Base URL del studio (ej. `https://studio.example`). Al quedar una pieza en `borrador` el CRM hace `POST {MARKETING_STUDIO_URL}/ping` sin payload; sin la var (o sin `MARKETING_STUDIO_SECRET`) el ping es no-op y el studio igual consulta cada 60 s |
+
+La migración `0080` (tablas `marketing_*`) se aplica a mano antes de mergear (ver `AGENTS.md`).
+
 ### Tenant `central-led`
 | Var | Valor |
 |---|---|

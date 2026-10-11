@@ -1653,3 +1653,189 @@ export const preciosOnlineRetenciones = pgTable(
     index("precios_online_retenciones_alegra_idx").on(t.tenantId, t.alegraId, t.estado),
   ],
 )
+
+// ── Marketing (plataforma de marketing, iteración 1; migración 0080) ───────────────────
+// Cada pieza es una fila con estado: el studio, la rutina y ai-api la toman por la API interna.
+// Los "enums" son text con CHECK en el SQL (drift sólo en SQL). Ver src/lib/marketing/.
+
+export type ReglaMarca = { id: string; texto: string; patron?: string; severidad: "alta" | "media" }
+export type AlertaPieza = { regla: string; mensaje: string; severidad: "alta" | "media"; fuente: "regla" | "ia" | "studio" }
+
+export const marketingMarca = pgTable(
+  "marketing_marca",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    voz: text("voz").notNull().default(""),
+    reglas: jsonb("reglas").$type<ReglaMarca[]>().notNull().default([]),
+    paleta: jsonb("paleta").$type<Record<string, string>>().notNull().default({}),
+    tipografias: jsonb("tipografias").$type<Record<string, string>>().notNull().default({}),
+    logoKey: text("logo_key"),
+    hashtagsBase: text("hashtags_base").array().notNull().default(sql`'{}'::text[]`),
+    horariosPreferidos: jsonb("horarios_preferidos").$type<Record<string, string[]>>().notNull().default({}),
+    plantillasHabilitadas: text("plantillas_habilitadas").array().notNull().default(sql`'{}'::text[]`),
+    reparto: jsonb("reparto").$type<{ publico?: Record<string, number>; tema?: Record<string, number> }>().notNull().default({}),
+    politicaComentarios: jsonb("politica_comentarios").$type<Record<string, "sugerir" | "auto" | "derivar" | "ocultar">>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("marketing_marca_tenant_uniq").on(t.tenantId)],
+)
+
+export const marketingCampanas = pgTable("marketing_campanas", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull().references(() => tenants.id),
+  nombre: text("nombre").notNull(),
+  objetivo: text("objetivo").notNull().default(""),
+  desde: date("desde"),
+  hasta: date("hasta"),
+  sucursalId: uuid("sucursal_id").references(() => sucursales.id),
+  // 'activa' | 'pausada' | 'cerrada' (CHECK en SQL)
+  estado: text("estado").notNull().default("activa"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const marketingMusica = pgTable("marketing_musica", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull().references(() => tenants.id),
+  archivoKey: text("archivo_key").notNull(),
+  titulo: text("titulo").notNull(),
+  autor: text("autor").notNull().default(""),
+  licencia: text("licencia").notNull().default(""),
+  contentId: boolean("content_id").notNull().default(false),
+  bpm: numeric("bpm", { precision: 6, scale: 2 }).notNull(),
+  dropSeg: numeric("drop_seg", { precision: 7, scale: 3 }).notNull().default("0"),
+  duracionSeg: numeric("duracion_seg", { precision: 7, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const marketingPiezas = pgTable(
+  "marketing_piezas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    campanaId: uuid("campana_id").references(() => marketingCampanas.id),
+    canal: text("canal").notNull(),
+    formato: text("formato").notNull(),
+    plantilla: text("plantilla").notNull(),
+    contenido: jsonb("contenido").$type<Record<string, unknown>>().notNull().default({}),
+    caption: text("caption").notNull().default(""),
+    hashtags: text("hashtags").array().notNull().default(sql`'{}'::text[]`),
+    productos: text("productos").array().notNull().default(sql`'{}'::text[]`),
+    musicaId: uuid("musica_id").references(() => marketingMusica.id),
+    sucursalId: uuid("sucursal_id").references(() => sucursales.id),
+    publico: text("publico").notNull(),
+    tema: text("tema").notNull(),
+    objetivo: text("objetivo").notNull(),
+    produccion: text("produccion").notNull(),
+    briefGrabacion: jsonb("brief_grabacion").$type<{ guion: string; tomas: string[]; duracionSeg: number; fechaLimite?: string } | null>(),
+    programadaPara: timestamp("programada_para", { withTimezone: true }),
+    estado: text("estado").notNull().default("borrador"),
+    version: integer("version").notNull().default(1),
+    renderKey: text("render_key"),
+    portadaKey: text("portada_key"),
+    alertas: jsonb("alertas").$type<AlertaPieza[]>().notNull().default([]),
+    chequeoIa: boolean("chequeo_ia").notNull().default(false),
+    claimPor: text("claim_por"),
+    claimHasta: timestamp("claim_hasta", { withTimezone: true }),
+    origen: text("origen").notNull().default("usuario"),
+    externoId: text("externo_id"),
+    permalink: text("permalink"),
+    publicadaAt: timestamp("publicada_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("marketing_piezas_tenant_estado_idx").on(t.tenantId, t.estado),
+    index("marketing_piezas_tenant_programada_idx").on(t.tenantId, t.programadaPara),
+  ],
+)
+
+export const marketingPiezaEventos = pgTable(
+  "marketing_pieza_eventos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    piezaId: uuid("pieza_id").notNull().references(() => marketingPiezas.id, { onDelete: "cascade" }),
+    de: text("de"),
+    a: text("a").notNull(),
+    actor: text("actor").notNull(),
+    nota: text("nota").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("marketing_pieza_eventos_pieza_idx").on(t.piezaId, t.createdAt)],
+)
+
+export const marketingMaterial = pgTable(
+  "marketing_material",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    piezaId: uuid("pieza_id").references(() => marketingPiezas.id, { onDelete: "set null" }),
+    archivoKey: text("archivo_key").notNull(),
+    tipo: text("tipo").notNull(),
+    contentType: text("content_type").notNull(),
+    bytes: integer("bytes").notNull(),
+    duracionSeg: numeric("duracion_seg", { precision: 7, scale: 2 }),
+    etiquetas: text("etiquetas").array().notNull().default(sql`'{}'::text[]`),
+    subidoPor: uuid("subido_por"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("marketing_material_key_uniq").on(t.archivoKey)],
+)
+
+export const marketingSolicitudes = pgTable(
+  "marketing_solicitudes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    tipo: text("tipo").notNull(),
+    piezaId: uuid("pieza_id").references(() => marketingPiezas.id, { onDelete: "cascade" }),
+    nota: text("nota").notNull().default(""),
+    estado: text("estado").notNull().default("pendiente"),
+    resultado: text("resultado").notNull().default(""),
+    resueltaAt: timestamp("resuelta_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("marketing_solicitudes_tenant_estado_idx").on(t.tenantId, t.estado)],
+)
+
+export const marketingMetricas = pgTable(
+  "marketing_metricas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    ambito: text("ambito").notNull(),
+    refId: text("ref_id").notNull(),
+    fecha: date("fecha").notNull(),
+    metricas: jsonb("metricas").$type<Record<string, number>>().notNull().default({}),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("marketing_metricas_uniq").on(t.tenantId, t.ambito, t.refId, t.fecha)],
+)
+
+export const marketingInteracciones = pgTable(
+  "marketing_interacciones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    origen: text("origen").notNull(),
+    externoId: text("externo_id").notNull(),
+    piezaId: uuid("pieza_id").references(() => marketingPiezas.id, { onDelete: "set null" }),
+    autor: text("autor").notNull().default(""),
+    texto: text("texto").notNull(),
+    categoria: text("categoria").notNull(),
+    sentimiento: text("sentimiento").notNull().default("neutro"),
+    respuestaSugerida: text("respuesta_sugerida").notNull().default(""),
+    respuestaFinal: text("respuesta_final"),
+    estado: text("estado").notNull().default("pendiente"),
+    conversacionId: text("conversacion_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("marketing_interacciones_externo_uniq").on(t.tenantId, t.origen, t.externoId),
+    index("marketing_interacciones_tenant_estado_idx").on(t.tenantId, t.estado),
+  ],
+)

@@ -1258,6 +1258,33 @@ del asistente del Shop. Se guardan en `tenants.chat_empty_state` y `tenants.chat
 
 ---
 
+## Marketing
+
+Sección **Marketing** del admin (`/admin/marketing`, admin+): calendario semanal de piezas (reels,
+carruseles, stories, novedades de Google), revisión y aprobación, aprobación en lote de stories,
+subida de material desde el celular para las piezas que lo piden, bandeja de comentarios con
+respuesta sugerida y edición de la marca (voz, reglas, hashtags). Las piezas las crea la rutina
+planificadora o el usuario, las genera el studio y las publica ai-api, todo por la API interna
+`/api/internal/marketing/*` (contrato en `platform/contracts/marketing.md`). Mientras ai-api no
+publique, una pieza aprobada se descarga y se marca como publicada a mano.
+
+- **Reglas de marca = frases literales.** El campo "patrón" de una regla no es una expresión
+  regular: es una lista de frases separadas por `|` (hasta 20, de 2 a 80 caracteres). Se comparan
+  sin distinguir mayúsculas, tildes ni espacios de más contra el texto, los hashtags y el contenido
+  de la pieza. Las alertas resultantes las calcula siempre el servidor; las reglas sin frases las
+  revisa la rutina con IA (chequeo con IA, sólo sobre piezas en revisión).
+- **Publicación manual.** Una pieza aprobada puede marcarse como publicada a mano (con el enlace
+  opcional) hasta que ai-api publique por su cuenta.
+- **Estados de la pieza.** `esperando_material`, `borrador`, `renderizando`, `para_revisar`,
+  `cambios_pedidos`, `aprobada`, `programada`, `publicada`, `fallida`, `descartada`; cada cliente
+  (usuario, rutina, studio, ai-api) sólo mueve las aristas que le corresponden. Editar el contenido
+  de una pieza la vuelve a borrador para re-renderizar.
+- **Datos**: tablas `marketing_*` (migración 0080, `src/db/schema.ts`), lógica en
+  `src/lib/marketing/`, rutas de la pantalla en `/api/admin/marketing/*`.
+- **Variables de entorno** (API interna y ping al studio): `docs/DEPLOY.md`, sección Marketing.
+
+---
+
 ## Correo compartido (lectura)
 
 Detrás del flag `correo` (Vercel Flags). Las casillas de Resend Inboxes son **solapas dentro de Mensajes** (`/admin/inbox`), junto a las de canal; `/admin/correo` solo redirige. Con el flag apagado Mensajes queda idéntico.

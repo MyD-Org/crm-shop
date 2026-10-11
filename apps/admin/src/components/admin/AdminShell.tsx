@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { MessageSquare, Users, LogOut, BarChart3, FileText, Package, Receipt, ShoppingBag, UserRound, Store, CreditCard, Clock, Truck, MessageCircleQuestion } from "lucide-react"
+import { MessageSquare, Users, LogOut, BarChart3, FileText, Package, Receipt, ShoppingBag, UserRound, Store, CreditCard, Clock, Truck, MessageCircleQuestion, Megaphone } from "lucide-react"
 import { SideNav, ToastProvider } from "@myd-org/ui"
 import { AvailabilityToggle, type Availability } from "./AvailabilityToggle"
 import { NotificationsPrompt } from "./NotificationsPrompt"
@@ -170,6 +170,7 @@ const NAV = [
   // Sin `minRole`: los pedidos del Shop los ve y los mueve también el operador (operator es el piso).
   { href: "/admin/pedidos", label: "Pedidos", group: "Operación", icon: <ShoppingBag size={16} strokeWidth={1.6} />, badge: "pedidos" as const },
   { href: "/admin/comprobantes", label: "Comprobantes", group: "Operación", icon: <Receipt size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "comprobantes" as const },
+  { href: "/admin/marketing", label: "Marketing", group: "Operación", icon: <Megaphone size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/catalogo", label: "Catálogo", group: "Datos", icon: <Package size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   // Sin `minRole`: el listado de usuarios de la tienda es de sólo lectura y lo ve el operador.
   { href: "/admin/clientes-tienda", label: "Clientes de la tienda", group: "Datos", icon: <UserRound size={16} strokeWidth={1.6} /> },

@@ -74,7 +74,7 @@ export function PiezaDetalle({ pieza, eventos, material }: { pieza: PiezaDto; ev
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           {pieza.renderUrl ? (
-            esVideo ? <video src={pieza.renderUrl} controls className="w-full rounded" /> : (
+            esVideo ? <video src={pieza.renderUrl} poster={pieza.portadaUrl ?? undefined} controls className="w-full rounded" /> : (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={pieza.renderUrl} alt="Vista previa de la pieza" className="w-full rounded" />
             )

@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto"
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { NO_STORE } from "@/lib/catalogo-admin"
-import { esKeyDeMaterial, materialKey, TIPOS_MATERIAL } from "@/lib/marketing/material-keys"
+import { esKeyDeMaterial, materialKey, tipoMaterial, type TipoMaterial } from "@/lib/marketing/material-keys"
 import { registrarMaterial } from "@/lib/marketing/otros-repo"
 import { obtenerPieza } from "@/lib/marketing/piezas-repo"
 import { pingStudio } from "@/lib/marketing/ping-studio"
@@ -23,13 +23,17 @@ function conflicto(error: string, code: string): Response {
 
 const SIN_MATERIAL = () => conflicto("Esta pieza ya no admite material", "invalid_state")
 
-function validarArchivo(b: { contentType?: unknown; bytes?: unknown } | null): { contentType: string; bytes: number } | Response {
-  const contentType = String(b?.contentType ?? "")
-  const bytes = Number(b?.bytes)
-  const tipo = TIPOS_MATERIAL[contentType]
+const SIN_ALMACENAMIENTO = () =>
+  Response.json({ error: "El almacenamiento de archivos no está configurado", code: "storage_not_configured" }, { status: 503, headers: NO_STORE })
+
+function validarArchivo(b: { contentType?: unknown; bytes?: unknown } | null): { contentType: string; bytes: number; tipo: TipoMaterial } | Response {
+  const contentType = typeof b?.contentType === "string" ? b.contentType : ""
+  const tipo = tipoMaterial(contentType)
   if (!tipo) return invalido("Formato no admitido. Suba un video MP4 o MOV, o una foto JPG, PNG o WEBP", "invalid_tipo")
-  if (!Number.isInteger(bytes) || bytes <= 0 || bytes > tipo.maxBytes) return invalido("El archivo supera el tamaño máximo permitido", "invalid_bytes")
-  return { contentType, bytes }
+  const bytes = b?.bytes
+  if (typeof bytes !== "number" || !Number.isInteger(bytes) || bytes <= 0) return invalido("Indique un tamaño de archivo válido", "invalid_bytes")
+  if (bytes > tipo.maxBytes) return invalido("El archivo supera el tamaño máximo permitido", "invalid_bytes")
+  return { contentType, bytes, tipo }
 }
 
 /** Camina la cadena de `cause` buscando el 23505 (unique_violation) de Postgres. */
@@ -51,7 +55,7 @@ export async function POST(req: Request, ctx: Ctx) {
   const archivo = validarArchivo(await req.json().catch(() => null))
   if (archivo instanceof Response) return archivo
   const r2 = getShopMediaR2()
-  if (!r2) return Response.json({ error: "El almacenamiento de archivos no está configurado", code: "storage_not_configured" }, { status: 503, headers: NO_STORE })
+  if (!r2) return SIN_ALMACENAMIENTO()
   const key = materialKey(guard.tenantId, id, randomUUID(), archivo.contentType)
   const firmado = await r2.presignPut(key, { contentType: archivo.contentType, contentLength: archivo.bytes, ttlSeconds: 900 })
   return Response.json({ key, url: firmado.url, headers: firmado.headers }, { headers: NO_STORE })
@@ -70,12 +74,21 @@ export async function PUT(req: Request, ctx: Ctx) {
   if (archivo instanceof Response) return archivo
   const key = String(b?.key ?? "")
   if (!esKeyDeMaterial(guard.tenantId, id, key)) return invalido("El archivo no corresponde a esta pieza", "invalid_key")
+  const r2 = getShopMediaR2()
+  if (!r2) return SIN_ALMACENAMIENTO()
+  // El navegador declara tipo y tamaño: se contrastan con lo que realmente quedó en el bucket.
+  const subido = await r2.head(key)
+  if (!subido) return invalido("No se encontró el archivo subido. Vuelva a subirlo", "not_uploaded")
+  const extDeclarada = archivo.tipo.ext
+  if (subido.size !== archivo.bytes || (subido.contentType && subido.contentType !== archivo.contentType) || !key.endsWith(`.${extDeclarada}`)) {
+    return invalido("El archivo subido no coincide con lo declarado", "mismatch")
+  }
   let m
   try {
     m = await registrarMaterial(guard.tenantId, {
       piezaId: id,
       archivoKey: key,
-      tipo: TIPOS_MATERIAL[archivo.contentType].tipo,
+      tipo: archivo.tipo.tipo,
       contentType: archivo.contentType,
       bytes: archivo.bytes,
       subidoPor: guard.user.id,

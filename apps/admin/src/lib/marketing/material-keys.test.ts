@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { esKeyDeMaterial, materialKey, TIPOS_MATERIAL } from "./material-keys"
+import { esKeyDeMaterial, materialKey, TIPOS_MATERIAL, tipoMaterial } from "./material-keys"
 
 const P = "3f2b1c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d"
 const U = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d"
@@ -12,6 +12,10 @@ describe("keys de material", () => {
 
   it("rechaza tipos no permitidos y partes inválidas", () => {
     expect(() => materialKey("tenant-mkt", P, U, "application/pdf")).toThrow()
+    for (const raro of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+      expect(() => materialKey("tenant-mkt", P, U, raro)).toThrow()
+      expect(tipoMaterial(raro)).toBeNull()
+    }
     expect(() => materialKey("Tenant Raro", P, U, "video/mp4")).toThrow()
   })
 

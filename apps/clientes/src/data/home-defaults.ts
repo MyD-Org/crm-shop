@@ -83,8 +83,8 @@ export type DestacadosContent = TextosSeccion & {
   cantidad: number;
   /** Productos elegidos (SKUs de Alegra), en orden. El resto se completa con Iluminación. */
   skus?: string[];
-  /** Fotos de los productos destacados, por posición. Path local (/) o URL
-      https de un host de SHOP_MEDIA_HOSTS. */
+  /** En desuso: fotos de relleno por posición. Ya no se editan ni se muestran
+      (cada producto usa su foto); se conserva por las filas ya guardadas. */
   imagenes?: string[];
 };
 

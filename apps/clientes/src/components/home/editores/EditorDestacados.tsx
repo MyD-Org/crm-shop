@@ -1,16 +1,15 @@
 "use client";
 
 import { Field, Input } from "@myd-org/ui";
-import { DEFAULTS_HOME, type DestacadosContent } from "@/data/home-defaults";
-import { ListaEditable } from "../ListaEditable";
-import { CampoImagen } from "./CampoImagen";
+import type { DestacadosContent } from "@/data/home-defaults";
 import { CamposTitulo } from "./CamposTitulo";
 import { SelectorSkusDestacados } from "./SelectorSkusDestacados";
 import type { EditorProps } from "./index";
 
 /**
  * `skus` se edita con un buscador sobre el catálogo (rebanada D, opcional).
- * `imagenes` se edita como lista de `CampoImagen` (rebanada C).
+ * `imagenes` (fotos de relleno por posición) ya no se edita ni se muestra:
+ * cada producto usa su propia foto. El campo guardado se conserva tal cual.
  */
 export function EditorDestacados({ valor, onChange }: EditorProps<DestacadosContent>) {
   return (
@@ -28,15 +27,6 @@ export function EditorDestacados({ valor, onChange }: EditorProps<DestacadosCont
           onChange={(e) => onChange({ ...valor, cantidad: Number(e.target.value) })}
         />
       </Field>
-      <div>
-        <p className="mb-2 text-sm font-semibold text-text">Fotos de los destacados</p>
-        <ListaEditable
-          items={valor.imagenes ?? []}
-          onChange={(imagenes) => onChange({ ...valor, imagenes })}
-          nuevo={() => DEFAULTS_HOME.destacados.imagenes?.[0] ?? "/images/prod-bulb-warm.webp"}
-          renderItem={(item, onItem) => <CampoImagen valor={item} onChange={onItem} />}
-        />
-      </div>
       <div>
         <p className="mb-2 text-sm font-semibold text-text">Productos destacados</p>
         <p className="mb-2 text-sm text-muted">

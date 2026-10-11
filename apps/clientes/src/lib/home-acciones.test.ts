@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { esAdminMock, guardarMock, borrarMock, leerMock, revalidateMock, r2Mock, buscarEnShopMock } = vi.hoisted(() => ({
+const { esAdminMock, guardarMock, borrarMock, leerMock, revalidateMock, r2Mock, buscarEnShopMock, porSkusMock } = vi.hoisted(() => ({
+  porSkusMock: vi.fn(),
   esAdminMock: vi.fn(),
   guardarMock: vi.fn(),
   borrarMock: vi.fn(),
@@ -38,6 +39,10 @@ vi.mock("@/lib/busqueda-v2/motor-servidor", () => ({
   buscarEnShop: buscarEnShopMock,
 }));
 
+vi.mock("@/lib/catalog", () => ({
+  getProductosPorSkus: porSkusMock,
+}));
+
 import {
   buscarProductosHome,
   cambiarVisibilidadSeccion,
@@ -46,6 +51,7 @@ import {
   guardarFooter,
   guardarSeccion,
   leerSeccionParaEditar,
+  resolverProductosHome,
   restablecerFooter,
   restablecerSeccion,
 } from "./home-acciones";
@@ -291,6 +297,43 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
       buscarEnShopMock.mockRejectedValue(new Error("db down"));
 
       const r = await buscarProductosHome("x");
+
+      expect(r).toEqual({ ok: false, errores: ["No se pudo buscar productos. Inténtelo de nuevo."] });
+    });
+  });
+
+  describe("resolverProductosHome", () => {
+    it("No-admin: no consulta el catálogo", async () => {
+      esAdminMock.mockResolvedValue(false);
+
+      const r = await resolverProductosHome(["A-1"]);
+
+      expect(r).toEqual({ ok: false, errores: ["No tiene permisos para editar la página de inicio."] });
+      expect(porSkusMock).not.toHaveBeenCalled();
+    });
+
+    it("Admin: devuelve nombre y foto de los códigos que existen", async () => {
+      porSkusMock.mockResolvedValue([
+        { id: "1", name: "Lámpara colgante", sku: "A-1", price: 1000, stock: "in", images: [{ url: "/a.webp", w: 800 }] },
+      ]);
+
+      const r = await resolverProductosHome(["A-1", " ", "NO-EXISTE"]);
+
+      expect(porSkusMock).toHaveBeenCalledWith(["A-1", "NO-EXISTE"], { soloVisibles: false });
+      expect(r).toEqual({ ok: true, productos: [{ sku: "A-1", nombre: "Lámpara colgante", foto: "/a.webp" }] });
+    });
+
+    it("Sin códigos: no consulta el catálogo", async () => {
+      const r = await resolverProductosHome([]);
+
+      expect(porSkusMock).not.toHaveBeenCalled();
+      expect(r).toEqual({ ok: true, productos: [] });
+    });
+
+    it("Error del catálogo no se propaga como excepción", async () => {
+      porSkusMock.mockRejectedValue(new Error("db down"));
+
+      const r = await resolverProductosHome(["A-1"]);
 
       expect(r).toEqual({ ok: false, errores: ["No se pudo buscar productos. Inténtelo de nuevo."] });
     });

@@ -16,6 +16,7 @@ const { cat, cacheTagMock, cacheLifeMock } = vi.hoisted(() => ({
     getFacetaCategorias: vi.fn(),
     getPaginaCatalogo: vi.fn(),
     getProducto: vi.fn(),
+    getProductosPorSkus: vi.fn(),
   },
   cacheTagMock: vi.fn(),
   cacheLifeMock: vi.fn(),
@@ -175,7 +176,7 @@ describe("categoriasNav", () => {
 describe("destacadosHome", () => {
   it("curados primero, completa con Iluminación; perfil catalogo", async () => {
     cat.getPaginaCatalogo.mockResolvedValue({ productos: [prod("1", "A"), prod("2", "B")] });
-    cat.getCatalogo.mockResolvedValue([prod("9", "Z")]);
+    cat.getProductosPorSkus.mockResolvedValue([prod("9", "Z")]);
     const out = await destacadosHome({ skus: ["Z"], cantidad: 2, soloVisibles: true });
     expect(out.map((p) => p.id)).toEqual(["9", "1"]);
     expect(cat.getPaginaCatalogo).toHaveBeenCalledWith({
@@ -184,20 +185,20 @@ describe("destacadosHome", () => {
       pagina: 1,
       soloVisibles: true,
     });
-    expect(cat.getCatalogo).toHaveBeenCalledWith({ limit: 300, soloVisibles: true });
+    expect(cat.getProductosPorSkus).toHaveBeenCalledWith(["Z"], { soloVisibles: true });
     expect(cacheTagMock).toHaveBeenCalledWith("catalogo");
     expect(cacheLifeMock.mock.calls).toEqual([["catalogo"]]);
   });
 
-  it("sin SKUs curados no trae el respaldo", async () => {
+  it("sin SKUs curados no consulta por código", async () => {
     cat.getPaginaCatalogo.mockResolvedValue({ productos: [prod("1", "A")] });
     await destacadosHome({ skus: [], cantidad: 4, soloVisibles: false });
-    expect(cat.getCatalogo).not.toHaveBeenCalled();
+    expect(cat.getProductosPorSkus).not.toHaveBeenCalled();
   });
 
   it("una lectura que falla: degrada a lo que hay y se guarda con el perfil degradado", async () => {
     cat.getPaginaCatalogo.mockRejectedValue(new Error("db caída"));
-    cat.getCatalogo.mockResolvedValue([prod("9", "Z")]);
+    cat.getProductosPorSkus.mockResolvedValue([prod("9", "Z")]);
     const out = await destacadosHome({ skus: ["Z"], cantidad: 4, soloVisibles: false });
     expect(out.map((p) => p.id)).toEqual(["9"]);
     expect(cacheLifeMock.mock.calls).toEqual([["degradado"]]);

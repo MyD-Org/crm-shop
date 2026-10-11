@@ -113,6 +113,7 @@ Un secreto por cliente de la API interna `/api/internal/marketing/*` (contrato e
 `platform/contracts/marketing.md`). Generar cada uno con `openssl rand -hex 32` y cargar el mismo
 valor en el servicio que lo usa; **no** reutilizar `INTERNAL_SECRET`. Sin `MARKETING_TENANT_ID` la
 API responde 503 `not_configured`; sin el secreto de un cliente, ese cliente recibe 401.
+
 | Var | Valor |
 |---|---|
 | `MARKETING_TENANT_ID` | Id del tenant al que pertenecen las piezas (en la iteración 1 hay uno solo; el tenant sale de acá, nunca del request) |

@@ -1,7 +1,7 @@
 import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { NO_STORE } from "@/lib/catalogo-admin"
 import { pingStudio } from "@/lib/marketing/ping-studio"
-import { crearPieza, listarPiezas } from "@/lib/marketing/piezas-repo"
+import { crearPieza, liberarClaimsVencidos, listarPiezas } from "@/lib/marketing/piezas-repo"
 import { validarNuevaPieza } from "@/lib/marketing/validar"
 
 export const dynamic = "force-dynamic"
@@ -21,6 +21,7 @@ export async function GET(req: Request) {
   if (desde === "invalida" || hasta === "invalida") {
     return Response.json({ error: "Revise el rango de fechas", code: "invalid_rango" }, { status: 400, headers: NO_STORE })
   }
+  await liberarClaimsVencidos(guard.tenantId)
   return Response.json({ items: await listarPiezas(guard.tenantId, { desde, hasta }) }, { headers: NO_STORE })
 }
 

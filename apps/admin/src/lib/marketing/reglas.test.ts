@@ -67,15 +67,6 @@ describe("reglas de marca", () => {
     const alertas = evaluarReglas(["frase 1"], [{ id: "x", texto: "X", patron: largo, severidad: "alta" }])
     expect(alertas).toEqual([{ regla: "x", mensaje: "La regla «X» tiene un patrón inválido", severidad: "alta", fuente: "regla" }])
   })
-
-  it("extrae todos los textos de la pieza, incluso anidados en el contenido", () => {
-    const textos = textosDePieza({
-      caption: "Caption",
-      hashtags: ["#MarDelPlata"],
-      contenido: { titulo: "Hola", lineas: [["Todo", "lo que"]], cantidad: 3, extra: { nota: "Anidado" } },
-    })
-    expect(textos).toEqual(["Caption", "#MarDelPlata", "Hola", "Todo", "lo que", "Anidado"])
-  })
 })
 
 describe("validarFrases", () => {

@@ -31,7 +31,7 @@ export async function PUT(req: Request) {
       const motivo = r.patron === undefined ? null : validarFrases(r.patron)
       if (motivo) return rechazo(`Regla «${r.texto}»: ${motivo}`, "invalid_patron")
     }
-    cambios.reglas = b.reglas
+    cambios.reglas = b.reglas.map((r) => ({ id: r.id, texto: r.texto, severidad: r.severidad, ...(r.patron !== undefined ? { patron: r.patron } : {}) }))
   }
   if (b.hashtagsBase !== undefined) {
     if (!esListaHashtags(b.hashtagsBase)) return rechazo("Los hashtags deben ser hasta 30 textos de hasta 50 caracteres", "invalid_hashtags")

@@ -4,6 +4,8 @@ import { NextRequest } from "next/server"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { invalidateTenantRegistry } from "@/lib/tenants"
 import { crearSolicitud, guardarInteraccion, listarSolicitudes } from "@/lib/marketing/otros-repo"
+import { getDb } from "@/db"
+import { sql } from "drizzle-orm"
 import { crearPieza, obtenerPieza, reclamarPieza, transicionar } from "@/lib/marketing/piezas-repo"
 import { obtenerMarca } from "@/lib/marketing/marca-repo"
 import { seedOperator, seedTenant, truncateAll } from "./helpers"
@@ -123,6 +125,51 @@ describe("API admin de marketing", () => {
       const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "pedir_cambios", nota: "Otra foto" }), ctx(p.id))
       expect(r.status).toBe(409)
       expect(await listarSolicitudes(T, "pendiente")).toHaveLength(1)
+    })
+
+    it("GET libera un claim vencido antes de listar", async () => {
+      const p = await crearPieza(T, base, { tipo: "planificador", nombre: "rutina" })
+      await reclamarPieza(T, p.id, "w1", 600)
+      await getDb().execute(sql`update marketing_piezas set claim_hasta = now() - interval '1 minute' where id = ${p.id}`)
+      const r = await piezas.GET(req("/piezas"))
+      expect(r.status).toBe(200)
+      expect((await r.json()).items).toMatchObject([{ id: p.id, estado: "borrador", claimPor: null }])
+      expect(await obtenerPieza(T, p.id)).toMatchObject({ estado: "borrador", claimPor: null })
+    })
+
+    it("desde fallida: aprobar vuelve a aprobada y descartar la descarta", async () => {
+      const p = await enRevision()
+      await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "aprobar" }), ctx(p.id))
+      await getDb().execute(sql`update marketing_piezas set estado = 'fallida' where id = ${p.id}`)
+      const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "aprobar" }), ctx(p.id))
+      expect(r.status).toBe(200)
+      expect((await r.json()).estado).toBe("aprobada")
+      await getDb().execute(sql`update marketing_piezas set estado = 'fallida' where id = ${p.id}`)
+      const d = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "descartar" }), ctx(p.id))
+      expect(d.status).toBe(200)
+      expect((await d.json()).estado).toBe("descartada")
+    })
+
+    it("desde cambios_pedidos se puede descartar", async () => {
+      const p = await enRevision()
+      await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "pedir_cambios", nota: "Otra foto" }), ctx(p.id))
+      const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "descartar" }), ctx(p.id))
+      expect((await r.json()).estado).toBe("descartada")
+    })
+
+    it("editar con el mismo contenido no versiona la pieza", async () => {
+      const p = await enRevision()
+      const antes = await obtenerPieza(T, p.id)
+      const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "editar", caption: antes!.caption, contenido: antes!.contenido }), ctx(p.id))
+      expect(r.status).toBe(200)
+      expect(await obtenerPieza(T, p.id)).toEqual(antes)
+    })
+
+    it("editar rechaza un contenido de más de 64 KB: 400 invalid_contenido", async () => {
+      const p = await enRevision()
+      const r = await piezaAdmin.PATCH(req(`/piezas/${p.id}`, { accion: "editar", contenido: { texto: "x".repeat(70 * 1024) } }), ctx(p.id))
+      expect(r.status).toBe(400)
+      expect((await r.json()).code).toBe("invalid_contenido")
     })
 
     it("editar sin nada que cambiar: 400 empty_edit", async () => {
@@ -248,6 +295,20 @@ describe("API admin de marketing", () => {
       expect(await listarSolicitudes(T, "pendiente")).toHaveLength(1)
     })
 
+    it("dos clics en Planificar semana: una sola solicitud pendiente, y la segunda respuesta devuelve esa", async () => {
+      const r1 = await solicitudes.POST(req("/solicitudes", { tipo: "plan_semana" }, "POST"))
+      const r2 = await solicitudes.POST(req("/solicitudes", { tipo: "plan_semana" }, "POST"))
+      expect([r1.status, r2.status]).toEqual([201, 200])
+      expect((await r2.json()).id).toBe((await r1.json()).id)
+      expect(await listarSolicitudes(T, "pendiente")).toHaveLength(1)
+    })
+
+    it("una solicitud plan_semana de otro tenant no bloquea la de este", async () => {
+      await crearSolicitud(OTRO, "plan_semana")
+      const r = await solicitudes.POST(req("/solicitudes", { tipo: "plan_semana" }, "POST"))
+      expect(r.status).toBe(201)
+    })
+
     it("rechaza otros tipos", async () => {
       const r = await solicitudes.POST(req("/solicitudes", { tipo: "cambios" }, "POST"))
       expect(r.status).toBe(400)
@@ -259,6 +320,15 @@ describe("API admin de marketing", () => {
       const i = await comentario()
       const r = await interaccion.PATCH(req(`/interacciones/${i.id}`, { accion: "aprobar", respuesta: "¡Te escribimos por privado!" }), ctx(i.id))
       expect(await r.json()).toMatchObject({ estado: "aprobada", respuestaFinal: "¡Te escribimos por privado!" })
+    })
+
+    it("aprobar sin respuesta propia y sin sugerida: 400 empty_reply y no cambia el estado", async () => {
+      const i = await guardarInteraccion(T, { origen: "comentario", externoId: "vacio", autor: "@ana", texto: "Hola", categoria: "elogio", sentimiento: "positivo", respuestaSugerida: "" })
+      const r = await interaccion.PATCH(req(`/interacciones/${i.id}`, { accion: "aprobar", respuesta: "   " }), ctx(i.id))
+      expect(r.status).toBe(400)
+      expect(await r.json()).toEqual({ error: "Escriba una respuesta antes de aprobar", code: "empty_reply" })
+      const ok = await interaccion.PATCH(req(`/interacciones/${i.id}`, { accion: "aprobar", respuesta: "Gracias" }), ctx(i.id))
+      expect(await ok.json()).toMatchObject({ estado: "aprobada", respuestaFinal: "Gracias" })
     })
 
     it("aprobar dos veces: la segunda es 409", async () => {
@@ -288,6 +358,15 @@ describe("API admin de marketing", () => {
       expect(r.status).toBe(200)
       expect(await r.json()).toMatchObject({ voz: "Cercana", reglas, hashtagsBase: ["#mdp"] })
       expect((await (await marca.GET(req("/marca"))).json()).voz).toBe("Cercana")
+    })
+
+    it("las reglas se guardan sólo con id, texto, severidad y patron (sin campos extra)", async () => {
+      const r = await marca.PUT(req("/marca", { reglas: [{ id: "a", texto: "A", severidad: "alta", patron: "uno|dos", extra: "x", __proto: 1 }, { id: "b", texto: "B", severidad: "media", otro: true }] }, "PUT"))
+      expect(r.status).toBe(200)
+      expect((await obtenerMarca(T)).reglas).toEqual([
+        { id: "a", texto: "A", severidad: "alta", patron: "uno|dos" },
+        { id: "b", texto: "B", severidad: "media" },
+      ])
     })
 
     it("rechaza una regla con frases inválidas: 400 invalid_patron y no guarda nada", async () => {

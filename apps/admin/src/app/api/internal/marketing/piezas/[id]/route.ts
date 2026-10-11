@@ -27,10 +27,14 @@ export async function PATCH(req: Request, ctx: Ctx) {
   if (auth.cliente === "studio" && (typeof b.worker !== "string" || !WORKER_RE.test(b.worker))) return jsonInterno({ error: "invalid_worker" }, 400)
   const v = validarCamposTransicion(auth.cliente, b, auth.tenantId)
   if (!v.ok) return jsonInterno({ error: v.error }, 400)
+  const nota = typeof b.nota === "string" ? b.nota.slice(0, 500) : undefined
   const r = await transicionar(auth.tenantId, id, b.estado, ACTOR[auth.cliente], {
     campos: v.campos,
     worker: auth.cliente === "studio" ? (b.worker as string) : undefined,
-    nota: typeof b.nota === "string" ? b.nota.slice(0, 500) : undefined,
+    nota,
+    // El studio pide cambios cuando el esquema de la pieza no valida: el planificador tiene que enterarse
+    // (solicitud `cambios` con la nota del studio, en la misma transacción que la transición).
+    ...(auth.cliente === "studio" && b.estado === "cambios_pedidos" ? { encolarCambios: { nota: nota ?? "" } } : {}),
   })
   if (!r.ok) return jsonInterno({ error: r.code }, r.code === "not_found" ? 404 : 409)
   if (r.pieza.estado === "borrador") await pingStudio()

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { guardarMarca } from "@/lib/marketing/marca-repo"
+import { listarSolicitudes } from "@/lib/marketing/otros-repo"
 import { eventosDePieza, obtenerPieza } from "@/lib/marketing/piezas-repo"
 import { seedTenant, truncateAll } from "./helpers"
 
@@ -264,6 +265,44 @@ describe("API interna de marketing: piezas", () => {
       const r = await chequeo(p.id, SECRETOS.studio, { alertas: [{ regla: "x", mensaje: "m", severidad: "alta" }] })
       expect(r.status).toBe(403)
       expect(await obtenerPieza(T, p.id)).toMatchObject({ chequeoIa: false, alertas: [] })
+    })
+
+    it("400 invalid_productos e invalid_contenido al crear (tope de 50 productos de 60 caracteres y 64 KB de contenido)", async () => {
+      const crearCon = (extra: Record<string, unknown>) => piezas.POST(req("/piezas", SECRETOS.planificador, { method: "POST", body: { ...nueva, ...extra } }))
+      const r1 = await crearCon({ productos: Array.from({ length: 51 }, (_, i) => `p${i}`) })
+      expect([r1.status, await r1.json()]).toEqual([400, { error: "invalid_productos" }])
+      expect((await (await crearCon({ productos: ["x".repeat(61)] })).json())).toEqual({ error: "invalid_productos" })
+      expect((await (await crearCon({ productos: [1] })).json())).toEqual({ error: "invalid_productos" })
+      expect((await (await crearCon({ contenido: { texto: "x".repeat(70 * 1024) } })).json())).toEqual({ error: "invalid_contenido" })
+      expect((await crearCon({ productos: ["a", "b"], contenido: { texto: "ok" } })).status).toBe(201)
+      // El PATCH de la rutina aplica el mismo tope de contenido.
+      const p = await crear()
+      await claim.POST(req(`/piezas/${p.id}/claim`, SECRETOS.studio, { method: "POST", body: { worker: "w1", ttlSeg: 600 } }), ctx(p.id))
+      await patch(p.id, SECRETOS.studio, { estado: "cambios_pedidos", worker: "w1" })
+      const r = await patch(p.id, SECRETOS.planificador, { estado: "borrador", contenido: { texto: "x".repeat(70 * 1024) } })
+      expect([r.status, await r.json()]).toEqual([400, { error: "invalid_contenido" }])
+    })
+
+    it("el studio que pide cambios (esquema inválido) encola una solicitud para la rutina, sin duplicarla", async () => {
+      const p = await crear()
+      await claim.POST(req(`/piezas/${p.id}/claim`, SECRETOS.studio, { method: "POST", body: { worker: "w1", ttlSeg: 600 } }), ctx(p.id))
+      const r = await patch(p.id, SECRETOS.studio, { estado: "cambios_pedidos", worker: "w1", nota: "contenido no cumple el esquema: titulo" })
+      expect(r.status).toBe(200)
+      expect((await r.json()).estado).toBe("cambios_pedidos")
+      const filas = await listarSolicitudes(T, "pendiente")
+      expect(filas).toMatchObject([{ tipo: "cambios", piezaId: p.id, nota: "contenido no cumple el esquema: titulo" }])
+      // La rutina lo retoma (cambios_pedidos → borrador) y el studio vuelve a fallar: no hay duplicado mientras siga pendiente.
+      await patch(p.id, SECRETOS.planificador, { estado: "borrador" })
+      await claim.POST(req(`/piezas/${p.id}/claim`, SECRETOS.studio, { method: "POST", body: { worker: "w1", ttlSeg: 600 } }), ctx(p.id))
+      await patch(p.id, SECRETOS.studio, { estado: "cambios_pedidos", worker: "w1", nota: "otra vez" })
+      expect(await listarSolicitudes(T, "pendiente")).toHaveLength(1)
+    })
+
+    it("un PATCH del studio a para_revisar no encola solicitudes", async () => {
+      const p = await crear()
+      await claim.POST(req(`/piezas/${p.id}/claim`, SECRETOS.studio, { method: "POST", body: { worker: "w1", ttlSeg: 600 } }), ctx(p.id))
+      await patch(p.id, SECRETOS.studio, { estado: "para_revisar", worker: "w1", renderKey: `marketing/${T}/render/a.mp4` })
+      expect(await listarSolicitudes(T, "pendiente")).toEqual([])
     })
   })
 })

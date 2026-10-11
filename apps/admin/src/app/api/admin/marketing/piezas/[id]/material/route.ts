@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto"
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { NO_STORE } from "@/lib/catalogo-admin"
+import { ESTADOS_CON_MATERIAL } from "@/lib/marketing/estados"
 import { esKeyDeMaterial, materialKey, tipoMaterial, type TipoMaterial } from "@/lib/marketing/material-keys"
 import { registrarMaterial } from "@/lib/marketing/otros-repo"
 import { obtenerPieza } from "@/lib/marketing/piezas-repo"
@@ -9,9 +10,6 @@ import { getShopMediaR2 } from "@/lib/shop-media"
 
 export const dynamic = "force-dynamic"
 type Ctx = { params: Promise<{ id: string }> }
-
-// Estados en los que la pieza todavía puede recibir (o reemplazar) su material.
-const ESTADOS_CON_MATERIAL = ["esperando_material", "borrador", "cambios_pedidos"]
 
 function invalido(error: string, code: string): Response {
   return Response.json({ error, code }, { status: 400, headers: NO_STORE })
@@ -51,7 +49,7 @@ export async function POST(req: Request, ctx: Ctx) {
   const { id } = await ctx.params
   const pieza = await obtenerPieza(guard.tenantId, id)
   if (!pieza) return adminNotFoundResponse()
-  if (!ESTADOS_CON_MATERIAL.includes(pieza.estado)) return SIN_MATERIAL()
+  if (!(ESTADOS_CON_MATERIAL as readonly string[]).includes(pieza.estado)) return SIN_MATERIAL()
   const archivo = validarArchivo(await req.json().catch(() => null))
   if (archivo instanceof Response) return archivo
   const r2 = getShopMediaR2()
@@ -68,7 +66,7 @@ export async function PUT(req: Request, ctx: Ctx) {
   const { id } = await ctx.params
   const pieza = await obtenerPieza(guard.tenantId, id)
   if (!pieza) return adminNotFoundResponse()
-  if (!ESTADOS_CON_MATERIAL.includes(pieza.estado)) return SIN_MATERIAL()
+  if (!(ESTADOS_CON_MATERIAL as readonly string[]).includes(pieza.estado)) return SIN_MATERIAL()
   const b = (await req.json().catch(() => null)) as { key?: unknown; contentType?: unknown; bytes?: unknown } | null
   const archivo = validarArchivo(b)
   if (archivo instanceof Response) return archivo

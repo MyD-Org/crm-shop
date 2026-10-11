@@ -10,9 +10,15 @@ const MAX_HASHTAGS = 30
 const MAX_ALERTAS = 50
 const MAX_MENSAJE_ALERTA = 500
 const MAX_KEY = 500
+const MAX_CONTENIDO_BYTES = 64 * 1024
+const MAX_PRODUCTOS = 50
+const MAX_PRODUCTO = 60
 
 // Validadores compartidos por la creación (POST) y por los campos que viajan con una transición (PATCH).
 const esObjetoPlano = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
+/** Objeto plano cuyo JSON serializado no supera 64 KB (se guarda en jsonb y lo lee el studio). */
+export const esContenido = (v: unknown): v is Record<string, unknown> => esObjetoPlano(v) && Buffer.byteLength(JSON.stringify(v), "utf8") <= MAX_CONTENIDO_BYTES
+const esProductos = (v: unknown): v is string[] => Array.isArray(v) && v.length <= MAX_PRODUCTOS && v.every((p) => typeof p === "string" && p.length <= MAX_PRODUCTO)
 const esCaption = (v: unknown): v is string => typeof v === "string" && v.length <= MAX_CAPTION
 const esHashtags = (v: unknown): v is string[] => Array.isArray(v) && v.length <= MAX_HASHTAGS && v.every((h) => typeof h === "string")
 function esBrief(v: unknown): v is BriefGrabacion {
@@ -70,7 +76,8 @@ export function validarNuevaPieza(b: Record<string, unknown>): { ok: true; pieza
   ]
   for (const [campo, valores] of enums) if (!esUno(valores, b[campo])) return { ok: false, error: `invalid_${campo}` }
   if (typeof b.plantilla !== "string" || !/^[a-z0-9-]{1,60}$/.test(b.plantilla)) return { ok: false, error: "invalid_plantilla" }
-  if (b.contenido !== undefined && !esObjetoPlano(b.contenido)) return { ok: false, error: "invalid_contenido" }
+  if (b.contenido !== undefined && !esContenido(b.contenido)) return { ok: false, error: "invalid_contenido" }
+  if (b.productos !== undefined && !esProductos(b.productos)) return { ok: false, error: "invalid_productos" }
   if (b.caption !== undefined && !esCaption(b.caption)) return { ok: false, error: "invalid_caption" }
   if (b.hashtags !== undefined && !esHashtags(b.hashtags)) return { ok: false, error: "invalid_hashtags" }
   if (b.briefGrabacion != null && !esBrief(b.briefGrabacion)) return { ok: false, error: "invalid_briefGrabacion" }
@@ -89,7 +96,7 @@ export function validarNuevaPieza(b: Record<string, unknown>): { ok: true; pieza
       contenido: b.contenido as Record<string, unknown> | undefined,
       caption: b.caption as string | undefined,
       hashtags: b.hashtags as string[] | undefined,
-      productos: Array.isArray(b.productos) ? b.productos.map(String) : undefined,
+      productos: b.productos as string[] | undefined,
       briefGrabacion: b.briefGrabacion != null ? limpiarBrief(b.briefGrabacion as BriefGrabacion) : null,
       programadaPara,
     },
@@ -119,7 +126,7 @@ export function validarCamposTransicion(
     if (v === undefined) continue
     switch (k) {
       case "contenido":
-        if (!esObjetoPlano(v)) return { ok: false, error: "invalid_contenido" }
+        if (!esContenido(v)) return { ok: false, error: "invalid_contenido" }
         campos.contenido = v
         break
       case "caption":

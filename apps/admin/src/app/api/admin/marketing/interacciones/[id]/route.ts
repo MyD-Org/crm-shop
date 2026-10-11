@@ -13,6 +13,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
   const { id } = await ctx.params
   const respuesta = typeof b.respuesta === "string" ? b.respuesta.slice(0, 2000) : undefined
+  if (b.accion === "aprobar" && !respuesta?.trim()) {
+    // Sin texto propio se envía la respuesta sugerida: si tampoco hay, no hay nada que aprobar.
+    // (Si la interacción no existe, sigue el camino normal y responde 404.)
+    const actual = await obtenerInteraccion(guard.tenantId, id)
+    if (actual && !actual.respuestaSugerida.trim()) {
+      return Response.json({ error: "Escriba una respuesta antes de aprobar", code: "empty_reply" }, { status: 400, headers: NO_STORE })
+    }
+  }
   const i = await actualizarInteraccion(guard.tenantId, id, b.accion, respuesta)
   if (i) return Response.json(i, { headers: NO_STORE })
   // null = no existe (o es de otro tenant) o su estado ya no admite la acción.

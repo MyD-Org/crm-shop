@@ -1,9 +1,10 @@
 // src/lib/marketing/piezas-repo.ts
 // Acceso a marketing_piezas. Toda escritura de estado pasa por acá: valida la arista con
 // puedeTransicionar, usa `where estado = de` (concurrencia optimista) y deja un evento.
-import { and, asc, eq, gte, lt, sql } from "drizzle-orm"
+import { isDeepStrictEqual } from "node:util"
+import { and, asc, eq, gte, isNull, lt, notInArray, sql } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
-import { marketingPiezaEventos, marketingPiezas, type AlertaPieza } from "@/db/schema"
+import { marketingPiezaEventos, marketingPiezas, marketingSolicitudes, type AlertaPieza } from "@/db/schema"
 import { urlPublicaFoto } from "@/lib/shop-media"
 import { ESTADOS_EDITABLES, esEstadoPieza, puedeTransicionar, type ActorPieza, type EstadoPieza } from "./estados"
 import { obtenerMarca } from "./marca-repo"
@@ -137,8 +138,15 @@ export async function obtenerPieza(tenantId: string, id: string): Promise<PiezaD
   return f ? aDto(f) : null
 }
 
-export async function listarPiezas(tenantId: string, f: { estado?: EstadoPieza; canal?: string; desde?: Date; hasta?: Date }): Promise<PiezaDto[]> {
+const MAX_PIEZAS_LISTADO = 500
+
+/**
+ * `sinFecha` trae las piezas sin `programadaPara` que siguen vivas (excluye descartadas y publicadas):
+ * el calendario las muestra aparte porque ningún rango de fechas las alcanza.
+ */
+export async function listarPiezas(tenantId: string, f: { estado?: EstadoPieza; canal?: string; desde?: Date; hasta?: Date; sinFecha?: boolean }): Promise<PiezaDto[]> {
   const condiciones = [eq(marketingPiezas.tenantId, tenantId)]
+  if (f.sinFecha) condiciones.push(isNull(marketingPiezas.programadaPara), notInArray(marketingPiezas.estado, ["descartada", "publicada"]))
   if (f.estado) condiciones.push(eq(marketingPiezas.estado, f.estado))
   if (f.canal) condiciones.push(eq(marketingPiezas.canal, f.canal))
   if (f.desde) condiciones.push(gte(marketingPiezas.programadaPara, f.desde))
@@ -148,6 +156,7 @@ export async function listarPiezas(tenantId: string, f: { estado?: EstadoPieza; 
     .from(marketingPiezas)
     .where(and(...condiciones))
     .orderBy(asc(marketingPiezas.programadaPara), asc(marketingPiezas.createdAt))
+    .limit(MAX_PIEZAS_LISTADO)
   return filas.map(aDto)
 }
 
@@ -192,7 +201,14 @@ export async function transicionar(
   id: string,
   a: EstadoPieza,
   actor: ActorPieza,
-  opciones: { nombreActor?: string; nota?: string; campos?: CamposTransicion; worker?: string } = {},
+  opciones: {
+    nombreActor?: string
+    nota?: string
+    campos?: CamposTransicion
+    worker?: string
+    /** Encola, en la misma transacción, una solicitud `cambios` para la rutina (si no hay una pendiente). */
+    encolarCambios?: { nota: string }
+  } = {},
 ): Promise<ResultadoTransicion> {
   const actual = await obtenerPieza(tenantId, id)
   if (!actual) return { ok: false, code: "not_found" }
@@ -249,6 +265,14 @@ export async function transicionar(
     if (!f) return { ok: false, code: "conflict" }
     const nombre = opciones.nombreActor ?? opciones.worker
     await registrarEvento(tenantId, id, actual.estado, a, nombre ? `${actor}:${nombre}` : actor, opciones.nota ?? "", tx)
+    if (opciones.encolarCambios) {
+      const pendiente = await tx
+        .select({ id: marketingSolicitudes.id })
+        .from(marketingSolicitudes)
+        .where(and(eq(marketingSolicitudes.tenantId, tenantId), eq(marketingSolicitudes.tipo, "cambios"), eq(marketingSolicitudes.piezaId, id), eq(marketingSolicitudes.estado, "pendiente")))
+        .limit(1)
+      if (pendiente.length === 0) await tx.insert(marketingSolicitudes).values({ tenantId, tipo: "cambios", piezaId: id, nota: opciones.encolarCambios.nota })
+    }
     return { ok: true, pieza: aDto(f) }
   })
 }
@@ -266,6 +290,10 @@ export async function editarContenido(
   const contenido = cambios.contenido ?? actual.contenido
   const caption = cambios.caption ?? actual.caption
   const hashtags = cambios.hashtags ?? actual.hashtags
+  // Guardar sin cambios reales no versiona la pieza ni borra su render ni deja evento.
+  if (caption === actual.caption && isDeepStrictEqual(contenido, actual.contenido) && isDeepStrictEqual(hashtags, actual.hashtags)) {
+    return { ok: true, pieza: actual }
+  }
   const alertas = await alertasDeReglas(tenantId, { caption, contenido, hashtags })
   // Una pieza esperando material sigue esperándolo; cualquier otra vuelve a borrador para re-renderizar.
   const destino: EstadoPieza = actual.estado === "esperando_material" ? "esperando_material" : "borrador"

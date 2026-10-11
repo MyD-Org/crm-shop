@@ -2,7 +2,7 @@ import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard
 import { NO_STORE } from "@/lib/catalogo-admin"
 import { crearSolicitud, hayPendiente } from "@/lib/marketing/otros-repo"
 import { pingStudio } from "@/lib/marketing/ping-studio"
-import { esListaHashtags } from "@/lib/marketing/validar"
+import { esContenido, esListaHashtags } from "@/lib/marketing/validar"
 import { editarContenido, eventosDePieza, obtenerPieza, transicionar, type ResultadoTransicion } from "@/lib/marketing/piezas-repo"
 
 export const dynamic = "force-dynamic"
@@ -69,8 +69,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
     case "editar": {
       const contenido = b?.contenido
-      if (contenido !== undefined && (typeof contenido !== "object" || contenido === null || Array.isArray(contenido))) {
-        return Response.json({ error: "El contenido debe ser un objeto JSON", code: "invalid_contenido" }, { status: 400, headers: NO_STORE })
+      if (contenido !== undefined && !esContenido(contenido)) {
+        return Response.json({ error: "El contenido debe ser un objeto JSON de hasta 64 KB", code: "invalid_contenido" }, { status: 400, headers: NO_STORE })
       }
       if (b?.caption !== undefined && (typeof b.caption !== "string" || b.caption.length > 2200)) {
         return Response.json({ error: "El texto debe tener hasta 2200 caracteres", code: "invalid_caption" }, { status: 400, headers: NO_STORE })

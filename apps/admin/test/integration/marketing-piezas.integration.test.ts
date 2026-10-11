@@ -138,4 +138,44 @@ describe("repo de piezas", () => {
     expect(semana).toHaveLength(1)
     expect(await listarPiezas(T, { estado: "borrador" })).toHaveLength(2)
   })
+
+  it("sinFecha trae las piezas sin programadaPara vivas (incluye esperando material) y excluye descartadas y publicadas", async () => {
+    const semi = await crearPieza(T, { ...base, produccion: "semi", briefGrabacion: { guion: "g", tomas: ["t"], duracionSeg: 10 } }, planificador)
+    const borrador = await crearPieza(T, base, planificador)
+    const conFecha = await crearPieza(T, { ...base, programadaPara: new Date("2026-10-13T12:00:00Z") }, planificador)
+    const descartada = await crearPieza(T, base, planificador)
+    await transicionar(T, descartada.id, "descartada", "usuario", { nombreActor: "Ana" })
+    const publicada = await crearPieza(T, base, planificador)
+    await getDb().execute(sql`update marketing_piezas set estado = 'publicada' where id = ${publicada.id}`)
+    const otro = await crearPieza(OTRO, base, planificador)
+    const ids = (await listarPiezas(T, { sinFecha: true })).map((x) => x.id)
+    expect(ids).toContain(semi.id)
+    expect(ids).toContain(borrador.id)
+    expect(ids).not.toContain(conFecha.id)
+    expect(ids).not.toContain(descartada.id)
+    expect(ids).not.toContain(publicada.id)
+    expect(ids).not.toContain(otro.id)
+  })
+
+  it("listarPiezas devuelve como máximo 500 filas", async () => {
+    await getDb().execute(
+      sql`insert into marketing_piezas (tenant_id, canal, formato, plantilla, publico, tema, objetivo, produccion)
+          select ${T}, 'instagram', 'reel', 'x', 'ambos', 'producto', 'alcance', 'auto' from generate_series(1, 505)`,
+    )
+    expect(await listarPiezas(T, {})).toHaveLength(500)
+  })
+
+  it("guardar sin cambios reales no versiona, no borra el render ni deja evento", async () => {
+    const p = await crearPieza(T, { ...base, caption: "Hola", hashtags: ["#a"], contenido: { titulo: "T", lineas: ["x"] } }, planificador)
+    await reclamarPieza(T, p.id, "w1", 600)
+    await transicionar(T, p.id, "para_revisar", "studio", { worker: "w1", campos: { renderKey: "k.mp4", portadaKey: "k.jpg" } })
+    const antes = await obtenerPieza(T, p.id)
+    const eventosAntes = (await eventosDePieza(T, p.id)).length
+    const r = await editarContenido(T, p.id, { caption: "Hola", hashtags: ["#a"], contenido: { lineas: ["x"], titulo: "T" } }, "Ana")
+    expect(r.ok).toBe(true)
+    const despues = await obtenerPieza(T, p.id)
+    expect(despues).toEqual(antes)
+    expect(despues).toMatchObject({ estado: "para_revisar", version: antes!.version, renderKey: "k.mp4" })
+    expect((await eventosDePieza(T, p.id)).length).toBe(eventosAntes)
+  })
 })

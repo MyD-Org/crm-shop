@@ -3,7 +3,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { Alert, Badge, Button, Card, Field, Input, Textarea, useToast } from "@myd-org/ui"
-import { ESTADOS_EDITABLES } from "@/lib/marketing/estados"
+import { ESTADOS_CON_MATERIAL, ESTADOS_EDITABLES } from "@/lib/marketing/estados"
 import type { MaterialDto } from "@/lib/marketing/otros-repo"
 import type { PiezaDto } from "@/lib/marketing/tipos"
 import { ETIQUETA_ESTADO, ETIQUETA_FORMATO, ETIQUETA_PUBLICO, TONO_ESTADO } from "./etiquetas"
@@ -16,7 +16,8 @@ export function PiezaDetalle({ pieza, eventos, material }: { pieza: PiezaDto; ev
   const router = useRouter()
   const { toast } = useToast()
   const [caption, setCaption] = useState(pieza.caption)
-  const [contenido, setContenido] = useState(JSON.stringify(pieza.contenido, null, 2))
+  const contenidoInicial = JSON.stringify(pieza.contenido, null, 2)
+  const [contenido, setContenido] = useState(contenidoInicial)
   const [nota, setNota] = useState("")
   const [permalink, setPermalink] = useState("")
   const [ocupado, setOcupado] = useState(false)
@@ -34,6 +35,11 @@ export function PiezaDetalle({ pieza, eventos, material }: { pieza: PiezaDto; ev
     }
   }
 
+  function descartar() {
+    if (!window.confirm("¿Descarta esta pieza? No se puede deshacer.")) return
+    void accion({ accion: "descartar" }, "Pieza descartada")
+  }
+
   function guardarEdicion() {
     let parsed: unknown
     try {
@@ -47,6 +53,8 @@ export function PiezaDetalle({ pieza, eventos, material }: { pieza: PiezaDto; ev
 
   const editable = (ESTADOS_EDITABLES as readonly string[]).includes(pieza.estado)
   const enRevision = pieza.estado === "para_revisar"
+  const admiteMaterial = (ESTADOS_CON_MATERIAL as readonly string[]).includes(pieza.estado)
+  const hayCambios = caption !== pieza.caption || contenido !== contenidoInicial
   const esVideo = pieza.renderKey?.endsWith(".mp4")
 
   return (
@@ -59,8 +67,8 @@ export function PiezaDetalle({ pieza, eventos, material }: { pieza: PiezaDto; ev
         <Badge tone="neutral">Versión {pieza.version}</Badge>
       </div>
 
-      {pieza.alertas.map((a) => (
-        <Alert key={`${a.fuente}-${a.regla}`} tone={a.severidad === "alta" ? "danger" : "warning"}>{a.mensaje}</Alert>
+      {pieza.alertas.map((a, i) => (
+        <Alert key={`${i}-${a.fuente}-${a.regla}`} tone={a.severidad === "alta" ? "danger" : "warning"}>{a.mensaje}</Alert>
       ))}
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -77,12 +85,16 @@ export function PiezaDetalle({ pieza, eventos, material }: { pieza: PiezaDto; ev
         </Card>
 
         <div className="space-y-3">
-          {pieza.estado === "esperando_material" && pieza.briefGrabacion && (
+          {admiteMaterial && (
             <Card>
-              <h2 className="mb-1 font-semibold">Qué grabar</h2>
-              <p className="text-sm">{pieza.briefGrabacion.guion}</p>
-              <ul className="mt-2 list-disc pl-5 text-sm">{pieza.briefGrabacion.tomas.map((t) => <li key={t}>{t}</li>)}</ul>
-              <p className="mt-2 text-xs" style={{ color: "var(--ink-soft)" }}>Duración sugerida: {pieza.briefGrabacion.duracionSeg} s</p>
+              {pieza.briefGrabacion && (
+                <>
+                  <h2 className="mb-1 font-semibold">Qué grabar</h2>
+                  <p className="text-sm">{pieza.briefGrabacion.guion}</p>
+                  <ul className="mt-2 list-disc pl-5 text-sm">{pieza.briefGrabacion.tomas.map((t, i) => <li key={`${i}-${t}`}>{t}</li>)}</ul>
+                  <p className="mt-2 text-xs" style={{ color: "var(--ink-soft)" }}>Duración sugerida: {pieza.briefGrabacion.duracionSeg} s</p>
+                </>
+              )}
               <SubirMaterial piezaId={pieza.id} onSubido={() => router.refresh()} />
             </Card>
           )}
@@ -102,13 +114,24 @@ export function PiezaDetalle({ pieza, eventos, material }: { pieza: PiezaDto; ev
               <Field label="Contenido (JSON)">
                 <Textarea value={contenido} onChange={(e) => setContenido(e.target.value)} rows={8} className="font-mono text-xs" />
               </Field>
-              <Button variant="secondary" disabled={ocupado} onClick={guardarEdicion}>Guardar cambios</Button>
+              <Button variant="secondary" disabled={ocupado || !hayCambios} onClick={guardarEdicion}>Guardar cambios</Button>
             </>
           )}
           {enRevision && (
             <div className="flex flex-wrap gap-2">
               <Button disabled={ocupado} onClick={() => accion({ accion: "aprobar" }, "Pieza aprobada")}>Aprobar</Button>
-              <Button variant="secondary" disabled={ocupado} onClick={() => accion({ accion: "descartar" }, "Pieza descartada")}>Descartar</Button>
+              <Button variant="secondary" disabled={ocupado} onClick={descartar}>Descartar</Button>
+            </div>
+          )}
+          {pieza.estado === "fallida" && (
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={ocupado} onClick={() => accion({ accion: "aprobar" }, "Pieza aprobada de nuevo")}>Volver a aprobar</Button>
+              <Button variant="secondary" disabled={ocupado} onClick={descartar}>Descartar</Button>
+            </div>
+          )}
+          {pieza.estado === "cambios_pedidos" && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" disabled={ocupado} onClick={descartar}>Descartar</Button>
             </div>
           )}
           {enRevision && (

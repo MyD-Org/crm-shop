@@ -16,7 +16,7 @@ export default async function PiezaPage({ params }: { params: Promise<{ id: stri
   const [eventos, material] = await Promise.all([eventosDePieza(guard.tenantId, id), listarMaterial(guard.tenantId, id)])
   return (
     <div className="p-4 md:p-6">
-      <PiezaDetalle key={`${pieza.id}-${pieza.version}`} pieza={pieza} eventos={eventos} material={material} />
+      <PiezaDetalle key={`${pieza.id}-${pieza.updatedAt}`} pieza={pieza} eventos={eventos} material={material} />
     </div>
   )
 }

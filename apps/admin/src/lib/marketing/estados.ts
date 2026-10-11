@@ -62,3 +62,6 @@ export function esEstadoPieza(v: unknown): v is EstadoPieza {
 export function puedeTransicionar(actor: ActorPieza, de: EstadoPieza, a: EstadoPieza): boolean {
   return TRANSICIONES[actor][de]?.includes(a) ?? false
 }
+
+/** Estados en los que la pieza todavía puede recibir (o reemplazar) su material. */
+export const ESTADOS_CON_MATERIAL: readonly EstadoPieza[] = ["esperando_material", "borrador", "cambios_pedidos"]

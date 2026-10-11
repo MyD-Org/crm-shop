@@ -26,13 +26,26 @@ export async function listarSolicitudes(tenantId: string, estado: "pendiente" | 
 }
 
 export async function hayPendiente(tenantId: string, tipo: TipoSolicitud, piezaId: string): Promise<boolean> {
-  if (!UUID_RE.test(piezaId)) return false
-  const filas = await getDb()
-    .select({ id: marketingSolicitudes.id })
+  return (await solicitudPendiente(tenantId, tipo, piezaId)) !== null
+}
+
+/** Solicitud pendiente del tenant de ese tipo (y de esa pieza, si se indica); null si no hay. */
+export async function solicitudPendiente(tenantId: string, tipo: TipoSolicitud, piezaId?: string): Promise<SolicitudDto | null> {
+  if (piezaId !== undefined && !UUID_RE.test(piezaId)) return null
+  const [f] = await getDb()
+    .select()
     .from(marketingSolicitudes)
-    .where(and(eq(marketingSolicitudes.tenantId, tenantId), eq(marketingSolicitudes.tipo, tipo), eq(marketingSolicitudes.piezaId, piezaId), eq(marketingSolicitudes.estado, "pendiente")))
+    .where(
+      and(
+        eq(marketingSolicitudes.tenantId, tenantId),
+        eq(marketingSolicitudes.tipo, tipo),
+        eq(marketingSolicitudes.estado, "pendiente"),
+        ...(piezaId !== undefined ? [eq(marketingSolicitudes.piezaId, piezaId)] : []),
+      ),
+    )
+    .orderBy(asc(marketingSolicitudes.createdAt))
     .limit(1)
-  return filas.length > 0
+  return f ? solicitudDto(f) : null
 }
 
 export async function resolverSolicitud(tenantId: string, id: string, ok: boolean, resultado = ""): Promise<SolicitudDto | null> {

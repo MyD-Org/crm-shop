@@ -57,7 +57,7 @@ export function CalendarioSemanal({ dias, grupos }: { dias: string[]; grupos: Re
 
       {(grupos.sin_fecha?.length ?? 0) > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-semibold" style={{ color: "var(--ink)" }}>Esperando material</h2>
+          <h2 className="mb-2 text-sm font-semibold" style={{ color: "var(--ink)" }}>Sin fecha</h2>
           <div className="flex flex-wrap gap-2">{grupos.sin_fecha.map((p) => <div key={p.id} className="w-44"><TarjetaPieza pieza={p} /></div>)}</div>
         </section>
       )}

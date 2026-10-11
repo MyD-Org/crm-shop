@@ -3,7 +3,8 @@
 -- Cada pieza de contenido es una fila con estado; el studio, la rutina y ai-api la toman por
 -- la API interna /api/internal/marketing/*. Ningún rol del Shop lee estas tablas (sin GRANT).
 --
--- Drift sólo en SQL: los CHECK de los "enums" de texto (drizzle-kit no los conoce).
+-- Drift sólo en SQL: los CHECK de los "enums" de texto (drizzle-kit no los conoce) y el
+-- bloque final de REVOKE condicional sobre shop_app (cinturón; ver el final del archivo).
 --
 -- Reversa (en una migración nueva, SOLO después de revertir el código que las usa):
 --   DROP TABLE marketing_interacciones, marketing_metricas, marketing_musica,
@@ -204,3 +205,22 @@ CREATE TABLE "marketing_interacciones" (
 CREATE UNIQUE INDEX "marketing_interacciones_externo_uniq" ON "marketing_interacciones" ("tenant_id","origen","externo_id");
 --> statement-breakpoint
 CREATE INDEX "marketing_interacciones_tenant_estado_idx" ON "marketing_interacciones" ("tenant_id","estado");
+--> statement-breakpoint
+-- REVOKE condicional: ningún rol del Shop lee estas tablas. Es un cinturón por si algún
+-- DEFAULT PRIVILEGES del esquema public le diera algo a shop_app al crearlas (mismo patrón que
+-- contactos_acceso_facturacion en 0039). Si el rol se crea DESPUÉS de esta migración, correr
+-- este bloque a mano como owner.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'shop_app') THEN
+    REVOKE ALL ON "public"."marketing_marca" FROM shop_app;
+    REVOKE ALL ON "public"."marketing_campanas" FROM shop_app;
+    REVOKE ALL ON "public"."marketing_musica" FROM shop_app;
+    REVOKE ALL ON "public"."marketing_piezas" FROM shop_app;
+    REVOKE ALL ON "public"."marketing_pieza_eventos" FROM shop_app;
+    REVOKE ALL ON "public"."marketing_material" FROM shop_app;
+    REVOKE ALL ON "public"."marketing_solicitudes" FROM shop_app;
+    REVOKE ALL ON "public"."marketing_metricas" FROM shop_app;
+    REVOKE ALL ON "public"."marketing_interacciones" FROM shop_app;
+  END IF;
+END $$;

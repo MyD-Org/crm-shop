@@ -185,3 +185,9 @@ export async function actualizarInteraccion(
     .returning()
   return f ? interaccionDto(f) : null
 }
+
+export async function obtenerInteraccion(tenantId: string, id: string): Promise<InteraccionDto | null> {
+  if (!UUID_RE.test(id)) return null
+  const [f] = await getDb().select().from(marketingInteracciones).where(and(eq(marketingInteracciones.tenantId, tenantId), eq(marketingInteracciones.id, id)))
+  return f ? interaccionDto(f) : null
+}

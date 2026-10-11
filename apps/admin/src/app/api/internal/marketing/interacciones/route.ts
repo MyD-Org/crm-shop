@@ -1,5 +1,6 @@
 // src/app/api/internal/marketing/interacciones/route.ts
 import { autenticarInterno, jsonInterno } from "@/lib/marketing/auth-interna"
+import { obtenerPieza } from "@/lib/marketing/piezas-repo"
 import { guardarInteraccion, listarInteracciones, type NuevaInteraccion } from "@/lib/marketing/otros-repo"
 
 export const dynamic = "force-dynamic"
@@ -22,7 +23,11 @@ export async function POST(req: Request) {
   if (!ORIGENES.includes(String(b.origen))) return jsonInterno({ error: "invalid_origen" }, 400)
   if (!CATEGORIAS.includes(String(b.categoria))) return jsonInterno({ error: "invalid_categoria" }, 400)
   if (!SENTIMIENTOS.includes(String(b.sentimiento ?? "neutro"))) return jsonInterno({ error: "invalid_sentimiento" }, 400)
-  if (typeof b.externoId !== "string" || !b.externoId || typeof b.texto !== "string") return jsonInterno({ error: "invalid_interaccion" }, 400)
+  if (typeof b.externoId !== "string" || !b.externoId || typeof b.texto !== "string" || !b.texto.trim()) return jsonInterno({ error: "invalid_interaccion" }, 400)
+  // piezaId opcional: si viene, tiene que ser una pieza de este tenant (evita 500 por cast/FK).
+  if (b.piezaId !== undefined && b.piezaId !== null && (typeof b.piezaId !== "string" || !(await obtenerPieza(auth.tenantId, b.piezaId)))) {
+    return jsonInterno({ error: "invalid_piezaId" }, 400)
+  }
   const i = await guardarInteraccion(auth.tenantId, {
     origen: b.origen as NuevaInteraccion["origen"],
     externoId: b.externoId,

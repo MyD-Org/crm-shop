@@ -92,4 +92,65 @@ describe("API interna de marketing: resto del contrato", () => {
     expect(await r.json()).toEqual({ items: [] })
     expect((await catalogo.GET(req("/catalogo", S.aiapi))).status).toBe(403)
   })
+
+  describe("validación de entradas", () => {
+    const filaOk = { ambito: "cuenta_ig", refId: "ig", fecha: "2026-10-12", metricas: { seguidores: 10 } }
+    const postMetricas = (filas: unknown[]) => metricas.POST(req("/metricas", S.aiapi, { method: "POST", body: { filas } }))
+    const comentario = { origen: "comentario", externoId: "c9", autor: "@ana", texto: "Hola", categoria: "consulta" }
+    const postInter = (extra: Record<string, unknown>) => interacciones.POST(req("/interacciones", S.aiapi, { method: "POST", body: { ...comentario, ...extra } }))
+
+    it("POST /metricas rechaza con 400 filas nulas, fechas imposibles, metricas array, claves largas y refId vacío/largo", async () => {
+      for (const mala of [
+        null,
+        "texto",
+        { ...filaOk, fecha: "2026-02-31" },
+        { ...filaOk, fecha: "2026-13-45" },
+        { ...filaOk, metricas: [1, 2] },
+        { ...filaOk, metricas: { ["k".repeat(61)]: 1 } },
+        { ...filaOk, refId: "" },
+        { ...filaOk, refId: "r".repeat(201) },
+      ]) {
+        const r = await postMetricas([filaOk, mala])
+        expect(r.status, JSON.stringify(mala)).toBe(400)
+        expect(await r.json()).toEqual({ error: "invalid_fila" })
+      }
+    })
+
+    it("GET /metricas rechaza fechas imposibles con 400 y acepta rangos válidos", async () => {
+      const mal = await metricas.GET(req("/metricas?desde=2026-13-01&hasta=2026-10-31", S.planificador))
+      expect(mal.status).toBe(400)
+      expect(await mal.json()).toEqual({ error: "invalid_fecha" })
+      expect((await metricas.GET(req("/metricas?desde=2026-10-01&hasta=2026-10-31", S.planificador))).status).toBe(200)
+    })
+
+    it("POST /interacciones: piezaId inválido, de otra tenant o inexistente es 400; texto vacío es 400", async () => {
+      for (const piezaId of ["no-es-uuid", "00000000-0000-4000-8000-000000000000"]) {
+        const r = await postInter({ piezaId })
+        expect(r.status, piezaId).toBe(400)
+        expect(await r.json()).toEqual({ error: "invalid_piezaId" })
+      }
+      expect((await postInter({ piezaId: 5 })).status).toBe(400)
+      const vacio = await postInter({ texto: "" })
+      expect(vacio.status).toBe(400)
+      expect(await vacio.json()).toEqual({ error: "invalid_interaccion" })
+    })
+
+    it("POST /interacciones acepta un piezaId de una pieza de este tenant", async () => {
+      const { crearPieza } = await import("@/lib/marketing/piezas-repo")
+      const pieza = await crearPieza(T, { canal: "instagram", formato: "reel", plantilla: "producto-destacado", publico: "ambos", tema: "producto", objetivo: "alcance", produccion: "auto", caption: "Hola", programadaPara: new Date("2026-10-13T22:00:00.000Z") } as never, { tipo: "planificador", nombre: "rutina" })
+      const r = await postInter({ piezaId: pieza.id })
+      expect(r.status).toBe(201)
+      expect((await r.json()).piezaId).toBe(pieza.id)
+    })
+
+    it("PATCH marcar_respondida es idempotente: la segunda vez también es 200", async () => {
+      const creada = await (await postInter({})).json()
+      await actualizarInteraccion(T, creada.id, "aprobar")
+      const patch = () => interaccion.PATCH(req(`/interacciones/${creada.id}`, S.aiapi, { method: "PATCH", body: { accion: "marcar_respondida" } }), { params: Promise.resolve({ id: creada.id }) })
+      const a = await patch()
+      const b = await patch()
+      expect([a.status, b.status]).toEqual([200, 200])
+      expect((await b.json()).estado).toBe("respondida")
+    })
+  })
 })

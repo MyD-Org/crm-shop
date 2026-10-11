@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const auth = autenticarInterno(req, ["planificador", "studio"])
   if (!auth.ok) return auth.response
   const q = new URL(req.url).searchParams
-  const limite = Math.min(Number(q.get("limite") ?? 50) || 50, 100)
+  const limite = Math.min(Math.trunc(Number(q.get("limite") ?? 50)) || 50, 100)
   const { items } = await listarProductos(auth.tenantId, { q: q.get("q") ?? undefined, estado: "visible", stock: "con" }, { limit: limite })
   return jsonInterno({
     items: items.map((p) => ({

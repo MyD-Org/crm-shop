@@ -14,5 +14,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const i = await actualizarInteraccion(auth.tenantId, id, "marcar_respondida")
   if (i) return jsonInterno(i)
   // null = no existe o el estado no admite la acción: se distingue para que ai-api no reintente en vano.
-  return (await obtenerInteraccion(auth.tenantId, id)) ? jsonInterno({ error: "invalid_state" }, 409) : jsonInterno({ error: "not_found" }, 404)
+  const actual = await obtenerInteraccion(auth.tenantId, id)
+  if (!actual) return jsonInterno({ error: "not_found" }, 404)
+  // Idempotente: un reintento tras una respuesta perdida ve la fila ya respondida y no debe fallar.
+  if (actual.estado === "respondida") return jsonInterno(actual)
+  return jsonInterno({ error: "invalid_state" }, 409)
 }

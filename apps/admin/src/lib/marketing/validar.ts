@@ -156,3 +156,22 @@ export function validarCamposTransicion(
   }
   return { ok: true, campos }
 }
+
+const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/
+/** YYYY-MM-DD que existe en el calendario ("2026-02-31" no pasa el round-trip por Date). */
+export function fechaValida(s: unknown): s is string {
+  if (typeof s !== "string" || !FECHA_RE.test(s)) return false
+  const d = new Date(`${s}T00:00:00Z`)
+  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s
+}
+
+const MAX_CLAVE_METRICA = 60
+const MAX_REF_ID = 200
+/** Fila de métricas {ambito, refId, fecha, metricas:{clave:número}}; objeto plano obligatorio. */
+export function filaMetricaValida(f: unknown): boolean {
+  if (!esObjetoPlano(f) || !esObjetoPlano(f.metricas)) return false
+  if (!["pieza", "cuenta_ig", "ficha_google"].includes(f.ambito as string)) return false
+  if (typeof f.refId !== "string" || f.refId.length === 0 || f.refId.length > MAX_REF_ID) return false
+  if (!fechaValida(f.fecha)) return false
+  return Object.entries(f.metricas).every(([k, v]) => k.length > 0 && k.length <= MAX_CLAVE_METRICA && typeof v === "number" && Number.isFinite(v))
+}

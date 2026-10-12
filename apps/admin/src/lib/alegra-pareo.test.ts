@@ -132,6 +132,22 @@ describe("mapItemSecundario", () => {
     expect(m.alegraIdCuenta).toBe("1")
   })
 
+  it("una variante lleva el padre de SU cuenta reescrito al id sintético; tipo y opción se conservan", () => {
+    const m = mapItemSecundario(
+      base({ tipo: "variante", padreAlegraId: "40", variante: [{ atributo: "Color", opcion: "Rojo" }], varianteClave: "rojo" }),
+      cuenta,
+      listasPrincipal,
+      catsSec,
+      catsPrincipal,
+    )
+    expect(m.producto).toMatchObject({ tipo: "variante", padreAlegraId: "mdp:40", varianteClave: "rojo" })
+  })
+
+  it("un ítem sin padre no inventa padreAlegraId", () => {
+    const m = mapItemSecundario(base(), cuenta, listasPrincipal, catsSec, catsPrincipal)
+    expect(m.producto.padreAlegraId).toBeUndefined()
+  })
+
   it("listas por nombre normalizado; la lista sin equivalente se descarta y se informa", () => {
     const m = mapItemSecundario(base(), cuenta, listasPrincipal, catsSec, catsPrincipal)
     expect(m.producto.prices).toEqual([{ idPriceList: "1", name: "General", price: 100 }])

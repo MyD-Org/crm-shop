@@ -229,6 +229,9 @@ export function mapItemSecundario(
       alegraId: alegraIdSintetico(cuenta.slug, item.alegraId),
       categoryAlegraId,
       prices,
+      // El padre de una variante es un id DE ESA CUENTA: se reescribe al sintético para que coincida
+      // con el `alegra_id` de la fila del padre (S3 lo canonicaliza si el padre se parea con la principal).
+      ...(item.padreAlegraId ? { padreAlegraId: alegraIdSintetico(cuenta.slug, item.padreAlegraId) } : {}),
       raw: { ...item.raw, price: rawPriceRemapeado },
     },
     alegraIdCuenta: item.alegraId,

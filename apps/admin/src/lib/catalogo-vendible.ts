@@ -18,10 +18,15 @@ import { catalogProducts, catalogOverlay, sucursales } from "@/db/schema"
  *  - `alegra_status <> 'inactive'`: el ítem no está dado de baja EN Alegra. Se acepta null para
  *    los que todavía no pasaron por el sync nuevo, así estrenar esto no vacía el catálogo.
  *  - precio > 0: un producto sin precio no se puede vender. Son 315 de 8012 en Central Led.
+ *
+ * Y una cuarta: `tipo <> 'padre'`. El padre de un producto con variantes es un ítem de Alegra que
+ * NO se vende (lo que se vende son sus variantes); aunque tenga overlay visible, precio heredado o
+ * stock null, nunca es vendible.
  */
 export function esVendible(): SQL {
   return and(
     eq(catalogProducts.status, "active"),
+    ne(catalogProducts.tipo, "padre"),
     or(isNull(catalogProducts.alegraStatus), ne(catalogProducts.alegraStatus, "inactive")),
     precioMayorACero(),
   ) as SQL
@@ -50,6 +55,7 @@ export function precioMayorACero(): SQL {
 export function esVendibleSql(alias: string): SQL {
   return sql.raw(`(
     ${alias}.status = 'active'
+    AND ${alias}.tipo <> 'padre'
     AND (${alias}.alegra_status IS NULL OR ${alias}.alegra_status <> 'inactive')
     AND coalesce((
       SELECT max((elem->>'price')::numeric)

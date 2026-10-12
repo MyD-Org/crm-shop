@@ -21,6 +21,7 @@ import {
   listasDeLaPrincipal,
 } from "./catalogo-union-repo"
 import { avisarShop } from "./aviso-shop"
+import { recalcularGruposTrasSync } from "./catalogo-variantes-repo"
 
 // Sync de una cuenta de Alegra SECUNDARIA (change `sucursales-igz-mdp`, rebanada D, design D3).
 // El catálogo de la tienda es la UNIÓN de las cuentas del tenant emparejadas por código:
@@ -362,6 +363,8 @@ export async function syncCuentaSecundaria(
       categoriasSinEquivalente: categoriasSin,
     }
 
+    // Variantes (0080): las filas solo-secundaria (y sus padres) ya están; se recalculan los grupos del tenant.
+    await recalcularGruposTrasSync(tenantId, undefined, `sync-cuenta:${cuenta.slug}`)
     await db
       .update(catalogSyncLog)
       .set({

@@ -7,6 +7,7 @@ import { upsertProductos } from "./catalog-products-repo"
 import { abrirCorrida, baseDeCorrida, evaluarCorrida, MSG_SYNC_EN_CURSO, type Conteo } from "./alegra-sync-guarda"
 import { absorberSoloSecundaria, escribirStockPrincipal } from "./catalogo-union-repo"
 import { avisarShop } from "./aviso-shop"
+import { recalcularGruposTrasSync } from "./catalogo-variantes-repo"
 import { recalcularTrasSync } from "./precios-online-costos"
 import { sincronizarAtributosDeNombre } from "./catalogo-atributos-repo"
 
@@ -214,6 +215,7 @@ async function cerrarPasada(
       AND o.visible = true
       AND NOT (
         p.status = 'active'
+        AND p.tipo <> 'padre'
         AND (p.alegra_status IS NULL OR p.alegra_status <> 'inactive')
         AND coalesce((
           SELECT max((elem->>'price')::numeric)
@@ -235,6 +237,9 @@ async function cerrarPasada(
   // Absorción: DESPUÉS del stale, para decidir con el estado final de la principal (un ítem que
   // acaba de darse de baja no absorbe a su par solo-secundaria).
   await absorberSoloSecundaria(config.id)
+  // Variantes (0080): con el estado final de la pasada (stale + absorción) se recalculan los
+  // grupos y representantes de TODO el tenant. Best-effort: no convierte una sync OK en error.
+  await recalcularGruposTrasSync(config.id, undefined, "sync-cierre")
 
   if (!guarda.parcialCategorias) {
     await db

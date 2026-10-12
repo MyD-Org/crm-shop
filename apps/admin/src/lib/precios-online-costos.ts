@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { preciosOnlineCambios, preciosOnlineRetenciones } from "@/db/schema"
 import { avisarShop } from "./aviso-shop"
+import { recalcularGruposTrasSync } from "./catalogo-variantes-repo"
 import { PreciosOnlineError, idsSql, idsUuidSql, lockTenant, type Tx, type UsuarioActor } from "./precios-online-repo"
 
 // Costos que llegan desde Alegra (change `listas-precio-online`, rebanada B): recálculo de los
@@ -167,6 +168,8 @@ export async function aprobarRetenidos(
     return { resueltos: aprobables.length, omitidos }
   })
   if (r.resueltos > 0) {
+    // Variantes (0080): un precio nuevo puede cambiar el representante de su grupo.
+    await recalcularGruposTrasSync(tenantId, undefined, "costos-aprobados")
     try {
       await avisarShop(tenantId)
     } catch {

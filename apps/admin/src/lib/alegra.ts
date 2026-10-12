@@ -1,5 +1,6 @@
 import type { TenantConfig } from "./tenants"
 import { sumaImpuestos } from "./alegra-impuestos"
+import { claveVariante, padreDeItem, tipoDeItem, varianteDeItem, type TipoItem, type VarianteOpcion } from "./variantes-puras"
 import {
   mockCategories,
   mockItems,
@@ -68,6 +69,14 @@ export interface AlegraProduct {
   ivaPorcentaje: number | null
   /** Costo unitario SIN IVA (inventory.unitCost). null/ausente = sin costo (0 o inválido). Nunca viaja al Shop. */
   costo?: number | null
+  /** Variantes (change `variantes-de-producto`): 'simple' (default), 'padre' (no se vende) o 'variante'. */
+  tipo?: TipoItem
+  /** Id, EN LA CUENTA DE ORIGEN, del padre de una variante. La secundaria lo reescribe a sintético. */
+  padreAlegraId?: string | null
+  /** Opción(es) de la variante: de variantAttributes o derivadas del sufijo del nombre. */
+  variante?: VarianteOpcion[] | null
+  /** Clave normalizada de la opción (pareo entre cuentas), derivada de `variante`. */
+  varianteClave?: string | null
   /** El ítem COMPLETO tal cual vino. Nada se descarta. */
   raw: Record<string, unknown>
 }
@@ -545,6 +554,7 @@ function mapRawItem(raw: Record<string, unknown>): AlegraProduct {
   const cat = raw.itemCategory as { id?: unknown } | undefined
   const inv = raw.inventory as { availableQuantity?: unknown } | undefined
   const imgs = Array.isArray(raw.images) ? (raw.images as Record<string, unknown>[]) : []
+  const variante = varianteDeItem(raw)
   return {
     alegraId: String(raw.id),
     code: codigoDeItem(raw.reference),
@@ -559,6 +569,10 @@ function mapRawItem(raw: Record<string, unknown>): AlegraProduct {
     // SUMA de los impuestos (regla única: alegra-impuestos.ts = public.alegra_suma_impuestos).
     ivaPorcentaje: sumaImpuestos(raw.tax),
     costo: costoDeItem(raw),
+    tipo: tipoDeItem(raw),
+    padreAlegraId: padreDeItem(raw),
+    variante,
+    varianteClave: claveVariante(variante),
     // Se guarda entero: cada vez que hizo falta un campo que el mapper no leía hubo que tocarlo
     // y re-sincronizar. Con el crudo, se resuelve con una query.
     raw,
@@ -852,8 +866,13 @@ export async function listAllCategories(config: TenantConfig): Promise<AlegraCat
   return fetchAllPages(config, "/item-categories", mapRawCategory)
 }
 
-/** Orden estable por id; `fields=inventory` es ADITIVO (suma inventory.unitCost, el resto de los campos sigue igual). */
-export const PARAMS_ITEMS = { order_field: "id", order_direction: "ASC", fields: "inventory" } as const
+/**
+ * Orden estable por id. `fields` es ADITIVO (el resto de los campos sigue igual): `inventory` suma
+ * inventory.unitCost y `variantAttributes` la opción de cada variante. `type` e `idItemParent` llegan
+ * siempre. Verificado contra Alegra real (2026-10-11), en el listado y en GET /items/{id}.
+ */
+export const FIELDS_ITEMS = "inventory,variantAttributes"
+export const PARAMS_ITEMS = { order_field: "id", order_direction: "ASC", fields: FIELDS_ITEMS } as const
 
 /** Todos los productos del tenant (modo advanced: trae categoría, inventario, precios). Para la sync. */
 export async function listAllItems(config: TenantConfig): Promise<AlegraProduct[]> {
@@ -940,7 +959,7 @@ export async function getItemParaEspejo(
 ): Promise<AlegraProduct | null> {
   if (config.alegraMock) return getMockItemLive(alegraId)
   try {
-    const raw = (await alegraFetch(config, `/items/${encodeURIComponent(alegraId)}`, { fields: "inventory" }, undefined, {
+    const raw = (await alegraFetch(config, `/items/${encodeURIComponent(alegraId)}`, { fields: FIELDS_ITEMS }, undefined, {
       reintentos429: opts.reintentos429,
       onRequest: opts.onRequest,
     })) as Record<string, unknown>

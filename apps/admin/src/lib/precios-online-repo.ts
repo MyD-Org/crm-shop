@@ -14,6 +14,7 @@ import {
   shopCategories,
 } from "@/db/schema"
 import { avisarShop } from "./aviso-shop"
+import { recalcularGruposTrasSync } from "./catalogo-variantes-repo"
 import { combinarListasAlegra, leerListasDeAlegra, type ListaAlegraSelector } from "./listas-alegra-selector"
 import { getTenantByIdFromDb } from "./tenants"
 import { pingShopRevalidarSucursales } from "./shop-revalidar"
@@ -828,6 +829,8 @@ async function aplicarEnTx(
  * lo toma al vencer su caché). Un cambio de condiciones además invalida la caché de los medios.
  */
 async function avisarTrasCommit(tenantId: string, hubo: { condiciones?: boolean } = {}): Promise<void> {
+  // Variantes (0080): los precios online recién aplicados pueden cambiar el representante de un grupo.
+  await recalcularGruposTrasSync(tenantId, undefined, "precios-online")
   try {
     await avisarShop(tenantId)
   } catch (err) {

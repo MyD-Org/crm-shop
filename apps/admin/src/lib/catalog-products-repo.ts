@@ -3,6 +3,7 @@ import { getDb } from "@/db"
 import { catalogProducts } from "@/db/schema"
 import type { AlegraProduct } from "./alegra"
 import { recalcularTrasSync } from "./precios-online-costos"
+import { recalcularGruposTrasSync } from "./catalogo-variantes-repo"
 
 // Escritura del espejo de productos (tabla catalog_products). La usan la sync completa
 // (lib/alegra-sync.ts) y el drenador de avisos de stock (lib/alegra-stock-cola.ts).
@@ -18,6 +19,19 @@ export type LeidoPor = "sync" | "webhook"
 
 const LOTE = 500
 
+/**
+ * Hasta cuántos ítems escritos justifican recalcular SOLO sus grupos al terminar el upsert. Una
+ * escritura más grande (la sync de la cuenta secundaria escribe todo junto) no pasa los ids: la
+ * pasada recalcula el tenant entero al cerrar, que es más barato que armar un alcance gigante.
+ */
+const ALCANCE_GRUPOS_MAX = 300
+
+/** Variantes (0080): grupo / etiqueta / representante de los grupos tocados por esta escritura. */
+async function recalcularGruposDe(tenantId: string, alegraIds: string[], origen: string): Promise<void> {
+  if (alegraIds.length === 0 || alegraIds.length > ALCANCE_GRUPOS_MAX) return
+  await recalcularGruposTrasSync(tenantId, { alegraIds }, origen)
+}
+
 /** Columnas de Alegra: se pisan sólo si la lectura nueva no es más vieja que la guardada. */
 type ColumnaDeAlegra =
   | "code"
@@ -31,6 +45,10 @@ type ColumnaDeAlegra =
   | "brand"
   | "iva_porcentaje"
   | "costo"
+  | "tipo"
+  | "padre_alegra_id"
+  | "variante"
+  | "variante_clave"
   | "raw"
   | "images"
   | "alegra_leido_at"
@@ -56,6 +74,12 @@ const SET_POR_FRESCURA = {
   ivaPorcentaje: segunFrescura("iva_porcentaje"),
   // `costo_aplicado` NO está acá a propósito: lo gobierna la retención por variación de costo.
   costo: segunFrescura("costo"),
+  // Variantes (0080): Alegra manda tipo / padre / opción. `grupo_id`, `etiqueta` y `es_representante`
+  // NO están acá a propósito: son derivadas y las escribe `recalcularGrupos`.
+  tipo: segunFrescura("tipo"),
+  padreAlegraId: segunFrescura("padre_alegra_id"),
+  variante: segunFrescura("variante"),
+  varianteClave: segunFrescura("variante_clave"),
   raw: segunFrescura("raw"),
   images: segunFrescura("images"),
   alegraLeidoAt: segunFrescura("alegra_leido_at"),
@@ -81,6 +105,10 @@ function fila(tenantId: string, it: AlegraProduct, leidoAt: Date, leidoPor: Leid
     brand: it.brand,
     ivaPorcentaje: it.ivaPorcentaje != null ? String(it.ivaPorcentaje) : null,
     costo: it.costo != null ? String(it.costo) : null,
+    tipo: it.tipo ?? "simple",
+    padreAlegraId: it.padreAlegraId ?? null,
+    variante: it.variante ?? null,
+    varianteClave: it.varianteClave ?? null,
     raw: it.raw,
     images: it.images,
     syncedAt: ahora,
@@ -112,6 +140,9 @@ export async function upsertProductos(
   // Listas de precio online (0064): el costo nuevo se aplica o se retiene. Cubre la sync de la
   // principal y el webhook (ambos escriben por acá). Best-effort: nunca tumba la escritura.
   await recalcularTrasSync(tenantId, unicos.map((it) => it.alegraId), opts.leidoPor)
+  // Variantes (0080): tipo / padre / opción acaban de entrar; se recalculan los grupos tocados
+  // (y sus hermanos). Cubre el webhook de stock; la sync diaria lo hace además al cerrar la pasada.
+  await recalcularGruposDe(tenantId, unicos.map((it) => it.alegraId), opts.leidoPor)
 }
 
 export interface ProductoSecundaria {
@@ -162,6 +193,7 @@ export async function upsertProductosSecundaria(
   }
   // Ídem `upsertProductos`: las filas solo-secundaria también reciben su precio online.
   await recalcularTrasSync(tenantId, unicos.map((it) => it.producto.alegraId), opts.leidoPor)
+  await recalcularGruposDe(tenantId, unicos.map((it) => it.producto.alegraId), opts.leidoPor)
 }
 
 /**

@@ -331,9 +331,29 @@ export const catalogProducts = pgTable(
     alegraIdCuenta: text("alegra_id_cuenta"),
     /** Si otra fila absorbió a esta (mismo código dado de alta en la principal): su `alegraId`. */
     reemplazadoPorAlegraId: text("reemplazado_por_alegra_id"),
+    // ── Variantes de producto (0080, change `variantes-de-producto`) ──
+    // Alegra manda tipo / padre / opción (columnas "de Alegra": se pisan con frescura por fila, como
+    // el resto). `grupo_id`, `etiqueta` y `es_representante` son DERIVADAS: las escribe
+    // `recalcularGrupos` (lib/catalogo-variantes-repo.ts), nunca el upsert del espejo.
+    /** 'simple' (default) | 'padre' (ítem Alegra no vendible) | 'variante'. CHECK solo en SQL. */
+    tipo: text("tipo").notNull().default("simple"),
+    /** Variantes: id del padre. Principal = id de Alegra; fila solo-secundaria = `<slug>:<id>` (sintético). */
+    padreAlegraId: text("padre_alegra_id"),
+    /** Opción(es) de la variante: [{"atributo":"Color","opcion":"Verde"}]. */
+    variante: jsonb("variante").$type<{ atributo: string; opcion: string }[]>(),
+    /** Clave normalizada de la opción (pareo entre cuentas; ver lib/variantes-puras.ts). */
+    varianteClave: text("variante_clave"),
+    /** Grupo (modelo) al que pertenece: el padre, o el ancla de un grupo manual. NULL = se vende suelta. */
+    grupoId: text("grupo_id"),
+    /** Texto del selector de la variante (opciones unidas con " / " o la etiqueta manual). */
+    etiqueta: text("etiqueta"),
+    /** La variante que da la cara del modelo en el listado. Simples y huérfanas: true. */
+    esRepresentante: boolean("es_representante").notNull().default(true),
   },
   (t) => [
     uniqueIndex("cp_tenant_alegra").on(t.tenantId, t.alegraId),
+    index("cp_tenant_grupo").on(t.tenantId, t.grupoId).where(sql`${t.grupoId} is not null`),
+    index("cp_tenant_padre").on(t.tenantId, t.padreAlegraId).where(sql`${t.padreAlegraId} is not null`),
     index("cp_tenant_cuenta").on(t.tenantId, t.cuentaId),
     index("cp_tenant_code").on(t.tenantId, t.code),
     index("cp_tenant_category").on(t.tenantId, t.categoryAlegraId),

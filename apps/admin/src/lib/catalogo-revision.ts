@@ -87,12 +87,14 @@ export async function revisionDeCatalogo(tenantId: string): Promise<RevisionCuen
       FROM catalog_products p
       LEFT JOIN catalog_overlay o ON o.tenant_id = p.tenant_id AND o.alegra_id = p.alegra_id
       WHERE p.tenant_id = ${tenantId} AND p.cuenta_id = ${c.id}::uuid AND p.reemplazado_por_alegra_id IS NULL
+        AND p.tipo <> 'padre'
       ORDER BY 3 ASC, p.alegra_id ASC
       LIMIT ${TOPE_SOLO_EN_CUENTA}
     `)) as unknown as FilaSolo[]
     const [conteo] = (await db.execute(sql`
       SELECT count(*)::int AS n FROM catalog_products
       WHERE tenant_id = ${tenantId} AND cuenta_id = ${c.id}::uuid AND reemplazado_por_alegra_id IS NULL
+        AND tipo <> 'padre'
     `)) as unknown as { n: number }[]
 
     out.push({

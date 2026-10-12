@@ -30,12 +30,57 @@ describe("getItemParaEspejo", () => {
     expect(new URL(String((f.mock.calls[0] as unknown[])[0])).pathname).toMatch(/\/items\/5$/)
   })
 
-  it("pide fields=inventory (suma el costo) y devuelve costo desde inventory.unitCost", async () => {
+  it("pide fields=inventory,variantAttributes (suma el costo y la opción) y devuelve costo desde inventory.unitCost", async () => {
     const f = responde(new Response(JSON.stringify({ ...item, inventory: { availableQuantity: 8, unitCost: 120.5 } }), { status: 200 }))
     const r = await getItemParaEspejo(tenant, "5")
     expect(r?.costo).toBe(120.5)
     expect(r?.stock).toBe(8)
-    expect(new URL(String((f.mock.calls[0] as unknown[])[0])).searchParams.get("fields")).toBe("inventory")
+    expect(new URL(String((f.mock.calls[0] as unknown[])[0])).searchParams.get("fields")).toBe("inventory,variantAttributes")
+  })
+
+  it("ítem simple: tipo 'simple', sin padre ni opción", async () => {
+    responde(new Response(JSON.stringify({ ...item, type: "product" }), { status: 200 }))
+    const r = await getItemParaEspejo(tenant, "5")
+    expect(r).toMatchObject({ tipo: "simple", padreAlegraId: null, variante: null, varianteClave: null })
+  })
+
+  it("variante: tipo, padre y opción desde variantAttributes", async () => {
+    responde(
+      new Response(
+        JSON.stringify({
+          ...item,
+          name: "Cinta LED / Verde",
+          type: "variant",
+          idItemParent: 90,
+          variantAttributes: [{ id: 1, name: "Color", status: "active", options: [{ id: 2, value: "Verde Claro" }] }],
+        }),
+        { status: 200 },
+      ),
+    )
+    const r = await getItemParaEspejo(tenant, "5")
+    expect(r).toMatchObject({
+      tipo: "variante",
+      padreAlegraId: "90",
+      variante: [{ atributo: "Color", opcion: "Verde Claro" }],
+      varianteClave: "verde claro",
+    })
+  })
+
+  it("variante sin variantAttributes: la opción sale del sufijo del nombre", async () => {
+    responde(
+      new Response(JSON.stringify({ ...item, name: "Cinta LED / Rojo", type: "variant", idItemParent: "90", variantAttributes: null }), {
+        status: 200,
+      }),
+    )
+    const r = await getItemParaEspejo(tenant, "5")
+    expect(r).toMatchObject({ tipo: "variante", padreAlegraId: "90", varianteClave: "rojo" })
+  })
+
+  it("padre: tipo 'padre', sin padre ni opción", async () => {
+    responde(new Response(JSON.stringify({ ...item, type: "variantParent", inventory: { unit: "unit" } }), { status: 200 }))
+    const r = await getItemParaEspejo(tenant, "5")
+    expect(r).toMatchObject({ tipo: "padre", padreAlegraId: null, variante: null })
+    expect(r?.stock).toBeNull()
   })
 
   it("sin unitCost → costo null", async () => {

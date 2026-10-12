@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
-import { avisarShop, conUrlDeFicha, conflictoResponse, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
+import { avisarShop, conUrlDeFicha, conflictoResponse, NO_STORE, rechazarSiVarianteAgrupada, validacionResponse } from "@/lib/catalogo-admin"
 import { MAX_BYTES_FICHA, sha256Hex } from "@/lib/catalogo-ficha-contenido"
 import { borrarFichaSiHuerfana, contarReferenciasFicha } from "@/lib/catalogo-ficha-repo"
 import { detalleProducto, guardarOverlay } from "@/lib/catalogo-overlay-repo"
@@ -23,6 +23,9 @@ import { fichaContenidoKey, fichaKey, getShopMediaR2, idDeRuta, prefijoProducto,
 // producto sólo apunta a él. Varios productos pueden compartir el mismo objeto, así que reemplazar
 // o quitar una ficha NUNCA borra el objeto si otro producto del tenant todavía lo referencia.
 // Sin sha256 en el POST (cliente viejo) se mantiene la key propia del producto.
+//
+// Una variante de un modelo no tiene ficha propia: la ficha del modelo se edita sobre el ancla y las
+// escrituras sobre una variante agrupada responden 400.
 //
 // admin+ (operator → 404). Tenant = el del guard, siempre.
 
@@ -92,6 +95,8 @@ export async function POST(req: Request, { params }: Params) {
 
   const alegraId = idDeRuta((await params).alegraId)
   if (!(await detalleProducto(guard.tenantId, alegraId))) return adminNotFoundResponse()
+  const rechazo = await rechazarSiVarianteAgrupada(req, guard.tenantId, alegraId)
+  if (rechazo) return rechazo
 
   const body = (await req.json().catch(() => null)) as { nombre?: unknown; bytes?: unknown; sha256?: unknown } | null
   if (!body) return validacionResponse("El cuerpo del pedido no es JSON válido.", "body")
@@ -140,6 +145,8 @@ export async function PUT(req: Request, { params }: Params) {
   const alegraId = idDeRuta((await params).alegraId)
   const anterior = await detalleProducto(guard.tenantId, alegraId)
   if (!anterior) return adminNotFoundResponse()
+  const rechazo = await rechazarSiVarianteAgrupada(req, guard.tenantId, alegraId)
+  if (rechazo) return rechazo
 
   const body = (await req.json().catch(() => null)) as { key?: unknown; nombre?: unknown; bytes?: unknown } | null
   if (!body) return validacionResponse("El cuerpo del pedido no es JSON válido.", "body")
@@ -217,6 +224,8 @@ export async function DELETE(req: Request, { params }: Params) {
   const alegraId = idDeRuta((await params).alegraId)
   const anterior = await detalleProducto(guard.tenantId, alegraId)
   if (!anterior) return adminNotFoundResponse()
+  const rechazo = await rechazarSiVarianteAgrupada(req, guard.tenantId, alegraId)
+  if (rechazo) return rechazo
 
   await guardarOverlay(guard.tenantId, alegraId, { fichaTecnica: null }, guard.user.id)
 

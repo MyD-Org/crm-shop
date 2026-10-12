@@ -61,6 +61,36 @@ export interface ProductoDto {
   cuenta: { slug: string; nombre: string; sucursal: string | null } | null
   /** Stock en cada sucursal (sin fila = sin dato). `stock` viaja como texto numérico. */
   stockSucursales: { sucursal: string; stock: string; leidoAt: string | null }[]
+  /** 'padre' = ancla de un modelo con variantes (no se vende); 'simple' = producto suelto o base de un grupo manual. */
+  tipo: "simple" | "padre" | "variante"
+  /** Modelo al que pertenece. En la base de un grupo manual es él mismo; null = suelto. */
+  grupoId: string | null
+  etiqueta: string | null
+  /** true = es el ancla de un modelo (padre o base de un grupo manual): acá vive el overlay del grupo. */
+  esAncla: boolean
+  /** Los productos del modelo (sólo en un ancla). */
+  variantes: VarianteDto[]
+}
+
+/** Un producto dentro de un modelo. Lo de Alegra es sólo lectura; la foto propia sí se edita. */
+export interface VarianteDto {
+  alegraId: string
+  code: string | null
+  nombreAlegra: string
+  etiqueta: string | null
+  tipo: "simple" | "padre" | "variante"
+  status: string
+  alegraStatus: string | null
+  prices: unknown
+  stock: string | null
+  fotos: FotoDto[]
+  /** true = lo sumó el operador a mano (se puede quitar). */
+  manual: boolean
+  orden: number | null
+  esRepresentante: boolean
+  /** true = es la base de un grupo armado a mano. */
+  esAncla: boolean
+  stockSucursales: { sucursal: string; stock: string; leidoAt: string | null }[]
 }
 
 /** Cuentas de Alegra del tenant, para la columna/filtro "Cuenta de origen" (solo con más de una). */

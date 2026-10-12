@@ -1,5 +1,6 @@
 import {
   esUuid,
+  resolverAncla,
   RE_SLUG_CUENTA,
   RE_FILTRO_SUCURSAL,
   RE_SLUG_SUCURSAL,
@@ -33,6 +34,32 @@ export const conflictoResponse = (error: string, code: string): Response =>
 
 // El aviso al Shop vive en lib/aviso-shop.ts (lo usan también la sync y el drenaje de stock).
 export { avisarShop } from "@/lib/aviso-shop"
+
+export const MSG_VARIANTE_AGRUPADA =
+  "Este producto es una variante de un modelo. Edite estos datos desde el modelo: la variante solo puede tener su propia foto."
+
+/**
+ * Las variantes de un modelo (y los productos sumados a mano a un grupo) NO tienen overlay propio para
+ * nombre, descripción, categoría, visibilidad, etiquetas, ficha ni orden: eso vive en el overlay del
+ * ancla (S4, design D5). Una ruta que edita esos campos sobre un producto agrupado responde 400.
+ * La excepción es la foto propia de la variante: `?alcance=variante` en las rutas de fotos.
+ * Devuelve la respuesta de rechazo, o null si se puede seguir.
+ */
+export async function rechazarSiVarianteAgrupada(
+  req: Request,
+  tenantId: string,
+  alegraId: string,
+  opciones: { permitirFotoPropia?: boolean } = {},
+): Promise<Response | null> {
+  const alcance = new URL(req.url).searchParams.get("alcance")
+  if (opciones.permitirFotoPropia) {
+    if (alcance !== null && alcance !== "variante") return invalidResponse("El alcance de la foto no es válido.", "alcance")
+    if (alcance === "variante") return null
+  }
+  const ancla = await resolverAncla(tenantId, alegraId)
+  if (ancla?.agrupada) return invalidResponse(MSG_VARIANTE_AGRUPADA, "alegraId")
+  return null
+}
 
 /**
  * `stockEn` tiene que ser una sucursal de ESTE tenant: un slug ajeno o inexistente es 400, no un
@@ -204,7 +231,12 @@ export function conUrlDeFotos<T extends { fotos: FotoOverlay[] }>(
   p: T,
   base: string | null = basePublicaFotos(),
 ): Omit<T, "fotos"> & { fotos: (FotoOverlay & { url: string | null })[] } {
-  return { ...p, fotos: p.fotos.map((f) => ({ ...f, url: base ? `${base}/${f.key}` : null })) }
+  const conUrl = (fotos: FotoOverlay[]) => fotos.map((f) => ({ ...f, url: base ? `${base}/${f.key}` : null }))
+  const salida: Record<string, unknown> = { ...p, fotos: conUrl(p.fotos) }
+  // El ancla de un modelo trae sus variantes, cada una con su foto propia.
+  const variantes = (p as { variantes?: { fotos: FotoOverlay[] }[] }).variantes
+  if (Array.isArray(variantes)) salida.variantes = variantes.map((v) => ({ ...v, fotos: conUrl(v.fotos) }))
+  return salida as ReturnType<typeof conUrlDeFotos<T>>
 }
 
 /**

@@ -4,6 +4,7 @@ import { agregarFavoritosLote, MAX_FAVORITOS } from "@/lib/favoritos";
 import { esIdProducto } from "@/lib/id-producto";
 import { getProductosPorIds } from "@/lib/catalog";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
+import { variantesSelector } from "@/lib/variantes-flag";
 import { permitirAsync } from "@/lib/rate-limit";
 
 /** Altas masivas por minuto y por usuario (aparte de los 60/min de los toggles). */
@@ -57,6 +58,8 @@ export async function POST(req: Request) {
   const productos = await getProductosPorIds(ids, {
     soloActivos: true,
     soloVisibles: await catalogoSoloVisibles(),
+    // Flag `variantes-selector`: la visibilidad es la del ancla del grupo (la variante marcada se valida igual).
+    ...((await variantesSelector()) ? { agrupar: true } : {}),
   });
   const disponibles = ids.filter((id) => productos.has(id));
   const noDisponibles = ids.length - disponibles.length;

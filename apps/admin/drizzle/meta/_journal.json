@@ -582,6 +582,13 @@
       "when": 1793280200000,
       "tag": "0082_catalogo_variantes_manuales",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1793280300000,
+      "tag": "0083_vista_shop_variantes",
+      "breakpoints": true
     }
   ]
 }

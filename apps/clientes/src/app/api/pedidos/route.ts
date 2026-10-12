@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
+import { variantesSelector } from "@/lib/variantes-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS, type Cotizacion } from "@/lib/cotizacion";
 import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
@@ -365,6 +366,8 @@ export async function POST(req: Request) {
       : undefined;
     const dispCotizacion = disp ? contextoUnion(disp) : undefined;
     const soloVisibles = await catalogoSoloVisibles();
+    // Flag `variantes-selector`: el overlay (visibilidad) es el del ancla del grupo. Apagado = como siempre.
+    const agrupar = await variantesSelector();
     // Precio por medio de pago, cuotas y lista: una sola resolución para crear y para cambiar el medio
     // (`cotizarConMedio`). La lista sale del slug ya validado (medios releídos sin caché más arriba),
     // nunca del body.
@@ -379,6 +382,7 @@ export async function POST(req: Request) {
       idListaPrivada,
       disp: dispCotizacion,
       soloVisibles,
+      ...(agrupar ? { agrupar: true } : {}),
     });
     if (!resuelto.ok) {
       if (resuelto.motivo === "forma_no_disponible") {
@@ -490,6 +494,7 @@ export async function POST(req: Request) {
           sucursalEntrada,
           disponibilidadSucursal: disp !== undefined,
           soloVisibles,
+          ...(agrupar ? { agrupar: true } : {}),
         },
         cotizacion,
       );

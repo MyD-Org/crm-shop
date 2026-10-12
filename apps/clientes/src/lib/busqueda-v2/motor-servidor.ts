@@ -23,6 +23,8 @@ export interface ContextoShop {
   superficie: Superficie;
   /** Flag `catalogo-solo-visibles`, ya evaluado por el llamador. */
   soloVisibles: boolean;
+  /** Flag `variantes-selector` (`flagsPublicos().variantes`), ya evaluado por el llamador. Ausente = apagado. */
+  agrupar?: boolean;
   disp?: ContextoDisponibilidad;
   /** Sólo la página: medio destacado de las cards (parte de la clave de la caché). */
   destacado?: MedioPrecio | null;
@@ -46,13 +48,14 @@ async function leerBusquedaIa(c: ContextoShop): Promise<boolean> {
 
 function depsDe(c: ContextoShop): DepsMotor {
   const { superficie, soloVisibles, disp, destacado, cuotas } = c;
+  const agrupado = c.agrupar ? { agrupar: true } : {};
   return {
     pagina: ({ filtros, orden, pagina, porPagina, sinConteo }) =>
       superficie === "catalogo"
         ? // La página del catálogo siempre cuenta y pagina de a PRODUCTOS_POR_PAGINA (su caché lo asume).
-          paginaCatalogoPublica({ filtros, orden, pagina, soloVisibles, disp, destacado, cuotas })
-        : getPaginaCatalogo({ soloVisibles, filtros, orden, pagina, porPagina, disp, sinConteo }),
-    facetas: (filtros) => facetasPublicas(filtros, soloVisibles, disp),
+          paginaCatalogoPublica({ filtros, orden, pagina, soloVisibles, ...agrupado, disp, destacado, cuotas })
+        : getPaginaCatalogo({ soloVisibles, ...agrupado, filtros, orden, pagina, porPagina, disp, sinConteo }),
+    facetas: (filtros) => (c.agrupar ? facetasPublicas(filtros, soloVisibles, disp, true) : facetasPublicas(filtros, soloVisibles, disp)),
     log: (mensaje) => console.error(mensaje),
   };
 }
@@ -66,7 +69,7 @@ export async function buscarEnShop(p: PedidoBuscar, c: ContextoShop): Promise<Re
   const planDe =
     c.superficie === "admin" || (c.superficie === "catalogo" && !c.conPlanDeUrl)
       ? undefined
-      : (consulta: string) => planParaPagina(consulta, { soloVisibles: c.soloVisibles });
+      : (consulta: string) => planParaPagina(consulta, { soloVisibles: c.soloVisibles, ...(c.agrupar ? { agrupar: true } : {}) });
   const r = await buscar(p, { superficie: c.superficie, conPlan, planDe, conFacetas: c.conFacetas }, depsDe(c));
   // Para vigilar el motor (etapa que resuelve y latencia). Nunca lleva la consulta.
   console.info(`[busqueda] superficie=${c.superficie} etapa=${r.etapa} ms=${Math.round(r.ms)}${r.truncado ? " truncado=1" : ""}`);
@@ -81,7 +84,9 @@ export function contarConsulta(a: {
   consulta: string;
   filtros: FiltrosSinTexto;
   soloVisibles: boolean;
+  /** Flag `variantes-selector`: cuenta un producto por modelo. Ausente = apagado. */
+  agrupar?: boolean;
   disp?: ContextoDisponibilidad;
 }): Promise<number> {
-  return contarCatalogo({ soloVisibles: a.soloVisibles, disp: a.disp, filtros: { ...a.filtros, texto: { q: a.consulta } } });
+  return contarCatalogo({ soloVisibles: a.soloVisibles, ...(a.agrupar ? { agrupar: true } : {}), disp: a.disp, filtros: { ...a.filtros, texto: { q: a.consulta } } });
 }

@@ -15,6 +15,8 @@ export type ContarConClaves = (filtros: Parameters<Contar>[0] & { conClaves?: Cl
 
 export function contador(base: {
   soloVisibles: boolean;
+  /** Flag `variantes-selector`: cuenta un producto por modelo. Ausente = apagado. */
+  agrupar?: boolean;
   soloStock: boolean;
   estructurados: boolean;
   disp?: ContextoDisponibilidad;
@@ -27,6 +29,7 @@ export function contador(base: {
   return ({ categorias, atributos, terminos, nombreConTodos, conClaves }) =>
     contarCatalogo({
       soloVisibles: base.soloVisibles,
+      ...(base.agrupar ? { agrupar: true } : {}),
       disp: base.disp,
       filtros: {
         categorias,

@@ -86,6 +86,12 @@ describe("clave y cupo de la caché", () => {
     const arbol = [{ id: "i", parentId: null, nombre: "ILUMINACION", orden: 1 }];
     expect(clavePlan(arbol, true)).not.toBe(clavePlan(arbol, false));
     expect(clavePlan(arbol, false)).toHaveLength(32);
+    // El flag variantes-selector cuenta un producto por modelo: otro conjunto, otra clave. Apagado
+    // (o ausente) la clave es la de siempre, así los planes guardados siguen valiendo.
+    expect(clavePlan(arbol, false, true)).not.toBe(clavePlan(arbol, false));
+    expect(clavePlan(arbol, true, true)).not.toBe(clavePlan(arbol, true));
+    expect(clavePlan(arbol, false, false)).toBe(clavePlan(arbol, false));
+    expect(clavePlan(arbol, false, true)).toHaveLength(32);
     // Los planes guardados con las reglas anteriores (sin versión en la clave) no se vuelven a leer.
     const antes = createHash("sha256").update(`${hashArbol(arbol)}:0`).digest("hex").slice(0, 32);
     expect(clavePlan(arbol, false)).not.toBe(antes);

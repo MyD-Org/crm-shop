@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   );
 
   try {
-    const [{ soloVisibles }, disp, conBusquedaIa, estructurados] = await Promise.all([
+    const [{ soloVisibles, variantes }, disp, conBusquedaIa, estructurados] = await Promise.all([
       flagsPublicos(),
       dispCatalogo(),
       busquedaIaHabilitada(),
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
         pagina: 1,
         porPagina: limit,
       },
-      { superficie: "autocompletar", soloVisibles, disp, busquedaIa: conBusquedaIa },
+      { superficie: "autocompletar", soloVisibles, ...(variantes ? { agrupar: true } : {}), disp, busquedaIa: conBusquedaIa },
     );
     return NextResponse.json(resultado.productos);
   } catch (err) {

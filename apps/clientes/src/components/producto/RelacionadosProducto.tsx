@@ -19,6 +19,7 @@ export async function RelacionadosProducto({
   categoria,
   productoId,
   soloVisibles,
+  agrupar,
   disp,
   destacado,
   cuotas,
@@ -27,6 +28,8 @@ export async function RelacionadosProducto({
   categoria?: string;
   productoId: string;
   soloVisibles: boolean;
+  /** Flag `variantes-selector`: un relacionado por modelo. Ausente = apagado. */
+  agrupar?: boolean;
   /** Flag `disponibilidad-sucursal`: contexto de la zona del visitante (undefined = apagado). */
   disp?: ContextoDisponibilidad;
   /** Medio destacado de las cards ("$X con <Medio>"). */
@@ -40,6 +43,7 @@ export async function RelacionadosProducto({
     excluirId: productoId,
     cantidad: CANTIDAD,
     soloVisibles,
+    ...(agrupar ? { agrupar: true } : {}),
     disp,
     destacado,
     cuotas,

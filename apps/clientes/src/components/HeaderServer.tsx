@@ -90,7 +90,10 @@ async function HeaderDinamico({
     // Si falla, el menú va sin Facturas.
     accesoFacturacion(),
     flagsPublicos()
-      .then(async ({ soloVisibles }) => categoriasNav(soloVisibles, await dispCatalogo()))
+      .then(async ({ soloVisibles, variantes }) => {
+        const disp = await dispCatalogo()
+        return variantes ? categoriasNav(soloVisibles, disp, true) : categoriasNav(soloVisibles, disp)
+      })
       .catch((err: unknown) => {
         console.error("[Header] no se pudieron cargar las categorias:", err)
         return [] as string[]

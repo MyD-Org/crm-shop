@@ -14,7 +14,6 @@ import { TEST_DATABASE_URL, assertLocalTestDb } from "./db-url"
  */
 
 const M0080 = fileURLToPath(new URL("../../drizzle/0080_variantes_espejo.sql", import.meta.url))
-const M0081 = fileURLToPath(new URL("../../drizzle/0081_vista_padre_no_activo.sql", import.meta.url))
 const T = "tenant-var"
 
 let sql: postgres.Sql
@@ -172,7 +171,8 @@ describe("migración 0081: la vista del Shop no ofrece padres (DB real)", () => 
              (${T}, 's1', 'Simple activo', 'simple', 'active', 'active'),
              (${T}, 's2', 'Simple dado de baja', 'simple', 'active', 'inactive')
     `
-    await aplicar(M0081)
+    // 0081 ya está aplicada por el global-setup. Desde la 0083 la vista tiene 17 columnas y
+    // CREATE OR REPLACE no puede quitarlas, así que no se reaplica la 0081 (ver variantes-vista-shop-0083).
   })
 
   afterAll(async () => {
@@ -191,12 +191,12 @@ describe("migración 0081: la vista del Shop no ofrece padres (DB real)", () => 
     ])
   })
 
-  it("conserva las 12 columnas del contrato, en orden", async () => {
+  it("conserva las 12 columnas originales del contrato, al principio y en orden", async () => {
     const cols = await sql`
       SELECT column_name FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'catalog_products_shop' ORDER BY ordinal_position
     `
-    expect(cols.map((c) => c.column_name)).toEqual([
+    expect(cols.map((c) => c.column_name).slice(0, 12)).toEqual([
       "tenant_id",
       "alegra_id",
       "stock",
@@ -212,10 +212,9 @@ describe("migración 0081: la vista del Shop no ofrece padres (DB real)", () => 
     ])
   })
 
-  it("conserva el GRANT de shop_app (y reaplicar la migración no lo rompe)", async () => {
+  it("conserva el GRANT de shop_app", async () => {
     const existe = await sql`SELECT 1 FROM pg_roles WHERE rolname = 'shop_app'`
     expect(existe.length).toBe(1)
-    await aplicar(M0081)
     const [r] = await sql`SELECT has_table_privilege('shop_app', 'public.catalog_products_shop', 'SELECT') AS ok`
     expect(r.ok).toBe(true)
     // La tabla base sigue sin SELECT para el Shop.

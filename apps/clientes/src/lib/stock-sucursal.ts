@@ -14,7 +14,7 @@
  * igual.
  *
  * Las expresiones exigen `from(crmCatalogo)` con `enTenantCatalogo()` y el join al overlay
- * (`joinOverlay()`, todas las consultas del catálogo lo tienen): el ocultamiento por sucursal sale
+ * (`joinOverlay(agrupar)`, todas las consultas del catálogo lo tienen): el ocultamiento por sucursal sale
  * de `catalog_overlay.oculto_en_sucursales`.
  */
 import { sql, type SQL } from "drizzle-orm";
@@ -171,6 +171,8 @@ export async function leerDisponibilidadBruta(
   sucursales: string[],
   stockHeredado: string,
   db: Lector = getDb(),
+  /** Flag `variantes-selector`: el ocultamiento por sucursal es el del overlay del ancla del grupo. */
+  agrupar = false,
 ): Promise<DisponibilidadBruta> {
   if (ids.length === 0)
     return { stockPorSucursal: {}, reservadoPorSucursal: {}, ocultoEn: {} };
@@ -183,7 +185,7 @@ export async function leerDisponibilidadBruta(
         oculto: crmOverlay.ocultoEnSucursales,
       })
       .from(crmCatalogo)
-      .leftJoin(crmOverlay, joinOverlay())
+      .leftJoin(crmOverlay, joinOverlay(agrupar))
       .where(and(enTenantCatalogo(), inArray(crmCatalogo.alegraId, ids))),
     db
       .select({
@@ -251,6 +253,8 @@ export async function disponibilidadDe(
     sucursales: SucursalDato[];
     reglas: ReglasVenta;
     cantidades?: Record<string, number>;
+    /** Flag `variantes-selector`: el ocultamiento por sucursal es el del overlay del ancla del grupo. */
+    agrupar?: boolean;
   },
 ): Promise<ResultadoDisponibilidad> {
   const lista = [...new Set(Array.isArray(ids) ? ids : [ids])];
@@ -260,7 +264,7 @@ export async function disponibilidadDe(
     .map((s) => s.slug);
   if (activas.length === 0 || lista.length === 0)
     return { productos: {}, lineasATraer: [] };
-  const bruta = await leerDisponibilidadBruta(lista, activas, activas[0]);
+  const bruta = await leerDisponibilidadBruta(lista, activas, activas[0], undefined, datos.agrupar);
   const calcular = (m: "envio" | "retiro") =>
     disponibilidadPorSucursal({
       ...bruta,

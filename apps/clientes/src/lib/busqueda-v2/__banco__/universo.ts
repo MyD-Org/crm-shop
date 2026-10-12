@@ -79,7 +79,8 @@ export async function cargarFilasUniverso(): Promise<FilaUniverso[]> {
       conPrecio: sql<boolean>`${conPrecioSql}`,
     })
     .from(crmCatalogo)
-    .leftJoin(crmOverlay, joinOverlay())
+    // El banco mide la búsqueda con el flag `variantes-selector` apagado (overlay del propio producto).
+    .leftJoin(crmOverlay, joinOverlay(false))
     .leftJoin(stockReservado, joinReserva())
     .where(enTenantCatalogo());
 }

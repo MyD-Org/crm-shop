@@ -134,7 +134,12 @@
     "code": "text",
     "brand": "text",
     "category_alegra_id": "text",
-    "iva_porcentaje": "numeric(5, 2)"
+    "iva_porcentaje": "numeric(5, 2)",
+    "tipo": "text",
+    "grupo_id": "text",
+    "etiqueta": "text",
+    "es_representante": "boolean",
+    "overlay_alegra_id": "text"
   },
   "public.catalog_categories_shop": {
     "tenant_id": "text",

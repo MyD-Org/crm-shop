@@ -39,6 +39,13 @@ describe("contador", () => {
     expect(typeof contar).toBe("function");
   });
 
+  it("con `agrupar` (flag variantes-selector) cuenta un producto por modelo; apagado no manda la marca", async () => {
+    await contador(base)({ categorias: [], atributos: [] });
+    expect(contarCatalogo.mock.calls[0][0]).not.toHaveProperty("agrupar");
+    await contador({ ...base, agrupar: true })({ categorias: [], atributos: [] });
+    expect(contarCatalogo.mock.calls[1][0]).toMatchObject({ agrupar: true });
+  });
+
   it("sin estructurados no manda la marca (el catálogo ignora las medidas)", async () => {
     await contador({ ...base, estructurados: false })({ categorias: [], atributos: [] });
     const { filtros } = contarCatalogo.mock.calls[0][0] as { filtros: Record<string, unknown> };

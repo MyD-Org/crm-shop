@@ -229,7 +229,15 @@ describe("migración 0042: cuentas de Alegra y stock por sucursal (DB real)", ()
       SELECT column_name FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'catalog_products_shop' ORDER BY ordinal_position
     `
-    expect(cols.map((c) => c.column_name)).toEqual(COLUMNAS_VISTA_0037)
+    // Las 12 de 0037 intactas y primeras; desde la 0083 (variantes) suma 5 AL FINAL, tampoco la cuenta.
+    expect(cols.map((c) => c.column_name)).toEqual([
+      ...COLUMNAS_VISTA_0037,
+      "tipo",
+      "grupo_id",
+      "etiqueta",
+      "es_representante",
+      "overlay_alegra_id",
+    ])
   })
 
   it("GUARDA: una fila solo-secundaria entra por la vista con sus columnas de siempre", async () => {

@@ -198,6 +198,19 @@ export const crmCatalogo = publico
     brand: text("brand"),
     categoryAlegraId: text("category_alegra_id"),
     ivaPorcentaje: numeric("iva_porcentaje", { precision: 5, scale: 2 }),
+    // 0083 (change `variantes-de-producto`): el grupo de variantes ya resuelto por el CRM. Con el flag
+    // `variantes-selector` APAGADO el Shop no las lee (se comporta como antes); prendido, agrupa por
+    // `esRepresentante` y lee el overlay de `overlayAlegraId` (el ancla del grupo, o el propio id).
+    /** 'simple' | 'padre' | 'variante'. El padre nunca es `activo`. */
+    tipo: text("tipo").notNull(),
+    /** Grupo efectivo (manual o del padre de Alegra); null = se vende suelto. */
+    grupoId: text("grupo_id"),
+    /** Texto de la opción en el selector ("Verde", "Rojo / 5m"). */
+    etiqueta: text("etiqueta"),
+    /** La card del listado cuando se agrupa; true también en los productos sueltos. */
+    esRepresentante: boolean("es_representante").notNull(),
+    /** `coalesce(grupo_id, alegra_id)`: de quién se lee el overlay (nombre, fotos, ficha, visibilidad). */
+    overlayAlegraId: text("overlay_alegra_id").notNull(),
   })
   .existing();
 

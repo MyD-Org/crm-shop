@@ -12,8 +12,12 @@ export async function GET() {
   // Por request: sin esto el build podría prerenderizar la respuesta.
   await connection();
   try {
-    const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
-    const categorias = disp ? await getCategorias(soloVisibles, disp) : await getCategorias(soloVisibles);
+    const [{ soloVisibles, variantes }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
+    const categorias = variantes
+      ? await getCategorias(soloVisibles, disp, true)
+      : disp
+        ? await getCategorias(soloVisibles, disp)
+        : await getCategorias(soloVisibles);
     return NextResponse.json({ categorias });
   } catch (err) {
     console.error("[/api/shop/categorias] error:", err);

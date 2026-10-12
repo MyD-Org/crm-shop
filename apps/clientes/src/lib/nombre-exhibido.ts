@@ -70,6 +70,15 @@ export const nombreExhibidoSql = sql<string>`coalesce(
  * tenants del CRM: el tenant va en el join, no en el WHERE, para no convertirlo
  * en un inner join. Función y no constante: el tenant se lee del entorno en
  * cada consulta.
+ *
+ * `agrupar` es el flag `variantes-selector` (change `variantes-de-producto`):
+ * apagado, el overlay es el del propio producto (como siempre); prendido, es el
+ * del ANCLA del grupo (`overlay_alegra_id` de la vista: el padre de Alegra, la
+ * base de un grupo manual, o el propio producto si se vende suelto). Es
+ * obligatorio a propósito: un call site que lo olvide no compila.
  */
-export const joinOverlay = () =>
-  and(eq(crmOverlay.alegraId, crmCatalogo.alegraId), eq(crmOverlay.tenantId, shopTenantId()));
+export const joinOverlay = (agrupar: boolean) =>
+  and(
+    eq(crmOverlay.alegraId, agrupar ? crmCatalogo.overlayAlegraId : crmCatalogo.alegraId),
+    eq(crmOverlay.tenantId, shopTenantId()),
+  );

@@ -67,6 +67,13 @@ import { SIN_MEDIOS_PRECIO, type MedioPrecio } from "./medios-precio";
 const CATEGORIA_DESTACADOS = "ILUMINACION";
 
 /**
+ * `agrupar` es el flag `variantes-selector` (un representante por modelo, overlay del ancla). Apagado
+ * NO se pasa a la capa de consultas: las llamadas son las de siempre, byte a byte. Viaja siempre como
+ * argumento (nunca se lee acá) para que sea parte de la clave de las cachés.
+ */
+const conAgrupar = (agrupar: boolean | undefined): { agrupar?: true } => (agrupar ? { agrupar: true } : {});
+
+/**
  * ¿Vale la pena cachear esta combinación de filtros? No con búsqueda por
  * texto ni rango de precio: tienen demasiados valores posibles y casi nunca
  * se repiten (ver la guía de `use cache: remote`, "Cache key considerations").
@@ -97,6 +104,8 @@ export interface ArgsPaginaPublica {
   orden: OrdenCatalogo;
   pagina: number;
   soloVisibles: boolean;
+  /** Flag `variantes-selector` (`flagsPublicos().variantes`). Ausente = apagado. */
+  agrupar?: boolean;
   /** Flag `disponibilidad-sucursal` (ver `ContextoDisponibilidad`). */
   disp?: ContextoDisponibilidad;
   /**
@@ -139,15 +148,26 @@ export function paginaCatalogoPublica(args: ArgsPaginaPublica): Promise<PaginaCa
     : directa();
 }
 
+function leerFacetas(
+  filtros: FiltrosCatalogo,
+  soloVisibles: boolean,
+  disp: ContextoDisponibilidad | undefined,
+  agrupar: boolean,
+): Promise<Facetas> {
+  if (agrupar) return getFacetas(filtros, soloVisibles, disp, true);
+  return disp ? getFacetas(filtros, soloVisibles, disp) : getFacetas(filtros, soloVisibles);
+}
+
 async function facetasCacheadas(
   filtros: FiltrosCatalogo,
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
+  agrupar = false,
 ): Promise<Facetas> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] catalogo-facetas miss");
-  const facetas = disp ? await getFacetas(filtros, soloVisibles, disp) : await getFacetas(filtros, soloVisibles);
+  const facetas = await leerFacetas(filtros, soloVisibles, disp, agrupar);
   // Facetas por tipo pedidas que no salieron (la consulta falló y degradó): no se guardan por el TTL del catálogo.
   // Dos llamadas con el perfil literal: `cacheLife` tipa cada perfil por overload y no acepta la unión.
   if (filtros.facetasPorTipo && facetas.porClave === undefined) cacheLife("degradado");
@@ -160,23 +180,35 @@ export function facetasPublicas(
   filtros: FiltrosCatalogo,
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
+  /** Flag `variantes-selector`: las facetas cuentan un producto por modelo. */
+  agrupar = false,
 ): Promise<Facetas> {
-  const directa = () => (disp ? getFacetas(filtros, soloVisibles, disp) : getFacetas(filtros, soloVisibles));
+  const directa = () => leerFacetas(filtros, soloVisibles, disp, agrupar);
   return filtrosCacheables(filtros)
-    ? conRespaldoSinCache("catalogo-facetas", () => facetasCacheadas(filtros, soloVisibles, disp), directa)
+    ? conRespaldoSinCache(
+        "catalogo-facetas",
+        () => (agrupar ? facetasCacheadas(filtros, soloVisibles, disp, true) : facetasCacheadas(filtros, soloVisibles, disp)),
+        directa,
+      )
     : directa();
+}
+
+function leerCategoriasTotales(soloVisibles: boolean, disp: ContextoDisponibilidad | undefined, agrupar: boolean) {
+  const filtros = { soloStock: SOLO_STOCK_DEFAULT };
+  if (agrupar) return getFacetaCategorias(filtros, soloVisibles, disp, true);
+  return disp ? getFacetaCategorias(filtros, soloVisibles, disp) : getFacetaCategorias(filtros, soloVisibles);
 }
 
 async function categoriasTotalesCacheadas(
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
+  agrupar = false,
 ): Promise<Faceta[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   cacheLife("catalogo");
   console.info("[cache] catalogo-categorias-totales miss");
-  const filtros = { soloStock: SOLO_STOCK_DEFAULT };
-  return disp ? getFacetaCategorias(filtros, soloVisibles, disp) : getFacetaCategorias(filtros, soloVisibles);
+  return leerCategoriasTotales(soloVisibles, disp, agrupar);
 }
 
 /**
@@ -185,12 +217,18 @@ async function categoriasTotalesCacheadas(
  * visitante busca ni filtre, así que es una sola clave de la caché compartida (tag `catalogo`) y
  * no suma consultas por request. Si la base falla, TIRA (no se cachea).
  */
-export function categoriasTotalesPublicas(soloVisibles: boolean, disp?: ContextoDisponibilidad): Promise<Faceta[]> {
-  const directa = () =>
-    disp
-      ? getFacetaCategorias({ soloStock: SOLO_STOCK_DEFAULT }, soloVisibles, disp)
-      : getFacetaCategorias({ soloStock: SOLO_STOCK_DEFAULT }, soloVisibles);
-  return conRespaldoSinCache("catalogo-categorias-totales", () => categoriasTotalesCacheadas(soloVisibles, disp), directa);
+export function categoriasTotalesPublicas(
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+  /** Flag `variantes-selector`: el total de cada categoría cuenta un producto por modelo. */
+  agrupar = false,
+): Promise<Faceta[]> {
+  const directa = () => leerCategoriasTotales(soloVisibles, disp, agrupar);
+  return conRespaldoSinCache(
+    "catalogo-categorias-totales",
+    () => (agrupar ? categoriasTotalesCacheadas(soloVisibles, disp, true) : categoriasTotalesCacheadas(soloVisibles, disp)),
+    directa,
+  );
 }
 
 async function productoCacheado(
@@ -205,12 +243,14 @@ async function productoCacheado(
   cuotas: MedioCuotas[] | null = null,
   /** Medios del modal (listas por forma, sin depender de la ficha): también parte de la clave. */
   modal: readonly MedioPrecio[] = [],
+  /** Flag `variantes-selector`: también parte de la clave. */
+  agrupar = false,
 ): Promise<Product | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   cacheLife("catalogo");
   console.info("[cache] producto miss");
-  return leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas, modal);
+  return leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas, modal, agrupar);
 }
 
 function leerProducto(
@@ -221,9 +261,11 @@ function leerProducto(
   ficha: readonly MedioPrecio[],
   cuotas: MedioCuotas[] | null,
   modal: readonly MedioPrecio[] = [],
+  agrupar = false,
 ): Promise<Product | null> {
   return getProducto(id, {
     soloVisibles,
+    ...conAgrupar(agrupar),
     disp,
     ...(estructurados ? { atributosEstructurados: true } : {}),
     ...(ficha.length || cuotas?.length || modal.length
@@ -253,15 +295,21 @@ export function productoPublico(
   cuotas: MedioCuotas[] | null = null,
   /** Medios del modal de medios de pago (`flagsPublicos().mediosPrecio.modal`). */
   modal: readonly MedioPrecio[] = [],
+  /** Flag `variantes-selector` (`flagsPublicos().variantes`): overlay del ancla del grupo. */
+  agrupar = false,
 ): Promise<Product | null> {
   if (!esIdProducto(id)) return Promise.resolve(null);
   const cacheada = () =>
-    ficha.length || cuotas?.length || modal.length
-      ? productoCacheado(id, soloVisibles, disp, estructurados, ficha, cuotas, modal)
-      : estructurados
-        ? productoCacheado(id, soloVisibles, disp, true)
-        : productoCacheado(id, soloVisibles, disp);
-  return conRespaldoSinCache("producto", cacheada, () => leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas, modal));
+    agrupar
+      ? productoCacheado(id, soloVisibles, disp, estructurados, ficha, cuotas, modal, true)
+      : ficha.length || cuotas?.length || modal.length
+        ? productoCacheado(id, soloVisibles, disp, estructurados, ficha, cuotas, modal)
+        : estructurados
+          ? productoCacheado(id, soloVisibles, disp, true)
+          : productoCacheado(id, soloVisibles, disp);
+  return conRespaldoSinCache("producto", cacheada, () =>
+    leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas, modal, agrupar),
+  );
 }
 
 /**
@@ -296,20 +344,34 @@ async function rutaCategoriaCacheada(categoriaId: string): Promise<string[]> {
  * Categorías del menú del header. Si la base falla, vacío (el header se
  * renderiza igual) y guardado sólo con el perfil `degradado` (minutos).
  */
-export function categoriasNav(soloVisibles: boolean, disp?: ContextoDisponibilidad): Promise<string[]> {
+export function categoriasNav(
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+  /** Flag `variantes-selector`: los conteos que deciden qué categorías se ven cuentan un producto por modelo. */
+  agrupar = false,
+): Promise<string[]> {
   return conRespaldoSinCache(
     "categorias-nav",
-    () => categoriasNavCacheadas(soloVisibles, disp),
-    () => (disp ? getCategorias(soloVisibles, disp) : getCategorias(soloVisibles)).catch(() => []),
+    () => (agrupar ? categoriasNavCacheadas(soloVisibles, disp, true) : categoriasNavCacheadas(soloVisibles, disp)),
+    () => leerCategoriasNav(soloVisibles, disp, agrupar).catch(() => []),
   );
 }
 
-async function categoriasNavCacheadas(soloVisibles: boolean, disp?: ContextoDisponibilidad): Promise<string[]> {
+function leerCategoriasNav(soloVisibles: boolean, disp: ContextoDisponibilidad | undefined, agrupar: boolean) {
+  if (agrupar) return getCategorias(soloVisibles, disp, true);
+  return disp ? getCategorias(soloVisibles, disp) : getCategorias(soloVisibles);
+}
+
+async function categoriasNavCacheadas(
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+  agrupar = false,
+): Promise<string[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] categorias-nav miss");
   try {
-    const categorias = disp ? await getCategorias(soloVisibles, disp) : await getCategorias(soloVisibles);
+    const categorias = await leerCategoriasNav(soloVisibles, disp, agrupar);
     cacheLife("catalogo");
     return categorias;
   } catch (err) {
@@ -329,6 +391,8 @@ interface ArgsDestacados {
   skus: string[];
   cantidad: number;
   soloVisibles: boolean;
+  /** Flag `variantes-selector`: un destacado por modelo. Ausente = apagado. */
+  agrupar?: boolean;
   disp?: ContextoDisponibilidad;
   /** Medio destacado de las cards (argumento: parte de la clave de la caché). */
   destacado?: MedioPrecio | null;
@@ -356,6 +420,7 @@ async function destacadosCacheados(args: ArgsDestacados): Promise<Product[]> {
 
 async function leerDestacados(args: ArgsDestacados): Promise<{ productos: Product[]; fallo: boolean }> {
   const { skus, cantidad, soloVisibles, disp } = args;
+  const agrupado = conAgrupar(args.agrupar);
   const { mediosPrecio } = conMedios(args);
   let fallo = false;
   const registrar = (err: unknown) => {
@@ -365,14 +430,14 @@ async function leerDestacados(args: ArgsDestacados): Promise<{ productos: Produc
   // Los curados se piden por código: buscarlos en una tanda del catálogo
   // dejaba afuera, sin aviso, a casi todos los productos.
   const [iluminacion, curados] = await Promise.all([
-    getPaginaCatalogo({ filtros: { categorias: [CATEGORIA_DESTACADOS] }, orden: "destacados", pagina: 1, soloVisibles, disp, mediosPrecio }).catch(
+    getPaginaCatalogo({ filtros: { categorias: [CATEGORIA_DESTACADOS] }, orden: "destacados", pagina: 1, soloVisibles, ...agrupado, disp, mediosPrecio }).catch(
       (err: unknown): { productos: Product[] } => {
         registrar(err);
         return { productos: [] };
       },
     ),
     skus.length
-      ? getProductosPorSkus(skus, { soloVisibles, disp, mediosPrecio }).catch((err: unknown): Product[] => {
+      ? getProductosPorSkus(skus, { soloVisibles, ...agrupado, disp, mediosPrecio }).catch((err: unknown): Product[] => {
           registrar(err);
           return [];
         })
@@ -389,6 +454,7 @@ async function primeraPaginaCategoria(
   disp?: ContextoDisponibilidad,
   destacado: MedioPrecio | null = null,
   cuotas: MedioCuotas[] | null = null,
+  agrupar = false,
 ): Promise<Product[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
@@ -399,6 +465,7 @@ async function primeraPaginaCategoria(
       orden: "destacados",
       pagina: 1,
       soloVisibles,
+      ...conAgrupar(agrupar),
       disp,
       ...conMedios({ destacado, cuotas }),
     });
@@ -420,6 +487,7 @@ async function categoriaExacta(
   disp?: ContextoDisponibilidad,
   destacado: MedioPrecio | null = null,
   cuotas: MedioCuotas[] | null = null,
+  agrupar = false,
 ): Promise<{ nombre: string; productos: Product[] } | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
@@ -429,6 +497,7 @@ async function categoriaExacta(
       categoriaId,
       limit: TOPE_CATEGORIA_EXACTA,
       soloVisibles,
+      ...conAgrupar(agrupar),
       disp,
       ...conMedios({ destacado, cuotas }),
     });
@@ -463,6 +532,8 @@ export async function relacionadosProducto(args: {
   excluirId: string;
   cantidad: number;
   soloVisibles: boolean;
+  /** Flag `variantes-selector`: un relacionado por modelo. Ausente = apagado. */
+  agrupar?: boolean;
   disp?: ContextoDisponibilidad;
   /** Medio destacado de las cards (argumento: parte de la clave de la caché). */
   destacado?: MedioPrecio | null;
@@ -474,16 +545,21 @@ export async function relacionadosProducto(args: {
 
   if (args.categoriaPropiaId) {
     const { categoriaPropiaId, soloVisibles, disp } = args;
+    const agrupar = args.agrupar ?? false;
     const destacado = args.destacado ?? null;
     const cuotas = args.cuotas ?? null;
     const exacta = await conRespaldoSinCache(
       "categoria-exacta",
-      () => categoriaExacta(categoriaPropiaId, soloVisibles, disp, destacado, cuotas),
+      () =>
+        agrupar
+          ? categoriaExacta(categoriaPropiaId, soloVisibles, disp, destacado, cuotas, true)
+          : categoriaExacta(categoriaPropiaId, soloVisibles, disp, destacado, cuotas),
       () =>
         getCategoriaExacta({
           categoriaId: categoriaPropiaId,
           limit: TOPE_CATEGORIA_EXACTA,
           soloVisibles,
+          ...conAgrupar(agrupar),
           disp,
           ...conMedios({ destacado, cuotas }),
         }).catch(() => null),
@@ -492,13 +568,17 @@ export async function relacionadosProducto(args: {
   }
   if (!args.categoria) return null;
   const { categoria, soloVisibles, disp } = args;
+  const agrupar = args.agrupar ?? false;
   const destacado = args.destacado ?? null;
   const cuotas = args.cuotas ?? null;
   const productos = await conRespaldoSinCache(
     "categoria-relacionados",
-    () => primeraPaginaCategoria(categoria, soloVisibles, disp, destacado, cuotas),
     () =>
-      getPaginaCatalogo({ filtros: { categorias: [categoria] }, orden: "destacados", pagina: 1, soloVisibles, disp, ...conMedios({ destacado, cuotas }) })
+      agrupar
+        ? primeraPaginaCategoria(categoria, soloVisibles, disp, destacado, cuotas, true)
+        : primeraPaginaCategoria(categoria, soloVisibles, disp, destacado, cuotas),
+    () =>
+      getPaginaCatalogo({ filtros: { categorias: [categoria] }, orden: "destacados", pagina: 1, soloVisibles, ...conAgrupar(agrupar), disp, ...conMedios({ destacado, cuotas }) })
         .then((r) => r.productos)
         .catch(() => []),
   );
@@ -510,23 +590,27 @@ export async function relacionadosProducto(args: {
  * (el sitemap sale con las páginas fijas) y guardado sólo con el perfil
  * `degradado`.
  */
-export function idsProductosPublicos(soloVisibles: boolean): Promise<string[]> {
+export function idsProductosPublicos(
+  soloVisibles: boolean,
+  /** Flag `variantes-selector`: el sitemap lista un producto por modelo (el representante). */
+  agrupar = false,
+): Promise<string[]> {
   return conRespaldoSinCache(
     "ids-productos",
-    () => idsProductosCacheados(soloVisibles),
+    () => (agrupar ? idsProductosCacheados(soloVisibles, true) : idsProductosCacheados(soloVisibles)),
     () =>
-      getCatalogo({ soloVisibles })
+      getCatalogo({ soloVisibles, ...conAgrupar(agrupar) })
         .then((ps) => ps.map((p) => p.id))
         .catch(() => []),
   );
 }
 
-async function idsProductosCacheados(soloVisibles: boolean): Promise<string[]> {
+async function idsProductosCacheados(soloVisibles: boolean, agrupar = false): Promise<string[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] ids-productos miss");
   try {
-    const productos = await getCatalogo({ soloVisibles });
+    const productos = await getCatalogo({ soloVisibles, ...conAgrupar(agrupar) });
     cacheLife("catalogo");
     return productos.map((p) => p.id);
   } catch (err) {

@@ -46,7 +46,7 @@ import {
 import { mapPrecios, precioDeLista } from "./alegra";
 import { esIdProducto } from "./id-producto";
 import { activoSql, preciosSql, stockSql } from "./stock-disponible";
-import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
+import { enListado, enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
 import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
 import {
@@ -580,6 +580,11 @@ function relevanciaSql(q: string, tolerante: boolean, codigo = "") {
 export async function getCatalogo(opts: {
   /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */
   soloVisibles: boolean;
+  /**
+   * Flag `variantes-selector` (change `variantes-de-producto`): un representante por modelo y overlay
+   * del ancla del grupo (ver `joinOverlay` y `enListado`). Ausente = apagado: como siempre.
+   */
+  agrupar?: boolean;
   idPriceList?: string;
   /** "$X con <Medio>" (ver `mapFilaToProduct`). */
   mediosPrecio?: MediosPrecio;
@@ -600,12 +605,13 @@ export async function getCatalogo(opts: {
     .select(columnasCatalogo(opts.disp, opts.atributosEstructurados))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
     .leftJoin(...joinStock(opts.disp))
     .where(
       and(
         enTenantCatalogo(),
         activoSql,
+        enListado(opts.agrupar ?? false),
         conPrecioSql,
         soloVisiblesSql(opts.soloVisibles),
         visibleEnZonaSql(opts.disp),
@@ -632,6 +638,11 @@ export async function getCategoriaExacta(opts: {
   limit: number;
   soloVisibles: boolean;
   /**
+   * Flag `variantes-selector` (change `variantes-de-producto`): un representante por modelo y overlay
+   * del ancla del grupo (ver `joinOverlay` y `enListado`). Ausente = apagado: como siempre.
+   */
+  agrupar?: boolean;
+  /**
    * Contexto de disponibilidad por sucursal (flag `disponibilidad-sucursal`): stock por sucursal y
    * productos ocultos por sucursal. Ausente = stock único, como siempre.
    */
@@ -656,12 +667,13 @@ export async function getCategoriaExacta(opts: {
     .select(columnasCatalogo(opts.disp))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
     .leftJoin(...joinStock(opts.disp))
     .where(
       and(
         enTenantCatalogo(),
         activoSql,
+        enListado(opts.agrupar ?? false),
         conPrecioSql,
         soloVisiblesSql(opts.soloVisibles),
         visibleEnZonaSql(opts.disp),
@@ -696,6 +708,11 @@ export async function getProductosPorIds(
     idPriceList?: string;
     soloActivos?: boolean;
     soloVisibles?: boolean;
+    /**
+     * Flag `variantes-selector`: lee el overlay del ancla del grupo (nombre, fotos, visibilidad). NO
+     * filtra por representante: la variante pedida (carrito, favoritos, pedido) sale siempre.
+     */
+    agrupar?: boolean;
     /** Con `soloActivos`, también excluye lo oculto en todas las sucursales que sirven al visitante. */
     disp?: ContextoDisponibilidad;
     /** Sumar los atributos estructurados (sólo con la tabla disponible). */
@@ -710,7 +727,7 @@ export async function getProductosPorIds(
     .select(columnasCatalogo(opts?.disp, opts?.atributosEstructurados))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmOverlay, joinOverlay(opts?.agrupar ?? false))
     .leftJoin(...joinStock(opts?.disp))
     .where(
       and(
@@ -738,6 +755,11 @@ export async function getProductosPorSkus(
   skus: readonly string[],
   opts: {
     soloVisibles: boolean;
+    /**
+     * Flag `variantes-selector` (change `variantes-de-producto`): un representante por modelo y overlay
+     * del ancla del grupo (ver `joinOverlay` y `enListado`). Ausente = apagado: como siempre.
+     */
+    agrupar?: boolean;
     disp?: ContextoDisponibilidad;
     /** "$X con <Medio>" (ver `mapFilaToProduct`). */
     mediosPrecio?: MediosPrecio;
@@ -750,12 +772,13 @@ export async function getProductosPorSkus(
     .select(columnasCatalogo(opts.disp))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
     .leftJoin(...joinStock(opts.disp))
     .where(
       and(
         enTenantCatalogo(),
         activoSql,
+        enListado(opts.agrupar ?? false),
         conPrecioSql,
         soloVisiblesSql(opts.soloVisibles),
         visibleEnZonaSql(opts.disp),
@@ -1079,12 +1102,16 @@ export function arbolCompletoConConteo(
 }
 
 /** Productos por categoría propia (sólo la directa; `enArbolConConteo` suma hacia arriba). */
-async function conteoPorCategoriaPropia(where: ReturnType<typeof condicionesDe>, disp?: ContextoDisponibilidad) {
+async function conteoPorCategoriaPropia(
+  where: ReturnType<typeof condicionesDe>,
+  agrupar: boolean,
+  disp?: ContextoDisponibilidad,
+) {
   const filas = await getDb()
     .select({ id: crmOverlay.categoriaId, count: sql<number>`count(*)::int` })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmOverlay, joinOverlay(agrupar))
     .leftJoin(...joinStock(disp))
     .where(and(where, sql`${crmOverlay.categoriaId} is not null`))
     .groupBy(crmOverlay.categoriaId);
@@ -1104,6 +1131,7 @@ export function categoriasPlanasConConteo(base: Faceta[], filtrado: Faceta[]): F
 /** Productos por categoría de Alegra, de más a menos y por nombre (sin árbol propio). */
 async function conteoPorCategoriaAlegra(
   where: ReturnType<typeof condicionesDe>,
+  agrupar: boolean,
   disp?: ContextoDisponibilidad,
 ): Promise<Faceta[]> {
   return getDb()
@@ -1113,7 +1141,7 @@ async function conteoPorCategoriaAlegra(
     })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmOverlay, joinOverlay(agrupar))
     .leftJoin(...joinStock(disp))
     .where(and(where, sql`nullif(${crmCategoriasAlegra.name}, '') is not null`))
     .groupBy(crmCategoriasAlegra.name)
@@ -1130,8 +1158,10 @@ export async function getFacetaCategorias(
   filtros: FiltrosCatalogo,
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
+  /** Flag `variantes-selector`: cuenta un producto por modelo (ver `enListado`). */
+  agrupar = false,
 ): Promise<Faceta[]> {
-  const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false }, soloVisibles, disp);
+  const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false }, soloVisibles, agrupar, disp);
   const arbol = await getArbolCategorias();
   // Lo que no acota el conjunto sólo cambia qué se calcula.
   const sinFiltros = Object.entries(filtros).every(
@@ -1145,15 +1175,17 @@ export async function getFacetaCategorias(
   );
   if (arbol.length) {
     const [base, filtrado] = await Promise.all([
-      conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp), disp),
-      conteoPorCategoriaPropia(whereCategorias, disp),
+      conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, agrupar, disp), agrupar, disp),
+      conteoPorCategoriaPropia(whereCategorias, agrupar, disp),
     ]);
     return arbolCompletoConConteo(arbol, base, filtrado);
   }
   const [base, filtrado] = await Promise.all([
     // Sin filtros el conteo ya es el del catálogo entero: no hace falta la segunda consulta.
-    sinFiltros ? null : conteoPorCategoriaAlegra(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp), disp),
-    conteoPorCategoriaAlegra(whereCategorias, disp),
+    sinFiltros
+      ? null
+      : conteoPorCategoriaAlegra(condicionesDe({}, APLICAR_TODOS, soloVisibles, agrupar, disp), agrupar, disp),
+    conteoPorCategoriaAlegra(whereCategorias, agrupar, disp),
   ]);
   return base ? categoriasPlanasConConteo(base, filtrado) : filtrado;
 }
@@ -1223,6 +1255,8 @@ function condicionesDe(
   filtros: FiltrosCatalogo,
   aplicar: AplicarFiltros,
   soloVisibles: boolean,
+  /** Flag `variantes-selector`: sólo el representante de cada modelo (ver `enListado`). */
+  agrupar: boolean,
   disp?: ContextoDisponibilidad,
 ) {
   const texto = textoDe(filtros);
@@ -1237,6 +1271,7 @@ function condicionesDe(
   return and(
     enTenantCatalogo(),
     activoSql,
+    enListado(agrupar),
     conPrecioSql,
     soloVisiblesSql(soloVisibles),
     visibleEnZonaSql(disp),
@@ -1422,6 +1457,8 @@ export function acotarPagina(pagina: number, paginas: number): number {
 export async function getPaginaCatalogo(opts: {
   /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */
   soloVisibles: boolean;
+  /** Flag `variantes-selector`: un representante por modelo y overlay del ancla. Ausente = apagado. */
+  agrupar?: boolean;
   filtros?: FiltrosCatalogo;
   orden?: OrdenCatalogo;
   /** 1-based. Si se pasa de largo, se devuelve la última página. */
@@ -1444,7 +1481,8 @@ export async function getPaginaCatalogo(opts: {
 }): Promise<PaginaCatalogo> {
   const filtros = opts.filtros ?? {};
   const porPagina = opts.porPagina ?? PRODUCTOS_POR_PAGINA;
-  const where = condicionesDe(filtros, APLICAR_TODOS, opts.soloVisibles, opts.disp);
+  const agrupar = opts.agrupar ?? false;
+  const where = condicionesDe(filtros, APLICAR_TODOS, opts.soloVisibles, agrupar, opts.disp);
 
   const [conteo] = opts.sinConteo
     ? []
@@ -1452,7 +1490,7 @@ export async function getPaginaCatalogo(opts: {
         .select({ total: sql<number>`count(*)::int` })
         .from(crmCatalogo)
         .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-        .leftJoin(crmOverlay, joinOverlay())
+        .leftJoin(crmOverlay, joinOverlay(agrupar))
         .leftJoin(...joinStock(opts.disp))
         .where(where);
 
@@ -1470,7 +1508,7 @@ export async function getPaginaCatalogo(opts: {
         .select(columnasCatalogo(opts.disp, filtros.atributosEstructurados))
         .from(crmCatalogo)
         .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-        .leftJoin(crmOverlay, joinOverlay())
+        .leftJoin(crmOverlay, joinOverlay(agrupar))
         .leftJoin(...joinStock(opts.disp))
         .where(where)
         .orderBy(...ordenDe(orden, filtros, opts.disp, destacados))
@@ -1489,6 +1527,8 @@ export async function getPaginaCatalogo(opts: {
  */
 export async function contarCatalogo(opts: {
   soloVisibles: boolean;
+  /** Flag `variantes-selector`: cuenta un producto por modelo. Ausente = apagado. */
+  agrupar?: boolean;
   filtros: FiltrosCatalogo;
   disp?: ContextoDisponibilidad;
 }): Promise<number> {
@@ -1496,9 +1536,9 @@ export async function contarCatalogo(opts: {
     .select({ total: sql<number>`count(*)::int` })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
     .leftJoin(...joinStock(opts.disp))
-    .where(condicionesDe(opts.filtros, APLICAR_TODOS, opts.soloVisibles, opts.disp));
+    .where(condicionesDe(opts.filtros, APLICAR_TODOS, opts.soloVisibles, opts.agrupar ?? false, opts.disp));
   return conteo?.total ?? 0;
 }
 
@@ -1515,6 +1555,8 @@ export async function getProducto(
   opts: {
     /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */
     soloVisibles: boolean;
+    /** Flag `variantes-selector`: overlay del ancla del grupo (ver `getProductosPorIds`). */
+    agrupar?: boolean;
     idPriceList?: string;
     /** Flag `disponibilidad-sucursal`: null si ninguna sucursal que sirve al visitante lo ofrece. */
     disp?: ContextoDisponibilidad;
@@ -1530,6 +1572,7 @@ export async function getProducto(
     idPriceList: opts.idPriceList,
     soloActivos: true,
     soloVisibles: opts.soloVisibles,
+    agrupar: opts.agrupar,
     disp: opts.disp,
     atributosEstructurados: opts.atributosEstructurados,
     mediosPrecio: opts.mediosPrecio,
@@ -1597,6 +1640,8 @@ function consultaConteoAtributos(
   medidaPositiva = false,
   /** El mismo contexto con el que se armó `where` (ver `joinStock`). */
   disp?: ContextoDisponibilidad,
+  /** El mismo `agrupar` con el que se armó `where` (ver `joinOverlay`). */
+  agrupar = false,
 ) {
   // Con estructurados, el jsonb de cada producto también se lee UNA vez por fila.
   const filas = getDb()
@@ -1606,7 +1651,7 @@ function consultaConteoAtributos(
     })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmOverlay, joinOverlay(agrupar))
     .leftJoin(...joinStock(disp))
     .where(where)
     .as("filas_atributos");
@@ -1625,6 +1670,7 @@ function consultaConteoAtributos(
 async function consultaFacetasPorTipo(
   filtros: FiltrosCatalogo,
   soloVisibles: boolean,
+  agrupar: boolean,
   disp?: ContextoDisponibilidad,
 ): Promise<FacetaClave[] | undefined> {
   try {
@@ -1640,9 +1686,9 @@ async function consultaFacetasPorTipo(
       .select({ id: sql<string>`${crmCatalogo.alegraId}`.as("id"), ...cumple })
       .from(crmCatalogo)
       .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-      .leftJoin(crmOverlay, joinOverlay())
+      .leftJoin(crmOverlay, joinOverlay(agrupar))
       .leftJoin(...joinStock(disp))
-      .where(condicionesDe(filtros, { ...APLICAR_TODOS, car: false, potencia: false }, soloVisibles, disp));
+      .where(condicionesDe(filtros, { ...APLICAR_TODOS, car: false, potencia: false }, soloVisibles, agrupar, disp));
     const filas = (await getDb().execute(
       consultaFacetasPorTipoSql({ base: base.getSQL(), activas, tenant: shopTenantId() }),
     )) as unknown as FilaFacetasPorTipo[];
@@ -1658,11 +1704,16 @@ async function consultaFacetasPorTipo(
  * Las facetas por tipo se calculan con categoría, búsqueda o algún `car` activo; sin nada de eso (la
  * entrada al catálogo) no se ofrecen (`[]`, sin consulta) y el panel pide elegir una categoría.
  */
-function facetasPorTipoDe(filtros: FiltrosCatalogo, soloVisibles: boolean, disp?: ContextoDisponibilidad) {
+function facetasPorTipoDe(
+  filtros: FiltrosCatalogo,
+  soloVisibles: boolean,
+  agrupar: boolean,
+  disp?: ContextoDisponibilidad,
+) {
   if (!conFacetasPorTipo(filtros)) return Promise.resolve(undefined);
   const texto = textoDe(filtros);
   const enContexto = Boolean(filtros.categorias?.length || texto.q || texto.plan || filtros.caracteristicas?.length);
-  return enContexto ? consultaFacetasPorTipo(filtros, soloVisibles, disp) : Promise.resolve([] as FacetaClave[]);
+  return enContexto ? consultaFacetasPorTipo(filtros, soloVisibles, agrupar, disp) : Promise.resolve([] as FacetaClave[]);
 }
 
 /**
@@ -1683,18 +1734,20 @@ export async function getFacetas(
   soloVisibles: boolean,
   /** Flag `disponibilidad-sucursal` (ver `ContextoDisponibilidad`). */
   disp?: ContextoDisponibilidad,
+  /** Flag `variantes-selector`: las facetas cuentan un producto por modelo (ver `enListado`). */
+  agrupar = false,
 ): Promise<Facetas> {
-  const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false }, soloVisibles, disp);
-  const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false }, soloVisibles, disp);
-  const whereAtributos = condicionesDe(filtros, { ...APLICAR_TODOS, atributos: false }, soloVisibles, disp);
+  const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false }, soloVisibles, agrupar, disp);
+  const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false }, soloVisibles, agrupar, disp);
+  const whereAtributos = condicionesDe(filtros, { ...APLICAR_TODOS, atributos: false }, soloVisibles, agrupar, disp);
 
   const [categorias, marcas, [rango], [conteoAtributos], porClave] = await Promise.all([
-    filtros.sinFacetaCategorias ? Promise.resolve([]) : getFacetaCategorias(filtros, soloVisibles, disp),
+    filtros.sinFacetaCategorias ? Promise.resolve([]) : getFacetaCategorias(filtros, soloVisibles, disp, agrupar),
     getDb()
       .select({ label: marcaSql, count: sql<number>`count(*)::int` })
       .from(crmCatalogo)
       .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-      .leftJoin(crmOverlay, joinOverlay())
+      .leftJoin(crmOverlay, joinOverlay(agrupar))
       .leftJoin(...joinStock(disp))
       .where(and(whereMarcas, sql`nullif(${marcaSql}, '') is not null`))
       .groupBy(marcaSql)
@@ -1708,13 +1761,13 @@ export async function getFacetas(
       })
       .from(crmCatalogo)
       .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-      .leftJoin(crmOverlay, joinOverlay())
+      .leftJoin(crmOverlay, joinOverlay(agrupar))
       .leftJoin(...joinStock(disp))
       .where(wherePrecio),
     filtros.sinFacetaAtributos
       ? Promise.resolve([])
-      : consultaConteoAtributos(whereAtributos, filtros.atributos, filtros.atributosEstructurados, medidasPositivasDe(filtros), disp),
-    facetasPorTipoDe(filtros, soloVisibles, disp),
+      : consultaConteoAtributos(whereAtributos, filtros.atributos, filtros.atributosEstructurados, medidasPositivasDe(filtros), disp, agrupar),
+    facetasPorTipoDe(filtros, soloVisibles, agrupar, disp),
   ]);
 
   const precio =
@@ -1741,16 +1794,22 @@ export async function getFacetas(
  *
  * Envuelto en `cache` de React para consultarla una sola vez por request.
  * `soloVisibles`: flag `catalogo-solo-visibles` (ver `soloVisiblesSql`).
+ * `agrupar`: flag `variantes-selector` (los conteos cuentan un producto por modelo).
  */
 export const getCategorias = cache(async function getCategorias(
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
+  agrupar = false,
 ): Promise<string[]> {
   // Con árbol propio el menú muestra sus raíces, en el orden del CRM, contando
   // lo que se publica de verdad (mismo WHERE que la grilla sin filtros).
   const arbol = await getArbolCategorias();
   if (arbol.length) {
-    const conteos = await conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp), disp);
+    const conteos = await conteoPorCategoriaPropia(
+      condicionesDe({}, APLICAR_TODOS, soloVisibles, agrupar, disp),
+      agrupar,
+      disp,
+    );
     return enArbolConConteo(arbol, conteos)
       .filter((c) => c.nivel === 1)
       .map((c) => c.label);

@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
+import { variantesSelector } from "@/lib/variantes-flag";
 import { marcarStockCambiado } from "@/lib/cache-invalidar";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
@@ -135,6 +136,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       opcionesMedios,
       idListaPrivada,
       soloVisibles: await catalogoSoloVisibles(),
+      ...((await variantesSelector()) ? { agrupar: true } : {}),
       ignorarStock: true,
       origen: "/api/pedidos/:id/medio",
     });

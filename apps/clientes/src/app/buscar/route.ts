@@ -29,12 +29,18 @@ export async function GET(request: NextRequest) {
     {
       habilitada: busquedaIaHabilitada,
       plan: async (q) => {
-        const { soloVisibles } = await flagsPublicos();
-        return planParaBuscar(q, { soloVisibles, ip, diferir: (tarea) => after(tarea) });
+        const { soloVisibles, variantes } = await flagsPublicos();
+        return planParaBuscar(q, { soloVisibles, ...(variantes ? { agrupar: true } : {}), ip, diferir: (tarea) => after(tarea) });
       },
       contarClasica: async (base) => {
-        const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
-        return contarConsulta({ consulta: base.query ?? "", filtros: filtrosDeEstado(base), soloVisibles, disp });
+        const [{ soloVisibles, variantes }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
+        return contarConsulta({
+          consulta: base.query ?? "",
+          filtros: filtrosDeEstado(base),
+          soloVisibles,
+          ...(variantes ? { agrupar: true } : {}),
+          disp,
+        });
       },
     },
   );

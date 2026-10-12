@@ -49,7 +49,7 @@ export async function GET(req: Request) {
   if (ids.length === 0) return json([]);
 
   try {
-    const [{ soloVisibles }, disp, idListaPrivada, estructurados] = await Promise.all([
+    const [{ soloVisibles, variantes }, disp, idListaPrivada, estructurados] = await Promise.all([
       flagsPublicos(),
       dispCatalogo(),
       identidad.cliente ? listaPrivadaDelComprador() : Promise.resolve(null),
@@ -59,6 +59,7 @@ export async function GET(req: Request) {
     const productos = await getProductosPorIds(ids, {
       soloActivos: true,
       soloVisibles,
+      ...(variantes ? { agrupar: true } : {}),
       disp,
       // Card `spec`: valores técnicos estructurados si la tabla del CRM está disponible.
       ...(estructurados ? { atributosEstructurados: true } : {}),

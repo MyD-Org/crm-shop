@@ -32,6 +32,7 @@ describe("flagsPublicos", () => {
     expect(await flagsPublicos()).toEqual({
       soloVisibles: false,
       cuotas: false,
+      variantes: false,
       mediosPrecio: { destacado: null, ficha: [] },
     });
   });
@@ -42,6 +43,12 @@ describe("flagsPublicos", () => {
     const f = await flagsPublicos();
     expect(f.soloVisibles).toBe(true);
     expect(f.cuotas).toBe(true);
+  });
+
+  it("refleja variantes-selector (apagado por defecto)", async () => {
+    expect((await flagsPublicos()).variantes).toBe(false);
+    setFlag("variantes-selector", true);
+    expect((await flagsPublicos()).variantes).toBe(true);
   });
 
   it("mediosPrecio: el destacado y los de la ficha salen de los medios del CRM", async () => {

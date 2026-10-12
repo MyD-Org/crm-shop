@@ -15,7 +15,7 @@
  *
  * SOLO servidor.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, type SQL } from "drizzle-orm";
 import { crmCatalogo, crmCategoriasAlegra } from "@/db/crm";
 import { shopTenantId } from "./tenant";
 
@@ -28,3 +28,14 @@ export const joinCategoriasAlegra = () =>
     eq(crmCategoriasAlegra.alegraId, crmCatalogo.categoryAlegraId),
     eq(crmCategoriasAlegra.tenantId, shopTenantId()),
   );
+
+/**
+ * Con el flag `variantes-selector` (`agrupar`), el listado muestra una sola card por modelo: el
+ * representante del grupo (`es_representante`; true también en los productos sueltos). Se suma
+ * con AND junto a `activoSql` SOLO en listado, conteo, facetas y destacados. NO va en la ficha, el
+ * carrito, los favoritos ni la cotización: la variante pedida tiene que salir aunque no sea la
+ * representante. Apagado devuelve `undefined` (drizzle lo ignora dentro de `and()`): el SQL es el de
+ * antes. Obligatorio a propósito: un call site que lo olvide no compila.
+ */
+export const enListado = (agrupar: boolean): SQL | undefined =>
+  agrupar ? eq(crmCatalogo.esRepresentante, true) : undefined;

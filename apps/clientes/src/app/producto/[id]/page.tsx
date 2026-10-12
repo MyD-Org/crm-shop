@@ -33,12 +33,15 @@ const productoDe = cache(async (id: string) => {
   // cualquier local, sin lo que ninguna sucursal ofrece). Sin flag: undefined.
   // Tabla "Características" (fichas estructuradas, fase 2): sólo con el flag `busqueda-ia` y con
   // `catalog_atributos` legible; si no, la ficha de siempre (sin la tabla).
-  const [{ soloVisibles, mediosPrecio }, disp, estructurados] = await Promise.all([
+  const [{ soloVisibles, variantes, mediosPrecio }, disp, estructurados] = await Promise.all([
     flagsPublicos(),
     dispCatalogo(),
     usarAtributosEstructurados(),
   ]);
-  return productoPublico(id, soloVisibles, disp, estructurados, mediosPrecio?.ficha, mediosPrecio?.cuotas, mediosPrecio?.modal);
+  // `variantes` (flag `variantes-selector`): overlay del ancla del grupo; apagado, la llamada de siempre.
+  return variantes
+    ? productoPublico(id, soloVisibles, disp, estructurados, mediosPrecio?.ficha, mediosPrecio?.cuotas, mediosPrecio?.modal, true)
+    : productoPublico(id, soloVisibles, disp, estructurados, mediosPrecio?.ficha, mediosPrecio?.cuotas, mediosPrecio?.modal);
 });
 
 /** Vista previa del link (WhatsApp, Google…). Ver src/lib/producto-metadata.ts. */
@@ -50,7 +53,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProductoPage({ params }: Props) {
   const id = idDeRuta((await params).id);
-  const [producto, reglas, { soloVisibles, mediosPrecio }, disp, dispEntrega, tarjetas] = await Promise.all([
+  const [producto, reglas, { soloVisibles, variantes, mediosPrecio }, disp, dispEntrega, tarjetas] = await Promise.all([
     productoDe(id),
     reglasVentaCacheadas(),
     flagsPublicos(),
@@ -68,7 +71,9 @@ export default async function ProductoPage({ params }: Props) {
   // "Retiro en <local>: ..." por cada local y "Envío a domicilio: ..." (sólo con el flag
   // `disponibilidad-sucursal`), sin que el visitante elija nada. El envío usa la zona del visitante
   // (perfil o predeterminada) sólo para el plazo; no cambia qué se ve.
-  const disponibilidad = await disponibilidadParaMostrar([producto.id], dispEntrega);
+  const disponibilidad = await (variantes
+    ? disponibilidadParaMostrar([producto.id], dispEntrega, undefined, true)
+    : disponibilidadParaMostrar([producto.id], dispEntrega));
   // Migas: la categoría del admin con sus padres. Sin ella, la de Alegra.
   const rutaCategorias = producto.categoriaPropiaId ? await rutaCategoriaPublica(producto.categoriaPropiaId) : [];
 
@@ -111,6 +116,7 @@ export default async function ProductoPage({ params }: Props) {
                 categoria={producto.category}
                 productoId={producto.id}
                 soloVisibles={soloVisibles}
+                agrupar={variantes}
                 disp={disp}
                 destacado={mediosPrecio?.destacado}
                 cuotas={mediosPrecio?.cuotas}

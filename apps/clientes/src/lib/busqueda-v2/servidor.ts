@@ -38,6 +38,11 @@ import type { PlanBusqueda } from "./plan";
 export interface OpcionesPlan {
   soloVisibles: boolean;
   /**
+   * Flag `variantes-selector`: el conteo que decide duro/blando cuenta un producto por modelo, como
+   * la página. Entra en la clave del plan sólo si está prendido (apagado, la clave es la de siempre).
+   */
+  agrupar?: boolean;
+  /**
    * Para correr la escritura de la caché DESPUÉS de responder (el route handler pasa `after` de
    * next/server): el 307 no espera un viaje más a la base. Sin él, se espera.
    */
@@ -61,9 +66,15 @@ export interface PlanObtenido {
  */
 export const VERSION_REGLAS_PLAN = 6;
 
-/** Clave del plan en la caché: el árbol activo, el flag `catalogo-solo-visibles` y la versión de las reglas (≤ 64 caracteres). */
-export function clavePlan(arbol: readonly NodoArbol[], soloVisibles: boolean): string {
-  return createHash("sha256").update(`${hashArbol(arbol)}:${soloVisibles ? 1 : 0}:v${VERSION_REGLAS_PLAN}`).digest("hex").slice(0, 32);
+/**
+ * Clave del plan en la caché: el árbol activo, el flag `catalogo-solo-visibles`, el flag
+ * `variantes-selector` (sólo prendido) y la versión de las reglas (≤ 64 caracteres).
+ */
+export function clavePlan(arbol: readonly NodoArbol[], soloVisibles: boolean, agrupar = false): string {
+  return createHash("sha256")
+    .update(`${hashArbol(arbol)}:${soloVisibles ? 1 : 0}${agrupar ? ":g" : ""}:v${VERSION_REGLAS_PLAN}`)
+    .digest("hex")
+    .slice(0, 32);
 }
 
 async function arbolSeguro(): Promise<NodoArbol[]> {
@@ -112,14 +123,19 @@ const huellaPlan = (plan: PlanBusqueda) =>
 async function conMedidas(
   plan: PlanBusqueda,
   consultaCruda: string,
-  c: { tenant: string; hash: string; soloVisibles: boolean; estructurados: boolean },
+  c: { tenant: string; hash: string; soloVisibles: boolean; estructurados: boolean; agrupar?: boolean },
 ): Promise<PlanBusqueda> {
   const clave = [c.tenant, c.hash, consultaCruda.trim().toLowerCase(), c.estructurados ? 1 : 0, huellaPlan(plan)].join("\u0000");
   const decidido = medidasLru.get(clave);
   if (decidido) return { ...plan, duros: { ...plan.duros, atributos: decidido.duros }, blandos: { ...plan.blandos, atributos: decidido.blandos } };
   try {
     // El plan es el mismo para todos: la decisión cuenta sobre el catálogo entero (con y sin stock).
-    const base = { soloVisibles: c.soloVisibles, soloStock: false, estructurados: c.estructurados };
+    const base = {
+      soloVisibles: c.soloVisibles,
+      ...(c.agrupar ? { agrupar: true } : {}),
+      soloStock: false,
+      estructurados: c.estructurados,
+    };
     const contar = contador(base);
     const { plan: conMedidas } = await calcularMedidas(plan, consultaCruda, {
       activo: true,
@@ -145,7 +161,7 @@ async function obtener(q: string, opciones: OpcionesPlan, modo: ModoObtener): Pr
   ]);
   const obtenido = await obtenerBase(q, opciones, modo, arbol, estructurados);
   if (!obtenido || !medidas) return obtenido;
-  const plan = await conMedidas(obtenido.plan, q, { tenant: shopTenantId(), hash: clavePlan(arbol, opciones.soloVisibles), soloVisibles: opciones.soloVisibles, estructurados });
+  const plan = await conMedidas(obtenido.plan, q, { tenant: shopTenantId(), hash: clavePlan(arbol, opciones.soloVisibles, opciones.agrupar), soloVisibles: opciones.soloVisibles, agrupar: opciones.agrupar, estructurados });
   return { ...obtenido, plan };
 }
 
@@ -158,7 +174,7 @@ async function obtenerBase(
 ): Promise<PlanObtenido | null> {
   const tenant = shopTenantId();
   const norm = normalizarConsulta(q);
-  const hash = clavePlan(arbol, opciones.soloVisibles);
+  const hash = clavePlan(arbol, opciones.soloVisibles, opciones.agrupar);
   const clave = norm ? claveLru(tenant, hash, norm) : null;
   if (norm && clave) {
     const enMemoria = lru.get(clave);
@@ -169,7 +185,12 @@ async function obtenerBase(
       return { plan: { ...enBase, consulta: q.trim() }, msJev: null };
     }
   }
-  const contar = contador({ soloVisibles: opciones.soloVisibles, soloStock: false, estructurados });
+  const contar = contador({
+    soloVisibles: opciones.soloVisibles,
+    ...(opciones.agrupar ? { agrupar: true } : {}),
+    soloStock: false,
+    estructurados,
+  });
   const entendido = await entender(q, { arbol, jev: modo.jev, contar });
   if (!entendido) return null;
   if (modo.guardar && norm && clave && !entendido.jevFallo && entendido.plan.intencion !== "codigo") {

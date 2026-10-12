@@ -26,6 +26,7 @@ import { getDb } from "@/db";
 import { stockReservado } from "@/db/schema";
 import { crmCatalogo, crmOverlay } from "@/db/crm";
 import { enTenantCatalogo } from "./catalogo-fuente";
+import { joinOverlay } from "./nombre-exhibido";
 import { shopTenantId } from "./tenant";
 
 /**
@@ -104,16 +105,17 @@ export class ProductoNoDisponibleError extends Error {
   }
 }
 
-/** Ids de `ids` que NO están visibles en el overlay (mismo criterio que el catálogo: `visible = true`). */
-export async function noVisiblesEnTx(tx: Lector, ids: string[]): Promise<string[]> {
+/**
+ * Ids de `ids` que NO están visibles en el overlay (mismo criterio que el catálogo: `visible = true`).
+ * Con `agrupar` (flag `variantes-selector`) la visibilidad es la del overlay del ancla del grupo: la
+ * variante vive sin overlay propio, así que sin esto un carrito con una variante nunca pasaría.
+ */
+export async function noVisiblesEnTx(tx: Lector, ids: string[], agrupar = false): Promise<string[]> {
   if (ids.length === 0) return [];
   const filas = await tx
     .select({ alegraId: crmCatalogo.alegraId })
     .from(crmCatalogo)
-    .innerJoin(
-      crmOverlay,
-      and(eq(crmOverlay.alegraId, crmCatalogo.alegraId), eq(crmOverlay.tenantId, shopTenantId())),
-    )
+    .innerJoin(crmOverlay, joinOverlay(agrupar))
     .where(and(enTenantCatalogo(), inArray(crmCatalogo.alegraId, ids), eq(crmOverlay.visible, true)));
   const visibles = new Set(filas.map((f) => f.alegraId));
   return ids.filter((id) => !visibles.has(id));

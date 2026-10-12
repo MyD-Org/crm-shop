@@ -265,11 +265,11 @@ export async function buscarProductosHome(q: string): Promise<ResultadoBusquedaP
   try {
     // Mismo criterio de visibilidad que la home pública: un SKU que el
     // visitante no vería no sirve como destacado.
-    const { soloVisibles } = await flagsPublicos();
+    const { soloVisibles, variantes } = await flagsPublicos();
     // Búsqueda del motor único (superficie `admin`): sólo la exacta, sin conteo.
     const { productos } = await buscarEnShop(
       { consulta: busqueda, filtros: {}, orden: "relevancia", pagina: 1, porPagina: LIMITE_BUSQUEDA_PRODUCTOS },
-      { superficie: "admin", soloVisibles },
+      { superficie: "admin", soloVisibles, ...(variantes ? { agrupar: true } : {}) },
     );
     return {
       ok: true,
@@ -297,8 +297,8 @@ export async function resolverProductosHome(skus: string[]): Promise<ResultadoBu
   if (pedidos.length === 0) return { ok: true, productos: [] };
 
   try {
-    const { soloVisibles } = await flagsPublicos();
-    const productos = await getProductosPorSkus(pedidos, { soloVisibles });
+    const { soloVisibles, variantes } = await flagsPublicos();
+    const productos = await getProductosPorSkus(pedidos, { soloVisibles, ...(variantes ? { agrupar: true } : {}) });
     return {
       ok: true,
       productos: productos

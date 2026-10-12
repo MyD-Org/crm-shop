@@ -11,6 +11,6 @@ import { baseDelSitio, entradasSitemap } from "@/lib/seo";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const sitio = process.env.NEXT_PUBLIC_SITE_URL;
   if (!baseDelSitio(sitio)) return [];
-  const { soloVisibles } = await flagsPublicos();
-  return entradasSitemap(sitio, await idsProductosPublicos(soloVisibles));
+  const { soloVisibles, variantes } = await flagsPublicos();
+  return entradasSitemap(sitio, await (variantes ? idsProductosPublicos(soloVisibles, true) : idsProductosPublicos(soloVisibles)));
 }

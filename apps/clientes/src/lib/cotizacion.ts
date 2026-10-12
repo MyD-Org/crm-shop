@@ -261,6 +261,11 @@ async function leerEspejo(
   ids: string[],
   disp?: ContextoDisponibilidad,
   soloVisibles = false,
+  /**
+   * Flag `variantes-selector`: el overlay (visibilidad, marca, nombre) es el del ancla del grupo. No
+   * filtra por representante: la variante que está en el carrito se cotiza siempre.
+   */
+  agrupar = false,
 ): Promise<Map<string, AlegraItem>> {
   if (ids.length === 0) return new Map();
   const filas: FilaEspejo[] = await getDb()
@@ -291,7 +296,7 @@ async function leerEspejo(
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(stockReservado, joinReserva())
-    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmOverlay, joinOverlay(agrupar))
     .where(and(enTenantCatalogo(), inArray(crmCatalogo.alegraId, ids)));
   return new Map(filas.map((f) => [f.alegraId, itemDesdeEspejo(f)]));
 }
@@ -322,12 +327,15 @@ export async function cotizar(
     disp?: ContextoDisponibilidad;
     /** Flag `catalogo-solo-visibles`: los productos despublicados en el overlay no se pueden comprar. */
     soloVisibles?: boolean;
+    /** Flag `variantes-selector`: overlay del ancla del grupo (ver `leerEspejo`). Ausente = apagado. */
+    agrupar?: boolean;
   } = {},
 ): Promise<Cotizacion> {
   const items = await leerEspejo(
     pedidas.map((p) => p.id),
     opts.disp,
     opts.soloVisibles,
+    opts.agrupar,
   );
   // Una sola lectura de la vista privada para todas las líneas (nunca desde caché compartida).
   const privados = opts.idListaPrivada

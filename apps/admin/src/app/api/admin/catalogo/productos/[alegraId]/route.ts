@@ -1,5 +1,13 @@
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
-import { avisarShop, conUrlDeFicha, conUrlDeFotos, invalidResponse, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
+import {
+  avisarShop,
+  conUrlDeFicha,
+  conUrlDeFotos,
+  invalidResponse,
+  NO_STORE,
+  rechazarSiVarianteAgrupada,
+  validacionResponse,
+} from "@/lib/catalogo-admin"
 import { MSG_SUCURSAL_INVALIDA, validarCamposOverlay } from "@/lib/catalogo-overlay"
 import { sonSlugsDeSucursal } from "@/lib/sucursales-repo"
 import {
@@ -40,6 +48,9 @@ export async function PATCH(req: Request, { params }: Params) {
   // El overlay es esparso: se edita sobre el producto espejado, no sobre una fila que tenga que
   // existir de antemano. Pero el producto sí tiene que existir en ESTE tenant.
   if (!(await detalleProducto(guard.tenantId, alegraId))) return adminNotFoundResponse()
+  // Una variante de un modelo no tiene overlay propio: se edita desde el ancla.
+  const rechazo = await rechazarSiVarianteAgrupada(req, guard.tenantId, alegraId)
+  if (rechazo) return rechazo
 
   const body = await req.json().catch(() => null)
   const v = validarCamposOverlay(body)

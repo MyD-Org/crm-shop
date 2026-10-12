@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AlertTriangle, Undo2 } from "lucide-react"
-import { Button, Checkbox, Chip, Dialog, Field, Input, Select, Textarea } from "@myd-org/ui"
+import { Alert, Button, Checkbox, Chip, Dialog, Field, Input, Select, Textarea } from "@myd-org/ui"
 import {
   api,
   TEXTO_MOTIVO,
@@ -12,8 +12,10 @@ import {
   stockEnSucursal,
   type CategoriaDto,
   type FichaDto,
+  type FotoDto,
   type ProductoDto,
   type Sincronizacion,
+  type VarianteDto,
   type SucursalOpcionDto,
   type TagDto,
 } from "./tipos"
@@ -23,6 +25,8 @@ import { FotosProducto } from "./FotosProducto"
 import { FichaTecnicaProducto } from "./FichaTecnicaProducto"
 import { AtributosProducto } from "./AtributosProducto"
 import { formularioDeOrden, ordenDeFormulario } from "./destacado"
+import { ListaVariantes } from "./GrupoFila"
+import { AVISO_MODELOS, esModelo, nombreDeVariante, textoCantidadVariantes } from "./variantes-ui"
 
 interface Props {
   producto: ProductoDto
@@ -132,6 +136,10 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
   }
 
   const precio = precioDeLista(producto.prices)
+  // Un modelo: el overlay de acá es el del GRUPO y lo heredan todas las variantes. El padre de Alegra
+  // no tiene precio ni stock propios (se ven en cada variante) y no se vende.
+  const modelo = esModelo(producto)
+  const esPadre = producto.tipo === "padre"
 
   return (
     <Dialog
@@ -142,7 +150,7 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
         if (!abierto) onCerrar()
       }}
       title={producto.nombreEfectivo}
-      description={`SKU ${producto.sku}`}
+      description={modelo ? `Modelo · ${textoCantidadVariantes(producto.variantes.length)} · SKU ${producto.sku}` : `SKU ${producto.sku}`}
       footer={
         <div className="flex w-full items-center justify-between gap-3">
           <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
@@ -166,6 +174,8 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
           </p>
         )}
 
+        {modelo && <Alert tone="neutral">{AVISO_MODELOS}</Alert>}
+
         <PorQueNoSePublica producto={producto} sincronizacion={sincronizacion} />
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -178,9 +188,9 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
             <DatoAlegra etiqueta="Código" valor={producto.code ?? "—"} />
             <DatoAlegra etiqueta="Nombre en Alegra" valor={producto.nombreAlegra} />
             <DatoAlegra etiqueta="Descripción en Alegra" valor={producto.descripcionAlegra ?? "—"} />
-            <DatoAlegra etiqueta="Precio de lista" valor={precio ?? "Sin precio"} />
-            <DatoAlegra etiqueta="Stock" valor={producto.stock ?? "—"} />
-            {sucursales.length > 1 && (
+            {!esPadre && <DatoAlegra etiqueta="Precio de lista" valor={precio ?? "Sin precio"} />}
+            {!esPadre && <DatoAlegra etiqueta="Stock" valor={producto.stock ?? "—"} />}
+            {!esPadre && sucursales.length > 1 && (
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-medium" style={{ color: "var(--ink-soft)" }}>
                   Stock por sucursal
@@ -202,7 +212,9 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
             <DatoAlegra etiqueta="Estado" valor={producto.status === "active" ? "Activo" : "Inactivo"} />
             <DatoAlegra etiqueta="Última sincronización" valor={fmtFechaHora(producto.syncedAt)} />
             <p className="mt-1 text-xs" style={{ color: "var(--ink-faint)" }}>
-              El precio y el stock se administran en Alegra. Desde acá no se modifican.
+              {esPadre
+                ? "Este producto agrupa las variantes en Alegra y no se vende: el precio y el stock están en cada variante. Se administran en Alegra."
+                : "El precio y el stock se administran en Alegra. Desde acá no se modifican."}
             </p>
           </section>
 
@@ -287,8 +299,8 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
             </div>
 
             <label className="flex items-center gap-2 text-sm" style={{ color: "var(--ink)" }}>
-              <Checkbox checked={visible} onCheckedChange={setVisible} aria-label="Publicar en la tienda" />
-              Publicar en la tienda
+              <Checkbox checked={visible} onCheckedChange={setVisible} aria-label={modelo ? "Publicar el modelo en la tienda" : "Publicar en la tienda"} />
+              {modelo ? "Publicar el modelo en la tienda" : "Publicar en la tienda"}
             </label>
 
             <label className="flex items-center gap-2 text-sm" style={{ color: "var(--ink)" }}>
@@ -326,11 +338,30 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
           </section>
         </div>
 
-        <FotosProducto alegraId={producto.alegraId} fotos={fotos} onCambio={setFotos} />
+        {modelo && (
+          <section className="flex flex-col gap-2">
+            <span className="text-sm font-medium" style={{ color: "var(--ink)" }}>
+              Variantes del modelo
+            </span>
+            <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
+              Todas las variantes comparten el nombre, la descripción, la categoría, las etiquetas, la ficha y las fotos del
+              modelo. Cada una conserva su propio precio y stock, y puede tener su foto propia. Para ocultar una variante,
+              désela de baja en Alegra.
+            </p>
+            <ListaVariantes variantes={producto.variantes} extra={(v) => <FotoPropiaVariante variante={v} />} />
+          </section>
+        )}
+
+        <FotosProducto
+          alegraId={producto.alegraId}
+          fotos={fotos}
+          onCambio={setFotos}
+          titulo={modelo ? "Fotos del modelo" : "Fotos del producto"}
+        />
 
         <FichaTecnicaProducto alegraId={producto.alegraId} ficha={fichaTecnica} onCambio={setFichaTecnica} />
 
-        <AtributosProducto alegraId={producto.alegraId} tieneFicha={fichaTecnica !== null} />
+        {!esPadre && <AtributosProducto alegraId={producto.alegraId} tieneFicha={fichaTecnica !== null} />}
       </div>
     </Dialog>
   )
@@ -437,6 +468,42 @@ function ValorDeAlegra({ valor, usandoPropio, onVolver }: { valor: string; usand
   )
 }
 
+/** Lo mismo que TEXTO_MOTIVO, pero para un modelo: el precio y el estado en Alegra son los de sus variantes. */
+const TEXTO_MOTIVO_MODELO: typeof TEXTO_MOTIVO = {
+  oculto: "El modelo está oculto en la tienda. Puede publicarlo desde acá.",
+  inactivo_en_alegra: "Todas las variantes están dadas de baja en Alegra. Mientras siga así, publicarlo no lo muestra en la tienda.",
+  sin_precio: "Ninguna variante activa tiene precio en Alegra.",
+}
+
+/**
+ * La foto propia de una variante (la que se muestra al elegir ese color). Se guarda aparte del resto
+ * de la ficha, como las demás fotos, en el overlay de la variante. La base de un grupo armado a mano
+ * no la tiene: sus fotos son las del modelo.
+ */
+function FotoPropiaVariante({ variante }: { variante: VarianteDto }) {
+  const [abierto, setAbierto] = useState(false)
+  const [fotos, setFotos] = useState<FotoDto[]>(variante.fotos)
+  if (variante.esAncla) return null
+  return (
+    <div className="mt-2">
+      <Button variant="ghost" size="sm" aria-expanded={abierto} onClick={() => setAbierto((v) => !v)}>
+        {abierto ? "Ocultar la foto propia" : fotos.length > 0 ? "Ver la foto propia" : "Agregar una foto propia"}
+      </Button>
+      {abierto && (
+        <div className="mt-2">
+          <FotosProducto
+            alegraId={variante.alegraId}
+            fotos={fotos}
+            onCambio={setFotos}
+            alcance="variante"
+            titulo={`Foto propia: ${nombreDeVariante(variante)}`}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PorQueNoSePublica({ producto, sincronizacion }: { producto: ProductoDto; sincronizacion: Sincronizacion }) {
   const publicado = producto.motivos.length === 0
   return (
@@ -450,12 +517,18 @@ function PorQueNoSePublica({ producto, sincronizacion }: { producto: ProductoDto
     >
       <div className="flex items-center gap-2 font-medium">
         {!publicado && <AlertTriangle size={15} strokeWidth={1.8} />}
-        {publicado ? "Se publica en la tienda" : "No se publica en la tienda"}
+        {publicado
+          ? producto.tipo === "padre"
+            ? "El modelo se publica en la tienda"
+            : "Se publica en la tienda"
+          : producto.tipo === "padre"
+            ? "El modelo no se publica en la tienda"
+            : "No se publica en la tienda"}
       </div>
       {!publicado && (
         <ul className="mt-1 list-disc pl-5">
           {producto.motivos.map((m) => (
-            <li key={m}>{TEXTO_MOTIVO[m]}</li>
+            <li key={m}>{producto.tipo === "padre" ? TEXTO_MOTIVO_MODELO[m] : TEXTO_MOTIVO[m]}</li>
           ))}
         </ul>
       )}

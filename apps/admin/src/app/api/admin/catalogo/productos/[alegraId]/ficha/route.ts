@@ -4,7 +4,7 @@ import { avisarShop, conUrlDeFicha, conflictoResponse, NO_STORE, validacionRespo
 import { MAX_BYTES_FICHA, sha256Hex } from "@/lib/catalogo-ficha-contenido"
 import { borrarFichaSiHuerfana, contarReferenciasFicha } from "@/lib/catalogo-ficha-repo"
 import { detalleProducto, guardarOverlay } from "@/lib/catalogo-overlay-repo"
-import { fichaContenidoKey, fichaKey, getShopMediaR2, shaDeFichaContenidoKey } from "@/lib/shop-media"
+import { fichaContenidoKey, fichaKey, getShopMediaR2, idDeRuta, prefijoProducto, shaDeFichaContenidoKey } from "@/lib/shop-media"
 
 // GET    /api/admin/catalogo/productos/[alegraId]/ficha — el PDF, para el visor del admin.
 // POST   /api/admin/catalogo/productos/[alegraId]/ficha — firma la subida del PDF.
@@ -44,7 +44,7 @@ export async function GET(req: Request, { params }: Params) {
   const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
 
-  const { alegraId } = await params
+  const alegraId = idDeRuta((await params).alegraId)
   const producto = await detalleProducto(guard.tenantId, alegraId)
   if (!producto?.fichaTecnica) return adminNotFoundResponse()
 
@@ -90,7 +90,7 @@ export async function POST(req: Request, { params }: Params) {
     )
   }
 
-  const { alegraId } = await params
+  const alegraId = idDeRuta((await params).alegraId)
   if (!(await detalleProducto(guard.tenantId, alegraId))) return adminNotFoundResponse()
 
   const body = (await req.json().catch(() => null)) as { nombre?: unknown; bytes?: unknown; sha256?: unknown } | null
@@ -137,7 +137,7 @@ export async function PUT(req: Request, { params }: Params) {
   const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
 
-  const { alegraId } = await params
+  const alegraId = idDeRuta((await params).alegraId)
   const anterior = await detalleProducto(guard.tenantId, alegraId)
   if (!anterior) return adminNotFoundResponse()
 
@@ -145,7 +145,12 @@ export async function PUT(req: Request, { params }: Params) {
   if (!body) return validacionResponse("El cuerpo del pedido no es JSON válido.", "body")
 
   const key = typeof body.key === "string" ? body.key : ""
-  const prefijoDelTenant = `productos/${guard.tenantId}/${alegraId}/`
+  let prefijoDelTenant: string
+  try {
+    prefijoDelTenant = prefijoProducto(guard.tenantId, alegraId)
+  } catch {
+    return adminNotFoundResponse()
+  }
   const sha = shaDeFichaContenidoKey(guard.tenantId, key)
   // Sin esta comprobación, un PUT podría hacer que el producto de un tenant apunte a la ficha de
   // otro: la key viene del navegador. Vale la key propia del producto o una por contenido del
@@ -209,7 +214,7 @@ export async function DELETE(req: Request, { params }: Params) {
   const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
 
-  const { alegraId } = await params
+  const alegraId = idDeRuta((await params).alegraId)
   const anterior = await detalleProducto(guard.tenantId, alegraId)
   if (!anterior) return adminNotFoundResponse()
 

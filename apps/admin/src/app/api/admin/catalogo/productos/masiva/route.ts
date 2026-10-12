@@ -1,7 +1,7 @@
 import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { avisarShop, invalidResponse, NO_STORE, parsearSeleccion, validacionResponse, validarStockEn } from "@/lib/catalogo-admin"
 import { MSG_SUCURSAL_INVALIDA } from "@/lib/catalogo-overlay"
-import { masivaOverlay, masivaSucursal, masivaTags, type Seleccion } from "@/lib/catalogo-overlay-repo"
+import { hayVariantesAgrupadas, masivaOverlay, masivaSucursal, masivaTags, type Seleccion } from "@/lib/catalogo-overlay-repo"
 
 // POST /api/admin/catalogo/productos/masiva — publicar, ocultar, asignar categoría o etiqueta,
 // o mostrar/ocultar en una sucursal, sobre una selección.
@@ -36,6 +36,11 @@ export async function POST(req: Request) {
   if (seleccion.tipo === "filtro") {
     const stockEnInvalido = await validarStockEn(guard.tenantId, seleccion.filtros)
     if (stockEnInvalido) return stockEnInvalido
+  }
+
+  // Las variantes de un modelo no tienen overlay propio: se actúa sobre el modelo (su ancla).
+  if (seleccion.tipo === "ids" && (await hayVariantesAgrupadas(guard.tenantId, seleccion.alegraIds))) {
+    return invalidResponse("La selección incluye variantes de un modelo. Seleccione el modelo completo.", "alegraIds")
   }
 
   const accion = esObjeto(body) && esObjeto(body.accion) ? body.accion : null

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react"
 import { ArrowDown, ArrowUp, Check, Copy, Package, RefreshCw } from "lucide-react"
 import {
+  Alert,
   Badge,
   Button,
   Dialog,
@@ -19,6 +20,9 @@ import { ProductoDialog, caminoCategoria } from "./ProductoDialog"
 import { contarFotos } from "./FotosProducto"
 import { ORDEN_DESTACADO_SIN_POSICION, reordenarDisponible } from "./destacado"
 import { SincronizarAlegra } from "./SincronizarAlegra"
+import { GrupoCelda } from "./GrupoFila"
+import { SumarAlGrupoDialog } from "./SumarAlGrupoDialog"
+import { AVISO_MODELOS, TEXTO_NO_SE_VENDE, esModelo, esSuelto, resumenPrecio, stockTotal } from "./variantes-ui"
 import { AyudaTooltip } from "../AyudaTooltip"
 import {
   AYUDA_CUENTA_ORIGEN,
@@ -152,6 +156,8 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
   const [pendiente, setPendiente] = useState<Pendiente | null>(null)
   const [aplicando, setAplicando] = useState(false)
   const [moviendo, setMoviendo] = useState(false)
+  // Sumar a mano un producto suelto a un modelo (o un producto a un modelo): el diálogo guarda el extremo fijo.
+  const [sumando, setSumando] = useState<{ modo: "producto" | "modelo"; fijo: ProductoDto } | null>(null)
 
   // Sólo vale la respuesta del último pedido: una consulta vieja que llega tarde (p. ej. la de los
   // filtros iniciales después de "Limpiar filtros") no debe pisar el listado actual.
@@ -293,6 +299,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
   const puedeReordenar = reordenarDisponible(filtros as Record<string, string | undefined>)
   const hasta = Math.min(start + items.length, total)
   const seleccionados = todoElFiltro ? total : seleccion.length
+  const hayModelos = items.some(esModelo)
 
   const hayVariasCuentas = cuentas.length > 1
   const hayVariasSucursales = sucursales.length > 1
@@ -306,7 +313,8 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
     {
       key: "producto",
       header: "Producto",
-      render: (p) => (
+      render: (p) => {
+        const cabecera = (
         <>
           <div className="font-medium" style={{ color: "var(--ink)" }}>
             {p.nombreEfectivo}
@@ -343,7 +351,21 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
             </div>
           )}
         </>
-      ),
+        )
+        return esModelo(p) ? (
+          <GrupoCelda
+            producto={p}
+            cabecera={cabecera}
+            onCambio={() => {
+              void cargar()
+              onCambio()
+            }}
+            onError={setError}
+          />
+        ) : (
+          cabecera
+        )
+      },
     },
     {
       key: "categoria",
@@ -375,9 +397,16 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
       align: "right",
       hideBelow: "sm",
       className: "tabular-nums text-xs",
-      render: (p) => (
-        <span style={{ color: "var(--ink-soft)" }}>{precioDeLista(p.prices) ?? "Sin precio"}</span>
-      ),
+      render: (p) => {
+        if (p.tipo === "padre") {
+          // El padre no tiene precio propio: se muestra el de sus variantes («Desde» si difieren).
+          const r = resumenPrecio(p.variantes)
+          if (r.minimo === null) return <span style={{ color: "var(--ink-faint)" }}>Sin precio</span>
+          const texto = r.minimo.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 2 })
+          return <span style={{ color: "var(--ink-soft)" }}>{r.difieren ? `Desde ${texto}` : texto}</span>
+        }
+        return <span style={{ color: "var(--ink-soft)" }}>{precioDeLista(p.prices) ?? "Sin precio"}</span>
+      },
     },
     {
       key: "stock",
@@ -386,6 +415,14 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
       hideBelow: "sm",
       className: "tabular-nums text-xs",
       render: (p) => {
+        if (p.tipo === "padre") {
+          const total = stockTotal(p.variantes)
+          return (
+            <div style={{ color: total ? "var(--ink-soft)" : "var(--ink-faint)" }}>
+              {total === null ? "Sin dato" : `${total.toLocaleString("es-AR", { maximumFractionDigits: 2 })} en total`}
+            </div>
+          )
+        }
         const s = stockDe(p.stock)
         return (
           <>
@@ -462,6 +499,30 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
                   <ArrowDown size={14} />
                 </Button>
               </>
+            )}
+            {esSuelto(p) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSumando({ modo: "producto", fijo: p })
+                }}
+              >
+                Sumar a un modelo
+              </Button>
+            )}
+            {p.esAncla && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSumando({ modo: "modelo", fijo: p })
+                }}
+              >
+                Sumar producto
+              </Button>
             )}
             <Button
               variant="ghost"
@@ -634,6 +695,12 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
       )}
 
       <SincronizarAlegra onTerminado={() => void cargar()} />
+
+      {hayModelos && (
+        <Alert tone="neutral">
+          {AVISO_MODELOS} Cada modelo cuenta como un solo producto; el padre de Alegra figura como «{TEXTO_NO_SE_VENDE}».
+        </Alert>
+      )}
 
       {error && (
         <div
@@ -811,6 +878,19 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
               prev ? { ...prev, items: prev.items.map((p) => (p.alegraId === actualizado.alegraId ? actualizado : p)) } : prev,
             )
             setAbierto(null)
+            onCambio()
+          }}
+        />
+      )}
+
+      {sumando && (
+        <SumarAlGrupoDialog
+          modo={sumando.modo}
+          fijo={sumando.fijo}
+          onCerrar={() => setSumando(null)}
+          onListo={() => {
+            setSumando(null)
+            void cargar()
             onCambio()
           }}
         />

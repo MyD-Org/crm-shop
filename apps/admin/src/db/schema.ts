@@ -362,6 +362,28 @@ export const catalogProducts = pgTable(
   ],
 )
 
+// Grupos de variantes armados a mano (0082, change `variantes-de-producto`, S4). Una fila = "este
+// producto de Alegra va en el grupo `grupoId` con esta etiqueta". `grupoId` es el `alegra_id` del
+// ANCLA (un padre de Alegra, o un producto suelto elegido como base, que lleva además su propia fila
+// con `grupoId = alegraId`). Sin FK a catalog_products: el espejo se reescribe. La lee y materializa
+// `recalcularGrupos` en `catalog_products.grupo_id`. Sin GRANT al Shop (lo lee por la vista).
+export const catalogVariantesManuales = pgTable(
+  "catalog_variantes_manuales",
+  {
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    alegraId: text("alegra_id").notNull(),
+    grupoId: text("grupo_id").notNull(),
+    etiqueta: text("etiqueta").notNull(),
+    orden: integer("orden").notNull().default(0),
+    updatedBy: text("updated_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "cvm_pk", columns: [t.tenantId, t.alegraId] }),
+    index("cvm_tenant_grupo").on(t.tenantId, t.grupoId),
+  ],
+)
+
 // Bitácora de cada corrida de sync (observabilidad + "última sincronización" en el admin).
 export const catalogSyncLog = pgTable(
   "catalog_sync_log",

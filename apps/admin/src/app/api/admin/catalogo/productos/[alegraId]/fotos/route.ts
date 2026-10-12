@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
-import { avisarShop, conUrlDeFotos, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
+import { avisarShop, conUrlDeFotos, NO_STORE, rechazarSiVarianteAgrupada, validacionResponse } from "@/lib/catalogo-admin"
 import { detalleProducto, guardarOverlay } from "@/lib/catalogo-overlay-repo"
 import { ANCHOS_FOTO, esAnchoValido, fotoKey, getShopMediaR2, idDeRuta, prefijoProducto } from "@/lib/shop-media"
 
@@ -12,6 +12,10 @@ import { ANCHOS_FOTO, esAnchoValido, fotoKey, getShopMediaR2, idDeRuta, prefijoP
 // paga el tránsito dos veces.
 //
 // Se firma contra el bucket PÚBLICO (`getShopMediaR2`), nunca contra el de comprobantes.
+// Variantes de un modelo: la foto BASE del modelo se edita sobre el ancla; la foto PROPIA de una variante
+// (la que se muestra al elegir ese color) se edita con `?alcance=variante` y escribe en el overlay de la
+// variante, sólo `fotos`. Sin ese parámetro, una variante agrupada responde 400.
+//
 // admin+ (operator → 404). Tenant = el del guard, siempre.
 
 interface Params {
@@ -38,6 +42,8 @@ export async function POST(req: Request, { params }: Params) {
 
   const alegraId = idDeRuta((await params).alegraId)
   if (!(await detalleProducto(guard.tenantId, alegraId))) return adminNotFoundResponse()
+  const rechazo = await rechazarSiVarianteAgrupada(req, guard.tenantId, alegraId, { permitirFotoPropia: true })
+  if (rechazo) return rechazo
 
   const body = (await req.json().catch(() => null)) as { id?: unknown; variantes?: unknown } | null
   if (!body) return validacionResponse("El cuerpo del pedido no es JSON válido.", "body")
@@ -86,6 +92,8 @@ export async function PUT(req: Request, { params }: Params) {
 
   const alegraId = idDeRuta((await params).alegraId)
   if (!(await detalleProducto(guard.tenantId, alegraId))) return adminNotFoundResponse()
+  const rechazo = await rechazarSiVarianteAgrupada(req, guard.tenantId, alegraId, { permitirFotoPropia: true })
+  if (rechazo) return rechazo
 
   const body = (await req.json().catch(() => null)) as { fotos?: unknown } | null
   if (!body || !Array.isArray(body.fotos)) return validacionResponse("Indique las fotos del producto.", "fotos")

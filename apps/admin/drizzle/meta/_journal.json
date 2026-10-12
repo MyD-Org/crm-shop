@@ -575,6 +575,13 @@
       "when": 1793280100000,
       "tag": "0081_vista_padre_no_activo",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1793280200000,
+      "tag": "0082_catalogo_variantes_manuales",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,7 @@ import {
   type FotoOverlay,
   type MotivoNoPublicado,
   type NodoCategoria,
+  tienePrecio,
   type TagValido,
 } from "@/lib/catalogo-overlay"
 import { ORDEN_DESTACADO_SIN_POSICION } from "@/components/admin/catalogo/destacado"
@@ -598,11 +599,13 @@ function seleccionSql(tenantId: string, seleccion: Seleccion): SQL {
     `
   }
   const excluir = seleccion.excluir ?? []
+  // Por filtro se actúa sobre las UNIDADES del panel (un modelo es una sola, y su overlay es el del
+  // ancla), igual que el listado: el mismo conjunto que ve la usuaria. Sin variantes en juego, cada
+  // unidad es el producto mismo y el resultado es el de siempre.
   return sql`
-    SELECT p.alegra_id FROM ${catalogProducts} p
-    LEFT JOIN ${catalogOverlay} o ON (o.tenant_id = p.tenant_id AND o.alegra_id = p.alegra_id)
-    WHERE ${whereListado(tenantId, seleccion.filtros)}
-    ${excluir.length > 0 ? sql`AND p.alegra_id NOT IN ${listaSql(excluir)}` : sql``}
+    SELECT DISTINCT coalesce(p.grupo_id, p.alegra_id) AS alegra_id ${desdeListadoGrupo}
+    WHERE ${whereListado(tenantId, seleccion.filtros)} AND ${noEsPadreConHijos}
+    ${excluir.length > 0 ? sql`AND coalesce(p.grupo_id, p.alegra_id) NOT IN ${listaSql(excluir)}` : sql``}
   `
 }
 
@@ -1030,6 +1033,39 @@ export interface ProductoAdmin {
    * sucursal sin fila no figura). `leidoAt` = cuándo se leyó ese stock de Alegra.
    */
   stockSucursales: { sucursal: string; stock: string; leidoAt: string | null }[]
+  /** 'simple' | 'padre' | 'variante' (S2). Un padre no se vende: es el ancla de su modelo. */
+  tipo: "simple" | "padre" | "variante"
+  /** Modelo al que pertenece (alegra_id del ancla). null = se vende suelto. En el ancla de un grupo manual, es él mismo. */
+  grupoId: string | null
+  /** Texto de la opción dentro del modelo ("Verde", "RGB"). */
+  etiqueta: string | null
+  /** true = es el ancla del modelo: un padre de Alegra o la base de un grupo manual. En ella vive el overlay del grupo. */
+  esAncla: boolean
+  /** Los productos del modelo (sólo en un ancla). Vacío en los demás. */
+  variantes: VarianteAdmin[]
+}
+
+/** Un producto dentro de un modelo: lo de Alegra (sólo lectura) y su foto propia. */
+export interface VarianteAdmin {
+  alegraId: string
+  code: string | null
+  nombreAlegra: string
+  etiqueta: string | null
+  tipo: "simple" | "padre" | "variante"
+  status: string
+  alegraStatus: string | null
+  prices: unknown
+  stock: string | null
+  /** Foto propia de la variante (overlay de la variante; el resto del overlay lo manda el ancla). */
+  fotos: FotoOverlay[]
+  /** true = lo sumó el operador a mano (se puede quitar). */
+  manual: boolean
+  /** Orden manual dentro del modelo (sólo en los sumados a mano). */
+  orden: number | null
+  esRepresentante: boolean
+  /** true = es el ancla del grupo (base de un grupo manual, también figura entre las opciones). */
+  esAncla: boolean
+  stockSucursales: { sucursal: string; stock: string; leidoAt: string | null }[]
 }
 
 export type OrdenListado = "nombre" | "nombre-desc" | "actualizado"
@@ -1064,7 +1100,30 @@ interface FilaListadoCruda {
   cuenta_slug: string | null
   cuenta_nombre: string | null
   cuenta_sucursal: string | null
+  tipo: string | null
+  grupo_id: string | null
+  etiqueta: string | null
+  es_ancla: boolean | null
 }
+
+interface FilaVarianteCruda {
+  alegra_id: string
+  grupo_id: string
+  code: string | null
+  name: string
+  etiqueta: string | null
+  tipo: string
+  status: string
+  alegra_status: string | null
+  prices: unknown
+  stock: string | null
+  fotos: FotoOverlay[] | null
+  es_representante: boolean
+  manual: boolean
+  manual_orden: number | null
+}
+
+const aTipo = (t: string | null): ProductoAdmin["tipo"] => (t === "padre" || t === "variante" ? t : "simple")
 
 const iso = (v: Date | string | null): string | null =>
   v === null ? null : v instanceof Date ? v.toISOString() : String(v)
@@ -1098,6 +1157,11 @@ function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
     motivos: motivoNoPublicado({ visible, status: f.status, alegraStatus: f.alegra_status, prices: f.prices }),
     cuenta: f.cuenta_slug ? { slug: f.cuenta_slug, nombre: f.cuenta_nombre ?? f.cuenta_slug, sucursal: f.cuenta_sucursal } : null,
     stockSucursales: [],
+    tipo: aTipo(f.tipo),
+    grupoId: f.grupo_id,
+    etiqueta: f.etiqueta,
+    esAncla: f.es_ancla ?? false,
+    variantes: [],
   }
 }
 
@@ -1135,6 +1199,7 @@ const columnasListado = sql`
   o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, o.oculto_en_sucursales, o.mostrar_marca, o.updated_at,
   c.nombre AS categoria_nombre,
   ac.slug AS cuenta_slug, ac.nombre AS cuenta_nombre,
+  p.tipo, p.grupo_id, p.etiqueta, (p.tipo = 'padre' OR p.grupo_id = p.alegra_id) AS es_ancla,
   (SELECT s.nombre FROM sucursales s WHERE s.tenant_id = p.tenant_id AND s.cuenta_alegra_id = p.cuenta_id ORDER BY s.orden, s.slug LIMIT 1) AS cuenta_sucursal,
   ${nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`, sql`p.code`)} AS nombre_efectivo,
   ${skuEfectivoSql(sql`p.code`, sql`p.name`)} AS sku,
@@ -1150,6 +1215,26 @@ const desdeListado = sql`
   LEFT JOIN ${shopCategories} c ON (c.id = o.categoria_id AND c.tenant_id = p.tenant_id)
   LEFT JOIN alegra_cuentas ac ON (ac.id = p.cuenta_id AND ac.tenant_id = p.tenant_id)
 `
+
+/**
+ * Para elegir QUÉ unidades (modelos / sueltos) entran al listado: el overlay de un producto agrupado
+ * es el de su grupo (`coalesce(grupo_id, alegra_id)`), igual que en el Shop. Los filtros de
+ * `condicionesListado` se aplican tal cual sobre este `p` / `o`.
+ */
+const desdeListadoGrupo = sql`
+  FROM ${catalogProducts} p
+  LEFT JOIN ${catalogOverlay} o ON (o.tenant_id = p.tenant_id AND o.alegra_id = coalesce(p.grupo_id, p.alegra_id))
+`
+
+/**
+ * El padre no se vende: no tiene precio ni stock propios, así que los filtros de producto (stock,
+ * precio, estado en Alegra) no pueden dejarlo pasar por sí mismo —un "sin stock" lo mostraría siempre—.
+ * El modelo entra por sus variantes. Un padre sin ninguna variante en el espejo entra por sí mismo,
+ * para que no quede invisible en el panel.
+ */
+const noEsPadreConHijos = sql`(p.tipo <> 'padre' OR NOT EXISTS (
+  SELECT 1 FROM ${catalogProducts} h WHERE h.tenant_id = p.tenant_id AND h.grupo_id = p.alegra_id
+))`
 
 /**
  * Página del listado del panel. Filtrado, conteo, orden y paginado se resuelven en Postgres:
@@ -1183,24 +1268,110 @@ export async function listarProductos(
           : sql`${nombre} ASC, p.alegra_id ASC`
 
   const db = getDb()
+  // El listado pagina por UNIDAD DE PANEL: un modelo (padre + variantes, o grupo manual) es una sola
+  // fila, y un producto suelto también. `unidades` junta, entre los productos que cumplen los
+  // filtros, el ancla de cada uno; así un modelo aparece si CUALQUIERA de sus variantes coincide
+  // (el padre no tiene precio ni stock y sin esto desaparecería con los filtros por defecto). Los
+  // filtros del overlay (tienda, fotos, categoría, etiqueta, destacado) se evalúan sobre el overlay
+  // del GRUPO, que es el de verdad. El conteo y el LIMIT cuentan modelos, no variantes.
   const [filas, conteo] = await Promise.all([
     db.execute(sql`
-      SELECT ${columnasListado} ${desdeListado}
-      WHERE ${where}
+      WITH unidades AS (
+        SELECT DISTINCT coalesce(p.grupo_id, p.alegra_id) AS id
+        ${desdeListadoGrupo}
+        WHERE ${where} AND ${noEsPadreConHijos}
+      )
+      SELECT ${columnasListado}
+      FROM unidades u
+      JOIN ${catalogProducts} p ON (p.tenant_id = ${tenantId} AND p.alegra_id = u.id)
+      LEFT JOIN ${catalogOverlay} o ON (o.tenant_id = p.tenant_id AND o.alegra_id = p.alegra_id)
+      LEFT JOIN ${shopCategories} c ON (c.id = o.categoria_id AND c.tenant_id = p.tenant_id)
+      LEFT JOIN alegra_cuentas ac ON (ac.id = p.cuenta_id AND ac.tenant_id = p.tenant_id)
       ORDER BY ${orden}
       LIMIT ${limit} OFFSET ${start}
     `),
-    db.execute(sql`SELECT count(*)::int AS n ${desdeListado} WHERE ${where}`),
+    db.execute(sql`
+      SELECT count(DISTINCT coalesce(p.grupo_id, p.alegra_id))::int AS n
+      ${desdeListadoGrupo}
+      WHERE ${where} AND ${noEsPadreConHijos}
+    `),
   ])
 
   const items = (filas as unknown as FilaListadoCruda[]).map(aProductoAdmin)
-  const stock = await stockPorSucursal(tenantId, items.map((i) => i.alegraId))
-  for (const i of items) i.stockSucursales = stock.get(i.alegraId) ?? []
+  await completarGrupos(tenantId, items)
 
   return {
     items,
     total: Number((conteo[0] as { n: number }).n),
   }
+}
+
+/**
+ * Stock por sucursal de los productos y, para los que son ancla de un modelo, sus variantes (en UNA
+ * consulta para todos, sin N+1). Un padre trae además el motivo por el que el MODELO no se publica,
+ * calculado sobre sus variantes: el padre no tiene precio ni estado propios que valgan.
+ */
+async function completarGrupos(tenantId: string, items: ProductoAdmin[]): Promise<void> {
+  const anclas = items.filter((i) => i.esAncla).map((i) => i.alegraId)
+  const hijos = await variantesDeGrupos(tenantId, anclas)
+  const stock = await stockPorSucursal(tenantId, [...items.map((i) => i.alegraId), ...[...hijos.values()].flat().map((v) => v.alegraId)])
+  for (const i of items) {
+    i.stockSucursales = stock.get(i.alegraId) ?? []
+    if (!i.esAncla) continue
+    i.variantes = (hijos.get(i.alegraId) ?? []).map((v) => ({ ...v, stockSucursales: stock.get(v.alegraId) ?? [] }))
+    if (i.tipo === "padre") i.motivos = motivosDelModelo(i, i.variantes)
+  }
+}
+
+/** Por qué un modelo (cuyo ancla es un padre) no se publica: se mira a sus variantes. */
+function motivosDelModelo(padre: Pick<ProductoAdmin, "visible">, variantes: VarianteAdmin[]): MotivoNoPublicado[] {
+  const vendibles = variantes.filter((v) => v.status === "active" && v.alegraStatus !== "inactive")
+  const conPrecio = vendibles.find((v) => tienePrecio(v.prices))
+  return motivoNoPublicado({
+    visible: padre.visible,
+    status: vendibles.length > 0 ? "active" : "inactive",
+    alegraStatus: "active",
+    prices: conPrecio?.prices ?? [],
+  })
+}
+
+/** Las variantes de cada ancla, ordenadas por el orden manual y la etiqueta. Siempre acotado al tenant. */
+async function variantesDeGrupos(tenantId: string, anclas: string[]): Promise<Map<string, VarianteAdmin[]>> {
+  const mapa = new Map<string, VarianteAdmin[]>()
+  if (anclas.length === 0) return mapa
+  const filas = (await getDb().execute(sql`
+    SELECT p.alegra_id, p.grupo_id, p.code, p.name, p.etiqueta, p.tipo, p.status, p.alegra_status, p.prices, p.stock,
+           p.es_representante, ov.fotos, (m.alegra_id IS NOT NULL) AS manual, m.orden AS manual_orden
+    FROM ${catalogProducts} p
+    LEFT JOIN ${catalogOverlay} ov ON (ov.tenant_id = p.tenant_id AND ov.alegra_id = p.alegra_id)
+    LEFT JOIN catalog_variantes_manuales m ON (m.tenant_id = p.tenant_id AND m.alegra_id = p.alegra_id)
+    WHERE p.tenant_id = ${tenantId}
+      AND p.grupo_id IN ${listaSql(anclas)}
+      AND p.reemplazado_por_alegra_id IS NULL
+    ORDER BY p.grupo_id, coalesce(m.orden, 0), lower(coalesce(p.etiqueta, '')), p.alegra_id
+  `)) as unknown as FilaVarianteCruda[]
+  for (const f of filas) {
+    const lista = mapa.get(f.grupo_id) ?? []
+    lista.push({
+      alegraId: f.alegra_id,
+      code: f.code,
+      nombreAlegra: f.name,
+      etiqueta: f.etiqueta,
+      tipo: aTipo(f.tipo),
+      status: f.status,
+      alegraStatus: f.alegra_status,
+      prices: f.prices,
+      stock: f.stock,
+      fotos: f.fotos ?? [],
+      manual: f.manual,
+      orden: f.manual_orden,
+      esRepresentante: f.es_representante,
+      esAncla: f.alegra_id === f.grupo_id,
+      stockSucursales: [],
+    })
+    mapa.set(f.grupo_id, lista)
+  }
+  return mapa
 }
 
 /** La ficha de un producto. null si ese `alegraId` no existe en el espejo de ESTE tenant. */
@@ -1213,8 +1384,53 @@ export async function detalleProducto(tenantId: string, alegraId: string): Promi
   const fila = (filas as unknown as FilaListadoCruda[])[0]
   if (!fila) return null
   const producto = aProductoAdmin(fila)
-  producto.stockSucursales = (await stockPorSucursal(tenantId, [alegraId])).get(alegraId) ?? []
+  await completarGrupos(tenantId, [producto])
   return producto
+}
+
+export interface AnclaDeProducto {
+  /** Lo que se edita a nivel grupo: el ancla (padre o base del grupo manual); el mismo producto si es suelto. */
+  anclaId: string
+  tipo: "simple" | "padre" | "variante"
+  grupoId: string | null
+  /** true = el producto es una variante (o miembro) de un modelo cuyo ancla es OTRO: sus campos de grupo no se editan acá. */
+  agrupada: boolean
+}
+
+/**
+ * ¿A qué modelo pertenece el producto y dónde vive su overlay? Es la pregunta que hacen las rutas de
+ * edición antes de escribir: un producto agrupado (variante o miembro de un grupo manual) NO tiene
+ * overlay propio para nombre, categoría, visibilidad, etiquetas, ficha ni orden —eso lo manda el
+ * ancla—; sólo puede tener foto propia. null = el producto no existe en ESTE tenant.
+ */
+export async function resolverAncla(tenantId: string, alegraId: string): Promise<AnclaDeProducto | null> {
+  const [fila] = (await getDb().execute(sql`
+    SELECT tipo, grupo_id FROM ${catalogProducts} WHERE tenant_id = ${tenantId} AND alegra_id = ${alegraId} LIMIT 1
+  `)) as unknown as { tipo: string; grupo_id: string | null }[]
+  if (!fila) return null
+  const grupoId = fila.grupo_id
+  return {
+    anclaId: grupoId ?? alegraId,
+    tipo: aTipo(fila.tipo),
+    grupoId,
+    agrupada: grupoId !== null && grupoId !== alegraId,
+  }
+}
+
+/**
+ * ¿Alguno de esos ids es una variante agrupada (de un modelo o de un grupo manual, y no su ancla)?
+ * Una acción masiva sobre ids escribe el overlay de cada uno: sobre una variante agrupada no tiene
+ * efecto (manda el ancla), así que la ruta la rechaza en vez de dejar overlays muertos.
+ */
+export async function hayVariantesAgrupadas(tenantId: string, alegraIds: string[]): Promise<boolean> {
+  if (alegraIds.length === 0) return false
+  const filas = (await getDb().execute(sql`
+    SELECT 1 FROM ${catalogProducts}
+    WHERE tenant_id = ${tenantId} AND alegra_id IN ${listaSql(alegraIds)}
+      AND grupo_id IS NOT NULL AND grupo_id <> alegra_id
+    LIMIT 1
+  `)) as unknown as unknown[]
+  return filas.length > 0
 }
 
 // ─── Frescura del aviso al Shop (decisión D1) ────────────────────────────────────────────

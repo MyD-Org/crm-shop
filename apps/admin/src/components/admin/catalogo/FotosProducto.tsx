@@ -20,6 +20,14 @@ interface Props {
   alegraId: string
   fotos: FotoDto[]
   onCambio: (fotos: FotoDto[]) => void
+  /**
+   * "variante" = la foto PROPIA de una variante de un modelo (la que se muestra al elegir ese color):
+   * se guarda en el overlay de la variante y las demás conservan las fotos del modelo. Sin esto, se
+   * editan las fotos del producto o del modelo.
+   */
+  alcance?: "variante"
+  /** Título de la sección; por defecto «Fotos del producto». */
+  titulo?: string
 }
 
 /** Ancho que se usa para previsualizar en el panel. */
@@ -32,7 +40,8 @@ interface VarianteFirmada {
   headers: { "content-type": string }
 }
 
-export function FotosProducto({ alegraId, fotos, onCambio }: Props) {
+export function FotosProducto({ alegraId, fotos, onCambio, alcance, titulo = "Fotos del producto" }: Props) {
+  const sufijo = alcance === "variante" ? "?alcance=variante" : ""
   const [subiendo, setSubiendo] = useState(false)
   const [error, setError] = useState("")
   const [ampliada, setAmpliada] = useState<Grupo | null>(null)
@@ -51,7 +60,7 @@ export function FotosProducto({ alegraId, fotos, onCambio }: Props) {
         const variantes = await generarVariantes(file)
 
         const { id, variantes: firmadas } = await api<{ id: string; variantes: VarianteFirmada[] }>(
-          `/api/admin/catalogo/productos/${encodeURIComponent(alegraId)}/fotos`,
+          `/api/admin/catalogo/productos/${encodeURIComponent(alegraId)}/fotos${sufijo}`,
           {
             method: "POST",
             body: JSON.stringify({
@@ -87,7 +96,7 @@ export function FotosProducto({ alegraId, fotos, onCambio }: Props) {
 
   async function persistir(lista: FotoDto[]) {
     const { producto } = await api<{ producto: { fotos: FotoDto[] } }>(
-      `/api/admin/catalogo/productos/${encodeURIComponent(alegraId)}/fotos`,
+      `/api/admin/catalogo/productos/${encodeURIComponent(alegraId)}/fotos${sufijo}`,
       { method: "PUT", body: JSON.stringify({ fotos: lista.map((f) => ({ key: f.key, w: f.w, alt: f.alt })) }) },
     )
     onCambio(producto.fotos)
@@ -114,7 +123,7 @@ export function FotosProducto({ alegraId, fotos, onCambio }: Props) {
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium" style={{ color: "var(--ink)" }}>
-          Fotos del producto
+          {titulo}
         </span>
         <Button variant="ghost" size="sm" disabled={subiendo} onClick={() => inputRef.current?.click()}>
           {subiendo ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
@@ -134,7 +143,9 @@ export function FotosProducto({ alegraId, fotos, onCambio }: Props) {
       {grupos.length === 0 ? (
         <p className="rounded-[var(--radius)] p-3 text-xs"
            style={{ background: "var(--bg)", border: "1px dashed var(--border-strong)", color: "var(--ink-soft)" }}>
-          Este producto no tiene fotos. Puede publicarlo igual: la foto no es condición para que la tienda lo muestre.
+          {alcance === "variante"
+            ? "Esta variante no tiene foto propia: la tienda muestra las fotos del modelo."
+            : "Este producto no tiene fotos. Puede publicarlo igual: la foto no es condición para que la tienda lo muestre."}
         </p>
       ) : (
         <ul className="flex flex-wrap gap-2">

@@ -183,7 +183,7 @@ function CuentaRevision({ cuenta, onVerProducto }: { cuenta: RevisionCuenta; onV
         </p>
         {!r ? (
           <p className="text-sm" style={{ color: "var(--ink-faint)" }}>Sin datos: falta una sincronización de esta cuenta.</p>
-        ) : r.duplicados.total === 0 && r.sinCodigo.total === 0 ? (
+        ) : r.duplicados.total === 0 && r.sinCodigo.total === 0 && (r.sinOpcion?.total ?? 0) === 0 ? (
           <p className="text-sm" style={{ color: "var(--ink-soft)" }}>No hay códigos para revisar.</p>
         ) : (
           <>
@@ -209,6 +209,23 @@ function CuentaRevision({ cuenta, onVerProducto }: { cuenta: RevisionCuenta; onV
                 {r.sinCodigo.total > r.sinCodigo.items.length && (
                   <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
                     Se muestran los primeros {r.sinCodigo.items.length} de {r.sinCodigo.total}.
+                  </p>
+                )}
+              </>
+            )}
+            {r.sinOpcion && r.sinOpcion.total > 0 && (
+              <>
+                <p className="text-sm font-medium" style={{ color: "var(--ink)" }}>
+                  Variante sin opción ({r.sinOpcion.total})
+                </p>
+                <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                  Son variantes de un modelo a las que Alegra no les informa la opción (por ejemplo, el color): no se pueden emparejar
+                  con la otra cuenta. Complete la opción en Alegra.
+                </p>
+                <Table<ItemRevisar> columns={columnasSinCodigo} rows={r.sinOpcion.items} rowKey={(i) => i.alegraId} empty="Sin productos" />
+                {r.sinOpcion.total > r.sinOpcion.items.length && (
+                  <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
+                    Se muestran los primeros {r.sinOpcion.items.length} de {r.sinOpcion.total}.
                   </p>
                 )}
               </>

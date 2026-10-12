@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
 import { esVendibleSql } from "./catalogo-vendible"
 import type { ListaPrincipal } from "./alegra-pareo"
+import { recalcularGruposTrasSync } from "./catalogo-variantes-repo"
 
 // Piezas de base de datos del catálogo UNIÓN entre cuentas de Alegra (change
 // `sucursales-igz-mdp`, rebanada D, design D2/D3/D14). Las comparten la sync de la principal
@@ -15,6 +16,23 @@ type Ejecutor = Db | Tx
 
 /** El mismo criterio que `normalizarCodigo` (TS), en SQL. */
 export const normCodigoSql = (col: string) => `lower(unaccent(regexp_replace(btrim(${col}), '\\s+', ' ', 'g')))`
+
+/**
+ * La clave de la opción de una variante (`claveVariante`, TS) en SQL: opciones normalizadas como
+ * `normCodigoSql`, ordenadas por bytes y unidas con '|'. `col` es una columna jsonb del tipo
+ * `[{"atributo":"Color","opcion":"Verde"}]`. NULL si no hay ninguna opción.
+ */
+export const claveVarianteSql = (col: string) =>
+  `(SELECT string_agg(x.o, '|' ORDER BY x.o COLLATE "C")
+    FROM (
+      SELECT lower(unaccent(regexp_replace(btrim(e->>'opcion'), '\\s+', ' ', 'g'))) AS o
+      FROM jsonb_array_elements(CASE WHEN jsonb_typeof(${col}) = 'array' THEN ${col} ELSE '[]'::jsonb END) e
+    ) x
+    WHERE x.o <> '')`
+
+/** Clave de la opción de la fila `alias` ('' para simples y padres): la columna materializada o, si falta, la derivada de `variante`. */
+export const claveEfectivaSql = (alias: string) =>
+  `coalesce(${alias}.variante_clave, ${claveVarianteSql(`${alias}.variante`)}, '')`
 
 const ACTIVA_PRINCIPAL = (alias: string) =>
   `${alias}.cuenta_id IS NULL AND ${alias}.status = 'active' AND (${alias}.alegra_status IS NULL OR ${alias}.alegra_status <> 'inactive')`
@@ -136,21 +154,28 @@ export interface ResultadoAbsorcion {
  */
 export async function absorberSoloSecundaria(tenantId: string): Promise<ResultadoAbsorcion> {
   const db = getDb()
+  // Variantes (S3): el padre y sus variantes comparten código, así que el par es (código, tipo,
+  // opción). Una variante sin opción resoluble nunca se absorbe. Con la opción identificando UNA
+  // fila no hay bloqueo por `count > 1`.
   const candidatas = (await db.execute(sql`
-    SELECT s.alegra_id AS sintetica, min(p.alegra_id) AS principal
+    SELECT s.alegra_id AS sintetica, s.tipo AS tipo, min(p.alegra_id) AS principal
     FROM catalog_products s
     JOIN catalog_products p
       ON p.tenant_id = s.tenant_id
      AND ${sql.raw(ACTIVA_PRINCIPAL("p"))}
      AND ${sql.raw(normCodigoSql("p.code"))} = ${sql.raw(normCodigoSql("s.code"))}
+     AND p.tipo = s.tipo
+     AND ${sql.raw(claveEfectivaSql("p"))} = ${sql.raw(claveEfectivaSql("s"))}
     WHERE s.tenant_id = ${tenantId}
       AND s.cuenta_id IS NOT NULL
       AND s.reemplazado_por_alegra_id IS NULL
       AND btrim(coalesce(s.code, '')) <> ''
-    GROUP BY s.alegra_id
+      AND (s.tipo <> 'variante' OR ${sql.raw(claveEfectivaSql("s"))} <> '')
+    GROUP BY s.alegra_id, s.tipo
     HAVING count(*) = 1
-  `)) as unknown as { sintetica: string; principal: string }[]
+  `)) as unknown as { sintetica: string; tipo: string; principal: string }[]
 
+  let padresAbsorbidos = 0
   for (const c of candidatas) {
     await db.transaction(async (tx) => {
       await moverStockSucursal(tx, tenantId, c.sintetica, c.principal)
@@ -164,8 +189,17 @@ export async function absorberSoloSecundaria(tenantId: string): Promise<Resultad
       await tx.execute(sql`
         UPDATE catalog_overlay SET updated_at = now() WHERE tenant_id = ${tenantId} AND alegra_id = ${c.sintetica}
       `)
+      // Un padre absorbido: sus hijos pasan a colgar del padre de la principal (un solo grupo).
+      if (c.tipo === "padre") {
+        await tx.execute(sql`
+          UPDATE catalog_products SET padre_alegra_id = ${c.principal}
+          WHERE tenant_id = ${tenantId} AND padre_alegra_id = ${c.sintetica}
+        `)
+      }
     })
+    if (c.tipo === "padre") padresAbsorbidos++
   }
+  if (padresAbsorbidos > 0) await recalcularGruposTrasSync(tenantId, undefined, "absorcion-padres")
   return { absorbidos: candidatas.length }
 }
 

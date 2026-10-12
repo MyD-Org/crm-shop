@@ -983,7 +983,8 @@ export async function buscarItemsPorCodigo(config: TenantConfig, codigo: string)
   const buscado = codigo.trim().toLowerCase()
   if (!buscado) return []
   if (config.alegraMock) return mockBuscarItemsPorCodigo(buscado)
-  const raw = (await alegraFetch(config, "/items", { query: codigo.trim(), limit: "30", start: "0" })) as unknown
+  // `fields` igual que la lista: trae la opción de las variantes (`variantAttributes`).
+  const raw = (await alegraFetch(config, "/items", { query: codigo.trim(), limit: "30", start: "0", fields: FIELDS_ITEMS })) as unknown
   const filas = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : []
   return filas.map(mapRawItem).filter((it) => (it.code ?? "").trim().toLowerCase() === buscado)
 }

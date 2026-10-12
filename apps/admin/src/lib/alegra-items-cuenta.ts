@@ -31,6 +31,10 @@ import type { TenantConfig } from "./tenants"
 //
 // Lo que NO se hace: nunca se modifica un ítem existente ni la fila de `catalog_products`; un
 // código duplicado en la cuenta destino aborta (mejor no facturar que elegir el ítem equivocado).
+//
+// Variantes (change `variantes-de-producto`, S3): el padre y sus variantes comparten código, así que
+// al buscar por código se filtra por la OPCIÓN de la variante. Si la variante no está en la cuenta
+// destino NO se crea un ítem simple por código (sembraría un duplicado): se informa para cargarla.
 
 export interface CuentaDestino {
   id: string
@@ -73,6 +77,8 @@ interface FilaCatalogo {
   code: string | null
   name: string
   brand: string | null
+  tipo: string
+  varianteClave: string | null
 }
 
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0]
@@ -96,6 +102,8 @@ async function filasCatalogo(tenantId: string, ids: string[], ej: Ejecutor = get
       code: catalogProducts.code,
       name: catalogProducts.name,
       brand: catalogProducts.brand,
+      tipo: catalogProducts.tipo,
+      varianteClave: catalogProducts.varianteClave,
     })
     .from(catalogProducts)
     .where(and(eq(catalogProducts.tenantId, tenantId), inArray(catalogProducts.alegraId, ids)))
@@ -181,6 +189,15 @@ async function guardarPareo(tx: Tx, tenantId: string, slugs: string[], alegraId:
 const msgDuplicado = (codigo: string, cuenta: CuentaDestino) =>
   `El código "${codigo}" está repetido en la cuenta de Alegra de ${cuenta.nombre}. Corrija el duplicado en Alegra antes de facturar.`
 
+const msgVarianteFaltante = (nombre: string, cuenta: CuentaDestino) =>
+  `La variante "${nombre}" no está cargada en la cuenta de Alegra de ${cuenta.nombre}. Cargue la variante en esa cuenta, con el mismo código y la misma opción, antes de facturar.`
+
+const msgVarianteSinDatos = (nombre: string, cuenta: CuentaDestino) =>
+  `No se puede resolver la variante "${nombre}" en la cuenta de ${cuenta.nombre}: falta su código o su opción en el catálogo. Complételos en Alegra y sincronice el catálogo antes de facturar.`
+
+const msgCodigoDeVariantes = (codigo: string, cuenta: CuentaDestino) =>
+  `El código "${codigo}" corresponde en la cuenta de Alegra de ${cuenta.nombre} a un producto con variantes, no a un producto simple. Corrija el código en Alegra antes de facturar.`
+
 const msgSinImpuesto = (nombre: string, iva: number, cuenta: CuentaDestino) =>
   `No se puede dar de alta "${nombre}" en la cuenta de ${cuenta.nombre}: no hay un impuesto activo con ${iva}% de IVA en esa cuenta.`
 
@@ -218,8 +235,12 @@ export async function asegurarItemsEnCuenta(
     }
 
     const codigo = fila.code?.trim() || null
-    const clave = codigo ? normalizarCodigo(codigo) : linea.alegraItemId
     const nombre = fila.name || linea.nombre
+    const esVariante = fila.tipo === "variante"
+    const opcion = fila.varianteClave ?? ""
+    if (esVariante && (!codigo || !opcion)) return { ok: false, error: msgVarianteSinDatos(nombre, cuenta) }
+    // El lock distingue las variantes de un mismo código por su opción.
+    const clave = codigo ? normalizarCodigo(codigo) + (esVariante ? `#${opcion}` : "") : linea.alegraItemId
 
     type Paso = { ok: true; id: string; creado: boolean } | { ok: false; error: string }
     const paso: Paso = await db.transaction(async (tx): Promise<Paso> => {
@@ -230,12 +251,19 @@ export async function asegurarItemsEnCuenta(
       if (yaPareado) return { ok: true, id: yaPareado, creado: false }
 
       if (codigo) {
-        const existentes = await deps.buscarPorCodigo(config, codigo)
+        const encontrados = await deps.buscarPorCodigo(config, codigo)
+        // Una variante se identifica por (código, opción); un simple, solo entre los simples.
+        const existentes = esVariante
+          ? encontrados.filter((e) => (e.tipo ?? "simple") === "variante" && (e.varianteClave ?? "") === opcion)
+          : encontrados.filter((e) => (e.tipo ?? "simple") === "simple")
         if (existentes.length > 1) return { ok: false, error: msgDuplicado(codigo, cuenta) }
         if (existentes.length === 1) {
           await guardarPareo(tx, tenantId, slugs, linea.alegraItemId, existentes[0].alegraId)
           return { ok: true, id: existentes[0].alegraId, creado: false }
         }
+        // Nunca se crea un simple en lugar de una variante, ni un ítem con el código de un modelo con variantes.
+        if (esVariante) return { ok: false, error: msgVarianteFaltante(nombre, cuenta) }
+        if (encontrados.length > 0) return { ok: false, error: msgCodigoDeVariantes(codigo, cuenta) }
       }
 
       taxes ??= await deps.listTaxes(config)

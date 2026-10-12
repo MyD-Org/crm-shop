@@ -6,14 +6,16 @@ import {
   estadoSoloSecundaria,
   mapItemSecundario,
   normalizarCodigo,
+  parearPadres,
   parearPorCodigo,
   type ItemPrincipalPareo,
 } from "./alegra-pareo"
 import { escribirStock } from "./alegra-sync-cuenta"
 import { upsertProductosSecundaria } from "./catalog-products-repo"
-import { copiarOverlaySiFalta, listasDeLaPrincipal, normCodigoSql } from "./catalogo-union-repo"
+import { claveEfectivaSql, copiarOverlaySiFalta, listasDeLaPrincipal, normCodigoSql } from "./catalogo-union-repo"
 import { configParaCuenta } from "./sucursales-cuenta"
 import type { TenantConfig } from "./tenants"
+import type { TipoItem } from "./variantes-puras"
 
 // Re-lectura de UN ítem de una cuenta SECUNDARIA a partir de un aviso de webhook (change
 // `sucursales-igz-mdp`, rebanada D, D2). La cola (`alegra_item_refresh`) guarda los ítems de una
@@ -29,6 +31,10 @@ import type { TenantConfig } from "./tenants"
 //    reglas de la sync. Par → stock de la sucursal; solo-secundaria → fila nueva; duplicado o sin
 //    código → se ignora (lo informa la sync).
 //  - Borrado en Alegra (404): stock 0; si era solo-secundaria queda inactivo.
+//  - Variantes (S3): el padre y sus variantes comparten código, así que el ítem se identifica por
+//    (código, opción). Un hijo desconocido entra como `<slug>:<id>` si no tiene par aunque un
+//    hermano comparta el código. Un PADRE nunca lleva stock vendible: si no se pareó con un padre de
+//    la principal se guarda como ancla del grupo (`tipo='padre'`).
 // Nunca toca `catalog_products` de la principal ni la cola de otra cuenta.
 
 export type ResultadoCuenta = "pareado" | "solo_secundaria" | "nuevo" | "baja" | "ignorado"
@@ -92,7 +98,11 @@ export async function refrescarItemDeCuenta(
     )
     .limit(1)
   const [propio] = await db
-    .select({ alegraId: catalogProducts.alegraId, categoryAlegraId: catalogProducts.categoryAlegraId })
+    .select({
+      alegraId: catalogProducts.alegraId,
+      categoryAlegraId: catalogProducts.categoryAlegraId,
+      padreAlegraId: catalogProducts.padreAlegraId,
+    })
     .from(catalogProducts)
     .where(and(eq(catalogProducts.tenantId, tenantId), eq(catalogProducts.alegraId, sintetico), eq(catalogProducts.cuentaId, cuenta.id)))
 
@@ -113,6 +123,19 @@ export async function refrescarItemDeCuenta(
   }
 
   const clave = normalizarCodigo(item.code)
+  const tipo: TipoItem = item.tipo ?? "simple"
+  const opcion = item.varianteClave ?? ""
+
+  // Padre (S3): nunca stock ni venta. Pareado con un padre de la principal no hace falta guardarlo
+  // (el ancla es el de la principal); si no, es la fila ancla del grupo de la secundaria.
+  if (tipo === "padre") {
+    if (!propio) {
+      const delPadre = await padresDeLaPrincipal(tenantId, clave)
+      if (parearPadres(delPadre, [{ alegraId: idEnCuenta, code: item.code, tipo: "padre" }]).pares.length > 0) return "pareado"
+    }
+    await escribirSoloSecundaria(base, cuenta, slugs, item, { adoptada: false, categoriaPrevia: propio?.categoryAlegraId ?? null, sinStock: true }, leidoAt)
+    return propio ? "solo_secundaria" : "nuevo"
+  }
 
   // Pareado con un producto de la principal: solo stock.
   if (enStock && !propio) {
@@ -129,40 +152,61 @@ export async function refrescarItemDeCuenta(
             code: catalogProducts.code,
             status: catalogProducts.status,
             alegraStatus: catalogProducts.alegraStatus,
+            tipo: catalogProducts.tipo,
+            varianteClave: catalogProducts.varianteClave,
           })
           .from(catalogProducts)
           .where(and(eq(catalogProducts.tenantId, tenantId), sql`${catalogProducts.cuentaId} is null`, sql`${codigoSql} = ${clave}`))
-      ).map((r) => ({ alegraId: r.alegraId, code: r.code, activo: r.status === "active" && r.alegraStatus !== "inactive" }))
+      ).map((r) => ({
+        alegraId: r.alegraId,
+        code: r.code,
+        activo: r.status === "active" && r.alegraStatus !== "inactive",
+        tipo: r.tipo as TipoItem,
+        varianteClave: r.varianteClave,
+      }))
     : []
+
+  // Una variante se identifica por (código, opción): sin opción no se puede parear ni dar de alta.
+  const sinOpcion = tipo === "variante" && !opcion
 
   // Es un producto propio ya conocido: se refresca y listo (su estado depende de la adopción).
   if (propio) {
-    const adoptada = principales.some((p) => !p.activo) && !principales.some((p) => p.activo)
-    await escribirSoloSecundaria(base, cuenta, slugs, item, { adoptada, categoriaPrevia: propio.categoryAlegraId }, leidoAt)
+    // Solo cuentan las filas de la principal del mismo tipo y la misma opción.
+    const mismas = principales.filter((p) => (p.tipo ?? "simple") === tipo && (p.varianteClave ?? "") === opcion)
+    const adoptada = mismas.some((p) => !p.activo) && !mismas.some((p) => p.activo)
+    // Un grupo ya unificado con el padre de la principal conserva ese padre (el webhook no lo pisa).
+    const padreCanonico =
+      item.padreAlegraId && propio.padreAlegraId && !propio.padreAlegraId.startsWith(`${slug}:`)
+        ? new Map([[item.padreAlegraId, propio.padreAlegraId]])
+        : undefined
+    await escribirSoloSecundaria(base, cuenta, slugs, item, { adoptada, categoriaPrevia: propio.categoryAlegraId, padresCanonicos: padreCanonico }, leidoAt)
     return "solo_secundaria"
   }
 
-  // Ítem que no conocemos: se lo empareja por código con las mismas reglas de la sync.
-  if (!clave) return "ignorado"
-  // Otros ítems de ESTA cuenta ya conocidos con el mismo código (pareados o propios): duplicado.
+  // Ítem que no conocemos: se lo empareja por (código, opción) con las mismas reglas de la sync.
+  if (!clave || sinOpcion) return "ignorado"
+  // Otros ítems de ESTA cuenta ya conocidos con el mismo código y la misma opción (pareados o
+  // propios): duplicado. Los hermanos con OTRA opción no cuentan.
   const otros = await db.execute(sql`
-    SELECT css.item_id_cuenta AS id, p.code AS code
+    SELECT css.item_id_cuenta AS id, p.code AS code, p.tipo AS tipo, p.variante_clave AS clave
     FROM catalog_stock_sucursal css
     JOIN catalog_products p ON p.tenant_id = css.tenant_id AND p.alegra_id = css.alegra_id
     WHERE css.tenant_id = ${tenantId} AND css.sucursal IN (${sql.join(slugs.map((s) => sql`${s}`), sql`, `)})
       AND css.item_id_cuenta IS NOT NULL AND css.item_id_cuenta <> ${idEnCuenta}
       AND ${sql.raw(normCodigoSql("p.code"))} = ${clave}
+      AND p.tipo = ${tipo} AND ${sql.raw(claveEfectivaSql("p"))} = ${opcion}
     UNION
-    SELECT p.alegra_id_cuenta AS id, p.code AS code
+    SELECT p.alegra_id_cuenta AS id, p.code AS code, p.tipo AS tipo, p.variante_clave AS clave
     FROM catalog_products p
     WHERE p.tenant_id = ${tenantId} AND p.cuenta_id = ${cuenta.id}::uuid AND p.alegra_id <> ${sintetico}
       AND ${sql.raw(normCodigoSql("p.code"))} = ${clave}
+      AND p.tipo = ${tipo} AND ${sql.raw(claveEfectivaSql("p"))} = ${opcion}
   `)
   const secundarios = [
-    { alegraId: idEnCuenta, code: item.code },
-    ...(otros as unknown as { id: string | null; code: string | null }[])
+    { alegraId: idEnCuenta, code: item.code, tipo, varianteClave: item.varianteClave ?? null },
+    ...(otros as unknown as { id: string | null; code: string | null; tipo: TipoItem; clave: string | null }[])
       .filter((o) => o.id)
-      .map((o) => ({ alegraId: o.id as string, code: o.code })),
+      .map((o) => ({ alegraId: o.id as string, code: o.code, tipo: o.tipo, varianteClave: o.clave })),
   ]
   const pareo = parearPorCodigo(principales, secundarios)
 
@@ -173,11 +217,73 @@ export async function refrescarItemDeCuenta(
   }
   const solo = pareo.soloSecundaria.find((s) => s.secundarioAlegraId === idEnCuenta)
   if (solo) {
-    await escribirSoloSecundaria(base, cuenta, slugs, item, { adoptada: solo.principalInactivaAlegraId != null, categoriaPrevia: null }, leidoAt)
+    // Una variante nueva necesita su ancla: el padre de la principal (si se parearon) o el de esta cuenta.
+    let padresCanonicos: Map<string, string> | undefined
+    if (tipo === "variante" && item.padreAlegraId) {
+      const r = await resolverPadre(base, cuenta, cfg, item.padreAlegraId, deps, opts)
+      if (r.canonico) padresCanonicos = new Map([[item.padreAlegraId, r.canonico]])
+      if (r.ancla) await escribirSoloSecundaria(base, cuenta, slugs, r.ancla, { adoptada: false, categoriaPrevia: null, sinStock: true }, leidoAt)
+    }
+    await escribirSoloSecundaria(base, cuenta, slugs, item, { adoptada: solo.principalInactivaAlegraId != null, categoriaPrevia: null, padresCanonicos }, leidoAt)
     if (solo.principalInactivaAlegraId) await copiarOverlaySiFalta(db, tenantId, solo.principalInactivaAlegraId, sintetico)
     return "nuevo"
   }
   return "ignorado"
+}
+
+/** Padres ACTIVOS de la principal con ese código normalizado (para parear el padre de la secundaria). */
+async function padresDeLaPrincipal(tenantId: string, clave: string): Promise<ItemPrincipalPareo[]> {
+  if (!clave) return []
+  const filas = await getDb()
+    .select({
+      alegraId: catalogProducts.alegraId,
+      code: catalogProducts.code,
+      status: catalogProducts.status,
+      alegraStatus: catalogProducts.alegraStatus,
+    })
+    .from(catalogProducts)
+    .where(
+      and(
+        eq(catalogProducts.tenantId, tenantId),
+        sql`${catalogProducts.cuentaId} is null`,
+        eq(catalogProducts.tipo, "padre"),
+        sql`${codigoSql} = ${clave}`,
+      ),
+    )
+  return filas.map((r) => ({
+    alegraId: r.alegraId,
+    code: r.code,
+    activo: r.status === "active" && r.alegraStatus !== "inactive",
+    tipo: "padre" as const,
+  }))
+}
+
+/**
+ * Ancla del grupo de una variante nueva. Si la fila ancla `<slug>:<padre>` ya existe no hay nada que
+ * hacer. Si no, se lee el padre de la cuenta: pareado con un padre de la principal -> su id canónico;
+ * sin par -> se devuelve para guardarlo como ancla.
+ */
+async function resolverPadre(
+  base: TenantConfig,
+  cuenta: typeof alegraCuentas.$inferSelect,
+  cfg: TenantConfig,
+  idPadreEnCuenta: string,
+  deps: DepsRefrescoCuenta,
+  opts: { reintentos429?: number; onRequest?: () => void },
+): Promise<{ canonico: string | null; ancla: AlegraProduct | null }> {
+  const tenantId = base.id
+  const sinteticoPadre = `${cuenta.slug}:${idPadreEnCuenta}`
+  const [existe] = await getDb()
+    .select({ alegraId: catalogProducts.alegraId })
+    .from(catalogProducts)
+    .where(and(eq(catalogProducts.tenantId, tenantId), eq(catalogProducts.alegraId, sinteticoPadre), eq(catalogProducts.cuentaId, cuenta.id)))
+  if (existe) return { canonico: null, ancla: null }
+  const padre = await deps.getItem(cfg, idPadreEnCuenta, opts)
+  if (!padre || padre.tipo !== "padre") return { canonico: null, ancla: null }
+  const par = parearPadres(await padresDeLaPrincipal(tenantId, normalizarCodigo(padre.code)), [
+    { alegraId: padre.alegraId, code: padre.code, tipo: "padre" },
+  ]).pares[0]
+  return par ? { canonico: par.principalAlegraId, ancla: null } : { canonico: null, ancla: padre }
 }
 
 async function escribirSoloSecundaria(
@@ -185,7 +291,7 @@ async function escribirSoloSecundaria(
   cuenta: typeof alegraCuentas.$inferSelect,
   slugs: string[],
   item: AlegraProduct,
-  o: { adoptada: boolean; categoriaPrevia: string | null },
+  o: { adoptada: boolean; categoriaPrevia: string | null; padresCanonicos?: ReadonlyMap<string, string>; sinStock?: boolean },
   leidoAt: Date,
 ): Promise<void> {
   const tenantId = base.id
@@ -196,7 +302,7 @@ async function escribirSoloSecundaria(
       .from(catalogCategories)
       .where(eq(catalogCategories.tenantId, tenantId))
   ).map((c) => ({ alegraId: c.alegraId, name: c.name }))
-  const m = mapItemSecundario(item, { id: cuenta.id, slug: cuenta.slug }, listas, [], categoriasPrincipal)
+  const m = mapItemSecundario(item, { id: cuenta.id, slug: cuenta.slug }, listas, [], categoriasPrincipal, o.padresCanonicos)
   // Sin las categorías de la cuenta a mano no se puede resolver la del ítem: se conserva la que ya
   // tenía la fila (la daily sync la corrige si cambió).
   const producto = { ...m.producto, categoryAlegraId: o.categoriaPrevia ?? m.producto.categoryAlegraId }
@@ -206,5 +312,7 @@ async function escribirSoloSecundaria(
     [{ producto, alegraIdCuenta: m.alegraIdCuenta, estado: estadoSoloSecundaria(o.adoptada, producto.stock) }],
     { leidoAt, leidoPor: "webhook" },
   )
+  // El ancla de un grupo (padre) no lleva stock.
+  if (o.sinStock) return
   await escribirStock(tenantId, slugs, [{ alegraId: producto.alegraId, itemIdCuenta: m.alegraIdCuenta, stock: producto.stock }], leidoAt, "webhook")
 }

@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { catalogCategories, catalogProducts, catalogStockSucursal, catalogSyncLog, sucursales } from "@/db/schema"
 import type { TenantConfig } from "./tenants"
+import type { TipoItem } from "./variantes-puras"
 import { listAllCategories, listAllItems, type AlegraProduct } from "./alegra"
 import { configParaCuenta, type CuentaCredenciales } from "./sucursales-cuenta"
 import {
@@ -73,6 +74,8 @@ export interface ResumenSync {
   sinCodigoPrincipal: number
   duplicados: { total: number; items: DuplicadoRevisar[] }
   sinCodigo: { total: number; items: ItemRevisar[] }
+  /** Variantes con código pero sin opción resoluble (no se pueden parear). Ausente en resúmenes viejos. */
+  sinOpcion?: { total: number; items: ItemRevisar[] }
   /** Nombres de listas de precio de la cuenta sin equivalente por nombre en la principal (O9). */
   listasSinEquivalente: string[]
   /** Solo-secundaria que quedaron sin ningún precio (no se pueden vender). */
@@ -213,6 +216,8 @@ export async function syncCuentaSecundaria(
         code: catalogProducts.code,
         status: catalogProducts.status,
         alegraStatus: catalogProducts.alegraStatus,
+        tipo: catalogProducts.tipo,
+        varianteClave: catalogProducts.varianteClave,
       })
       .from(catalogProducts)
       .where(and(eq(catalogProducts.tenantId, tenantId), sql`${catalogProducts.cuentaId} is null`))
@@ -220,12 +225,17 @@ export async function syncCuentaSecundaria(
       alegraId: r.alegraId,
       code: r.code,
       activo: r.status === "active" && r.alegraStatus !== "inactive",
+      tipo: r.tipo as TipoItem,
+      varianteClave: r.varianteClave,
     }))
+    // Variantes (S3): el padre y sus variantes comparten código; la clave de pareo es (código, opción).
     const pareo = parearPorCodigo(
       principales,
-      itemsAuto.map((it) => ({ alegraId: it.alegraId, code: it.code })),
+      itemsAuto.map((it) => ({ alegraId: it.alegraId, code: it.code, tipo: it.tipo, varianteClave: it.varianteClave })),
     )
     const porId = new Map<string, AlegraProduct>(itemsAuto.map((it) => [it.alegraId, it]))
+    // Padre de la secundaria -> padre de la principal con el que se pareó (unifica el grupo).
+    const padresCanonicos = new Map(pareo.padres.pares.map((x) => [x.secundarioAlegraId, x.principalAlegraId]))
 
     // ── 1) Pareados: sólo stock ──
     await escribirStock(
@@ -253,7 +263,7 @@ export async function syncCuentaSecundaria(
       const item = porId.get(s.secundarioAlegraId)
       if (!item) continue
       mapeados.push({
-        m: mapItemSecundario(item, cuenta, listasPrincipal, categorias, categoriasPrincipal),
+        m: mapItemSecundario(item, cuenta, listasPrincipal, categorias, categoriasPrincipal, padresCanonicos),
         adoptada: s.principalInactivaAlegraId != null,
         principalInactivaAlegraId: s.principalInactivaAlegraId,
       })
@@ -282,7 +292,23 @@ export async function syncCuentaSecundaria(
       alegraIdCuenta: m.alegraIdCuenta,
       estado: estadoSoloSecundaria(adoptada, m.producto.stock),
     }))
-    await upsertProductosSecundaria(tenantId, cuenta.id, filasSecundaria, { leidoAt: runStart, leidoPor: "sync" })
+    // Anclas (S3): el padre de la secundaria sin par en la principal es la fila ancla de su grupo
+    // (`tipo='padre'`, nunca vendible, sin stock). Solo se guardan las que usa alguna variante
+    // solo-secundaria; un padre pareado no se guarda (el ancla es el de la principal).
+    const padresUsados = new Set<string>()
+    for (const { m } of mapeados) {
+      const padreDeCuenta = porId.get(m.alegraIdCuenta)?.padreAlegraId
+      if (m.producto.tipo === "variante" && padreDeCuenta && !padresCanonicos.has(padreDeCuenta)) padresUsados.add(padreDeCuenta)
+    }
+    const itemsPorId = new Map<string, AlegraProduct>(items.map((it) => [it.alegraId, it]))
+    const anclas: ProductoSecundaria[] = []
+    for (const idPadre of padresUsados) {
+      const padre = itemsPorId.get(idPadre)
+      if (!padre || padre.tipo !== "padre") continue
+      const m = mapItemSecundario(padre, cuenta, listasPrincipal, categorias, categoriasPrincipal)
+      anclas.push({ producto: m.producto, alegraIdCuenta: m.alegraIdCuenta, estado: "active" })
+    }
+    await upsertProductosSecundaria(tenantId, cuenta.id, [...filasSecundaria, ...anclas], { leidoAt: runStart, leidoPor: "sync" })
     // Atributos del nombre de las filas solo-secundaria (tolerante, como en la sync principal).
     await sincronizarAtributosDeNombre(tenantId, filasSecundaria.map((f) => f.producto), `sync-cuenta:${cuenta.slug}`)
     await escribirStock(
@@ -336,6 +362,7 @@ export async function syncCuentaSecundaria(
       if (m.categoriaSinEquivalente) categoriasSin++
     }
     const sinCodigoSecundaria = pareo.sinCodigo.filter((x) => x.lado === "secundaria")
+    const sinOpcionSecundaria = pareo.sinOpcion.filter((x) => x.lado === "secundaria")
     const resumen: ResumenSync = {
       v: 1,
       cuenta: cuenta.slug,
@@ -357,6 +384,10 @@ export async function syncCuentaSecundaria(
       sinCodigo: {
         total: sinCodigoSecundaria.length,
         items: cortar(sinCodigoSecundaria.map((x) => ({ alegraId: x.alegraId, codigo: null, nombre: nombreDe(x.alegraId) }))),
+      },
+      sinOpcion: {
+        total: sinOpcionSecundaria.length,
+        items: cortar(sinOpcionSecundaria.map((x) => ({ alegraId: x.alegraId, codigo: codigoDe(x.alegraId), nombre: nombreDe(x.alegraId) }))),
       },
       listasSinEquivalente: [...listasSin].sort(),
       sinPrecio,

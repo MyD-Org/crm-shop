@@ -140,7 +140,10 @@ describe("la vista del Shop emite los precios online", () => {
         [listaTransf, "Lista B", 110, false],
       ].sort(),
     )
-    expect(JSON.stringify(v.precios_alegra)).not.toContain("999")
+    // El precio de Alegra (999) no sale. Se comprueba sobre los PRECIOS y los nombres, no sobre el
+    // JSON entero: un uuid de lista puede contener "999" y volvía el test inestable.
+    expect(v.precios_alegra.some((x) => Number(x.price) === 999)).toBe(false)
+    expect(v.precios_alegra.some((x) => x.name === "Lista de Alegra")).toBe(false)
   })
 
   it("un producto sin costo no tiene precio online: la vista da [] (nunca $0)", async () => {

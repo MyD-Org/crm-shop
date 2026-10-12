@@ -61,7 +61,7 @@ export async function GET(req: Request) {
     // Con el flag `disponibilidad-sucursal`, el mismo criterio que el catálogo: stock en cualquier
     // local y sin lo que ninguna sucursal ofrece (el agente no ofrece lo oculto ni stock que no hay).
     // Datos técnicos estructurados (`ProductoAgente.atributos`) si la tabla del CRM está disponible.
-    const [{ soloVisibles }, disp, estructurados] = await Promise.all([
+    const [{ soloVisibles, variantes }, disp, estructurados] = await Promise.all([
       flagsPublicos(),
       dispCatalogo(),
       // Misma regla que el catálogo y la ficha: flag `busqueda-ia` y tabla disponible.
@@ -77,7 +77,7 @@ export async function GET(req: Request) {
         pagina: 1,
         porPagina: limit,
       },
-      { superficie: "chat", soloVisibles, disp },
+      { superficie: "chat", soloVisibles, ...(variantes ? { agrupar: true } : {}), disp },
     );
     if (params.get("facetas") !== "1") return json(productos.map(aProductoAgente));
     // Nombres de las categorías propias (lo que viaja en `?categoria=`). Si el

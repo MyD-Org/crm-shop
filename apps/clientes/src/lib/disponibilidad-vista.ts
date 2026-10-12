@@ -48,6 +48,8 @@ export async function disponibilidadParaMostrar(
   ids: string[],
   disp: ContextoDisponibilidad | undefined,
   cantidades?: Record<string, number>,
+  /** Flag `variantes-selector`: el ocultamiento por sucursal es el del overlay del ancla del grupo. */
+  agrupar = false,
 ): Promise<DisponibilidadParaMostrar | null> {
   if (!disp || ids.length === 0) return null;
   try {
@@ -59,6 +61,7 @@ export async function disponibilidadParaMostrar(
       sucursales: datos.sucursales,
       reglas,
       cantidades,
+      ...(agrupar ? { agrupar: true } : {}),
     });
     const locales = datos.sucursales
       .filter((s) => s.activa && s.aceptaRetiro)

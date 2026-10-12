@@ -97,7 +97,7 @@ async function CatalogoResultados({ searchParams }: Props) {
   // `disp` (flag `disponibilidad-sucursal`; undefined = apagado): el catálogo NO depende de la zona
   // del visitante. "Con stock" = en cualquier local; con `?retiro=<local>`, sólo en ese local. Viaja
   // como argumento a las lecturas cacheadas y es el mismo para todos los visitantes.
-  const [params, { soloVisibles, mediosPrecio }, dispGeneral, locales, conBusquedaIa] = await Promise.all([
+  const [params, { soloVisibles, variantes, mediosPrecio }, dispGeneral, locales, conBusquedaIa] = await Promise.all([
     searchParams,
     flagsPublicos(),
     dispCatalogo(),
@@ -165,6 +165,8 @@ async function CatalogoResultados({ searchParams }: Props) {
   const contexto = {
     superficie: "catalogo" as const,
     soloVisibles,
+    // Flag `variantes-selector`: una card por modelo (el representante). Apagado = como siempre.
+    ...(variantes ? { agrupar: true } : {}),
     disp,
     destacado: mediosPrecio?.destacado,
     cuotas: mediosPrecio?.cuotas,
@@ -175,7 +177,7 @@ async function CatalogoResultados({ searchParams }: Props) {
     buscarEnShop(pedido, { ...contexto, conFacetas: true }),
     // El número de cada categoría del panel sin búsqueda: el total del catálogo, no el de los
     // filtros. Una sola clave de la caché compartida, para todos los visitantes.
-    categoriasTotalesPublicas(soloVisibles, dispGeneral),
+    variantes ? categoriasTotalesPublicas(soloVisibles, dispGeneral, true) : categoriasTotalesPublicas(soloVisibles, dispGeneral),
   ]);
   const plan = pagina.plan;
   // Una búsqueda sin resultados dejaba el panel de filtros vacío ("Sin
@@ -196,6 +198,7 @@ async function CatalogoResultados({ searchParams }: Props) {
           { ...sinTexto(pagina.filtrosEfectivos), ...(conBusquedaIa ? {} : { sinFacetaCategorias: true }) },
           soloVisibles,
           disp,
+          variantes,
         )
       : pagina.facetas;
 
@@ -211,6 +214,7 @@ async function CatalogoResultados({ searchParams }: Props) {
   const busquedaIa = conBusquedaIa
     ? await busquedaInteligente(estado, pagina.total, plan, {
         soloVisibles,
+        agrupar: variantes,
         disp,
         // Sólo se sugiere lo que deja productos dentro de esta búsqueda (las facetas ya lo cuentan).
         conProductos: new Set([...facetas.categorias, ...facetas.atributos].filter((f) => f.count > 0).map((f) => f.label)),
@@ -258,7 +262,7 @@ async function busquedaInteligente(
   estado: EstadoCatalogo,
   total: number,
   plan: PlanBusqueda | null,
-  opciones: { soloVisibles: boolean; disp: ContextoDisponibilidad | undefined; conProductos: Set<string> },
+  opciones: { soloVisibles: boolean; agrupar: boolean; disp: ContextoDisponibilidad | undefined; conProductos: Set<string> },
 ) {
   // Lo deducido como duro va primero: es lo que el plan entendió con más seguridad.
   const blandos = (p: PlanBusqueda) => ({
@@ -287,7 +291,7 @@ async function busquedaInteligente(
   }
   const q = estado.query;
   if (!q || total > 0 || pareceCodigo(q)) return { sugerencias: [], alternativas: [] };
-  const deterministico = await planParaPagina(q, { soloVisibles: opciones.soloVisibles });
+  const deterministico = await planParaPagina(q, { soloVisibles: opciones.soloVisibles, ...(opciones.agrupar ? { agrupar: true } : {}) });
   return {
     sugerencias: [],
     alternativas: deterministico

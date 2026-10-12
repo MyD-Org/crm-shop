@@ -132,6 +132,11 @@ export interface DatosPedido {
   /** Flag `catalogo-solo-visibles`: rechaza (dentro de la transacción) productos despublicados. */
   soloVisibles?: boolean;
   /**
+   * Flag `variantes-selector`: la visibilidad y el ocultamiento por sucursal se leen del overlay del
+   * ancla del grupo (ver `joinOverlay`). Ausente = apagado: como siempre.
+   */
+  agrupar?: boolean;
+  /**
    * Sólo con el flag `sucursales` prendido: modalidad, provincia, ciudad y local de retiro con los
    * que se asigna la sucursal. `crearPedido` relee las reglas SIN caché dentro de la transacción y
    * congela `sucursal`, `sucursal_regla` y `sucursal_asignada_en`. Ausente = quedan en NULL.
@@ -254,7 +259,7 @@ export async function crearPedido(
       }
       await bloquearItems(tx, ids);
       if (datos.soloVisibles) {
-        const ocultos = await noVisiblesEnTx(tx, ids);
+        const ocultos = await noVisiblesEnTx(tx, ids, datos.agrupar);
         if (ocultos.length > 0) throw new ProductoNoDisponibleError(ocultos);
       }
       const [sucursalesYZonas, reglas] = await Promise.all([leerSucursalesYZonas(tx), leerReglasVenta(tx)]);
@@ -263,7 +268,9 @@ export async function crearPedido(
         .sort((a, b) => a.orden - b.orden || a.slug.localeCompare(b.slug))
         .map((s) => s.slug);
       if (activas.length > 0) {
-        const bruta = await leerDisponibilidadBruta(ids, activas, activas[0], tx);
+        const bruta = datos.agrupar
+          ? await leerDisponibilidadBruta(ids, activas, activas[0], tx, true)
+          : await leerDisponibilidadBruta(ids, activas, activas[0], tx);
         // Un id que ya no está en el espejo: no hay con qué asignarlo (mismo criterio que la 0012).
         const faltan = ids.filter((id) => !(id in bruta.stockPorSucursal));
         if (faltan.length > 0) throw new StockInsuficienteError(faltan);
@@ -407,7 +414,7 @@ export async function crearPedido(
     if (!validadoPorSucursal) {
       await bloquearItems(tx, ids);
       if (datos.soloVisibles) {
-        const ocultos = await noVisiblesEnTx(tx, ids);
+        const ocultos = await noVisiblesEnTx(tx, ids, datos.agrupar);
         if (ocultos.length > 0) throw new ProductoNoDisponibleError(ocultos);
       }
       const disponibles = await disponiblesEnTx(tx, ids);

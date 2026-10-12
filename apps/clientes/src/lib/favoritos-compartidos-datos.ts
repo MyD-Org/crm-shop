@@ -16,10 +16,11 @@ export async function productosFavoritosCompartidos(
   ids: readonly string[],
 ): Promise<{ productos: Product[]; noDisponibles: number }> {
   if (ids.length === 0) return { productos: [], noDisponibles: 0 };
-  const [soloVisibles, { mediosPrecio }] = await Promise.all([catalogoSoloVisibles(), flagsPublicos()]);
+  const [soloVisibles, { mediosPrecio, variantes }] = await Promise.all([catalogoSoloVisibles(), flagsPublicos()]);
   const porId = await getProductosPorIds([...ids], {
     soloActivos: true,
     soloVisibles,
+    ...(variantes ? { agrupar: true } : {}),
     // "$X con <Medio>" sólo del destacado (las cards no muestran los de la ficha).
     mediosPrecio: {
       destacado: mediosPrecio.destacado,

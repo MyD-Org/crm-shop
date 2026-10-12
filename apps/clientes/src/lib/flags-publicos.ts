@@ -12,6 +12,7 @@
 import { cache } from "react";
 import { catalogoSoloVisibles } from "./catalogo-flag";
 import { cuotasHabilitadas } from "./cuotas-flag";
+import { variantesSelector } from "./variantes-flag";
 import { mediosOfrecibles } from "./medios-pago-datos";
 import { SIN_MEDIOS_PRECIO, seleccionarMediosPrecio, type MediosPrecio } from "./medios-precio";
 
@@ -20,6 +21,11 @@ export interface FlagsPublicos {
   soloVisibles: boolean;
   /** `cuotas-cobro`: se exhiben las cuotas sin interés y se cobra en cuotas. */
   cuotas: boolean;
+  /**
+   * `variantes-selector`: es el `agrupar` de las consultas del catálogo (un representante por modelo y
+   * overlay del ancla del grupo). Apagado = como antes de las variantes.
+   */
+  variantes: boolean;
   /**
    * "$X con <Medio>": el medio destacado de las cards y los de la ficha. Vacío si los
    * medios no se pueden leer (degrada sin romper).
@@ -39,7 +45,11 @@ async function leerMediosPrecio(cuotasEncendido: boolean): Promise<MediosPrecio>
 }
 
 export const flagsPublicos = cache(async (): Promise<FlagsPublicos> => {
-  const [soloVisibles, cuotas] = await Promise.all([catalogoSoloVisibles(), cuotasHabilitadas()]);
+  const [soloVisibles, cuotas, variantes] = await Promise.all([
+    catalogoSoloVisibles(),
+    cuotasHabilitadas(),
+    variantesSelector(),
+  ]);
   const mediosPrecio = await leerMediosPrecio(cuotas);
-  return { soloVisibles, cuotas, mediosPrecio };
+  return { soloVisibles, cuotas, variantes, mediosPrecio };
 });

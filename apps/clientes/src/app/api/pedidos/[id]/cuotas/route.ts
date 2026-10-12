@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
+import { variantesSelector } from "@/lib/variantes-flag";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { opcionesCuotasDePedido } from "@/lib/cuotas-opciones";
 import { combinarOpcionesCuotas, type CuotasRestringidas, type OpcionCuotasPedido } from "@/lib/cuotas-pedido";
@@ -118,7 +119,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       medio: { condicionesCuotas: conSinInteres ? (medio.condicionesCuotas ?? []) : [] },
       // El pago único a la lista de la forma congelada (null = la del medio).
       idListaUnPago: idListaDelMedio(medios, pedido.entregaTipo, pedido.pagoMetodo, undefined, 1, pedido.formaCobro),
-      opcionesCotizar: { entregaTipo: pedido.entregaTipo, idListaPrivada, soloVisibles: await catalogoSoloVisibles() },
+      opcionesCotizar: {
+        entregaTipo: pedido.entregaTipo,
+        idListaPrivada,
+        soloVisibles: await catalogoSoloVisibles(),
+        ...((await variantesSelector()) ? { agrupar: true } : {}),
+      },
       // El pedido ya reserva sus unidades.
       ignorarStock: true,
     });

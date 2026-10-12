@@ -31,6 +31,7 @@ import {
   destacadosHome,
   facetasPublicas,
   filtrosCacheables,
+  idsProductosPublicos,
   paginaCatalogoPublica,
   productoPublico,
 } from "./catalogo-publico";
@@ -223,6 +224,49 @@ describe("con `disp` (flag disponibilidad-sucursal): la sucursal viaja como argu
     expect(cat.getFacetas).toHaveBeenCalledWith({}, false, disp);
     expect(cat.getProducto).toHaveBeenCalledWith("42", { soloVisibles: false, disp });
     expect(cat.getCategorias).toHaveBeenCalledWith(false, disp);
+  });
+});
+
+describe("con `agrupar` (flag variantes-selector): viaja como argumento; apagado, las llamadas son las de siempre", () => {
+  const pagina = { productos: [], total: 0, pagina: 1, paginas: 1 };
+
+  it("página, facetas, ficha, nav y totales lo pasan a la lectura", async () => {
+    cat.getPaginaCatalogo.mockResolvedValue(pagina);
+    cat.getFacetas.mockResolvedValue({ categorias: [], marcas: [], precio: null });
+    cat.getProducto.mockResolvedValue(prod("42", "A"));
+    cat.getCategorias.mockResolvedValue([]);
+    cat.getFacetaCategorias.mockResolvedValue([]);
+    const args = { filtros: {}, orden: "nombre" as const, pagina: 1, soloVisibles: false, agrupar: true };
+    await paginaCatalogoPublica(args);
+    await facetasPublicas({}, false, undefined, true);
+    await productoPublico("42", false, undefined, false, [], null, [], true);
+    await categoriasNav(false, undefined, true);
+    await categoriasTotalesPublicas(false, undefined, true);
+    expect(cat.getPaginaCatalogo).toHaveBeenCalledWith(args);
+    expect(cat.getFacetas).toHaveBeenCalledWith({}, false, undefined, true);
+    expect(cat.getProducto).toHaveBeenCalledWith("42", { soloVisibles: false, agrupar: true });
+    expect(cat.getCategorias).toHaveBeenCalledWith(false, undefined, true);
+    expect(cat.getFacetaCategorias).toHaveBeenCalledWith({ soloStock: true }, false, undefined, true);
+  });
+
+  it("los destacados lo pasan a la página y a los SKUs; el sitemap, al catálogo", async () => {
+    cat.getPaginaCatalogo.mockResolvedValue({ productos: [prod("1", "A")], total: 1, pagina: 1, paginas: 1 });
+    cat.getProductosPorSkus.mockResolvedValue([prod("2", "B")]);
+    cat.getCatalogo.mockResolvedValue([prod("1", "A")]);
+    await destacadosHome({ skus: ["B"], cantidad: 4, soloVisibles: false, agrupar: true });
+    expect(cat.getProductosPorSkus).toHaveBeenCalledWith(["B"], { soloVisibles: false, agrupar: true });
+    expect(cat.getPaginaCatalogo.mock.calls[0][0]).toMatchObject({ agrupar: true });
+    await idsProductosPublicos(false, true);
+    expect(cat.getCatalogo).toHaveBeenCalledWith({ soloVisibles: false, agrupar: true });
+  });
+
+  it("apagado no se manda nada nuevo a la capa de consultas", async () => {
+    cat.getProducto.mockResolvedValue(prod("42", "A"));
+    cat.getCatalogo.mockResolvedValue([]);
+    await productoPublico("42", false, undefined, false, [], null, [], false);
+    await idsProductosPublicos(false);
+    expect(cat.getProducto).toHaveBeenCalledWith("42", { soloVisibles: false });
+    expect(cat.getCatalogo).toHaveBeenCalledWith({ soloVisibles: false });
   });
 });
 

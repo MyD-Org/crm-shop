@@ -95,10 +95,31 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
       "brand",
       "category_alegra_id",
       "iva_porcentaje",
+      // 0083 (variantes-de-producto): el grupo ya resuelto, AL FINAL.
+      "tipo",
+      "grupo_id",
+      "etiqueta",
+      "es_representante",
+      "overlay_alegra_id",
     ]);
     for (const prohibida of ["raw", "images", "prices", "status", "alegra_status"]) {
       expect(vista[prohibida], prohibida).toBeUndefined();
     }
+  });
+
+  it("la vista de catálogo suma el grupo de variantes AL FINAL (0083 del CRM) y no abre su tabla manual", () => {
+    const vista = esperado["public.catalog_products_shop"];
+    expect(Object.keys(vista).slice(-5)).toEqual([
+      "tipo",
+      "grupo_id",
+      "etiqueta",
+      "es_representante",
+      "overlay_alegra_id",
+    ]);
+    expect(vista.es_representante).toBe("boolean");
+    expect(vista.overlay_alegra_id).toBe("text");
+    // El Shop lee el grupo ya resuelto por la vista: la tabla de grupos manuales no se concede.
+    expect(esperado["public.catalog_variantes_manuales"]).toBeUndefined();
   });
 
   it("la vista de categorías de Alegra trae sólo lo que usa el catálogo", () => {

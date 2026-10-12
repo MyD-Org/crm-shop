@@ -14,6 +14,7 @@ import { preciosPrivados } from "@/lib/precios-privados-repo";
 import { precioFinal } from "@/lib/precio-final";
 import { getProductosPorIds } from "@/lib/catalog";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
+import { variantesSelector } from "@/lib/variantes-flag";
 import type { CartItem, LineaCarrito } from "@/lib/carrito-cliente";
 
 export interface ProductoCompartido {
@@ -27,11 +28,15 @@ export async function productosCompartidos(
   lineas: readonly LineaCarrito[],
 ): Promise<ProductoCompartido[]> {
   if (lineas.length === 0) return [];
-  const [{ cliente }, soloVisibles] = await Promise.all([identidadActual(), catalogoSoloVisibles()]);
+  const [{ cliente }, soloVisibles, agrupar] = await Promise.all([
+    identidadActual(),
+    catalogoSoloVisibles(),
+    variantesSelector(),
+  ]);
   const idListaPrivada = cliente ? await listaPrivadaDelComprador() : null;
   const ids = lineas.map((l) => l.id);
   const [productos, privados] = await Promise.all([
-    getProductosPorIds(ids, { soloActivos: true, soloVisibles }),
+    getProductosPorIds(ids, { soloActivos: true, soloVisibles, ...(agrupar ? { agrupar: true } : {}) }),
     idListaPrivada ? preciosPrivados(idListaPrivada, ids) : Promise.resolve(null),
   ]);
   return lineas.map(({ id, qty }) => {

@@ -65,6 +65,14 @@ export const trackingFlag = flag<boolean>({
   adapter: vercelAdapter,
 });
 
+export const variantesSelectorFlag = flag<boolean>({
+  key: "variantes-selector",
+  description:
+    "Productos con variantes (color, medida): el catálogo muestra una sola card por modelo (el representante) y lee el overlay del ancla del grupo. Apagado: una card por variante, como siempre (el padre nunca se vende)",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});
+
 export const busquedaMedidasFlag = flag<boolean>({
   key: "busqueda-medidas",
   description:

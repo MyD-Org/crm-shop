@@ -17,6 +17,8 @@ export interface OpcionesCotizarMedio {
   entregaTipo: EntregaTipo;
   disp?: ContextoDisponibilidad;
   soloVisibles: boolean;
+  /** Flag `variantes-selector` (overlay del ancla del grupo). Ausente = apagado. */
+  agrupar?: boolean;
 }
 
 export type ResultadoMedio =
@@ -48,6 +50,8 @@ export async function cotizarConMedio(a: {
   idListaPrivada: string | null;
   disp?: ContextoDisponibilidad;
   soloVisibles: boolean;
+  /** Flag `variantes-selector`: se cotiza con el overlay del ancla del grupo. Ausente = apagado. */
+  agrupar?: boolean;
   ignorarStock?: boolean;
   /** Para los logs. */
   origen?: string;
@@ -85,6 +89,7 @@ export async function cotizarConMedio(a: {
         entregaTipo,
         disp: a.disp,
         soloVisibles: a.soloVisibles,
+        ...(a.agrupar ? { agrupar: true } : {}),
       });
       totalBase = cotBase.hayProblemas ? 0 : cotBase.total;
       console.info(
@@ -103,6 +108,7 @@ export async function cotizarConMedio(a: {
     entregaTipo,
     disp: a.disp,
     soloVisibles: a.soloVisibles,
+    ...(a.agrupar ? { agrupar: true } : {}),
   };
   const cotizacion = await cotizarEstas(opcionesCotizar);
   return { ok: true, cuotasPedido, idListaMedio, formaCobro, opcionesCotizar, cotizacion };

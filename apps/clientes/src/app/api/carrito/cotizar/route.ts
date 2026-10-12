@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
+import { variantesSelector } from "@/lib/variantes-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
@@ -170,7 +171,15 @@ export async function POST(req: Request) {
     const provincia = provinciaTexto ? claveProvincia(provinciaTexto) : "";
     const disp = base ? await contextoParaProvincia(base, provincia || null) : undefined;
     const soloVisibles = await catalogoSoloVisibles();
-    const opcionesCotizar = { soloVisibles, idListaPrivada, entregaTipo, disp: disp ? contextoUnion(disp) : undefined };
+    // Flag `variantes-selector`: el overlay (visibilidad) es el del ancla del grupo. Apagado = como siempre.
+    const agrupar = await variantesSelector();
+    const opcionesCotizar = {
+      soloVisibles,
+      ...(agrupar ? { agrupar: true } : {}),
+      idListaPrivada,
+      entregaTipo,
+      disp: disp ? contextoUnion(disp) : undefined,
+    };
     // Monto mínimo por cantidad de cuotas: la base es el total con impuestos a la lista del PAGO ÚNICO
     // del medio. Sólo se cotiza si hay algún mínimo cargado y se pidieron cuotas u opciones.
     const hayMinimos = (medioCobro?.condicionesCuotas ?? []).some((c) => c.montoMinimo != null);
@@ -272,6 +281,7 @@ export async function POST(req: Request) {
       lineas.map((l) => l.id),
       disp,
       Object.fromEntries(lineas.map((l) => [l.id, l.qty])),
+      agrupar,
     );
 
     // Vista previa de la cuenta de la transferencia (sólo con identidad: el checkout exige

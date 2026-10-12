@@ -23,6 +23,7 @@
     "banco:linea-base": "tsx --env-file-if-exists=.env.local src/lib/busqueda-v2/__banco__/linea-base.ts",
     "busqueda:cobertura": "tsx --env-file-if-exists=.env.local scripts/cobertura-atributos.ts"
   },
+  
   "dependencies": {
     "@clerk/localizations": "^4.14.2",
     "@clerk/nextjs": "^7.7.1",

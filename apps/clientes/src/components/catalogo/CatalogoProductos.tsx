@@ -10,6 +10,7 @@ import type { Product } from "@/data/products";
 import type { VistaCatalogo } from "@/lib/catalogo-url";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
 import { nombreConMarca } from "@/lib/formato-nombre";
+import { vistaCardVariantes } from "@/lib/variantes-ficha";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { badgeProducto } from "@/components/badge-producto";
@@ -100,11 +101,15 @@ export function CatalogoProductos({
             />
           );
         }
+        // Modelo con variantes (flag `variantes-selector`): "Desde $X" si los precios difieren y la
+        // cantidad de opciones. Sin botón de agregar: la opción se elige en la ficha.
+        const vv = vistaCardVariantes(p);
+        const medio = vv.esDesde ? undefined : p.precioMedio;
         return (
         <ProductCard
           key={p.id}
           variant="soft"
-          priceSize={p.precioMedio ? "sm" : "md"}
+          priceSize={medio ? "sm" : "md"}
           layout={vista === "lista" ? "list" : "grid"}
           className="h-full"
           href={`/producto/${p.id}`}
@@ -117,8 +122,9 @@ export function CatalogoProductos({
           stockLabel={etiquetaStock(p)}
           showStock={mostrarStockEnCard(p)}
           // Final con IVA si se conoce; si no, el de siempre.
-          price={p.precioFinal ?? p.price}
-          oldPrice={p.oldPrice}
+          price={vv.precio}
+          priceNote={vv.nota}
+          oldPrice={vv.esDesde ? undefined : p.oldPrice}
           badge={badgeProducto(p)}
           // El slot queda fuera del enlace estirado de la card: no navega.
           cornerAction={<BotonFavorito productId={p.id} />}
@@ -144,23 +150,25 @@ export function CatalogoProductos({
               <>
                 {reservarMedio && (
                   <span className="block min-h-4">
-                    <PrecioMedioCard medio={p.precioMedio} />
+                    <PrecioMedioCard medio={medio} />
                   </span>
                 )}
                 {reservarCuotas && (
                   <span className="block min-h-4.5">
-                    <CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />
+                    <CuotasCard opcion={vv.esDesde ? null : (cuotasPorProducto.get(p.id) ?? null)} />
                   </span>
                 )}
               </>
             ) : undefined
           }
           action={
-            <AddToCartButton
-              disabled={p.stock === "out"}
-              max={maxCantidad(p)}
-              product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
-            />
+            vv.multiple ? undefined : (
+              <AddToCartButton
+                disabled={p.stock === "out"}
+                max={maxCantidad(p)}
+                product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
+              />
+            )
           }
         />
         );

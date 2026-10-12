@@ -10,6 +10,7 @@ import { PrecioMedioCard } from "@/components/PrecioMedio";
 import { mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
 import { etiquetaStock, mostrarStockEnCard } from "@/lib/catalogo-vista";
 import { nombreConMarca } from "@/lib/formato-nombre";
+import { vistaCardVariantes } from "@/lib/variantes-ficha";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { Product } from "@/data/products";
 import { badgeProducto } from "@/components/badge-producto";
@@ -64,6 +65,10 @@ export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
       />
     );
   }
+  // Modelo con variantes (flag `variantes-selector`): "Desde $X" si los precios difieren; sin
+  // botón de agregar (la opción se elige en la ficha).
+  const vv = vistaCardVariantes(p);
+  const medio = vv.esDesde ? undefined : p.precioMedio;
   return (
     <Link
       href={`/producto/${p.id}`}
@@ -73,15 +78,15 @@ export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
     >
       <ProductCard
         variant="soft"
-        priceSize={p.precioMedio ? "sm" : "md"}
+        priceSize={medio ? "sm" : "md"}
         className="h-full overflow-hidden"
         name={nombreParaMostrar}
         brand={marca}
         stock={p.stock}
         stockLabel={etiquetaStock(p)}
         showStock={mostrarStockEnCard(p)}
-        price={p.precioFinal ?? p.price}
-        oldPrice={p.oldPrice}
+        price={vv.precio}
+        oldPrice={vv.esDesde ? undefined : p.oldPrice}
         badge={badgeProducto(p)}
         // La card entera es un <Link>: el corazón corta la navegación.
         cornerAction={<BotonFavorito productId={p.id} dentroDeLink />}
@@ -99,16 +104,18 @@ export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
           )
         }
         // Si el nombre ya es el código, la nota lo repetiría.
-        priceNote={p.sku && !esCodigo ? `Cód. ${p.sku}` : undefined}
+        priceNote={vv.nota ?? (p.sku && !esCodigo ? `Cód. ${p.sku}` : undefined)}
         action={
-          <AddToCartButton
-            product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
-          />
+          vv.multiple ? undefined : (
+            <AddToCartButton
+              product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
+            />
+          )
         }
         installments={
           <>
-            <PrecioMedioCard medio={p.precioMedio} />
-            <CuotasCard opcion={mejorCuotaProducto(p.cuotasSinInteres)} />
+            <PrecioMedioCard medio={medio} />
+            <CuotasCard opcion={vv.esDesde ? null : mejorCuotaProducto(p.cuotasSinInteres)} />
           </>
         }
       />

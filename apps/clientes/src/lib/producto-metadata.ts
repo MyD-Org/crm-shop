@@ -19,7 +19,9 @@ import { formatMarca } from "@/lib/formato-rubro";
 export const IMAGEN_SITIO = "/opengraph-image";
 
 export function metadataProducto(producto: Product, conBase: boolean): Metadata {
-  const ruta = `/producto/${encodeURIComponent(producto.id)}`;
+  // Un modelo con variantes tiene UNA dirección canónica: la de su representante (las demás
+  // opciones comparten ficha; ver `variantes-selector`).
+  const ruta = `/producto/${encodeURIComponent(producto.grupo?.representanteId ?? producto.id)}`;
   const partes = [producto.brand, producto.sku && `Código ${producto.sku}`].filter(Boolean);
   const description = partes.length > 0 ? partes.join(" · ") : undefined;
   const portada = producto.images?.[0];

@@ -54,7 +54,8 @@ function descripcionPlana(descripcion: string | undefined): string | undefined {
 
 /** Arma el `Product` de JSON-LD. `siteUrl` = `NEXT_PUBLIC_SITE_URL` (sin barra final), undefined si no está configurada. */
 export function jsonLdProducto(producto: Product, siteUrl: string | undefined): JsonLdProduct {
-  const ruta = `/producto/${encodeURIComponent(producto.id)}`;
+  // Un modelo con variantes tiene UNA dirección canónica: la de su representante.
+  const ruta = `/producto/${encodeURIComponent(producto.grupo?.representanteId ?? producto.id)}`;
   const url = siteUrl ? `${siteUrl.replace(/\/$/, "")}${ruta}` : undefined;
   const precioFinal = producto.precioFinal ?? producto.price;
   const conPrecio = producto.price > 0;

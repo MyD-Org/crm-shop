@@ -55,6 +55,31 @@ export interface EspecificacionProducto {
   valor: string;
 }
 
+/**
+ * Resumen de un modelo con variantes para su card (flag `variantes-selector`): cuántas opciones tiene
+ * y, SÓLO si los precios de sus variantes activas con precio difieren, el menor ("Desde $X"). Ver
+ * `conResumenDeVariantes` en src/lib/catalog.ts.
+ */
+export interface ResumenVariantes {
+  /** Opciones activas con precio (>= 2 para que haya selector). */
+  cantidad: number;
+  /** Menor precio exhibido (con IVA si se conoce) cuando los precios difieren. Ausente = todos iguales. */
+  desde?: number;
+}
+
+/** Una opción del selector de la ficha: la variante con su producto ya resuelto (precio, stock, fotos). */
+export interface OpcionFicha {
+  id: string;
+  etiqueta: string;
+  producto: Product;
+}
+
+/** El modelo de la ficha: las opciones del selector (>= 2) y cuál es la representante (canonical SEO). */
+export interface GrupoFicha {
+  representanteId: string;
+  opciones: OpcionFicha[];
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -110,6 +135,10 @@ export interface Product {
    */
   cuotasSinInteres?: CuotasProducto;
   oldPrice?: number;
+  /** Card de un modelo con variantes (flag `variantes-selector`). Ausente = producto suelto o flag apagado. */
+  variantes?: ResumenVariantes;
+  /** Ficha de un modelo con variantes (flag `variantes-selector`): las opciones del selector. */
+  grupo?: GrupoFicha;
   /**
    * Estado del precio de la cuenta superpuesto en el navegador (ver `aplicarEstadoPrecio`):
    * "privado" = precio de su lista privada; "consulte" = sin precio en su lista; "pendiente" = el

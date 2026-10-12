@@ -7,7 +7,7 @@ import {
   MAX_FAVORITOS,
   quitarFavorito,
 } from "@/lib/favoritos";
-import { esIdAlegra } from "@/lib/alegra";
+import { esIdProducto } from "@/lib/id-producto";
 import { permitirAsync } from "@/lib/rate-limit";
 
 /** Usos por minuto y por usuario, sumando los tres métodos. */
@@ -47,7 +47,7 @@ async function itemDelBody(req: Request): Promise<string | null> {
   const id = (body as { alegraItemId?: unknown } | null)?.alegraItemId;
   if (typeof id !== "string") return null;
   const limpio = id.trim();
-  return esIdAlegra(limpio) && limpio.length <= MAX_LARGO_ID ? limpio : null;
+  return esIdProducto(limpio) && limpio.length <= MAX_LARGO_ID ? limpio : null;
 }
 
 const SIN_PRODUCTO = () => json({ error: "Indique el producto." }, 400);

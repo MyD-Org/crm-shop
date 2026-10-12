@@ -5,7 +5,7 @@
  * No importa `MAX_FAVORITOS` de `favoritos.ts` porque ese módulo trae la base;
  * el test comprueba que ambas constantes valen lo mismo.
  */
-import { esIdAlegra } from "./alegra";
+import { esIdProducto } from "./id-producto";
 import { MENSAJE_FAVORITOS, mensajeCompartido } from "./carrito-compartido";
 
 export const RUTA_FAVORITOS_COMPARTIDOS = "/favoritos/compartido";
@@ -20,7 +20,7 @@ const MAX_LARGO_QUERY = 4096;
 
 /** Ruta relativa con los ids (sólo los válidos, sin repetir, hasta el tope). */
 export function hrefFavoritosCompartidos(ids: readonly string[]): string {
-  const limpios = ids.filter((id) => esIdAlegra(id) && id.length <= MAX_LARGO_ID);
+  const limpios = ids.filter((id) => esIdProducto(id) && id.length <= MAX_LARGO_ID);
   const unicos = [...new Set(limpios)].slice(0, MAX_IDS_COMPARTIDOS);
   return `${RUTA_FAVORITOS_COMPARTIDOS}?i=${unicos.join(",")}`;
 }
@@ -31,7 +31,7 @@ export function parsearIdsFavoritos(raw: unknown): string[] {
   const vistos = new Set<string>();
   for (const parte of raw.slice(0, MAX_LARGO_QUERY).split(",")) {
     const id = parte.trim();
-    if (!esIdAlegra(id) || id.length > MAX_LARGO_ID) continue;
+    if (!esIdProducto(id) || id.length > MAX_LARGO_ID) continue;
     vistos.add(id);
     if (vistos.size >= MAX_IDS_COMPARTIDOS) break;
   }

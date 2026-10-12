@@ -37,6 +37,16 @@ describe("pedidoCompartible", () => {
     expect(r.recortado).toBe(false);
   });
 
+  it("ida y vuelta con ids numéricos y de cuenta secundaria", () => {
+    const items = [
+      { id: "4521", qty: 2 },
+      { id: "mdp:12", qty: 3 },
+    ];
+    const r = pedidoCompartible(items);
+    expect(r.href).toBe("/carrito/compartido?i=4521:2,mdp:12:3");
+    expect(parsearCompartido(new URL(r.href, "https://x.example").searchParams.get("i"))).toEqual(items);
+  });
+
   it("omite ítems sin id válido o cantidad inválida", () => {
     const r = pedidoCompartible([
       { id: "", qty: 1 },

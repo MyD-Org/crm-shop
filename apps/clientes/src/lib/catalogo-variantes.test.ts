@@ -13,7 +13,7 @@ let grabadora = dbGrabadora();
 let responder: (c: ConsultaGrabada) => unknown[][] | undefined = () => [];
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
-import { conResumenDeVariantes, getProducto, getVariantesDeGrupo } from "./catalog";
+import { conResumenDeVariantes, getProducto, getProductosPorSkus, getVariantesDeGrupo, representantesDePadres } from "./catalog";
 import type { Product } from "@/data/products";
 
 beforeEach(() => {
@@ -150,8 +150,10 @@ describe("getProducto con el flag (agrupar)", () => {
   const opcion = (id: string, etiqueta: string, rep: boolean) => [...base(id), etiqueta, rep, null];
 
   /** Contesta cada lectura de `getProducto` según su forma. */
-  const contestar = (grupo: string | null, opciones: unknown[][]) => (c: ConsultaGrabada) => {
+  const contestar = (grupo: string | null, opciones: unknown[][], fotosPropias: unknown[][] = []) => (c: ConsultaGrabada) => {
     if (c.sql.includes('"overlay_propio"')) return opciones;
+    // La foto propia de la variante pedida (overlay de ella misma, sólo con el flag).
+    if (c.sql.startsWith('select "alegra_id", "fotos" from "public"."catalog_overlay"')) return fotosPropias;
     if (c.sql.startsWith('select "grupo_id" from')) return grupo ? [[grupo]] : [];
     return [base("12")];
   };
@@ -163,6 +165,16 @@ describe("getProducto con el flag (agrupar)", () => {
     expect(p?.grupo?.representanteId).toBe("11");
     expect(p?.grupo?.opciones.map((o) => o.id)).toEqual(["11", "12"]);
     expect(p?.grupo?.opciones.every((o) => !("esRepresentante" in o))).toBe(true);
+  });
+
+  it("la variante pedida usa su foto propia si la tiene, y la del modelo si no", async () => {
+    const propia = JSON.stringify([{ key: "productos/t/12/zzz-1600.webp", w: 1600 }]);
+    responder = contestar(null, [], [["12", propia]]);
+    const conPropia = await getProducto("12", { soloVisibles: true, agrupar: true });
+    expect(conPropia?.images?.[0]?.url).toContain("productos/t/12/zzz");
+    responder = contestar(null, []);
+    const sinPropia = await getProducto("12", { soloVisibles: true, agrupar: true });
+    expect(sinPropia?.images?.[0]?.url).toContain("productos/t/g1/aaa");
   });
 
   it("un modelo con una sola opción activa se muestra sin selector", async () => {
@@ -195,5 +207,40 @@ describe("getProducto con el flag (agrupar)", () => {
     const p = await getProducto("12", { soloVisibles: true });
     expect(p?.grupo).toBeUndefined();
     expect(grabadora.consultas).toHaveLength(1);
+  });
+});
+
+describe("representantesDePadres", () => {
+  it("sin ids no consulta", async () => {
+    expect((await representantesDePadres([])).size).toBe(0);
+    expect(grabadora.consultas).toHaveLength(0);
+  });
+
+  it("id de modelo (padre) -> su representante activo; todo con el tenant en el WHERE", async () => {
+    responder = () => [["10", "11"]];
+    const m = await representantesDePadres(["10", "55"]);
+    expect([...m]).toEqual([["10", "11"]]);
+    const [c] = grabadora.consultas;
+    expect(c.sql).toMatch(/"catalog_products_shop"\."tenant_id" = \$\d+/);
+    expect(c.sql).toContain('"tipo" = $');
+    expect(c.params).toContain("padre");
+  });
+});
+
+describe("getProductosPorSkus con el flag (agrupar)", () => {
+  it("el código de cualquier variante trae al representante de su modelo (una card por modelo)", async () => {
+    responder = () => [];
+    await getProductosPorSkus(["p18-rojo"], { soloVisibles: true, agrupar: true });
+    const [c] = grabadora.consultas;
+    expect(c.sql).toContain('"grupo_id" in (select');
+    expect(c.sql).toContain('"es_representante"');
+    expect(c.params).toContain("P18-ROJO");
+    expect(c.params.filter((p) => p === TENANT).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("apagado: la consulta de siempre, sin subconsulta de grupos", async () => {
+    responder = () => [];
+    await getProductosPorSkus(["p18-rojo"], { soloVisibles: true });
+    expect(grabadora.consultas[0].sql).not.toContain('"grupo_id" in (select');
   });
 });

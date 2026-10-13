@@ -15,7 +15,7 @@ export function elegirDestacados(
 ): Product[] {
   const normalizados = skus.map((s) => s.trim().toUpperCase()).filter(Boolean);
   const coincide = (p: Product, sku: string) =>
-    (p.sku ?? "").toUpperCase() === sku || p.name.toUpperCase() === sku;
+    (p.sku ?? "").toUpperCase() === sku || p.name.toUpperCase() === sku || !!p.codigosElegidos?.includes(sku);
 
   const elegidos: Product[] = [];
   for (const sku of normalizados) {

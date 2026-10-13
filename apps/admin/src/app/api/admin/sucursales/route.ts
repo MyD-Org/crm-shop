@@ -23,6 +23,6 @@ export async function POST(req: Request) {
   if (r.kind === "not_found") return Response.json({ error: "No encontramos el registro indicado." }, { status: 404, headers: NO_STORE })
   if (r.kind !== "ok") return errorDeResultado(r)
 
-  const { propagado } = await pingShopRevalidarSucursales()
+  const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado, sucursal: r.sucursal }, { status: 201, headers: NO_STORE })
 }

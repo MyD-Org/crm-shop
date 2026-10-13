@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   const r = await crearMedioPago(guard.tenantId, body)
   if (r.kind !== "ok") return errorDeMedio(r)
 
-  const { propagado } = await pingShopRevalidarSucursales()
+  const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   const [medio] = await conAvisos(guard.tenantId, [r.medio])
   return Response.json({ ok: true, propagado, medio }, { status: 201, headers: NO_STORE })
 }

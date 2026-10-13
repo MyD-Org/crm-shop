@@ -26,6 +26,6 @@ export async function PUT(req: Request) {
     return Response.json({ error: r.error, code: "invalid", campo: r.campo }, { status: 400, headers: NO_STORE })
   }
 
-  const { propagado } = await pingShopRevalidarSucursales()
+  const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado, envio: r.envio }, { headers: NO_STORE })
 }

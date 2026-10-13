@@ -21,7 +21,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const r = await actualizarMedioPago(guard.tenantId, slug, body)
   if (r.kind !== "ok") return errorDeMedio(r)
 
-  const { propagado } = await pingShopRevalidarSucursales()
+  const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   const [medio] = await conAvisos(guard.tenantId, [r.medio])
   return Response.json({ ok: true, propagado, medio }, { headers: NO_STORE })
 }
@@ -35,6 +35,6 @@ export async function DELETE(req: Request, { params }: Ctx) {
   if (r.kind === "not_found") return adminNotFoundResponse()
   if (r.kind === "conflict") return Response.json({ error: r.error, code: "conflict" }, { status: 409, headers: NO_STORE })
 
-  const { propagado } = await pingShopRevalidarSucursales()
+  const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado }, { headers: NO_STORE })
 }

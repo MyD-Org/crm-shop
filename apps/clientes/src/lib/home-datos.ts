@@ -1,4 +1,5 @@
 import { cacheLife, cacheTag } from "next/cache";
+import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { homeContent } from "@/db/schema";
 import {
@@ -12,6 +13,7 @@ import {
 import { DEFAULTS_FOOTER, KEY_FOOTER, resolverDatosFooter, type DatosFooter } from "@/data/footer";
 import { leerSeccionesHome } from "@/lib/home-guardar";
 import { TAG_HOME } from "@/lib/cache-tags";
+import { shopTenantId } from "@/lib/tenant";
 
 export function combinarContenidoHome(filas: { key: string; payload: unknown }[]): HomeContent {
   return combinar(filas);
@@ -33,7 +35,10 @@ export async function getContenidoHome(): Promise<HomeContent> {
   cacheTag(TAG_HOME);
   console.info("[cache] home miss");
   try {
-    const filas = await getDb().select().from(homeContent);
+    const filas = await getDb()
+      .select()
+      .from(homeContent)
+      .where(eq(homeContent.tenantId, shopTenantId()));
     cacheLife("home");
     return combinar(filas);
   } catch (err) {

@@ -72,7 +72,7 @@ describe("ProductoClient con selector de variantes", () => {
   it("una opción sin stock se ve con 'Sin stock' y el botón de agregar deshabilitado", () => {
     const html = ficha(rojo);
     // La opción sigue en el selector (seleccionable) con la nota para lectores de pantalla.
-    expect(html).toContain(", Sin stock");
+    expect(html).toContain("· Sin stock");
     expect(html).not.toMatch(/<button[^>]*role="radio"[^>]*disabled/);
     // Y no se puede comprar.
     expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Sin stock/);

@@ -165,6 +165,8 @@ interface FilaCatalogo {
    */
   etiqueta?: string | null;
   grupoId?: string | null;
+  /** 'simple' | 'padre' | 'variante': con `agrupar`, para quitar la opción del nombre del modelo. */
+  tipo?: string | null;
 }
 
 /**
@@ -335,7 +337,9 @@ const columnasCatalogo = (disp?: ContextoDisponibilidad, estructurados = false, 
   const base = disp ? { ...COLUMNAS_CATALOGO_BASE, stock: stockSucursalSql(disp) } : COLUMNAS_CATALOGO_BASE;
   const conAtributos = estructurados ? { ...base, atributos: sql<unknown>`${atributosFilaSql()}` } : base;
   // Con el flag `variantes-selector`: la opción de la variante, para nombrar la línea "Modelo / Opción".
-  return agrupar ? { ...conAtributos, etiqueta: crmCatalogo.etiqueta, grupoId: crmCatalogo.grupoId } : conAtributos;
+  return agrupar
+    ? { ...conAtributos, etiqueta: crmCatalogo.etiqueta, grupoId: crmCatalogo.grupoId, tipo: crmCatalogo.tipo }
+    : conAtributos;
 };
 
 /**
@@ -928,19 +932,37 @@ export async function conResumenDeVariantes(productos: Product[], idPriceList?: 
   if (grupos.length === 0) return productos;
   const idsDeGrupo = [...new Set(grupos.map((g) => g.grupoId as string))];
   const hermanas = await db
-    .select({ grupoId: crmCatalogo.grupoId, prices: preciosSql, iva: crmCatalogo.ivaPorcentaje })
+    .select({
+      grupoId: crmCatalogo.grupoId,
+      alegraId: crmCatalogo.alegraId,
+      etiqueta: crmCatalogo.etiqueta,
+      prices: preciosSql,
+      iva: crmCatalogo.ivaPorcentaje,
+    })
     .from(crmCatalogo)
     .where(and(enTenantCatalogo(), inArray(crmCatalogo.grupoId, idsDeGrupo), activoSql, conPrecioSql));
   const preciosPorGrupo = new Map<string, number[]>();
+  const opcionesPorGrupo = new Map<string, { id: string; etiqueta: string }[]>();
   for (const h of hermanas) {
     const lista = preciosPorGrupo.get(h.grupoId as string) ?? [];
     lista.push(precioExhibidoDe(h.prices, h.iva, idPriceList));
     preciosPorGrupo.set(h.grupoId as string, lista);
+    const etiqueta = h.etiqueta?.trim();
+    if (etiqueta) {
+      const ops = opcionesPorGrupo.get(h.grupoId as string) ?? [];
+      ops.push({ id: h.alegraId, etiqueta });
+      opcionesPorGrupo.set(h.grupoId as string, ops);
+    }
   }
   const grupoDe = new Map(grupos.map((g) => [g.alegraId, g.grupoId as string]));
   return productos.map((p) => {
     const g = grupoDe.get(p.id);
-    const resumen = g ? resumirVariantes(preciosPorGrupo.get(g) ?? []) : undefined;
+    const resumen = g
+      ? resumirVariantes(
+          preciosPorGrupo.get(g) ?? [],
+          ordenarOpciones(opcionesPorGrupo.get(g) ?? []).map((o) => o.etiqueta),
+        )
+      : undefined;
     return resumen ? { ...p, variantes: resumen } : p;
   });
 }
@@ -967,6 +989,7 @@ export async function getVariantesDeGrupo(
     .select({
       ...columnasCatalogo(opts.disp, opts.atributosEstructurados),
       etiqueta: crmCatalogo.etiqueta,
+      tipo: crmCatalogo.tipo,
       esRepresentante: crmCatalogo.esRepresentante,
       fotosPropias: propio.fotos,
     })
@@ -986,7 +1009,7 @@ export async function getVariantesDeGrupo(
       ),
     );
   const opciones = filas.map((f) => {
-    const { etiqueta, esRepresentante, fotosPropias, ...fila } = f;
+    const { etiqueta, esRepresentante, fotosPropias, ...fila } = f; // `tipo` queda en `fila`
     // `grupoId` no se selecciona (es el del pedido): todas las opciones son del mismo grupo.
     const producto = mapFilaToProduct(
       { ...fila, etiqueta, grupoId, overlayFotos: fotosPropias?.length ? fotosPropias : fila.overlayFotos },
@@ -1002,7 +1025,7 @@ export async function getVariantesDeGrupo(
 
 /** Las opciones en orden natural de etiqueta ("5 m" antes que "10 m"), con el id como desempate estable. */
 const COLLATOR_OPCIONES = new Intl.Collator("es", { numeric: true, sensitivity: "base" });
-function ordenarOpciones<T extends OpcionFicha>(opciones: T[]): T[] {
+function ordenarOpciones<T extends { id: string; etiqueta: string }>(opciones: T[]): T[] {
   return [...opciones].sort((a, b) => COLLATOR_OPCIONES.compare(a.etiqueta, b.etiqueta) || a.id.localeCompare(b.id));
 }
 

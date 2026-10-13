@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Button, ProductCard } from "@myd-org/ui";
-import { AddToCartButton } from "@/components/AddToCartButton";
+import { ProductCard } from "@myd-org/ui";
+import { AddToCartButton, sinNavegar } from "@/components/AddToCartButton";
+import { BotonAgregarOpciones } from "@/components/catalogo/AccionOpciones";
+import { PanelOpciones } from "@/components/catalogo/PanelOpciones";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
@@ -38,6 +41,8 @@ function LightbulbIcon({ className }: { className?: string }) {
 export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
   // Precio de la lista privada de la cuenta: todas las tarjetas se piden en una sola tanda.
   const p = aplicarEstadoPrecio(producto, usePreciosCuenta([producto.id]).get(producto.id));
+  // Modelo con opciones: el panel para elegirla se monta fuera del `<Link>` (ver `PanelOpciones`).
+  const [panelAbierto, setPanelAbierto] = useState(false);
   const fotoReal = p.images?.[0];
   // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
   const marca = p.brand ? formatMarca(p.brand) : undefined;
@@ -65,11 +70,12 @@ export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
       />
     );
   }
-  // Modelo con variantes (flag `variantes-selector`): "Desde $X" si los precios difieren; en
-  // vez de «Agregar», «Elegir opción» (la opción se elige en la ficha).
+  // Modelo con variantes (flag `variantes-selector`): "Desde $X" si los precios difieren; el
+  // botón «Agregar» abre el panel para elegir la opción.
   const vv = vistaCardVariantes(p);
   const medio = vv.esDesde ? undefined : p.precioMedio;
   return (
+    <>
     <Link
       href={`/producto/${p.id}`}
       // h-full: el slide del carrusel se estira al alto de la card más alta; sin esto la card
@@ -107,10 +113,13 @@ export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
         priceNote={vv.nota ?? (p.sku && !esCodigo ? `Cód. ${p.sku}` : undefined)}
         action={
           vv.multiple ? (
-            // La card entera ya es un <Link> a la ficha: el clic sube y navega.
-            <Button variant="soft" className="w-full" tabIndex={-1}>
-              Elegir opción
-            </Button>
+            // La card entera es un <Link>: el botón corta la navegación y abre el panel.
+            <BotonAgregarOpciones
+              onClick={(e) => {
+                sinNavegar(e);
+                setPanelAbierto(true);
+              }}
+            />
           ) : (
             <AddToCartButton
               product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
@@ -125,5 +134,9 @@ export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
         }
       />
     </Link>
+    {vv.multiple && (
+      <PanelOpciones producto={p} titulo={nombreParaMostrar} abierto={panelAbierto} onAbiertoChange={setPanelAbierto} />
+    )}
+    </>
   );
 }

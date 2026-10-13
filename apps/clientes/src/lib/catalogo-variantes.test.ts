@@ -52,22 +52,36 @@ describe("conResumenDeVariantes", () => {
   });
 
   it("modelo con precios iguales: cantidad de opciones, sin 'Desde'", async () => {
-    responder = (c) => (c.sql.includes("is not null") ? [["1", "g1"]] : [["g1", precios(100), null], ["g1", precios(100), null], ["g1", precios(100), null]]);
+    responder = (c) => (c.sql.includes("is not null") ? [["1", "g1"]] : [["g1", "1", "Blanco", precios(100), null], ["g1", "2", "Cálido", precios(100), null], ["g1", "3", "Frío", precios(100), null]]);
     const [p] = await conResumenDeVariantes([producto("1")]);
-    expect(p.variantes).toEqual({ cantidad: 3 });
+    expect(p.variantes).toEqual({ cantidad: 3, etiquetas: ["Blanco", "Cálido", "Frío"] });
+  });
+
+  it("las etiquetas van en orden natural, hasta 3 (agotadas incluidas), y la cantidad cuenta todas", async () => {
+    const hermanas = ["10 m", "5 m", "2 m", "20 m"].map((e, i) => ["g1", String(i + 1), e, precios(100), null]);
+    responder = (c) => (c.sql.includes("is not null") ? [["1", "g1"]] : hermanas);
+    const [p] = await conResumenDeVariantes([producto("1")]);
+    expect(p.variantes).toEqual({ cantidad: 4, etiquetas: ["2 m", "5 m", "10 m"] });
+  });
+
+  it("las etiquetas salen de la misma consulta de hermanas: no suman lecturas", async () => {
+    responder = (c) => (c.sql.includes("is not null") ? [["1", "g1"]] : [["g1", "1", "A", precios(100), null], ["g1", "2", "B", precios(100), null]]);
+    await conResumenDeVariantes([producto("1")]);
+    expect(grabadora.consultas).toHaveLength(2);
+    expect(grabadora.consultas[1].sql).toContain('"etiqueta"');
   });
 
   it("grupo manual con un suelto de otro precio: 'Desde' el más bajo (precio exhibido con IVA)", async () => {
     responder = (c) =>
       c.sql.includes("is not null")
         ? [["1", "g1"]]
-        : [["g1", precios(100), "21.00"], ["g1", precios(100), "21.00"], ["g1", precios(180), "21.00"]];
+        : [["g1", "1", null, precios(100), "21.00"], ["g1", "2", null, precios(100), "21.00"], ["g1", "3", null, precios(180), "21.00"]];
     const [p] = await conResumenDeVariantes([producto("1")]);
     expect(p.variantes).toEqual({ cantidad: 3, desde: 121 });
   });
 
   it("un modelo con una sola opción activa no se resume (sin selector ni etiqueta)", async () => {
-    responder = (c) => (c.sql.includes("is not null") ? [["1", "g1"]] : [["g1", precios(100), null]]);
+    responder = (c) => (c.sql.includes("is not null") ? [["1", "g1"]] : [["g1", "1", null, precios(100), null]]);
     const [p] = await conResumenDeVariantes([producto("1")]);
     expect(p.variantes).toBeUndefined();
   });
@@ -87,11 +101,11 @@ describe("conResumenDeVariantes", () => {
 describe("getVariantesDeGrupo", () => {
   const fotoModelo = JSON.stringify([{ key: "productos/t/g1/aaa-1600.webp", w: 1600 }]);
   const fotoPropia = JSON.stringify([{ key: "productos/t/11/bbb-1600.webp", w: 1600 }]);
-  // Orden de columnas: las del catálogo (14) + etiqueta, esRepresentante, fotosPropias.
+  // Orden de columnas: las del catálogo (14) + etiqueta, tipo, esRepresentante, fotosPropias.
   const fila = (id: string, etiqueta: string | null, o: { stock: string | null; precio: number; rep: boolean; propia: string | null }) => [
     id, `Cinta LED ${id}`, `COD-${id}`, null, "Marca", precios(o.precio), o.stock, null, "ILUMINACION",
     "Cinta LED 5050", fotoModelo, null, null, null,
-    etiqueta, o.rep, o.propia,
+    etiqueta, "variante", o.rep, o.propia,
   ];
 
   it("arma una opción por variante: precio y stock propios, foto propia o la del modelo", async () => {

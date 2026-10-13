@@ -83,3 +83,11 @@ export function resolverDestinoShop(tenantId: string, fila: FilaShop, env: EnvSh
     secret: limpio(env.SHOP_CRM_SECRET) || null,
   }
 }
+
+/** Atajo para quien ya tiene el tenant cargado (portal, mails, agente): su URL pública del Shop. */
+export function urlPublicaShopDeTenant(
+  tenant: { id: string; shopUrl?: string; shopInternalUrl?: string },
+  env: EnvShop,
+): string | null {
+  return urlPublicaShop(tenant.id, { shopUrl: tenant.shopUrl ?? "", shopInternalUrl: tenant.shopInternalUrl ?? "" }, env)
+}

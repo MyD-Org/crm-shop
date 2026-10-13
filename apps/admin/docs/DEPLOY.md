@@ -58,9 +58,11 @@ actualizalos también allá.
 | Var | Nota |
 |---|---|
 | `INTERNAL_SECRET` | Compartido con ai-api. **No** dárselo al Shop: también abre `/api/agent/*` |
-| `SHOP_CRM_SECRET` | Llave propia Shop↔CRM, mismo valor en el proyecto del Shop. La manda el ping de revalidación al Shop. Sin la var el ping es no-op |
+| `SHOP_CRM_SECRET` | Llave propia Shop↔CRM del Shop histórico (el que no tiene URL propia en `tenants`), mismo valor en el proyecto del Shop. La manda el ping de revalidación. Sin la var el ping es no-op. **Nunca** se usa para un tenant con URL propia (ver `SHOP_CRM_SECRET_<SLUG>`) |
+| `SHOP_CRM_SECRET_<SLUG>` | Secreto del ping de un tenant con Shop propio (`tenants.shop_url` / `shop_internal_url`, cargados a mano en la base). `<SLUG>` = id del tenant en mayúsculas con `-` → `_` (`avantec` → `SHOP_CRM_SECRET_AVANTEC`). Mismo valor que `SHOP_CRM_SECRET` del proyecto Shop de ese tenant. Sin la var, el ping de ese tenant no se envía y se registra un aviso: jamás cae al secreto sin sufijo |
+| `SHOP_TENANT_LEGACY` | Id del tenant dueño del par histórico (`SHOP_INTERNAL_URL` + `SHOP_CRM_SECRET` + `NEXT_PUBLIC_SHOP_URL`). **Setearla antes de dar de alta un segundo tenant con Shop**: sin ella cualquier tenant sin URL propia usa el Shop histórico. Sin definir = comportamiento de siempre |
 | `STAFF_TOKEN_SECRET` | Compartido con ai-api |
-| `SHOP_INTERNAL_URL` | Opcional. Base URL del Shop del mismo entorno (ej. `https://dev.cliente.example`). Al guardar Medios de pago el CRM hace `POST {SHOP_INTERNAL_URL}/api/internal/sucursales/revalidar`; sin la var el ping es no-op y el Shop toma los cambios al vencer su caché. |
+| `SHOP_INTERNAL_URL` | Opcional. Base URL del Shop histórico del mismo entorno (ej. `https://dev.cliente.example`); un tenant con `shop_internal_url` en la base usa la suya. Al guardar Medios de pago el CRM hace `POST {SHOP_INTERNAL_URL}/api/internal/sucursales/revalidar`; sin la var el ping es no-op y el Shop toma los cambios al vencer su caché. |
 | `ANTHROPIC_API_KEY` | Opcional. Lector de fichas técnicas del catálogo (botón "Leer ficha técnica", Claude Haiku). Sin la var el botón queda deshabilitado y la ruta responde 503. |
 | `RESEND_API_KEY` | Envío de emails (el `RESEND_FROM` debe ser un dominio verificado en Resend) |
 | `RESEND_API_KEY_EMAILS` | Correo compartido (Resend Inboxes, beta): clave propia, distinta de `RESEND_API_KEY`. Solo servidor. Sin ella el módulo de correo responde "no configurado" y no hace requests |

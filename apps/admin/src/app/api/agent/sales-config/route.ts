@@ -1,11 +1,12 @@
 import { authAgentInternalRequest } from "@/lib/agent-auth"
 import { getTenantConfig } from "@/lib/tenant-context"
+import { urlPublicaShopDeTenant } from "@/lib/shop-destino"
 import { listPriceLists, listPaymentTerms, listSellers, listTaxes, listCurrencies } from "@/lib/alegra"
 
 // GET /api/agent/sales-config
 // Configuración comercial del tenant desde Alegra: listas de precio, condiciones de pago,
 // vendedores, impuestos y monedas — todo lo que el agente necesita para hablar de precios
-// y armar cotizaciones. Incluye shop_url (env NEXT_PUBLIC_SHOP_URL) para compartir el link
+// y armar cotizaciones. Incluye shop_url (tenants.shop_url; sin URL propia, la env histórica NEXT_PUBLIC_SHOP_URL) para compartir el link
 // de la tienda cuando exista.
 //
 // Auth: sólo INTERNAL_SECRET (server-to-server). El crm_token del cliente logueado NO sirve acá:
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
     )
 
     return Response.json({
-      shop_url: process.env.NEXT_PUBLIC_SHOP_URL ?? null,
+      shop_url: urlPublicaShopDeTenant(tenant, process.env),
       price_lists: priceLists
         .filter((p) => p.status === "active")
         .map((p) => ({ id: p.alegraId, name: p.name })),

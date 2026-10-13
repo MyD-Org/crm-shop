@@ -6,9 +6,9 @@ import { mintAgentToken } from "@/lib/agent-token"
 // (lib/agent-auth.ts): un crm_token válido del cliente logueado, que llega a su navegador dentro
 // del JWT del widget, tiene que dar 401 sin tocar Alegra.
 
-const state = vi.hoisted(() => ({ llamadas: [] as string[] }))
+const state = vi.hoisted(() => ({ llamadas: [] as string[], tenant: { id: "t1" } as { id: string; shopUrl?: string } }))
 
-vi.mock("@/lib/tenant-context", () => ({ getTenantConfig: async () => ({ id: "t1" }) }))
+vi.mock("@/lib/tenant-context", () => ({ getTenantConfig: async () => state.tenant }))
 vi.mock("@/lib/alegra", () => ({
   listPriceLists: async () => {
     state.llamadas.push("listas")
@@ -45,6 +45,7 @@ const con = (auth?: string) =>
 
 beforeEach(() => {
   state.llamadas = []
+  state.tenant = { id: "t1" }
   vi.stubEnv("INTERNAL_SECRET", INTERNAL)
   vi.spyOn(console, "log").mockImplementation(() => {})
   vi.spyOn(console, "warn").mockImplementation(() => {})
@@ -79,5 +80,27 @@ describe("/api/agent/sales-config — auth server-to-server", () => {
     const res = await GET(con())
     expect(res.status).toBe(401)
     expect(state.llamadas).toEqual([])
+  })
+})
+
+describe("/api/agent/sales-config — shop_url por tenant", () => {
+  it("tenant con tienda propia: su shop_url, no la env histórica", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SHOP_URL", "https://legacy.example")
+    state.tenant = { id: "t2", shopUrl: "https://t2.example/" }
+    const body = (await (await GET(con(`Bearer ${INTERNAL}`))).json()) as { shop_url: string | null }
+    expect(body.shop_url).toBe("https://t2.example")
+  })
+
+  it("tenant sin tienda propia y sin SHOP_TENANT_LEGACY: la env histórica, como hoy", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SHOP_URL", "https://legacy.example")
+    const body = (await (await GET(con(`Bearer ${INTERNAL}`))).json()) as { shop_url: string | null }
+    expect(body.shop_url).toBe("https://legacy.example")
+  })
+
+  it("con SHOP_TENANT_LEGACY de otro tenant: null (no comparte la tienda de otro)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SHOP_URL", "https://legacy.example")
+    vi.stubEnv("SHOP_TENANT_LEGACY", "central")
+    const body = (await (await GET(con(`Bearer ${INTERNAL}`))).json()) as { shop_url: string | null }
+    expect(body.shop_url).toBeNull()
   })
 })

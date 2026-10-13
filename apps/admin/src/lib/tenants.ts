@@ -16,6 +16,10 @@ export interface TenantConfig {
   aiApiKey: string
   aiAgentId: string
   aiTenantId: string // UUID del tenant en la ai-api (para auth de staff/inbox)
+  // Shop del tenant (0084). Opcionales: el fallback por env no los tiene ('' / ausente = sin Shop
+  // propio, rige el par histórico de envs). Resolución en src/lib/shop-destino.ts.
+  shopUrl?: string
+  shopInternalUrl?: string
 }
 
 /** Fila de la tabla `tenants` → `TenantConfig`. Único lugar con ese mapeo (antes duplicado). */
@@ -35,6 +39,8 @@ export function tenantConfigFromRow(row: typeof tenantsTable.$inferSelect): Tena
     aiApiKey: row.aiApiKey,
     aiAgentId: row.aiAgentId,
     aiTenantId: row.aiTenantId,
+    shopUrl: row.shopUrl,
+    shopInternalUrl: row.shopInternalUrl,
   }
 }
 

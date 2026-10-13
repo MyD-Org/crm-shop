@@ -8,6 +8,7 @@ import { DashboardClient } from "@/components/portal/DashboardClient"
 import { AiChat } from "@/components/portal/AiChat"
 import { aiChatEnabled, shopEnabled } from "@/lib/flags"
 import { r2Config } from "@/lib/r2"
+import { urlPublicaShopDeTenant } from "@/lib/shop-destino"
 import type { SessionData } from "@/types"
 
 export default async function DashboardPage({
@@ -88,7 +89,7 @@ export default async function DashboardPage({
       initialTab={sp.factura ? "facturas" : sp.tab}
       openFacturaId={sp.factura}
       openFacturaAlegraId={sp.alegra}
-      shopUrl={shopActive ? process.env.NEXT_PUBLIC_SHOP_URL : undefined}
+      shopUrl={shopActive ? (urlPublicaShopDeTenant(tenant, process.env) ?? undefined) : undefined}
       seccionesCaidas={seccionesCaidas}
       receiptsEnabled={receiptsEnabled}
       />

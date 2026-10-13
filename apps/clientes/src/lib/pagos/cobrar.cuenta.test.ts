@@ -186,8 +186,10 @@ describe("cobrarPedido — cuenta del pedido", () => {
   it.each([400, 402, 404, 422, 500, 502, 504])("un error %i del procesador no prueba otra cuenta", async (status) => {
     responder(status, { message: "error" });
     const r = await pagar();
-    expect(r.status).toBe(502);
+    // 4xx: seguro sin pago, error. 5xx: no se sabe si el pago se creó, queda a confirmar.
+    expect(r.status).toBe(status < 500 ? 502 : 200);
     const j = await r.json();
+    if (status >= 500) expect(j).toEqual({ estado: "pendiente", sinConfirmar: true });
     expect(j.motivo).not.toBe("cuenta_rechazada");
     expect(j.config).toBeUndefined();
     expect(autorizaciones()).toEqual(["Bearer TEST-token-mdp"]);
@@ -199,7 +201,9 @@ describe("cobrarPedido — cuenta del pedido", () => {
       throw new TypeError("fetch failed");
     });
     const r = await pagar();
-    expect(r.status).toBe(502);
+    // No se invita a pagar de nuevo: el comprador espera la confirmación y el carrito no se vacía.
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ estado: "pendiente", sinConfirmar: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(cerrarIntentoSinPago).not.toHaveBeenCalled();
   });

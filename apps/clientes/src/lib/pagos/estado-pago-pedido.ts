@@ -14,6 +14,7 @@
 import type { PagoEstado } from "@/data/orders";
 import { esPagoEnLinea } from "@/lib/medios-pago";
 import {
+  descartarReserva,
   getPedidoParaPago,
   intentoAbiertoDelPedido,
   motivoNoCobrable,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/pedidos";
 import { proveedorPago } from "@/lib/pagos";
 import { conciliarIntento } from "./conciliar-intento";
+import { RESERVA_ABANDONADA_MS } from "./intento-abierto";
 import { candidatasDelPedido, proveedorDeIntento } from "./cuentas-sucursales";
 import { ErrorProveedor, MENSAJE_RECHAZO, esCredencialRechazada } from "./tipos";
 
@@ -98,7 +100,17 @@ export async function estadoPagoDelPedido(
   }
 
   if (enLinea && pedido.pagoEstado === "pendiente") {
-    const abierto = await intentoAbiertoDelPedido(id, dueno);
+    let abierto = await intentoAbiertoDelPedido(id, dueno);
+    /**
+     * Reserva sin referencia (el procesador no respondió al crear el pago) más vieja que el margen: nadie
+     * la va a completar. Se cierra acá, igual que al reintentar (`resolverIntentoAbierto`), para que quien
+     * espera en "Estamos confirmando su pago" sepa que puede volver a pagar. Si ya la reclamó un webhook
+     * `descartarReserva` no la toca, y la próxima consulta la encuentra con su referencia.
+     */
+    if (abierto && !abierto.referencia && Date.now() - abierto.creadoEn.getTime() >= RESERVA_ABANDONADA_MS) {
+      await descartarReserva(abierto.id, "reserva_abandonada");
+      abierto = await intentoAbiertoDelPedido(id, dueno);
+    }
     sinCobro = abierto === null;
     // Con la cuenta congelada en el intento (o, si es anterior a la 0035, la del pedido).
     const proveedor = abierto?.referencia

@@ -560,6 +560,17 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
       ).catch((e) => console.error(`[/api/pagos/${proveedor.id}] no se pudo cerrar el intento:`, e));
     }
 
+    /**
+     * Sin respuesta utilizable (timeout, 5xx) y con la reserva todavía abierta: no se sabe si el pago se
+     * creó. No se invita a pagar de nuevo (el reintento chocaría con `pago_en_curso`): el comprador ve
+     * "Estamos confirmando su pago" y el sondeo (`estadoPagoDelPedido`) lo resuelve: el webhook reclama la
+     * reserva si el pago existe, o se da por abandonada y recién ahí se le ofrece reintentar.
+     * `sinConfirmar`: el cobro NO quedó enviado, así que el navegador no vacía el carrito.
+     */
+    if (!sinPago && !referenciaPrevia) {
+      return NextResponse.json({ estado: "pendiente", sinConfirmar: true });
+    }
+
     return NextResponse.json(
       { error: "No pudimos procesar el pago. Inténtelo de nuevo en un momento." },
       { status: 502 },

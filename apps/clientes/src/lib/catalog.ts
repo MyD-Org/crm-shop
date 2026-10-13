@@ -158,6 +158,13 @@ interface FilaCatalogo {
    * viene cuando la consulta los pidió (flag + tabla disponible); ausente o null = sin datos.
    */
   atributos?: unknown;
+  /**
+   * Flag `variantes-selector`: la opción de la variante dentro de su modelo y el grupo al que
+   * pertenece. Sólo vienen con `agrupar` (ver `columnasCatalogo`); con ambos, el producto lleva
+   * `opcion` y su línea del carrito/pedido se llama "Modelo / Opción".
+   */
+  etiqueta?: string | null;
+  grupoId?: string | null;
 }
 
 /**
@@ -212,6 +219,7 @@ export function mapFilaToProduct(
     fichaTecnicaUrl: urlDeFicha(fila.overlayFichaTecnica, baseMedios),
     ...(atributosEstructurados ? { atributosEstructurados } : {}),
     ...(especificaciones.length ? { especificaciones } : {}),
+    ...(fila.grupoId && fila.etiqueta?.trim() ? { opcion: fila.etiqueta.trim() } : {}),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
   };
 }
@@ -323,9 +331,11 @@ const atributosFilaSql = () =>
  * sucursales del contexto menos su reserva (`stockSucursalSql`); sin él, el de siempre. Con
  * `estructurados`, además los atributos de `catalog_atributos` (ver `atributosFilaSql`).
  */
-const columnasCatalogo = (disp?: ContextoDisponibilidad, estructurados = false) => {
+const columnasCatalogo = (disp?: ContextoDisponibilidad, estructurados = false, agrupar = false) => {
   const base = disp ? { ...COLUMNAS_CATALOGO_BASE, stock: stockSucursalSql(disp) } : COLUMNAS_CATALOGO_BASE;
-  return estructurados ? { ...base, atributos: sql<unknown>`${atributosFilaSql()}` } : base;
+  const conAtributos = estructurados ? { ...base, atributos: sql<unknown>`${atributosFilaSql()}` } : base;
+  // Con el flag `variantes-selector`: la opción de la variante, para nombrar la línea "Modelo / Opción".
+  return agrupar ? { ...conAtributos, etiqueta: crmCatalogo.etiqueta, grupoId: crmCatalogo.grupoId } : conAtributos;
 };
 
 /**
@@ -604,7 +614,7 @@ export async function getCatalogo(opts: {
   atributosEstructurados?: boolean;
 }): Promise<Product[]> {
   let query = getDb()
-    .select(columnasCatalogo(opts.disp, opts.atributosEstructurados))
+    .select(columnasCatalogo(opts.disp, opts.atributosEstructurados, opts.agrupar ?? false))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
@@ -666,7 +676,7 @@ export async function getCategoriaExacta(opts: {
   if (!categoria) return null;
 
   const filas = await getDb()
-    .select(columnasCatalogo(opts.disp))
+    .select(columnasCatalogo(opts.disp, false, opts.agrupar ?? false))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
@@ -726,7 +736,11 @@ export async function getProductosPorIds(
   if (alegraIds.length === 0) return new Map();
 
   const filas = await getDb()
-    .select(columnasCatalogo(opts?.disp, opts?.atributosEstructurados))
+    .select({
+      ...columnasCatalogo(opts?.disp, opts?.atributosEstructurados, opts?.agrupar ?? false),
+      // Con el flag: la foto propia de la variante, si la tiene (si no, la del modelo, ver abajo).
+      ...(opts?.agrupar ? { fotosPropias: fotosPropiasSql() } : {}),
+    })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts?.agrupar ?? false))
@@ -742,7 +756,19 @@ export async function getProductosPorIds(
     );
 
   return new Map(
-    filas.map((f) => [f.alegraId, mapFilaToProduct(f, opts?.idPriceList, undefined, undefined, opts?.mediosPrecio)]),
+    filas.map((f) => {
+      const { fotosPropias, ...fila } = f as typeof f & { fotosPropias?: FotoCrm[] | null };
+      return [
+        f.alegraId,
+        mapFilaToProduct(
+          { ...fila, overlayFotos: fotosPropias?.length ? fotosPropias : fila.overlayFotos },
+          opts?.idPriceList,
+          undefined,
+          undefined,
+          opts?.mediosPrecio,
+        ),
+      ];
+    }),
   );
 }
 
@@ -771,7 +797,7 @@ export async function getProductosPorSkus(
   if (codigos.length === 0) return [];
 
   const filas = await getDb()
-    .select(columnasCatalogo(opts.disp))
+    .select(columnasCatalogo(opts.disp, false, opts.agrupar ?? false))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
@@ -897,8 +923,9 @@ export async function getVariantesDeGrupo(
     );
   const opciones = filas.map((f) => {
     const { etiqueta, esRepresentante, fotosPropias, ...fila } = f;
+    // `grupoId` no se selecciona (es el del pedido): todas las opciones son del mismo grupo.
     const producto = mapFilaToProduct(
-      { ...fila, overlayFotos: fotosPropias?.length ? fotosPropias : fila.overlayFotos },
+      { ...fila, etiqueta, grupoId, overlayFotos: fotosPropias?.length ? fotosPropias : fila.overlayFotos },
       opts.idPriceList,
       undefined,
       undefined,
@@ -1628,7 +1655,7 @@ export async function getPaginaCatalogo(opts: {
 
   const filas = hayFilas
     ? await getDb()
-        .select(columnasCatalogo(opts.disp, filtros.atributosEstructurados))
+        .select(columnasCatalogo(opts.disp, filtros.atributosEstructurados, agrupar))
         .from(crmCatalogo)
         .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
         .leftJoin(crmOverlay, joinOverlay(agrupar))

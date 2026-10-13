@@ -135,6 +135,12 @@ export interface Product {
    */
   cuotasSinInteres?: CuotasProducto;
   oldPrice?: number;
+  /**
+   * Opción de una variante dentro de su modelo ("Blanco frío"), flag `variantes-selector`. Con ella la
+   * línea del carrito/pedido se llama "Modelo / Opción" (`nombreDeLinea`). Ausente = producto suelto
+   * o flag apagado.
+   */
+  opcion?: string;
   /** Card de un modelo con variantes (flag `variantes-selector`). Ausente = producto suelto o flag apagado. */
   variantes?: ResumenVariantes;
   /** Ficha de un modelo con variantes (flag `variantes-selector`): las opciones del selector. */

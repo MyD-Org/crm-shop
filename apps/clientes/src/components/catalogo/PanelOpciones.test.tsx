@@ -78,15 +78,28 @@ describe("CuerpoPanelOpciones", () => {
     const mdp = opcion("mdp:12", "Rojo");
     const pie = (elegida: Product | null) =>
       renderToStaticMarkup(
-        <PiePanelOpciones elegida={elegida} idDeLaCard="1" deshabilitado={false} onAgregar={() => {}} onCerrar={() => {}} />,
+        <PiePanelOpciones
+          elegida={elegida}
+          idDeLaCard="1"
+          deshabilitado={elegida == null}
+          cantidad={2}
+          maximo={5}
+          onCantidad={() => {}}
+          onAgregar={() => {}}
+          onCerrar={() => {}}
+        />,
       );
     const out = pie(mdp);
     expect(out).toContain('href="/producto/mdp%3A12"');
     expect(out).toContain("Ver detalle del producto");
     // Las dos acciones van juntas en el pie, la principal primero.
-    expect(out.indexOf("Agregar al carrito")).toBeLessThan(out.indexOf("Ver detalle del producto"));
+    expect(out.indexOf('aria-label="Agregar al carrito"')).toBeGreaterThan(-1);
+    expect(out.indexOf('aria-label="Agregar al carrito"')).toBeLessThan(out.indexOf("Ver detalle del producto"));
     // Mientras cargan las opciones, el enlace lleva a la ficha de la card.
     expect(pie(null)).toContain('href="/producto/1"');
+    // Con una opción comprable se elige la cantidad (el contador del DS); mientras carga, no.
+    expect(out).toContain('aria-label="Aumentar cantidad"');
+    expect(pie(null)).not.toContain('aria-label="Aumentar cantidad"');
     // El cuerpo ya no trae un enlace suelto debajo del selector.
     expect(html(listo([frio, mdp]), mdp)).not.toContain("Ver detalle");
   });

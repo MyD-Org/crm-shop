@@ -2,17 +2,17 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
-import { Button, Dialog, Skeleton, VariantSelector } from "@myd-org/ui";
+import { Button, Dialog, QuantityStepper, Skeleton, VariantSelector } from "@myd-org/ui";
 import { CartIcon, LightbulbIcon } from "@/components/catalogo/iconos";
 import { linkNext } from "@/components/catalogo/link-next";
 import { useCart } from "@/context/CartContext";
 import type { Product } from "@/data/products";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
-import { etiquetaStock, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
+import { etiquetaStock, maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
 import { fmtPrecio } from "@/lib/format";
 import { nombreDeLinea } from "@/lib/nombre-linea";
 import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
-import { opcionInicial, rutaFichaVariante, TEXTOS_PANEL, TEXTOS_VARIANTES } from "@/lib/variantes-ficha";
+import { etiquetaDeOpcion, opcionInicial, rutaFichaVariante, TEXTOS_PANEL, TEXTOS_VARIANTES } from "@/lib/variantes-ficha";
 
 /** Lo que devuelve `GET /api/shop/variantes`. */
 interface Opciones {
@@ -72,6 +72,7 @@ export function PanelOpciones({
   const [carga, setCarga] = useState<Carga>({ estado: "cargando" });
   const [intento, setIntento] = useState(0);
   const [elegidaId, setElegidaId] = useState<string | null>(null);
+  const [cantidad, setCantidad] = useState(1);
   const { addItem } = useCart();
   const movil = useEsMovil();
 
@@ -112,16 +113,24 @@ export function PanelOpciones({
   const noSePuedeAgregar =
     !elegida || elegida.stock === "out" || !(elegida.price > 0) || elegida.precioCuenta === "pendiente";
 
+  // La cantidad nunca pasa del stock de la opción elegida (al cambiar de opción se recorta sola).
+  const maximo = elegida ? maxCantidad(elegida) : 1;
+  const unidades = Math.min(cantidad, maximo);
+
   function agregar() {
     if (!elegida || noSePuedeAgregar) return;
     // Entra como "Modelo / Opción" y con la foto de la variante.
-    addItem({
-      id: elegida.id,
-      name: nombreDeLinea(elegida),
-      brand: elegida.brand,
-      price: elegida.price,
-      image: elegida.images?.[0]?.url ?? producto.images?.[0]?.url,
-    });
+    addItem(
+      {
+        id: elegida.id,
+        name: nombreDeLinea(elegida),
+        brand: elegida.brand,
+        price: elegida.price,
+        image: elegida.images?.[0]?.url ?? producto.images?.[0]?.url,
+      },
+      unidades,
+    );
+    setCantidad(1);
     cerrar();
   }
 
@@ -139,6 +148,9 @@ export function PanelOpciones({
             elegida={carga.estado === "listo" ? elegida : null}
             idDeLaCard={producto.id}
             deshabilitado={carga.estado !== "listo" || noSePuedeAgregar}
+            cantidad={unidades}
+            maximo={maximo}
+            onCantidad={setCantidad}
             onAgregar={agregar}
             onCerrar={cerrar}
           />
@@ -162,28 +174,47 @@ export function PanelOpciones({
 }
 
 /**
- * Las acciones del panel, juntas en el pie: la principal arriba y «Ver detalle del producto» como
- * secundaria, las dos a todo el ancho (en el celular quedan al alcance del pulgar).
+ * Las acciones del panel, juntas en el pie: cantidad y «Agregar al carrito» arriba, y «Ver detalle del
+ * producto» como secundaria debajo, a todo el ancho (en el celular quedan al alcance del pulgar).
  */
 export function PiePanelOpciones({
   elegida,
   idDeLaCard,
   deshabilitado,
+  cantidad,
+  maximo,
+  onCantidad,
   onAgregar,
   onCerrar,
 }: {
   elegida: Product | null;
   idDeLaCard: string;
   deshabilitado: boolean;
+  cantidad: number;
+  /** Stock de la opción elegida: el contador no deja pasar de acá. */
+  maximo: number;
+  onCantidad: (cantidad: number) => void;
   onAgregar: () => void;
   onCerrar: () => void;
 }) {
   return (
     <div className="flex w-full flex-col gap-2">
-      <Button className="w-full" size="lg" disabled={deshabilitado} onClick={onAgregar}>
-        <CartIcon />
-        {elegida?.stock === "out" ? TEXTOS_VARIANTES.sinStock : TEXTOS_PANEL.agregarAlCarrito}
-      </Button>
+      {/* Cantidad y agregar en una fila, como en la ficha. Sin tacho: acá se elige antes de agregar. */}
+      <div className="flex items-center gap-2">
+        {!deshabilitado && (
+          <QuantityStepper value={cantidad} onValueChange={onCantidad} min={1} max={maximo} tone="soft" size="lg" />
+        )}
+        <Button
+          className="min-w-0 flex-1 whitespace-nowrap"
+          size="lg"
+          aria-label="Agregar al carrito"
+          disabled={deshabilitado}
+          onClick={onAgregar}
+        >
+          <CartIcon />
+          {elegida?.stock === "out" ? TEXTOS_VARIANTES.sinStock : TEXTOS_PANEL.agregarAlCarrito}
+        </Button>
+      </div>
       <Button
         className="w-full"
         variant="ghost"
@@ -289,8 +320,7 @@ export function CuerpoPanelOpciones({
           label={TEXTOS_VARIANTES.etiquetaSelector}
           options={datos.opciones.map((o) => ({
             id: o.id,
-            label: o.opcion ?? o.name,
-            soldOut: o.stock === "out",
+            label: etiquetaDeOpcion(o.opcion ?? o.name, o.stock === "out"),
           }))}
           value={elegida.id}
           onChange={onElegir}

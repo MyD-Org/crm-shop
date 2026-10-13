@@ -30,7 +30,7 @@ import { CartIcon } from "@/components/catalogo/iconos";
 import { itemDe } from "@/lib/tracking/eventos";
 import { nombreDeLinea } from "@/lib/nombre-linea";
 import { track } from "@/lib/tracking/track";
-import { TEXTOS_VARIANTES, rutaFichaVariante } from "@/lib/variantes-ficha";
+import { TEXTOS_VARIANTES, etiquetaDeOpcion, rutaFichaVariante } from "@/lib/variantes-ficha";
 
 function CheckIcon() {
   return (
@@ -336,8 +336,7 @@ export function ProductoClient({
                 label={TEXTOS_VARIANTES.etiquetaSelector}
                 options={opciones.map((o) => ({
                   id: o.id,
-                  label: o.etiqueta,
-                  soldOut: o.producto.stock === "out",
+                  label: etiquetaDeOpcion(o.etiqueta, o.producto.stock === "out"),
                 }))}
                 value={producto.id}
                 onChange={elegirOpcion}

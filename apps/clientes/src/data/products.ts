@@ -141,6 +141,11 @@ export interface Product {
    * o flag apagado.
    */
   opcion?: string;
+  /**
+   * Destacados (flag `variantes-selector`): los códigos elegidos a mano que cayeron en el grupo de
+   * esta card (el de una variante que no es la representante). Sólo para ubicarla donde se la eligió.
+   */
+  codigosElegidos?: string[];
   /** Card de un modelo con variantes (flag `variantes-selector`). Ausente = producto suelto o flag apagado. */
   variantes?: ResumenVariantes;
   /** Ficha de un modelo con variantes (flag `variantes-selector`): las opciones del selector. */

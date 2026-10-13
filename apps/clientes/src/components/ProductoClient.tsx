@@ -28,6 +28,7 @@ import { DudasProducto } from "@/components/producto/DudasProducto";
 import type { Product } from "@/data/products";
 import { CartIcon } from "@/components/catalogo/iconos";
 import { itemDe } from "@/lib/tracking/eventos";
+import { nombreDeLinea } from "@/lib/nombre-linea";
 import { track } from "@/lib/tracking/track";
 import { TEXTOS_VARIANTES, rutaFichaVariante } from "@/lib/variantes-ficha";
 
@@ -163,7 +164,8 @@ export function ProductoClient({
   );
 
   function agregar() {
-    addItem({ ...producto, image: producto.images?.[0]?.url }, qty);
+    // Una variante entra al carrito como "Modelo / Opción" (flag `variantes-selector`).
+    addItem({ ...producto, name: nombreDeLinea(producto), image: producto.images?.[0]?.url }, qty);
     setAgregado(true);
     if (timerAgregado.current) clearTimeout(timerAgregado.current);
     timerAgregado.current = setTimeout(() => setAgregado(false), MS_AGREGADO);

@@ -43,3 +43,18 @@ describe("armarOrder: cuenta congelada", () => {
     expect(armarOrder(fila(null), [])).not.toHaveProperty("cuentaPago");
   });
 });
+
+describe("armarOrder: variantes", () => {
+  it("el nombre visible de una variante es Modelo / Opción y lleva su foto; el guardado no se toca", () => {
+    const item = { alegraItemId: "12", name: "Panel 18W / Rojo", brand: "", code: "P18", qty: "1", precioUnitario: "100", total: "100" };
+    const producto = { id: "12", name: "Panel 18W", opcion: "Rojo", images: [{ url: "https://m.example/rojo.jpg" }] };
+    const o = armarOrder(
+      fila(null),
+      [item] as unknown as Parameters<typeof armarOrder>[1],
+      new Map([["12", producto]]) as unknown as Parameters<typeof armarOrder>[2],
+    );
+    expect(o.items[0].nombreVisible).toBe("Panel 18W / Rojo");
+    expect(o.items[0].name).toBe("Panel 18W / Rojo");
+    expect(o.items[0].imagen).toEqual({ url: "https://m.example/rojo.jpg" });
+  });
+});

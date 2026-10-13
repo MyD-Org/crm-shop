@@ -9,7 +9,9 @@ import { and, count, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { favorites } from "@/db/schema";
 import type { Product } from "@/data/products";
-import { getProductosPorIds } from "./catalog";
+import { getProductosPorIds, representantesDePadres } from "./catalog";
+import { conNombreDeLinea } from "./nombre-linea";
+import { variantesSelector } from "./variantes-flag";
 import { planificarLote } from "./favoritos-lote";
 import type { MediosPrecio } from "./medios-precio";
 import { shopTenantId } from "./tenant";
@@ -151,9 +153,21 @@ export async function listarFavoritos(
 ): Promise<Product[]> {
   const ids = await idsFavoritos(clerkUserId, opts?.limite);
   if (ids.length === 0) return [];
-  const productos = await getProductosPorIds(ids, { idPriceList: opts?.idPriceList, mediosPrecio: opts?.mediosPrecio });
-  return ids.flatMap((id) => {
+  // Flag `variantes-selector`: un favorito guardado con el id de un modelo (padre) se muestra como su
+  // representante; el de una variante, como "Modelo / Opción" con su foto.
+  const agrupar = await variantesSelector();
+  const idsReales = agrupar ? await representantesDePadres(ids) : new Map<string, string>();
+  const resueltos = ids.map((id) => idsReales.get(id) ?? id);
+  const productos = await getProductosPorIds([...new Set(resueltos)], {
+    idPriceList: opts?.idPriceList,
+    mediosPrecio: opts?.mediosPrecio,
+    ...(agrupar ? { agrupar: true } : {}),
+  });
+  const vistos = new Set<string>();
+  return resueltos.flatMap((id) => {
     const p = productos.get(id);
-    return p ? [p] : [];
+    if (!p || vistos.has(id)) return [];
+    vistos.add(id);
+    return [conNombreDeLinea(p)];
   });
 }

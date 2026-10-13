@@ -24,6 +24,7 @@ vi.mock("./precios-privados-repo", () => ({
   preciosPrivados: (...args: unknown[]) => preciosPrivados(...args),
 }));
 
+import { setFlag } from "@/test/flags";
 import {
   enriquecer,
   leerCarrito,
@@ -275,5 +276,34 @@ describe("enriquecer", () => {
         image: "https://media.plataforma.example/a.webp",
       },
     ]);
+  });
+});
+
+describe("enriquecer con variantes (flag variantes-selector)", () => {
+  it("con el flag pide el overlay del modelo y nombra la línea Modelo / Opción", async () => {
+    setFlag("variantes-selector", true);
+    getProductosPorIds.mockResolvedValue(
+      new Map([
+        ["12", { id: "12", name: "Panel 18W", opcion: "Rojo", brand: "Marca", price: 100, images: [{ url: "https://m.example/r.jpg" }] }],
+        ["13", { id: "13", name: "Panel 18W", opcion: "Verde", brand: "Marca", price: 100 }],
+      ]),
+    );
+    const r = await enriquecer([
+      { id: "12", qty: 1 },
+      { id: "13", qty: 1 },
+    ]);
+    expect(getProductosPorIds).toHaveBeenCalledWith(["12", "13"], { agrupar: true });
+    expect(r.map((l) => [l.id, l.name])).toEqual([
+      ["12", "Panel 18W / Rojo"],
+      ["13", "Panel 18W / Verde"],
+    ]);
+    expect(r[0].image).toBe("https://m.example/r.jpg");
+  });
+
+  it("con el flag apagado no pide agrupar ni toca el nombre", async () => {
+    getProductosPorIds.mockResolvedValue(new Map([["12", { id: "12", name: "Panel 18W / Rojo", brand: "", price: 1 }]]));
+    const r = await enriquecer([{ id: "12", qty: 1 }]);
+    expect(getProductosPorIds).toHaveBeenCalledWith(["12"]);
+    expect(r[0].name).toBe("Panel 18W / Rojo");
   });
 });

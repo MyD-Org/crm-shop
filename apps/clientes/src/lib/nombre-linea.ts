@@ -27,3 +27,9 @@ export function nombreConOpcion(nombre: string, opcion?: string | null): string 
 export function nombreDeLinea(p: { name: string; opcion?: string | null }): string {
   return nombreConOpcion(p.name, p.opcion);
 }
+
+/** El mismo producto con `name` = nombre de la línea. Sin `opcion` devuelve el mismo objeto. */
+export function conNombreDeLinea<T extends { name: string; opcion?: string | null }>(p: T): T {
+  const name = nombreDeLinea(p);
+  return name === p.name ? p : { ...p, name };
+}

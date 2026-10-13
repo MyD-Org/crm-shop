@@ -5,6 +5,7 @@ import { Button, QuantityStepper } from "@myd-org/ui";
 import { CartIcon } from "@/components/catalogo/iconos";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { CANTIDAD_MAXIMA } from "@/lib/catalogo-vista";
+import { nombreDeLinea } from "@/lib/nombre-linea";
 import { useHidratado } from "@/lib/hidratado";
 
 interface AddToCartButtonProps {
@@ -61,7 +62,7 @@ export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: Ad
           // header ya confirman la alta.
           if (!product) return;
           setAnimarEntrada(true);
-          addItem(product);
+          addItem({ ...product, name: nombreDeLinea(product) });
         }}
       >
         <CartIcon />

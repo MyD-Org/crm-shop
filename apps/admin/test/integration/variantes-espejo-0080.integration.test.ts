@@ -14,6 +14,7 @@ import { TEST_DATABASE_URL, assertLocalTestDb } from "./db-url"
  */
 
 const M0080 = fileURLToPath(new URL("../../drizzle/0080_variantes_espejo.sql", import.meta.url))
+const M0083 = fileURLToPath(new URL("../../drizzle/0083_vista_shop_variantes.sql", import.meta.url))
 const T = "tenant-var"
 
 let sql: postgres.Sql
@@ -215,6 +216,13 @@ describe("migración 0081: la vista del Shop no ofrece padres (DB real)", () => 
   it("conserva el GRANT de shop_app", async () => {
     const existe = await sql`SELECT 1 FROM pg_roles WHERE rolname = 'shop_app'`
     expect(existe.length).toBe(1)
+    // El global-setup crea `shop_app` DESPUÉS de migrar, así que ninguna migración concedió nada acá: sin
+    // esto el resultado dependía de qué otro archivo de la misma base (un worker) hubiera concedido antes.
+    // Se concede con el MISMO bloque de la migración y se recrea la vista (CREATE OR REPLACE) para
+    // comprobar lo que importa: que reemplazar la vista no pierde el permiso.
+    const partes = sentencias(M0083)
+    await sql.unsafe(partes[partes.length - 1])
+    await sql.unsafe(partes[0])
     const [r] = await sql`SELECT has_table_privilege('shop_app', 'public.catalog_products_shop', 'SELECT') AS ok`
     expect(r.ok).toBe(true)
     // La tabla base sigue sin SELECT para el Shop.

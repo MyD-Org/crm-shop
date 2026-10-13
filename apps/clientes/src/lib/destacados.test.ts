@@ -56,3 +56,11 @@ describe("elegirDestacados", () => {
     expect(r.map((x) => x.id)).toEqual(["3", "2", "4"]);
   });
 });
+
+describe("elegirDestacados con variantes", () => {
+  it("el código de una variante ubica a la card de su modelo donde se lo eligió", () => {
+    const modelo = { ...p("7", "Panel 18W", "P18-BLANCO"), codigosElegidos: ["P18-ROJO"] };
+    const r = elegirDestacados([p("1", "Otro", "X"), modelo], ["p18-rojo"], 2);
+    expect(r.map((x) => x.id)).toEqual(["7", "1"]);
+  });
+});

@@ -596,6 +596,13 @@
       "when": 1793366700000,
       "tag": "0084_tenants_shop_url",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1793366800000,
+      "tag": "0085_tenants_shop_marca",
+      "breakpoints": true
     }
   ]
 }

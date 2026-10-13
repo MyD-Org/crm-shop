@@ -1,8 +1,12 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { homeContent } from "@/db/schema";
+import { shopTenantId } from "@/lib/tenant";
 
 /**
+ * Todas las funciones de este módulo (y `getContenidoHome`) acotan por
+ * `shopTenantId()`: la tabla es de todas las tiendas que comparten la base.
+ *
  * Upsert de una sección de home. Llaman las server actions de
  * `home-acciones.ts` (editor in-place de la home). `payload === null`
  * (navBadge apagado) se persiste como jsonb 'null': borrar la fila NO apaga
@@ -18,11 +22,12 @@ export async function guardarSeccionHome(
     payload === null
       ? sql`'null'::jsonb`
       : (payload as Record<string, unknown>);
+  const tenantId = shopTenantId();
   const [fila] = await getDb()
     .insert(homeContent)
-    .values({ key, payload: valor as unknown as Record<string, unknown> })
+    .values({ tenantId, key, payload: valor as unknown as Record<string, unknown> })
     .onConflictDoUpdate({
-      target: homeContent.key,
+      target: [homeContent.tenantId, homeContent.key],
       set: { payload: valor as unknown as Record<string, unknown>, updatedAt: new Date() },
     })
     .returning({ updatedAt: homeContent.updatedAt });
@@ -31,7 +36,9 @@ export async function guardarSeccionHome(
 
 /** Elimina la fila de una sección (vuelve al default). */
 export async function borrarSeccionHome(key: string): Promise<void> {
-  await getDb().delete(homeContent).where(eq(homeContent.key, key));
+  await getDb()
+    .delete(homeContent)
+    .where(and(eq(homeContent.tenantId, shopTenantId()), eq(homeContent.key, key)));
 }
 
 /** Payload crudo de una sección, o `undefined` si no tiene fila. */
@@ -39,7 +46,7 @@ export async function leerSeccionHome(key: string): Promise<unknown> {
   const [fila] = await getDb()
     .select({ payload: homeContent.payload })
     .from(homeContent)
-    .where(eq(homeContent.key, key));
+    .where(and(eq(homeContent.tenantId, shopTenantId()), eq(homeContent.key, key)));
   return fila?.payload;
 }
 
@@ -52,6 +59,6 @@ export async function leerSeccionesHome(keys: readonly string[]): Promise<Map<st
   const filas = await getDb()
     .select({ key: homeContent.key, payload: homeContent.payload })
     .from(homeContent)
-    .where(inArray(homeContent.key, [...keys]));
+    .where(and(eq(homeContent.tenantId, shopTenantId()), inArray(homeContent.key, [...keys])));
   return new Map(filas.map((f) => [f.key, f.payload]));
 }

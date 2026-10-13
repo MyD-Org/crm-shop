@@ -61,7 +61,7 @@ describe("migración 0085: shop_app y la marca de la tienda (DB real)", () => {
       await sql.unsafe("CREATE ROLE shop_app NOLOGIN")
       rolCreadoAca = true
     }
-    for (const m of [MIGRACION_0032, MIGRACION_0085]) await sql.unsafe(bloqueDeGrants(m))
+    for (const m of [MIGRACION_0032, MIGRACION_0078, MIGRACION_0085]) await sql.unsafe(bloqueDeGrants(m))
 
     await sql`DELETE FROM tenants WHERE id = ${T}`
     await sql`INSERT INTO tenants (id, name, logo_path, resend_from) VALUES (${T}, 'Tenant Marca', '/logos/test.svg', 'no-responder@plataforma.example')`

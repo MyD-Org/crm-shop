@@ -129,6 +129,8 @@ interface RespuestaPago {
   referencia?: string;
   desafio?: { externalResourceUrl: string; creq: string };
   error?: string;
+  /** Pendiente porque el procesador no respondió: no se sabe si el pago se creó. */
+  sinConfirmar?: boolean;
 }
 
 export function PagoMercadoPago({
@@ -366,7 +368,9 @@ export function PagoMercadoPago({
       }
 
       setEstado({ fase: "pendiente" });
-      onPendiente?.();
+      // `sinConfirmar`: Mercado Pago no respondió y no se sabe si el pago existe. Se espera el resultado,
+      // pero el cobro no quedó enviado: no se avisa al checkout (que vaciaría el carrito).
+      if (!json.sinConfirmar) onPendiente?.();
     } catch {
       remontarBrick();
       setEstado({

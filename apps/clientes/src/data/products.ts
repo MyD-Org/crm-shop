@@ -65,6 +65,11 @@ export interface ResumenVariantes {
   cantidad: number;
   /** Menor precio exhibido (con IVA si se conoce) cuando los precios difieren. Ausente = todos iguales. */
   desde?: number;
+  /**
+   * Las primeras etiquetas de las opciones (orden natural, agotadas incluidas), hasta `MAX_ETIQUETAS_CARD`:
+   * la card las muestra para que se vea qué opciones hay sin abrir nada. `cantidad` dice cuántas son en total.
+   */
+  etiquetas?: string[];
 }
 
 /** Una opción del selector de la ficha: la variante con su producto ya resuelto (precio, stock, fotos). */

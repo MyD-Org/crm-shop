@@ -21,7 +21,7 @@ interface AddToCartButtonProps {
  * pero la home todavía envuelve la card entera en un `<Link>`: sin esto, el
  * "+" de la home navegaría a la ficha.
  */
-function sinNavegar(e: MouseEvent) {
+export function sinNavegar(e: MouseEvent) {
   e.preventDefault();
   e.stopPropagation();
 }

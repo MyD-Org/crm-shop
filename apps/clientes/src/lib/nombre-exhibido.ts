@@ -18,14 +18,44 @@ export function nameEsCodigo(fila: { name: string; code: string | null }): boole
   return !!name && !!code && (code === name || code.startsWith(`${name}-`));
 }
 
+/**
+ * Flag `variantes-selector`: el nombre del modelo cuando la fila es una variante de Alegra de un grupo
+ * y el ancla no tiene nombre curado. El `name` de la variante termina en " / " + etiqueta ("Optic 3 /
+ * Blanco cálido"): sin ese sufijo queda el nombre del padre. Sólo `tipo = 'variante'`: en un grupo
+ * manual no hay nombre de padre (la usuaria lo pone en el admin) y el `name` se deja como está.
+ * `undefined` = no aplica. Misma regla que `nombreExhibidoSql`.
+ */
+function nombreSinOpcion(fila: {
+  overlayNombre: string | null;
+  name: string;
+  tipo?: string | null;
+  grupoId?: string | null;
+  etiqueta?: string | null;
+}): string | undefined {
+  if (fila.overlayNombre?.trim() || !fila.grupoId || fila.tipo !== "variante") return undefined;
+  const etiqueta = fila.etiqueta?.trim();
+  const nombre = fila.name?.trim();
+  if (!etiqueta || !nombre) return undefined;
+  const sufijo = ` / ${etiqueta}`;
+  if (nombre.length <= sufijo.length || nombre.slice(-sufijo.length).toLowerCase() !== sufijo.toLowerCase()) {
+    return undefined;
+  }
+  return nombre.slice(0, -sufijo.length).trim() || undefined;
+}
+
 export function nombreExhibido(fila: {
   overlayNombre: string | null;
   description: string | null;
   name: string;
   code: string | null;
+  /** Sólo con `agrupar` (flag `variantes-selector`): ver `nombreSinOpcion`. */
+  tipo?: string | null;
+  grupoId?: string | null;
+  etiqueta?: string | null;
 }): string {
   return (
     fila.overlayNombre?.trim() ||
+    nombreSinOpcion(fila) ||
     (nameEsCodigo(fila) ? fila.description?.trim() : "") ||
     fila.name
   );
@@ -64,6 +94,22 @@ export const nombreExhibidoSql = sql<string>`coalesce(
   ) THEN nullif(btrim(${crmCatalogo.description}), '') END,
   ${crmCatalogo.name}
 )`;
+
+/**
+ * `nombreExhibidoSql` con el flag `variantes-selector` (ver `nombreSinOpcion`): para las consultas que
+ * arman el nombre de una línea (la cotización le suma la opción después, con `nombreConOpcion`). La
+ * búsqueda y el orden siguen usando `nombreExhibidoSql`: encontrar "Blanco cálido" por el nombre de la
+ * variante es lo que se quiere.
+ */
+export const nombreExhibidoAgrupadoSql = sql<string>`(CASE WHEN nullif(btrim(${crmOverlay.nombre}), '') IS NULL
+    AND ${crmCatalogo.grupoId} IS NOT NULL
+    AND ${crmCatalogo.tipo} = 'variante'
+    AND nullif(btrim(${crmCatalogo.etiqueta}), '') IS NOT NULL
+    AND length(btrim(${crmCatalogo.name})) > length(' / ' || btrim(${crmCatalogo.etiqueta}))
+    AND lower(right(btrim(${crmCatalogo.name}), length(' / ' || btrim(${crmCatalogo.etiqueta}))))
+        = lower(' / ' || btrim(${crmCatalogo.etiqueta}))
+  THEN btrim(left(btrim(${crmCatalogo.name}), length(btrim(${crmCatalogo.name})) - length(' / ' || btrim(${crmCatalogo.etiqueta}))))
+  ELSE ${nombreExhibidoSql} END)`;
 
 /**
  * Join al overlay del CRM (puede no tener fila). La tabla es de todos los

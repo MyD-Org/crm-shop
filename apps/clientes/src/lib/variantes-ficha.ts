@@ -93,7 +93,7 @@ export function opcionInicial<T extends { id: string; stock: Product["stock"] }>
 }
 
 export const TEXTOS_PANEL = {
-  verDetalle: "Ver detalle",
+  verDetalle: "Ver detalle del producto",
   agregarAlCarrito: "Agregar al carrito",
   cargando: "Cargando opciones",
   error: "No se pudieron cargar las opciones.",

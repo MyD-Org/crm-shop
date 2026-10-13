@@ -131,20 +131,18 @@ export function PanelOpciones({
       onOpenChange={alCambiar}
       size="sm"
       placement={movil ? "sheet" : "center"}
-      title={datos?.nombre ?? titulo}
+      title={titulo}
       description={TEXTOS_PANEL.ayuda}
       footer={
-        carga.estado === "listo" ? (
-          <Button
-            className="w-full"
-            size="lg"
-            disabled={noSePuedeAgregar}
-            onClick={agregar}
-          >
-            <CartIcon />
-            {elegida?.stock === "out" ? TEXTOS_VARIANTES.sinStock : TEXTOS_PANEL.agregarAlCarrito}
-          </Button>
-        ) : undefined
+        carga.estado === "error" ? undefined : (
+          <PiePanelOpciones
+            elegida={carga.estado === "listo" ? elegida : null}
+            idDeLaCard={producto.id}
+            deshabilitado={carga.estado !== "listo" || noSePuedeAgregar}
+            onAgregar={agregar}
+            onCerrar={cerrar}
+          />
+        )
       }
     >
       <CuerpoPanelOpciones
@@ -160,6 +158,42 @@ export function PanelOpciones({
         onCerrar={cerrar}
       />
     </Dialog>
+  );
+}
+
+/**
+ * Las acciones del panel, juntas en el pie: la principal arriba y «Ver detalle del producto» como
+ * secundaria, las dos a todo el ancho (en el celular quedan al alcance del pulgar).
+ */
+export function PiePanelOpciones({
+  elegida,
+  idDeLaCard,
+  deshabilitado,
+  onAgregar,
+  onCerrar,
+}: {
+  elegida: Product | null;
+  idDeLaCard: string;
+  deshabilitado: boolean;
+  onAgregar: () => void;
+  onCerrar: () => void;
+}) {
+  return (
+    <div className="flex w-full flex-col gap-2">
+      <Button className="w-full" size="lg" disabled={deshabilitado} onClick={onAgregar}>
+        <CartIcon />
+        {elegida?.stock === "out" ? TEXTOS_VARIANTES.sinStock : TEXTOS_PANEL.agregarAlCarrito}
+      </Button>
+      <Button
+        className="w-full"
+        variant="ghost"
+        href={rutaFichaVariante(elegida?.id ?? idDeLaCard)}
+        renderLink={linkNext}
+        onClick={onCerrar}
+      >
+        {TEXTOS_PANEL.verDetalle}
+      </Button>
+    </div>
   );
 }
 
@@ -186,7 +220,6 @@ export function CuerpoPanelOpciones({
   const sinPrecio = elegida != null && !(elegida.price > 0);
   const pendiente = elegida?.precioCuenta === "pendiente";
   const foto = elegida?.images?.[0] ?? fotoDeLaCard;
-  const rutaDetalle = rutaFichaVariante(elegida?.id ?? idDeLaCard);
   return (
     <>
     {carga.estado === "cargando" && (
@@ -264,10 +297,6 @@ export function CuerpoPanelOpciones({
           soldOutLabel={TEXTOS_VARIANTES.sinStock}
           unavailableLabel={TEXTOS_VARIANTES.noDisponible}
         />
-
-        <Button variant="link" href={rutaDetalle} renderLink={linkNext} onClick={onCerrar}>
-          {TEXTOS_PANEL.verDetalle}
-        </Button>
       </div>
     )}
     </>

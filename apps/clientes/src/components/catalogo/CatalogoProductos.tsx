@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ProductCard, cn } from "@myd-org/ui";
+import { Button, ProductCard, cn } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
@@ -102,7 +102,7 @@ export function CatalogoProductos({
           );
         }
         // Modelo con variantes (flag `variantes-selector`): "Desde $X" si los precios difieren y la
-        // cantidad de opciones. Sin botón de agregar: la opción se elige en la ficha.
+        // cantidad de opciones. En vez de «Agregar», «Elegir opción» lleva a la ficha.
         const vv = vistaCardVariantes(p);
         const medio = vv.esDesde ? undefined : p.precioMedio;
         return (
@@ -162,7 +162,11 @@ export function CatalogoProductos({
             ) : undefined
           }
           action={
-            vv.multiple ? undefined : (
+            vv.multiple ? (
+              <Button variant="soft" className="w-full" href={`/producto/${p.id}`} renderLink={linkNext}>
+                Elegir opción
+              </Button>
+            ) : (
               <AddToCartButton
                 disabled={p.stock === "out"}
                 max={maxCantidad(p)}

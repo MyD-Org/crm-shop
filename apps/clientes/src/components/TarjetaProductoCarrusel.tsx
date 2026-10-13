@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ProductCard } from "@myd-org/ui";
+import { Button, ProductCard } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
@@ -65,8 +65,8 @@ export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
       />
     );
   }
-  // Modelo con variantes (flag `variantes-selector`): "Desde $X" si los precios difieren; sin
-  // botón de agregar (la opción se elige en la ficha).
+  // Modelo con variantes (flag `variantes-selector`): "Desde $X" si los precios difieren; en
+  // vez de «Agregar», «Elegir opción» (la opción se elige en la ficha).
   const vv = vistaCardVariantes(p);
   const medio = vv.esDesde ? undefined : p.precioMedio;
   return (
@@ -106,7 +106,12 @@ export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
         // Si el nombre ya es el código, la nota lo repetiría.
         priceNote={vv.nota ?? (p.sku && !esCodigo ? `Cód. ${p.sku}` : undefined)}
         action={
-          vv.multiple ? undefined : (
+          vv.multiple ? (
+            // La card entera ya es un <Link> a la ficha: el clic sube y navega.
+            <Button variant="soft" className="w-full" tabIndex={-1}>
+              Elegir opción
+            </Button>
+          ) : (
             <AddToCartButton
               product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
             />

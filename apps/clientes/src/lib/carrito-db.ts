@@ -13,6 +13,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { carts } from "@/db/schema";
 import { getProductosPorIds } from "./catalog";
+import { nombreDeLinea } from "./nombre-linea";
+import { variantesSelector } from "./variantes-flag";
 import { preciosPrivados } from "./precios-privados-repo";
 import {
   mergeMax,
@@ -165,8 +167,10 @@ export async function enriquecer(
 ): Promise<CartItem[]> {
   if (lineas.length === 0) return [];
   const ids = lineas.map((l) => l.id);
+  // Flag `variantes-selector`: la línea de una variante se llama "Modelo / Opción", con su foto si tiene.
+  const agrupar = await variantesSelector();
   const [productos, privados] = await Promise.all([
-    getProductosPorIds(ids),
+    agrupar ? getProductosPorIds(ids, { agrupar: true }) : getProductosPorIds(ids),
     idListaPrivada ? preciosPrivados(idListaPrivada, ids) : Promise.resolve(null),
   ]);
   return lineas.map(({ id, qty }) => {
@@ -175,7 +179,7 @@ export async function enriquecer(
       ? {
           id,
           qty,
-          name: p.name,
+          name: nombreDeLinea(p),
           brand: p.brand,
           price: privados ? (privados.get(id) ?? 0) : p.price,
           image: p.images?.[0]?.url,

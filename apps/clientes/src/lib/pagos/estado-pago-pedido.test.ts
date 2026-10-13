@@ -12,9 +12,11 @@ const conciliarIntento = vi.fn();
 const proveedor = { id: "payway", configurado: () => true, cancelarPago: vi.fn() };
 const proveedorPago = vi.fn();
 const registrarCobro = vi.fn(async () => true);
+const descartarReserva = vi.fn(async () => {});
 
 vi.mock("@/lib/pedidos", () => ({
   cuentasRechazadasDelPedido: async () => [],
+  descartarReserva: (...a: unknown[]) => descartarReserva(...(a as [])),
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),
   intentoAbiertoDelPedido: (...a: unknown[]) => intentoAbiertoDelPedido(...a),
   motivoNoCobrable: (p: { estado: string }) => (p.estado === "cancelado" ? "cancelado" : null),
@@ -167,6 +169,35 @@ describe("estadoPagoDelPedido: sin cobro en curso y vuelta de Mercado Pago", () 
   it("con un intento abierto no es sinCobro", async () => {
     getPedidoParaPago.mockResolvedValue(pedido("pendiente"));
     expect((await estadoPagoDelPedido("p1", dueno))?.sinCobro).toBeUndefined();
+  });
+
+  it("reserva sin referencia reciente: se sigue esperando, sin consultar ni descartar", async () => {
+    getPedidoParaPago.mockResolvedValue(pedido("pendiente", { pagoMetodo: "mercadopago" }));
+    intentoAbiertoDelPedido.mockResolvedValue({ id: "i2", proveedor: "mercadopago", referencia: null, creadoEn: new Date() });
+    const r = await estadoPagoDelPedido("p1", dueno);
+    expect(r).toMatchObject({ estado: "pendiente" });
+    expect(r?.sinCobro).toBeUndefined();
+    expect(descartarReserva).not.toHaveBeenCalled();
+    expect(conciliarIntento).not.toHaveBeenCalled();
+  });
+
+  it("reserva sin referencia abandonada (más de 2 min): se cierra y pasa a sinCobro", async () => {
+    getPedidoParaPago.mockResolvedValue(pedido("pendiente", { pagoMetodo: "mercadopago" }));
+    intentoAbiertoDelPedido
+      .mockResolvedValueOnce({ id: "i2", proveedor: "mercadopago", referencia: null, creadoEn: new Date(Date.now() - 3 * 60_000) })
+      .mockResolvedValue(null);
+    expect(await estadoPagoDelPedido("p1", dueno)).toMatchObject({ estado: "pendiente", sinCobro: true });
+    expect(descartarReserva).toHaveBeenCalledWith("i2", "reserva_abandonada");
+  });
+
+  it("reserva vieja que un webhook reclamó mientras tanto: no es sinCobro y se consulta su pago", async () => {
+    getPedidoParaPago.mockResolvedValue(pedido("pendiente", { pagoMetodo: "mercadopago" }));
+    intentoAbiertoDelPedido
+      .mockResolvedValueOnce({ id: "i2", proveedor: "mercadopago", referencia: null, creadoEn: new Date(Date.now() - 3 * 60_000) })
+      .mockResolvedValue({ id: "i2", proveedor: "mercadopago", referencia: "999", creadoEn: new Date(Date.now() - 3 * 60_000) });
+    const r = await estadoPagoDelPedido("p1", dueno);
+    expect(r?.sinCobro).toBeUndefined();
+    expect(conciliarIntento).toHaveBeenCalled();
   });
 
   it("con el payment_id de la vuelta: consulta ese pago y, si es de este pedido, lo registra", async () => {

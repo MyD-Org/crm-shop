@@ -71,9 +71,21 @@ export default async function ProductoPage({ params }: Props) {
   // "Retiro en <local>: ..." por cada local y "Envío a domicilio: ..." (sólo con el flag
   // `disponibilidad-sucursal`), sin que el visitante elija nada. El envío usa la zona del visitante
   // (perfil o predeterminada) sólo para el plazo; no cambia qué se ve.
+  // Con selector de variantes (flag `variantes-selector`), la disponibilidad de TODAS las opciones:
+  // elegir otra no vuelve al servidor.
+  const idsDisponibilidad = producto.grupo ? producto.grupo.opciones.map((o) => o.id) : [producto.id];
   const disponibilidad = await (variantes
-    ? disponibilidadParaMostrar([producto.id], dispEntrega, undefined, true)
-    : disponibilidadParaMostrar([producto.id], dispEntrega));
+    ? disponibilidadParaMostrar(idsDisponibilidad, dispEntrega, undefined, true)
+    : disponibilidadParaMostrar(idsDisponibilidad, dispEntrega));
+  const configEnvio = reglas.envio ?? CONFIG_ENVIO_DEFAULT;
+  const envioDe = (id: string) => (
+    <Suspense fallback={textoEnvioFicha(configEnvio)}>
+      <EnvioProductoUbicacion
+        configEnvio={configEnvio}
+        plazo={disponibilidad?.productos[id]?.envio ? estadoEnvio(disponibilidad.productos[id].envio!) : null}
+      />
+    </Suspense>
+  );
   // Migas: la categoría del admin con sus padres. Sin ella, la de Alegra.
   const rutaCategorias = producto.categoriaPropiaId ? await rutaCategoriaPublica(producto.categoriaPropiaId) : [];
 
@@ -88,24 +100,22 @@ export default async function ProductoPage({ params }: Props) {
       />
       <ProductoClient
         producto={producto}
-        configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
+        configEnvio={configEnvio}
         localElegido={localElegido}
         envioElegido={envioElegido}
-        envioUbicacion={
-          // La ubicación sale de la cookie: va en un hueco por request, con la regla general de
-          // fallback, para que la ficha siga con su shell estático.
-          <Suspense fallback={textoEnvioFicha(reglas.envio ?? CONFIG_ENVIO_DEFAULT)}>
-            <EnvioProductoUbicacion
-              configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
-              plazo={disponibilidad?.productos[producto.id]?.envio ? estadoEnvio(disponibilidad.productos[producto.id].envio!) : null}
-            />
-          </Suspense>
+        // La ubicación sale de la cookie: va en un hueco por request, con la regla general de
+        // fallback, para que la ficha siga con su shell estático.
+        envioUbicacion={envioDe(producto.id)}
+        envioUbicacionPorId={
+          producto.grupo ? Object.fromEntries(producto.grupo.opciones.map((o) => [o.id, envioDe(o.id)])) : undefined
         }
         disponibilidad={
           disponibilidad?.productos[producto.id]
             ? { producto: disponibilidad.productos[producto.id], locales: disponibilidad.locales }
             : undefined
         }
+        disponibilidadPorId={producto.grupo ? disponibilidad?.productos : undefined}
+        localesDisponibilidad={producto.grupo ? disponibilidad?.locales : undefined}
         rutaCategorias={rutaCategorias}
         logosTarjetas={logosTarjetas(tarjetas)}
         relacionados={

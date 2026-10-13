@@ -32,6 +32,7 @@
 
 import { cache } from "react";
 import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { ProductStock } from "@myd-org/ui";
 import { getDb } from "@/db";
 import {
@@ -73,7 +74,8 @@ import {
   raizPlural,
   terminosBusqueda,
 } from "./catalogo-busqueda";
-import type { Product } from "@/data/products";
+import type { OpcionFicha, Product } from "@/data/products";
+import { resumirVariantes } from "./variantes-ficha";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import { armarPreciosMedios, type MediosPrecio } from "./medios-precio";
 import { disponibleSucursalSql, joinStock, stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
@@ -156,6 +158,13 @@ interface FilaCatalogo {
    * viene cuando la consulta los pidió (flag + tabla disponible); ausente o null = sin datos.
    */
   atributos?: unknown;
+  /**
+   * Flag `variantes-selector`: la opción de la variante dentro de su modelo y el grupo al que
+   * pertenece. Sólo vienen con `agrupar` (ver `columnasCatalogo`); con ambos, el producto lleva
+   * `opcion` y su línea del carrito/pedido se llama "Modelo / Opción".
+   */
+  etiqueta?: string | null;
+  grupoId?: string | null;
 }
 
 /**
@@ -210,6 +219,7 @@ export function mapFilaToProduct(
     fichaTecnicaUrl: urlDeFicha(fila.overlayFichaTecnica, baseMedios),
     ...(atributosEstructurados ? { atributosEstructurados } : {}),
     ...(especificaciones.length ? { especificaciones } : {}),
+    ...(fila.grupoId && fila.etiqueta?.trim() ? { opcion: fila.etiqueta.trim() } : {}),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
   };
 }
@@ -321,9 +331,11 @@ const atributosFilaSql = () =>
  * sucursales del contexto menos su reserva (`stockSucursalSql`); sin él, el de siempre. Con
  * `estructurados`, además los atributos de `catalog_atributos` (ver `atributosFilaSql`).
  */
-const columnasCatalogo = (disp?: ContextoDisponibilidad, estructurados = false) => {
+const columnasCatalogo = (disp?: ContextoDisponibilidad, estructurados = false, agrupar = false) => {
   const base = disp ? { ...COLUMNAS_CATALOGO_BASE, stock: stockSucursalSql(disp) } : COLUMNAS_CATALOGO_BASE;
-  return estructurados ? { ...base, atributos: sql<unknown>`${atributosFilaSql()}` } : base;
+  const conAtributos = estructurados ? { ...base, atributos: sql<unknown>`${atributosFilaSql()}` } : base;
+  // Con el flag `variantes-selector`: la opción de la variante, para nombrar la línea "Modelo / Opción".
+  return agrupar ? { ...conAtributos, etiqueta: crmCatalogo.etiqueta, grupoId: crmCatalogo.grupoId } : conAtributos;
 };
 
 /**
@@ -602,7 +614,7 @@ export async function getCatalogo(opts: {
   atributosEstructurados?: boolean;
 }): Promise<Product[]> {
   let query = getDb()
-    .select(columnasCatalogo(opts.disp, opts.atributosEstructurados))
+    .select(columnasCatalogo(opts.disp, opts.atributosEstructurados, opts.agrupar ?? false))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
@@ -664,7 +676,7 @@ export async function getCategoriaExacta(opts: {
   if (!categoria) return null;
 
   const filas = await getDb()
-    .select(columnasCatalogo(opts.disp))
+    .select(columnasCatalogo(opts.disp, false, opts.agrupar ?? false))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
@@ -724,7 +736,7 @@ export async function getProductosPorIds(
   if (alegraIds.length === 0) return new Map();
 
   const filas = await getDb()
-    .select(columnasCatalogo(opts?.disp, opts?.atributosEstructurados))
+    .select(columnasCatalogo(opts?.disp, opts?.atributosEstructurados, opts?.agrupar ?? false))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts?.agrupar ?? false))
@@ -739,9 +751,55 @@ export async function getProductosPorIds(
       ),
     );
 
+  // Con el flag: la foto propia de cada variante, si la tiene (si no, la del modelo).
+  const propias = new Map<string, FotoCrm[]>();
+  if (opts?.agrupar && filas.length) {
+    const fotos = await getDb()
+      .select({ alegraId: crmOverlay.alegraId, fotos: crmOverlay.fotos })
+      .from(crmOverlay)
+      .where(and(eq(crmOverlay.tenantId, shopTenantId()), inArray(crmOverlay.alegraId, [...alegraIds])));
+    for (const f of fotos) if (f.fotos?.length) propias.set(f.alegraId, f.fotos);
+  }
+
   return new Map(
-    filas.map((f) => [f.alegraId, mapFilaToProduct(f, opts?.idPriceList, undefined, undefined, opts?.mediosPrecio)]),
+    filas.map((f) => {
+      const fotosPropias = propias.get(f.alegraId);
+      const fila = f;
+      return [
+        f.alegraId,
+        mapFilaToProduct(
+          { ...fila, overlayFotos: fotosPropias?.length ? fotosPropias : fila.overlayFotos },
+          opts?.idPriceList,
+          undefined,
+          undefined,
+          opts?.mediosPrecio,
+        ),
+      ];
+    }),
   );
+}
+
+/**
+ * Flag `variantes-selector`: para cada id que es el MODELO de un grupo (el padre, que no se vende), el
+ * id de su representante activo. Un favorito o un link viejo con el id del modelo se resuelve así a
+ * una opción comprable. Los ids que no son un modelo, o cuyo modelo no tiene opciones activas, no
+ * aparecen en el resultado. Una consulta, con el tenant en el WHERE.
+ */
+export async function representantesDePadres(ids: readonly string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const db = getDb();
+  // Sólo los que son un padre de verdad: el ancla de un grupo manual es un producto vendible y no se reemplaza.
+  const padres = db
+    .select({ id: crmCatalogo.alegraId })
+    .from(crmCatalogo)
+    .where(and(enTenantCatalogo(), eq(crmCatalogo.tipo, "padre"), inArray(crmCatalogo.alegraId, [...ids])));
+  const filas = await db
+    .select({ grupoId: crmCatalogo.grupoId, alegraId: crmCatalogo.alegraId })
+    .from(crmCatalogo)
+    .where(and(enTenantCatalogo(), activoSql, enListado(true), inArray(crmCatalogo.grupoId, padres)));
+  const mapa = new Map<string, string>();
+  for (const f of filas) if (f.grupoId && !mapa.has(f.grupoId)) mapa.set(f.grupoId, f.alegraId);
+  return mapa;
 }
 
 /**
@@ -768,8 +826,17 @@ export async function getProductosPorSkus(
   const codigos = [...new Set(skus.map((s) => s.trim().toUpperCase()).filter(Boolean))];
   if (codigos.length === 0) return [];
 
-  const filas = await getDb()
-    .select(columnasCatalogo(opts.disp))
+  const db = getDb();
+  const coincideCodigo = or(
+    inArray(sql`upper(btrim(${crmCatalogo.code}))`, codigos),
+    inArray(sql`upper(btrim(${crmCatalogo.name}))`, codigos),
+  );
+  const gruposDeCodigos = db
+    .select({ g: sql<string>`${crmCatalogo.grupoId}` })
+    .from(crmCatalogo)
+    .where(and(enTenantCatalogo(), coincideCodigo));
+  const filas = await db
+    .select(columnasCatalogo(opts.disp, false, opts.agrupar ?? false))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
@@ -783,13 +850,160 @@ export async function getProductosPorSkus(
         soloVisiblesSql(opts.soloVisibles),
         visibleEnZonaSql(opts.disp),
         or(
-          inArray(sql`upper(btrim(${crmCatalogo.code}))`, codigos),
-          inArray(sql`upper(btrim(${crmCatalogo.name}))`, codigos),
+          coincideCodigo,
+          // Con el flag, el código de CUALQUIER variante trae a su modelo (una card por modelo, con su
+          // representante), no sólo el código de la que es representante.
+          opts.agrupar ? inArray(crmCatalogo.grupoId, gruposDeCodigos) : undefined,
         ),
       ),
     );
 
-  return filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, opts.mediosPrecio));
+  const productos = filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, opts.mediosPrecio));
+  if (!opts.agrupar) return productos;
+  // Los códigos pedidos que cayeron en el grupo de cada card (para ubicarla en el lugar elegido).
+  const grupoDe = new Map(filas.map((f) => [f.alegraId, (f as { grupoId?: string | null }).grupoId ?? null]));
+  const codigosPorGrupo = new Map<string, string[]>();
+  const grupos = [...new Set([...grupoDe.values()].filter((g): g is string => !!g))];
+  if (grupos.length) {
+    const elegidas = await db
+      .select({ grupoId: crmCatalogo.grupoId, code: crmCatalogo.code, name: crmCatalogo.name })
+      .from(crmCatalogo)
+      .where(and(enTenantCatalogo(), inArray(crmCatalogo.grupoId, grupos), coincideCodigo));
+    for (const e of elegidas) {
+      if (!e.grupoId) continue;
+      const lista = codigosPorGrupo.get(e.grupoId) ?? [];
+      for (const c of [e.code, e.name]) if (c && codigos.includes(c.trim().toUpperCase())) lista.push(c.trim().toUpperCase());
+      codigosPorGrupo.set(e.grupoId, lista);
+    }
+  }
+  return conResumenDeVariantes(
+    productos.map((p) => {
+      const g = grupoDe.get(p.id);
+      const cods = g ? codigosPorGrupo.get(g) : undefined;
+      return cods?.length ? { ...p, codigosElegidos: [...new Set(cods)] } : p;
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Variantes (flag `variantes-selector`, change `variantes-de-producto`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Precio exhibido (con IVA si se conoce) de una fila de la vista: el mismo que muestra la card del
+ * producto (`mapFilaToProduct`), para comparar variantes entre sí.
+ */
+function precioExhibidoDe(prices: unknown, iva: string | null, idPriceList?: string): number {
+  const neto = precioDeLista(mapPrecios(prices), idPriceList);
+  const ivaNum = iva != null ? Number(iva) : null;
+  return camposIva(neto, ivaNum).precioFinal ?? neto;
+}
+
+/**
+ * Sólo con el flag prendido. Para cada producto de la lista que pertenece a un grupo con al menos
+ * 2 variantes activas con precio, suma `variantes` (cantidad de opciones y, si los precios difieren,
+ * el menor: "Desde $X"). Los productos sueltos y los modelos de una sola opción quedan como estaban.
+ *
+ * Son dos lecturas por página (el grupo de cada producto y sus hermanas), ambas con el tenant en el
+ * WHERE. Los precios son los públicos de la lista del visitante (los que ya tiene la card): el
+ * precio de lista privada de una cuenta se superpone en el navegador, y la card no ofrece "Desde"
+ * cuando eso pasa (ver `vistaCardVariantes`).
+ */
+export async function conResumenDeVariantes(productos: Product[], idPriceList?: string): Promise<Product[]> {
+  if (productos.length === 0) return productos;
+  const db = getDb();
+  const grupos = await db
+    .select({ alegraId: crmCatalogo.alegraId, grupoId: crmCatalogo.grupoId })
+    .from(crmCatalogo)
+    .where(
+      and(
+        enTenantCatalogo(),
+        inArray(
+          crmCatalogo.alegraId,
+          productos.map((p) => p.id),
+        ),
+        sql`${crmCatalogo.grupoId} is not null`,
+      ),
+    );
+  if (grupos.length === 0) return productos;
+  const idsDeGrupo = [...new Set(grupos.map((g) => g.grupoId as string))];
+  const hermanas = await db
+    .select({ grupoId: crmCatalogo.grupoId, prices: preciosSql, iva: crmCatalogo.ivaPorcentaje })
+    .from(crmCatalogo)
+    .where(and(enTenantCatalogo(), inArray(crmCatalogo.grupoId, idsDeGrupo), activoSql, conPrecioSql));
+  const preciosPorGrupo = new Map<string, number[]>();
+  for (const h of hermanas) {
+    const lista = preciosPorGrupo.get(h.grupoId as string) ?? [];
+    lista.push(precioExhibidoDe(h.prices, h.iva, idPriceList));
+    preciosPorGrupo.set(h.grupoId as string, lista);
+  }
+  const grupoDe = new Map(grupos.map((g) => [g.alegraId, g.grupoId as string]));
+  return productos.map((p) => {
+    const g = grupoDe.get(p.id);
+    const resumen = g ? resumirVariantes(preciosPorGrupo.get(g) ?? []) : undefined;
+    return resumen ? { ...p, variantes: resumen } : p;
+  });
+}
+
+/**
+ * Las opciones del selector de la ficha: todas las variantes activas, con precio y visibles del
+ * grupo (la fila de la vista con `grupo_id = X`; el padre no está: nunca es `activo`). Cada una trae
+ * su `Product` completo (precio, stock disponible, "con medio", cuotas) por el mismo camino que la
+ * ficha de un producto suelto, con el overlay del ANCLA (nombre, descripción, ficha, fotos del
+ * modelo). Las fotos de la opción son las propias de su overlay si las tiene; si no, las del modelo.
+ */
+export async function getVariantesDeGrupo(
+  grupoId: string,
+  opts: {
+    soloVisibles: boolean;
+    idPriceList?: string;
+    disp?: ContextoDisponibilidad;
+    atributosEstructurados?: boolean;
+    mediosPrecio?: MediosPrecio;
+  },
+): Promise<(OpcionFicha & { esRepresentante: boolean })[]> {
+  const propio = alias(crmOverlay, "overlay_propio");
+  const filas = await getDb()
+    .select({
+      ...columnasCatalogo(opts.disp, opts.atributosEstructurados),
+      etiqueta: crmCatalogo.etiqueta,
+      esRepresentante: crmCatalogo.esRepresentante,
+      fotosPropias: propio.fotos,
+    })
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+    .leftJoin(crmOverlay, joinOverlay(true))
+    .leftJoin(propio, and(eq(propio.alegraId, crmCatalogo.alegraId), eq(propio.tenantId, shopTenantId())))
+    .leftJoin(...joinStock(opts.disp))
+    .where(
+      and(
+        enTenantCatalogo(),
+        eq(crmCatalogo.grupoId, grupoId),
+        activoSql,
+        conPrecioSql,
+        soloVisiblesSql(opts.soloVisibles),
+        visibleEnZonaSql(opts.disp),
+      ),
+    );
+  const opciones = filas.map((f) => {
+    const { etiqueta, esRepresentante, fotosPropias, ...fila } = f;
+    // `grupoId` no se selecciona (es el del pedido): todas las opciones son del mismo grupo.
+    const producto = mapFilaToProduct(
+      { ...fila, etiqueta, grupoId, overlayFotos: fotosPropias?.length ? fotosPropias : fila.overlayFotos },
+      opts.idPriceList,
+      undefined,
+      undefined,
+      opts.mediosPrecio,
+    );
+    return { id: fila.alegraId, etiqueta: etiqueta?.trim() || producto.name, producto, esRepresentante };
+  });
+  return ordenarOpciones(opciones);
+}
+
+/** Las opciones en orden natural de etiqueta ("5 m" antes que "10 m"), con el id como desempate estable. */
+const COLLATOR_OPCIONES = new Intl.Collator("es", { numeric: true, sensitivity: "base" });
+function ordenarOpciones<T extends OpcionFicha>(opciones: T[]): T[] {
+  return [...opciones].sort((a, b) => COLLATOR_OPCIONES.compare(a.etiqueta, b.etiqueta) || a.id.localeCompare(b.id));
 }
 
 // ---------------------------------------------------------------------------
@@ -1505,7 +1719,7 @@ export async function getPaginaCatalogo(opts: {
 
   const filas = hayFilas
     ? await getDb()
-        .select(columnasCatalogo(opts.disp, filtros.atributosEstructurados))
+        .select(columnasCatalogo(opts.disp, filtros.atributosEstructurados, agrupar))
         .from(crmCatalogo)
         .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
         .leftJoin(crmOverlay, joinOverlay(agrupar))
@@ -1516,7 +1730,8 @@ export async function getPaginaCatalogo(opts: {
         .offset((pagina - 1) * porPagina)
     : [];
 
-  const productos = filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, opts.mediosPrecio));
+  const mapeados = filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, opts.mediosPrecio));
+  const productos = agrupar ? await conResumenDeVariantes(mapeados, opts.idPriceList) : mapeados;
   if (opts.sinConteo) return { productos, total: productos.length, pagina: 1, paginas: 1, totalExacto: false };
   return { productos, total, pagina, paginas, totalExacto: true };
 }
@@ -1577,7 +1792,37 @@ export async function getProducto(
     atributosEstructurados: opts.atributosEstructurados,
     mediosPrecio: opts.mediosPrecio,
   });
-  return productos.get(id) ?? null;
+  const producto = productos.get(id) ?? null;
+  if (!producto || !opts.agrupar) return producto;
+  return conGrupoDeFicha(producto, opts);
+}
+
+/**
+ * Con el flag `variantes-selector`: si el producto es una variante de un modelo con al menos 2
+ * opciones activas (y él es una de ellas), le suma `grupo` para que la ficha dibuje el selector. Un
+ * producto suelto, un modelo de una sola opción o una variante que no figura entre las opciones
+ * (sin precio, oculta) se devuelve tal cual: ficha sin selector.
+ */
+async function conGrupoDeFicha(producto: Product, opts: Parameters<typeof getProducto>[1]): Promise<Product> {
+  const [fila] = await getDb()
+    .select({ grupoId: crmCatalogo.grupoId })
+    .from(crmCatalogo)
+    .where(and(enTenantCatalogo(), eq(crmCatalogo.alegraId, producto.id)))
+    .limit(1);
+  if (!fila?.grupoId) return producto;
+  const encontradas = await getVariantesDeGrupo(fila.grupoId, {
+    soloVisibles: opts.soloVisibles,
+    idPriceList: opts.idPriceList,
+    disp: opts.disp,
+    atributosEstructurados: opts.atributosEstructurados,
+    mediosPrecio: opts.mediosPrecio,
+  });
+  if (encontradas.length < 2 || !encontradas.some((o) => o.id === producto.id)) return producto;
+  const representanteId = (encontradas.find((o) => o.esRepresentante) ?? encontradas[0]).id;
+  const opciones: OpcionFicha[] = encontradas.map(({ id, etiqueta, producto: p }) => ({ id, etiqueta, producto: p }));
+  // El producto pedido es el de su propia opción (precio, fotos y stock de ESA variante).
+  const propio = opciones.find((o) => o.id === producto.id)?.producto ?? producto;
+  return { ...propio, grupo: { representanteId, opciones } };
 }
 
 // ---------------------------------------------------------------------------

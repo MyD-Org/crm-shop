@@ -8,16 +8,20 @@
  * navegador (`usePreciosCuenta`), igual que en Mi cuenta.
  */
 import type { Product } from "@/data/products";
-import { getProductosPorIds } from "./catalog";
+import { getProductosPorIds, representantesDePadres } from "./catalog";
 import { catalogoSoloVisibles } from "./catalogo-flag";
 import { flagsPublicos } from "./flags-publicos";
+import { conNombreDeLinea } from "./nombre-linea";
 
 export async function productosFavoritosCompartidos(
   ids: readonly string[],
 ): Promise<{ productos: Product[]; noDisponibles: number }> {
   if (ids.length === 0) return { productos: [], noDisponibles: 0 };
   const [soloVisibles, { mediosPrecio, variantes }] = await Promise.all([catalogoSoloVisibles(), flagsPublicos()]);
-  const porId = await getProductosPorIds([...ids], {
+  // Un id de modelo (padre) se muestra como su representante.
+  const reales = variantes ? await representantesDePadres(ids) : new Map<string, string>();
+  const idsReales = [...new Set(ids.map((id) => reales.get(id) ?? id))];
+  const porId = await getProductosPorIds(idsReales, {
     soloActivos: true,
     soloVisibles,
     ...(variantes ? { agrupar: true } : {}),
@@ -28,9 +32,9 @@ export async function productosFavoritosCompartidos(
       ...(mediosPrecio.cuotas ? { cuotas: mediosPrecio.cuotas } : {}),
     },
   });
-  const productos = ids.flatMap((id) => {
+  const productos = idsReales.flatMap((id) => {
     const p = porId.get(id);
-    return p && p.price > 0 ? [p] : [];
+    return p && p.price > 0 ? [conNombreDeLinea(p)] : [];
   });
   return { productos, noDisponibles: ids.length - productos.length };
 }

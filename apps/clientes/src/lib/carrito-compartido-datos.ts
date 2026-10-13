@@ -15,6 +15,7 @@ import { precioFinal } from "@/lib/precio-final";
 import { getProductosPorIds } from "@/lib/catalog";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { variantesSelector } from "@/lib/variantes-flag";
+import { nombreDeLinea } from "@/lib/nombre-linea";
 import type { CartItem, LineaCarrito } from "@/lib/carrito-cliente";
 
 export interface ProductoCompartido {
@@ -51,7 +52,7 @@ export async function productosCompartidos(
     const neto = privados ? (privados.get(id) ?? 0) : p.price;
     const exhibido = privados ? (precioFinal(neto, p.ivaPorcentaje) ?? neto) : (p.precioFinal ?? p.price);
     return {
-      item: { id, qty, name: p.name, brand: p.brand, price: neto, image: p.images?.[0]?.url },
+      item: { id, qty, name: nombreDeLinea(p), brand: p.brand, price: neto, image: p.images?.[0]?.url },
       precioExhibido: exhibido,
     };
   });

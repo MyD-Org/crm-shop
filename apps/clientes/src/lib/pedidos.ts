@@ -21,6 +21,8 @@ import {
 } from "@/data/orders";
 import type { Product } from "@/data/products";
 import { getProductosPorIds } from "./catalog";
+import { nombreDeLinea } from "./nombre-linea";
+import { variantesSelector } from "./variantes-flag";
 import { vaciarCarritoTx } from "./carrito-db";
 import type { CartItem } from "./carrito-cliente";
 import { disponiblesEnTx, noVisiblesEnTx, ProductoNoDisponibleError, StockInsuficienteError } from "./stock-disponible";
@@ -604,7 +606,7 @@ export function armarOrder(
         qty: num(i.qty),
         price: num(i.precioUnitario),
         total: num(i.total),
-        nombreVisible: producto?.name || i.name,
+        nombreVisible: (producto && nombreDeLinea(producto)) || i.name,
         codigo: i.code || producto?.sku || i.name,
         ...(imagen ? { imagen } : {}),
       };
@@ -617,8 +619,11 @@ export function armarOrder(
  * sin filtro de estado ni de visibilidad (un pedido viejo sigue mostrando el
  * nombre de un ítem despublicado). Sin líneas no consulta.
  */
-function productosDeLineas(items: FilaItem[]): Promise<Map<string, Product>> {
-  return getProductosPorIds([...new Set(items.map((i) => i.alegraItemId))]);
+async function productosDeLineas(items: FilaItem[]): Promise<Map<string, Product>> {
+  // Flag `variantes-selector`: nombre "Modelo / Opción" y foto propia de la variante (ver `armarOrder`).
+  const agrupar = await variantesSelector();
+  const ids = [...new Set(items.map((i) => i.alegraItemId))];
+  return agrupar ? getProductosPorIds(ids, { agrupar: true }) : getProductosPorIds(ids);
 }
 
 /**

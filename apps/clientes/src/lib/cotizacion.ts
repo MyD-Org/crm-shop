@@ -34,6 +34,7 @@ import { stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { joinOverlay, nombreExhibidoSql } from "./nombre-exhibido";
+import { nombreConOpcion } from "./nombre-linea";
 import { costoEnvio, type EntregaTipo } from "./envio";
 import { preciosPrivados } from "./precios-privados-repo";
 import { MAX_LINEAS, QTY_MAX } from "./carrito-cliente";
@@ -217,6 +218,12 @@ export interface FilaEspejo {
   categoryName: string | null;
   /** false = el admin pidió no exhibir la marca. null/ausente = sin overlay ⇒ se muestra. */
   mostrarMarca?: boolean | null;
+  /**
+   * Flag `variantes-selector`: la opción de la variante y su grupo. Con ambos, el ítem se llama
+   * "Modelo / Opción" (ver `nombreConOpcion`), que es el nombre que queda en el pedido.
+   */
+  etiqueta?: string | null;
+  grupoId?: string | null;
 }
 
 /**
@@ -233,7 +240,7 @@ export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
   const conMarca = fila.mostrarMarca !== false;
   return {
     id: fila.alegraId,
-    name: fila.name,
+    name: fila.grupoId ? nombreConOpcion(fila.name, fila.etiqueta) : fila.name,
     reference: fila.code ?? undefined,
     status: fila.status === "active" ? "active" : "inactive",
     price: mapPrecios(fila.prices),
@@ -292,6 +299,8 @@ async function leerEspejo(
           : estadoSql,
       categoryName: crmCategoriasAlegra.name,
       mostrarMarca: crmOverlay.mostrarMarca,
+      // Con el flag: la opción de la variante, para nombrar la línea "Modelo / Opción".
+      ...(agrupar ? { etiqueta: crmCatalogo.etiqueta, grupoId: crmCatalogo.grupoId } : {}),
     })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())

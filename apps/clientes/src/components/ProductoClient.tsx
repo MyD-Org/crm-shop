@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Button, QuantityStepper, Skeleton, type PaymentLogo } from "@myd-org/ui";
+import { Button, QuantityStepper, Skeleton, VariantSelector, type PaymentLogo } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { CuotasConCarrito, useProgresoCuotasCarrito } from "@/components/producto/CuotasConCarrito";
@@ -28,7 +28,9 @@ import { DudasProducto } from "@/components/producto/DudasProducto";
 import type { Product } from "@/data/products";
 import { CartIcon } from "@/components/catalogo/iconos";
 import { itemDe } from "@/lib/tracking/eventos";
+import { nombreDeLinea } from "@/lib/nombre-linea";
 import { track } from "@/lib/tracking/track";
+import { TEXTOS_VARIANTES, rutaFichaVariante } from "@/lib/variantes-ficha";
 
 function CheckIcon() {
   return (
@@ -79,14 +81,25 @@ export function ProductoClient({
   producto: productoLista,
   configEnvio = CONFIG_ENVIO_DEFAULT,
   envioUbicacion,
+  envioUbicacionPorId,
   localElegido,
   envioElegido,
   relacionados = null,
   rutaCategorias = [],
   disponibilidad,
+  disponibilidadPorId,
+  localesDisponibilidad,
   logosTarjetas = [],
 }: {
   producto: Product;
+  /**
+   * Con selector de variantes (`producto.grupo`): la disponibilidad de cada opción y los locales, para
+   * cambiar de opción sin volver al servidor. Ausentes = ficha de un producto suelto.
+   */
+  disponibilidadPorId?: Record<string, DisponibilidadVista>;
+  localesDisponibilidad?: LocalDisponibilidad[];
+  /** Con selector: el texto del envío de cada opción (su plazo puede diferir). */
+  envioUbicacionPorId?: Record<string, ReactNode>;
   /**
    * Flag `disponibilidad-sucursal`: disponibilidad del producto por modalidad, armada en el server.
    * Ausente = flag apagado (la ficha se ve como siempre).
@@ -109,19 +122,37 @@ export function ProductoClient({
 }) {
   // La ficha viene cacheada con el precio público; si el visitante tiene una lista privada, se pisa
   // acá (precio, sin "con medio" ni cuotas). Con sesión, hasta que llega se muestra un marcador.
+  //
+  // Con selector de variantes (flag `variantes-selector`) el producto que se ve es el de la opción
+  // elegida: precio, stock, fotos y botón de agregar son los de ESA variante (un ítem real de Alegra).
+  // Arranca en la opción de la URL; elegir otra cambia la dirección con `replaceState`, sin navegar.
+  const opciones = productoLista.grupo?.opciones;
+  const [opcionId, setOpcionId] = useState(productoLista.id);
+  const elegida = opciones?.find((o) => o.id === opcionId)?.producto ?? productoLista;
+  const productoElegido: Product = elegida;
   const producto = aplicarEstadoPrecio(
-    productoLista,
-    usePreciosCuenta([productoLista.id]).get(productoLista.id),
+    productoElegido,
+    usePreciosCuenta(opciones ? opciones.map((o) => o.id) : [productoLista.id]).get(productoElegido.id),
   );
   const precioPendiente = producto.precioCuenta === "pendiente";
   const [qty, setQty] = useState(1);
   const { addItem } = useCart();
   // Una vista por producto (no por cada cambio de precio de cuenta).
-  const idVisto = productoLista.id;
+  const idVisto = productoElegido.id;
   useEffect(() => {
-    track({ tipo: "ver_producto", item: itemDe(productoLista) });
+    track({ tipo: "ver_producto", item: itemDe(productoElegido) });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a propósito: sólo al cambiar de producto
   }, [idVisto]);
+
+  function elegirOpcion(id: string) {
+    const nueva = opciones?.find((o) => o.id === id);
+    if (!nueva) return;
+    setOpcionId(id);
+    // La cantidad elegida no puede pasar de lo que hay de la nueva opción.
+    setQty((q) => Math.max(1, Math.min(q, maxCantidad(nueva.producto))));
+    // La dirección refleja la opción (se puede compartir); sin recargar ni volver al servidor.
+    window.history.replaceState(null, "", rutaFichaVariante(id));
+  }
   // Confirmación en el mismo botón: agregar ya no abre el preview del header.
   const [agregado, setAgregado] = useState(false);
   const timerAgregado = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,7 +164,8 @@ export function ProductoClient({
   );
 
   function agregar() {
-    addItem({ ...producto, image: producto.images?.[0]?.url }, qty);
+    // Una variante entra al carrito como "Modelo / Opción" (flag `variantes-selector`).
+    addItem({ ...producto, name: nombreDeLinea(producto), image: producto.images?.[0]?.url }, qty);
     setAgregado(true);
     if (timerAgregado.current) clearTimeout(timerAgregado.current);
     timerAgregado.current = setTimeout(() => setAgregado(false), MS_AGREGADO);
@@ -254,6 +286,8 @@ export function ProductoClient({
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-12 lg:gap-y-10">
           <div className="min-w-0 lg:col-start-1 lg:row-start-1">
             <GaleriaProducto
+              // Cada opción tiene sus fotos: la galería arranca de cero al cambiar.
+              key={producto.id}
               fotos={producto.images}
               nombre={nombreParaMostrar}
               acciones={
@@ -294,6 +328,23 @@ export function ProductoClient({
                 </p>
               )}
             </div>
+
+            {/* Modelo con variantes (flag `variantes-selector`): cada opción es un producto real, con
+                su precio y su stock. Sin stock se ve y se puede elegir, pero no se compra. */}
+            {opciones && (
+              <VariantSelector
+                label={TEXTOS_VARIANTES.etiquetaSelector}
+                options={opciones.map((o) => ({
+                  id: o.id,
+                  label: o.etiqueta,
+                  soldOut: o.producto.stock === "out",
+                }))}
+                value={producto.id}
+                onChange={elegirOpcion}
+                soldOutLabel={TEXTOS_VARIANTES.sinStock}
+                unavailableLabel={TEXTOS_VARIANTES.noDisponible}
+              />
+            )}
 
             <div>
               {precioPendiente ? (
@@ -358,8 +409,12 @@ export function ProductoClient({
 
             <EntregaProducto
               configEnvio={configEnvio}
-              envioUbicacion={envioUbicacion}
-              disponibilidad={disponibilidad}
+              envioUbicacion={envioUbicacionPorId?.[producto.id] ?? envioUbicacion}
+              disponibilidad={
+                disponibilidadPorId?.[producto.id] && localesDisponibilidad
+                  ? { producto: disponibilidadPorId[producto.id], locales: localesDisponibilidad }
+                  : disponibilidad
+              }
               localElegido={localElegido}
               envioElegido={envioElegido}
             />

@@ -278,3 +278,35 @@ describe("cotizarItem con lista privada (listas-cuenta-corriente)", () => {
     expect(cotizarItem({ id: "1", qty: 1 }, inactivo, undefined, 700).problema).toBe("inactivo");
   });
 });
+
+describe("itemDesdeEspejo: variantes (flag variantes-selector)", () => {
+  const fila = {
+    alegraId: "12",
+    name: "Panel 18W",
+    code: "P18",
+    brand: null,
+    prices: [],
+    stock: "5",
+    ivaPorcentaje: null,
+    status: "active",
+    categoryName: null,
+  };
+
+  it("una variante se llama Modelo / Opción y conserva su propio id", () => {
+    const item = itemDesdeEspejo({ ...fila, grupoId: "10", etiqueta: "Rojo" });
+    expect(item.name).toBe("Panel 18W / Rojo");
+    expect(item.id).toBe("12");
+  });
+
+  it("dos opciones del mismo modelo son dos ítems distintos", () => {
+    const rojo = itemDesdeEspejo({ ...fila, alegraId: "12", grupoId: "10", etiqueta: "Rojo" });
+    const verde = itemDesdeEspejo({ ...fila, alegraId: "13", grupoId: "10", etiqueta: "Verde" });
+    expect([rojo.id, verde.id]).toEqual(["12", "13"]);
+    expect([rojo.name, verde.name]).toEqual(["Panel 18W / Rojo", "Panel 18W / Verde"]);
+  });
+
+  it("sin grupo (producto suelto o flag apagado) el nombre no cambia", () => {
+    expect(itemDesdeEspejo({ ...fila, etiqueta: "Rojo" }).name).toBe("Panel 18W");
+    expect(itemDesdeEspejo(fila).name).toBe("Panel 18W");
+  });
+});

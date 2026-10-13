@@ -103,7 +103,7 @@ export async function enviarFacturaPedido(input: {
       numeroPedido: formatearNumeroPedido(pedido.numero),
       numeroFactura,
       contactoNombre: pedido.contactoNombre,
-      pedidosUrl: pedidosUrl(),
+      pedidosUrl: pedidosUrl(tenant),
     })
     const base = `pedido-factura/${pedido.id}/${alegraId}`
     const enviado = await sendEmail(tenant, to, subject, html, text, {

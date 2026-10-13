@@ -39,6 +39,6 @@ export async function POST(req: NextRequest) {
   if (r.kind === "not_found") return NextResponse.json({ error: MSG_SUCURSAL_NO_EXISTE }, { status: 404 })
   if (r.kind === "invalid") return invalido(r.error)
 
-  await pingShopRevalidarSucursales()
+  await pingShopRevalidarSucursales(guard.tenantId)
   return NextResponse.json({ ok: true, destinos: r.destinos })
 }

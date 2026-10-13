@@ -23,6 +23,6 @@ export async function POST(req: Request) {
   const r = await crearCuenta(guard.tenantId, body)
   if (r.kind !== "ok") return errorDeCuenta(r)
 
-  const { propagado } = await pingShopRevalidarSucursales()
+  const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado, cuenta: r.cuenta }, { status: 201, headers: NO_STORE })
 }

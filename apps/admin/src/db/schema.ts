@@ -76,6 +76,11 @@ export const tenants = pgTable("tenants", {
   // textos por defecto (apps/clientes/src/lib/chat-ia-textos.ts). Validación: src/lib/chat-tienda.ts.
   chatEmptyState: text("chat_empty_state").notNull().default(""),
   chatSuggestions: jsonb("chat_suggestions").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  // Shop del tenant (0084). shopUrl = URL pública (enlaces); shopInternalUrl = base del ping de
+  // revalidación. El secreto del ping NO va acá: env SHOP_CRM_SECRET_<SLUG>. '' = sin Shop propio
+  // (rige el par histórico de envs). Ver src/lib/shop-destino.ts.
+  shopUrl: text("shop_url").notNull().default(""),
+  shopInternalUrl: text("shop_internal_url").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })

@@ -18,7 +18,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (r.kind === "not_found") return noEncontrado()
   if (r.kind !== "ok") return errorDeResultado(r)
 
-  const { propagado } = await pingShopRevalidarSucursales()
+  const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado, sucursal: r.sucursal }, { headers: NO_STORE })
 }
 
@@ -31,6 +31,6 @@ export async function DELETE(req: Request, { params }: Ctx) {
   if (r.kind === "not_found") return noEncontrado()
   if (r.kind !== "ok") return errorDeResultado(r)
 
-  const { propagado } = await pingShopRevalidarSucursales()
+  const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado }, { headers: NO_STORE })
 }

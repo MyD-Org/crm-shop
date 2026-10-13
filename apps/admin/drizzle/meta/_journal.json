@@ -589,6 +589,13 @@
       "when": 1793280300000,
       "tag": "0083_vista_shop_variantes",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793366700000,
+      "tag": "0084_tenants_shop_url",
+      "breakpoints": true
     }
   ]
 }

@@ -93,8 +93,9 @@ export function opcionInicial<T extends { id: string; stock: Product["stock"] }>
 }
 
 export const TEXTOS_PANEL = {
-  verDetalle: "Ver detalle",
-  agregarAlCarrito: "Agregar al carrito",
+  verDetalle: "Ver detalle del producto",
+  // Corto: comparte renglón con el contador de cantidad y no debe partirse en dos líneas.
+  agregarAlCarrito: "Agregar",
   cargando: "Cargando opciones",
   error: "No se pudieron cargar las opciones.",
   reintentar: "Reintentar",
@@ -103,3 +104,11 @@ export const TEXTOS_PANEL = {
   sinImpuestos: "precio sin impuestos nacionales",
   ayuda: "Elija una opción para agregarla a su carrito.",
 } as const;
+
+/**
+ * Texto de una opción en el selector. La agotada NO va tachada (se leía como "no elegida"): se le
+ * agrega «· Sin stock» y el botón de agregar queda deshabilitado al elegirla.
+ */
+export function etiquetaDeOpcion(etiqueta: string, agotada: boolean): string {
+  return agotada ? `${etiqueta} · ${TEXTOS_VARIANTES.sinStock}` : etiqueta;
+}

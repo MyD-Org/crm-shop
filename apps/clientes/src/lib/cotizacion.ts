@@ -33,7 +33,7 @@ import { activoSql, estadoSql, joinReserva, preciosSql, stockSql } from "./stock
 import { stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
-import { joinOverlay, nombreExhibidoSql } from "./nombre-exhibido";
+import { joinOverlay, nombreExhibidoAgrupadoSql, nombreExhibidoSql } from "./nombre-exhibido";
 import { nombreConOpcion } from "./nombre-linea";
 import { costoEnvio, type EntregaTipo } from "./envio";
 import { preciosPrivados } from "./precios-privados-repo";
@@ -279,7 +279,7 @@ async function leerEspejo(
     .select({
       alegraId: crmCatalogo.alegraId,
       // El mismo nombre que el catálogo y el carrito (ver nombre-exhibido.ts).
-      name: nombreExhibidoSql,
+      name: agrupar ? nombreExhibidoAgrupadoSql : nombreExhibidoSql,
       code: crmCatalogo.code,
       brand: crmCatalogo.brand,
       prices: preciosSql,

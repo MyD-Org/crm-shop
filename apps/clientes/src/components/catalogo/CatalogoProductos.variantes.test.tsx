@@ -4,11 +4,14 @@ import type { Product } from "@/data/products";
 
 /**
  * Cards del catálogo con el flag `variantes-selector`: UNA card por modelo, con "Desde $X" cuando los
- * precios de sus opciones difieren, y sin botón de agregar (la opción se elige en la ficha).
+ * precios de sus opciones difieren, y un botón «Agregar» que abre el panel para elegir la opción (no
+ * agrega directo ni navega).
  */
 
 vi.mock("@/components/AddToCartButton", () => ({ AddToCartButton: () => <button data-testid="agregar">Agregar</button> }));
 vi.mock("@/components/BotonFavorito", () => ({ BotonFavorito: () => null }));
+// El panel (Dialog por portal, pide las opciones al abrirse) se prueba aparte.
+vi.mock("./PanelOpciones", () => ({ PanelOpciones: () => null }));
 
 import { CatalogoProductos } from "./CatalogoProductos";
 
@@ -29,7 +32,7 @@ function html(productos: Product[]) {
 }
 
 describe("CatalogoProductos con modelos de variantes", () => {
-  it("modelo con precios distintos: 'Desde' el menor, la cantidad de opciones y sin botón de agregar", () => {
+  it("modelo con precios distintos: 'Desde' el menor, la cantidad de opciones y «Agregar» que abre el panel", () => {
     const out = html([prod("1", { variantes: { cantidad: 3, desde: 100 } })]);
     expect(out).toContain("Desde este precio · 3 opciones");
     expect(out).toContain("100");
@@ -40,6 +43,7 @@ describe("CatalogoProductos con modelos de variantes", () => {
   it("modelo con el mismo precio en todas las opciones: precio normal y '3 opciones'", () => {
     const out = html([prod("1", { variantes: { cantidad: 3 } })]);
     expect(out).toContain("3 opciones");
+    expect(out).toContain("aria-haspopup=\"dialog\"");
     expect(out).not.toContain("Desde este precio");
     expect(out).toContain("121");
     expect(out).not.toContain('data-testid="agregar"');
@@ -54,5 +58,17 @@ describe("CatalogoProductos con modelos de variantes", () => {
   it("la card enlaza a la ficha de la representante", () => {
     const out = html([prod("mdp:7", { variantes: { cantidad: 2 } })]);
     expect(out).toContain('href="/producto/mdp:7"');
+  });
+
+  it("nombra las opciones en la card (hasta 3, y '+N' con el resto)", () => {
+    const out = html([prod("1", { variantes: { cantidad: 5, etiquetas: ["Blanco frío", "Blanco cálido", "Neutro"] } })]);
+    expect(out).toContain("Blanco frío · Blanco cálido · Neutro +2");
+    expect(out).not.toContain("5 opciones");
+  });
+
+  it("el botón del modelo dice «Agregar», es un botón (no un enlace) y ya no ofrece «Elegir opción»", () => {
+    const out = html([prod("1", { variantes: { cantidad: 2 } })]);
+    expect(out).toMatch(/<button[^>]*aria-haspopup="dialog"[^>]*>[\s\S]*Agregar<\/button>/);
+    expect(out).not.toContain("Elegir opción");
   });
 });

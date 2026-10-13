@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { descripcionExhibida, nombreExhibido } from "./nombre-exhibido";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { descripcionExhibida, nombreExhibido, nombreExhibidoAgrupadoSql } from "./nombre-exhibido";
 
 describe("nombreExhibido", () => {
   it("prefiere el nombre curado en el CRM", () => {
@@ -55,5 +56,53 @@ describe("descripcionExhibida", () => {
     expect(
       descripcionExhibida({ overlayNombre: "Termica 2x16", description: "TERMICA 2X16", name: "COD-1", code: "COD-1" })
     ).toBeUndefined();
+  });
+});
+
+describe("nombreExhibido con variantes (flag variantes-selector)", () => {
+  const variante = {
+    overlayNombre: null,
+    description: null,
+    code: "OPT3-BC",
+    name: "Optic 3 / Blanco cálido",
+    tipo: "variante",
+    grupoId: "10",
+    etiqueta: "Blanco cálido",
+  };
+  it("variante de Alegra sin nombre curado: el nombre del modelo, sin la opción", () => {
+    expect(nombreExhibido(variante)).toBe("Optic 3");
+  });
+  it("ignora mayúsculas y espacios del sufijo", () => {
+    expect(nombreExhibido({ ...variante, etiqueta: "  BLANCO cálido " })).toBe("Optic 3");
+  });
+  it("con nombre curado en el ancla manda el curado", () => {
+    expect(nombreExhibido({ ...variante, overlayNombre: "Panel Optic" })).toBe("Panel Optic");
+  });
+  it("grupo manual (tipo simple): el name queda como está", () => {
+    expect(nombreExhibido({ ...variante, tipo: "simple", name: "Bulbo G120 cálido 2700K", etiqueta: "2700K" })).toBe(
+      "Bulbo G120 cálido 2700K",
+    );
+  });
+  it("si el name no termina en ' / ' + etiqueta, queda igual", () => {
+    expect(nombreExhibido({ ...variante, name: "Optic 3 Blanco cálido" })).toBe("Optic 3 Blanco cálido");
+  });
+  it("sin grupo (producto suelto o flag apagado, sin esos campos): como siempre", () => {
+    expect(nombreExhibido({ ...variante, grupoId: null })).toBe("Optic 3 / Blanco cálido");
+    const { tipo, grupoId, etiqueta, ...sinCampos } = variante;
+    void tipo; void grupoId; void etiqueta;
+    expect(nombreExhibido(sinCampos)).toBe("Optic 3 / Blanco cálido");
+  });
+  it("el name igual a la etiqueta no queda vacío", () => {
+    expect(nombreExhibido({ ...variante, name: " / Blanco cálido" })).toBe(" / Blanco cálido");
+  });
+});
+
+describe("nombreExhibidoAgrupadoSql", () => {
+  it("quita el sufijo sólo si es variante de un grupo sin nombre curado, y cae a nombreExhibidoSql", () => {
+    const q = new PgDialect().sqlToQuery(nombreExhibidoAgrupadoSql);
+    expect(q.sql).toContain("'variante'");
+    expect(q.sql).toContain('"grupo_id" IS NOT NULL');
+    expect(q.sql).toContain("' / ' || btrim(");
+    expect(q.sql).toContain("ELSE coalesce(");
   });
 });

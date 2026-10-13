@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { resumirVariantes, rutaFichaVariante, TEXTOS_VARIANTES, vistaCardVariantes } from "./variantes-ficha";
+import {
+  opcionInicial,
+  resumirVariantes,
+  rutaFichaVariante,
+  TEXTOS_VARIANTES,
+  textoEtiquetasOpciones,
+  vistaCardVariantes,
+} from "./variantes-ficha";
 
 describe("resumirVariantes", () => {
   it("un solo precio (o ninguno) no es un modelo con opciones", () => {
@@ -65,5 +72,43 @@ describe("rutaFichaVariante y textos", () => {
       TEXTOS_VARIANTES.desdeEsteMonto,
     ].join(" ");
     expect(todos).not.toMatch(/\b(elegí|elegi|tenés|vos|tu|tus)\b/i);
+  });
+});
+
+describe("etiquetas de las opciones en la card", () => {
+  it("resumirVariantes conserva las primeras 3 etiquetas, en el orden recibido", () => {
+    expect(resumirVariantes([1, 1, 1, 1], ["A", "B", "C", "D"])).toEqual({ cantidad: 4, etiquetas: ["A", "B", "C"] });
+    expect(resumirVariantes([1, 2], ["A", "B"])).toEqual({ cantidad: 2, desde: 1, etiquetas: ["A", "B"] });
+  });
+
+  it("textoEtiquetasOpciones: lista con ' · ' y '+N' si hay más opciones que etiquetas", () => {
+    expect(textoEtiquetasOpciones({ cantidad: 2, etiquetas: ["Blanco frío", "Blanco cálido"] })).toBe("Blanco frío · Blanco cálido");
+    expect(textoEtiquetasOpciones({ cantidad: 6, etiquetas: ["A", "B", "C"] })).toBe("A · B · C +3");
+    expect(textoEtiquetasOpciones({ cantidad: 3 })).toBeUndefined();
+  });
+
+  it("la nota de la card nombra las opciones; sin etiquetas, la cantidad", () => {
+    const base = { precioFinal: 121, price: 100 };
+    expect(vistaCardVariantes({ ...base, variantes: { cantidad: 2, etiquetas: ["A", "B"] } }).nota).toBe("A · B");
+    expect(vistaCardVariantes({ ...base, variantes: { cantidad: 2, desde: 80, etiquetas: ["A", "B"] } }).nota).toBe(
+      "Desde este precio · A · B",
+    );
+    expect(vistaCardVariantes({ ...base, variantes: { cantidad: 2 } }).nota).toBe("2 opciones");
+  });
+});
+
+describe("opcionInicial (panel de la card)", () => {
+  const o = (id: string, stock: "in" | "low" | "out") => ({ id, stock });
+  it("la de la card si tiene stock", () => {
+    expect(opcionInicial([o("1", "out"), o("2", "in"), o("3", "low")], "3")?.id).toBe("3");
+  });
+  it("si la de la card está agotada, la primera con stock", () => {
+    expect(opcionInicial([o("1", "out"), o("2", "in"), o("3", "in")], "1")?.id).toBe("2");
+  });
+  it("si ninguna tiene stock, la de la card (se ve «Sin stock»)", () => {
+    expect(opcionInicial([o("1", "out"), o("2", "out")], "2")?.id).toBe("2");
+  });
+  it("sin opciones, null", () => {
+    expect(opcionInicial([], "1")).toBeNull();
   });
 });

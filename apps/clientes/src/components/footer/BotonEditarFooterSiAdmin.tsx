@@ -11,7 +11,7 @@ import { BotonEditarFooter } from "./BotonEditarFooter";
 export async function BotonEditarFooterSiAdmin({ inicial }: { inicial: DatosFooter }) {
   if (!(await esAdmin())) return null;
   return (
-    <div data-editor="" className="mx-auto flex w-full max-w-[1280px] justify-end px-4 pt-6">
+    <div data-editor="" className="mx-auto flex w-full max-w-[1280px] flex-wrap justify-end gap-2 px-4 pt-6">
       <BotonEditarFooter inicial={inicial} />
     </div>
   );

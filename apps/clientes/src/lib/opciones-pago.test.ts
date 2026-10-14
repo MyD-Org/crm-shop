@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MedioPago } from "./medios-pago";
-import { ahorroFrente, listaDeOpcion, opcionElegida, opcionesDePago, textoConfirmar, tituloOpcion } from "./opciones-pago";
+import { ahorroFrente, bajadaOpcion, listaDeOpcion, tituloEnFrase, opcionElegida, opcionesDePago, textoConfirmar, tituloOpcion } from "./opciones-pago";
 
 const medio = (o: Partial<MedioPago>): MedioPago => ({
   slug: "transferencia",
@@ -108,5 +108,17 @@ describe("ahorroFrente", () => {
   });
   it("null si la diferencia es de redondeo", () => {
     expect(ahorroFrente({ a: 100, b: 100.4 }, [{ clave: "a", slug: "a", forma: null }, { clave: "b", slug: "b", forma: null }], "a")).toBeNull();
+  });
+});
+
+describe("tituloEnFrase y bajadaOpcion", () => {
+  it("en minúscula salvo Mercado Pago", () => {
+    expect(tituloEnFrase({ clave: "", slug: "transferencia", forma: null }, "Transferencia")).toBe("transferencia");
+    expect(tituloEnFrase({ clave: "", slug: "mercadopago", forma: "credito" }, "Mercado Pago")).toBe("tarjeta de crédito");
+    expect(tituloEnFrase({ clave: "", slug: "mercadopago", forma: "cuenta_mp" }, "Mercado Pago")).toBe("Mercado Pago");
+  });
+  it("bajada de la cuenta de Mercado Pago y de la transferencia", () => {
+    expect(bajadaOpcion({ clave: "", slug: "transferencia", forma: null })).toBe("Le enviamos los datos de la cuenta al confirmar");
+    expect(bajadaOpcion({ clave: "", slug: "efectivo", forma: null })).toBeUndefined();
   });
 });

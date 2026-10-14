@@ -7,6 +7,7 @@
  * (si los dos están activos, las tarjetas se cobran con Mercado Pago). El resto de los medios
  * (transferencia, efectivo…) es una card cada uno, sin forma.
  */
+import { SLUG_TRANSFERENCIA } from "./cuentas-bancarias";
 import { listaDelPagoUnico } from "./lista-medio";
 import { procesadorDeMedio, type MedioPago } from "./medios-pago";
 import { opcionesAplicables, type OpcionCobro } from "./pagos/opciones-cobro";
@@ -70,11 +71,21 @@ export function tituloOpcion(opcion: OpcionPago, nombreMedio: string): string {
   return nombreMedio;
 }
 
-/** Bajada de la card de una forma de cobro en línea (los medios manuales no llevan). */
+/** Título dentro de una frase ("Total con transferencia", "frente a tarjeta de crédito"): Mercado Pago queda igual. */
+export function tituloEnFrase(opcion: OpcionPago, nombreMedio: string): string {
+  const t = tituloOpcion(opcion, nombreMedio);
+  return opcion.forma === "cuenta_mp" ? t : t.charAt(0).toLowerCase() + t.slice(1);
+}
+
+/** Bajada de la card (los medios manuales que no son transferencia no llevan). */
 export function bajadaOpcion(opcion: OpcionPago): string | undefined {
   if (opcion.forma === "cuenta_mp") return "Con dinero disponible en su cuenta";
+  if (opcion.slug === SLUG_TRANSFERENCIA) return "Le enviamos los datos de la cuenta al confirmar";
   return undefined;
 }
+
+/** Detalle de la transferencia elegida cuando el admin no cargó instrucciones. */
+export const DETALLE_TRANSFERENCIA = "Al confirmar le mostramos el CBU y el alias. Tiene 24 h para transferir y adjuntar el comprobante.";
 
 /** Pie bajo el botón con la card de la cuenta de Mercado Pago elegida. */
 export const PIE_CUENTA_MP = "Al confirmar, lo llevamos a Mercado Pago para completar el pago.";

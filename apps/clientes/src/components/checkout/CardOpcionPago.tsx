@@ -4,7 +4,7 @@ import { IconoBanco, IconoBilletera, IconoTarjeta, IconoTarjetaDebito } from "@/
 import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
 import { fmtPrecio } from "@/lib/format";
 import type { MedioPago } from "@/lib/medios-pago";
-import type { OpcionPago } from "@/lib/opciones-pago";
+import { DETALLE_TRANSFERENCIA, type OpcionPago } from "@/lib/opciones-pago";
 
 function Icono({ opcion }: { opcion: OpcionPago }) {
   if (opcion.forma === "credito") return <IconoTarjeta />;
@@ -30,7 +30,9 @@ function detalleDe(opcion: OpcionPago, medio: MedioPago): string {
   if (opcion.forma === "cuenta_mp") return "Al confirmar, lo llevamos directo a Mercado Pago para que pague desde su cuenta.";
   if (opcion.forma === "credito") return "Al confirmar, ingresa los datos de la tarjeta y elige las cuotas.";
   if (opcion.forma === "debito") return "Al confirmar, ingresa los datos de la tarjeta de débito.";
-  return medio.instrucciones.trim();
+  const instrucciones = medio.instrucciones.trim();
+  if (!instrucciones && opcion.slug === SLUG_TRANSFERENCIA) return DETALLE_TRANSFERENCIA;
+  return instrucciones;
 }
 
 /**
@@ -111,7 +113,7 @@ export function CardOpcionPago({
       {ahorro && (
         <span className="mx-4 mb-4 flex items-center gap-2 rounded-xl bg-success-soft px-3 py-2 text-[13px] font-bold text-success sm:mr-5 sm:ml-[92px]">
           <IconoAhorro />
-          Ahorra {fmtPrecio(ahorro.monto)} frente a {ahorroFrenteA(ahorro.frente).toLowerCase()}
+          Ahorra {fmtPrecio(ahorro.monto)} frente a {ahorroFrenteA(ahorro.frente)}
         </span>
       )}
       {selected && detalle && (

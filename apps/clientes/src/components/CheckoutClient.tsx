@@ -11,7 +11,7 @@ import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, S
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { formaInicialDelMedio, pagoParaCotizar } from "@/lib/lista-medio";
-import { ahorroFrente, bajadaOpcion, opcionElegida, opcionesDePago, PIE_CUENTA_MP, textoConfirmar, tituloOpcion } from "@/lib/opciones-pago";
+import { ahorroFrente, bajadaOpcion, opcionElegida, opcionesDePago, PIE_CUENTA_MP, textoConfirmar, tituloEnFrase, tituloOpcion } from "@/lib/opciones-pago";
 import { leerFormaCobro, type OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { contenidoDistinto, COPY_CARRITO, type CartItem } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
@@ -183,6 +183,15 @@ function NavPaso({
         )}
       </div>
     </div>
+  );
+}
+
+function IconoFlechaConfirmar() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M5 12h14" />
+      <path d="M13 6l6 6-6 6" />
+    </svg>
   );
 }
 
@@ -823,6 +832,8 @@ export function CheckoutClient({
   const [totalesOpciones, setTotalesOpciones] = useState<Record<string, number | null>>({});
   const totalesRecibidos = cotizacion?.totalesOpciones;
   if (totalesRecibidos && totalesRecibidos !== totalesOpciones) setTotalesOpciones(totalesRecibidos);
+  // Lo que ahorra la card elegida (transferencia): se repite bajo el total del resumen.
+  const ahorroSel = opcionSel?.slug === SLUG_TRANSFERENCIA ? ahorroFrente(totalesOpciones, opcionesPago, opcionSel.clave) : null;
 
   /** Lo elegido en el formulario de pago (para el resumen); null fuera de él. */
   const [eleccionCuotas, setEleccionCuotas] = useState<EleccionCuotas | null>(null);
@@ -1651,8 +1662,28 @@ export function CheckoutClient({
     </>
   );
 
+  const textoBotonConfirmar = enviando ? "Confirmando…" : pasoActual === "pago" ? textoConfirmar(opcionSel) : "Confirmar pedido";
+  const motivoNoConfirmar =
+    !puedeConfirmar && !enviando
+      ? estado === "no_auth"
+                ? "Inicie sesión para confirmar el pedido."
+                : !facturacionCompleta
+                ? "Cargue sus datos de facturación para continuar."
+                : pasoActual !== "pago"
+                  ? "Complete los pasos para confirmar el pedido."
+                : cotizacion?.hayProblemas
+                  ? "Revise los productos marcados en rojo."
+                  : !datosCompletos
+                    ? "Complete todos los campos para continuar."
+                    : aDomicilio && !envioDisponible
+                      ? "Elija retiro en el local: el envío no está disponible."
+                      : "Confirmando precios y stock…"
+      : null;
+  const pieConfirmar = conCuenta ? PIE_TRANSFERENCIA : opcionSel?.forma === "cuenta_mp" ? PIE_CUENTA_MP : pieDelMedio(medioSel);
+  const nombreOpcionSel = opcionSel ? tituloEnFrase(opcionSel, medioSel?.nombre ?? "") : null;
+
   return (
-    <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
+    <main className={`mx-auto w-full max-w-contenido flex-1 px-4 py-8 ${pasoActual === "pago" ? "pb-56 lg:pb-8" : ""}`}>
       <nav className="mb-6 text-sm text-muted">
         <Link href="/carrito" className="hover:text-primary">Carrito</Link>
         {" / "}
@@ -1859,10 +1890,10 @@ export function CheckoutClient({
                           selected={opcionSel?.clave === o.clave}
                           onClick={() => setOpcionClave(o.clave)}
                           total={totalesOpciones[o.clave]}
-                          ahorro={o.slug === SLUG_TRANSFERENCIA ? ahorroFrente(totalesOpciones, opcionesPago, o.clave) : null}
+                          ahorro={o.clave === opcionSel?.clave ? ahorroSel : o.slug === SLUG_TRANSFERENCIA ? ahorroFrente(totalesOpciones, opcionesPago, o.clave) : null}
                           titulo={tituloOpcion(o, m.nombre)}
                           bajada={bajadaOpcion(o)}
-                          ahorroFrenteA={(x) => tituloOpcion(x, mediosParaElegir.find((y) => y.slug === x.slug)?.nombre ?? "")}
+                          ahorroFrenteA={(x) => tituloEnFrase(x, mediosParaElegir.find((y) => y.slug === x.slug)?.nombre ?? "")}
                           logos={
                             o.forma === "credito" || o.forma === "debito"
                               ? (o.slug === SLUG_PAYWAY ? tarjetasDelConvenioPayway : tarjetasMercadoPago)?.[o.forma]?.map((t) => ({ name: t.nombre, src: t.logo }))
@@ -1898,8 +1929,43 @@ export function CheckoutClient({
               placeholder="Horario de entrega, referencia del domicilio, etc."
               className="w-full rounded-sm border-[1.5px] border-border-strong bg-surface px-3 py-2 text-sm text-text outline-none focus-visible:border-primary"
             />
-            <NavPaso onVolver={() => irAPaso("entrega")} />
+            <div className="mt-5">
+              {errorEnvio && estado !== "no_auth" && (
+                <p className="mb-3 hidden rounded-lg bg-danger/5 p-3 text-xs text-danger lg:block">{errorEnvio}</p>
+              )}
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" onClick={() => irAPaso("entrega")}>
+                  Volver
+                </Button>
+                <span className="ml-auto hidden lg:block">
+                  <Button size="lg" disabled={!puedeConfirmar} onClick={confirmar}>
+                    {textoBotonConfirmar}
+                    <IconoFlechaConfirmar />
+                  </Button>
+                </span>
+              </div>
+              {motivoNoConfirmar && <p className="mt-2 hidden text-right text-xs text-muted lg:block">{motivoNoConfirmar}</p>}
+              <p className="mt-2 hidden text-right text-xs text-muted lg:block">{pieConfirmar}</p>
+            </div>
           </section>
+
+          {/* Celular: total y botón siempre a mano, en una barra fija abajo. */}
+          <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2 border-t border-border bg-surface px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] lg:hidden">
+            {errorEnvio && estado !== "no_auth" && (
+              <p className="rounded-lg bg-danger/5 p-2 text-xs text-danger">{errorEnvio}</p>
+            )}
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[13px] font-bold text-text">Total</span>
+              <span className="flex items-baseline gap-2">
+                {ahorroSel && <span className="text-xs font-bold text-success">Ahorra {fmtPrecio(ahorroSel.monto)}</span>}
+                <span className="font-display text-xl font-semibold text-text tabular-nums">{fmtPrecio(cotizacion?.total ?? 0)}</span>
+              </span>
+            </div>
+            <Button size="lg" className="w-full" disabled={!puedeConfirmar} onClick={confirmar}>
+              {textoBotonConfirmar}
+            </Button>
+            <p className="text-center text-[11px] text-muted">{motivoNoConfirmar ?? pieConfirmar}</p>
+          </div>
           </>
           )}
         </div>
@@ -1986,45 +2052,34 @@ export function CheckoutClient({
               </div>
             )}
             <div className="flex justify-between pt-2">
-              <span className="font-bold text-text">Total</span>
+              <span className="font-bold text-text">
+                Total{pasoActual === "pago" && nombreOpcionSel ? ` con ${nombreOpcionSel}` : ""}
+              </span>
               <span className="text-lg font-extrabold text-text">
                 {fmtPrecio(cotizacion?.total ?? 0)}
               </span>
             </div>
+            {pasoActual === "pago" && ahorroSel && (
+              <p className="text-right text-[13px] font-bold text-success">Ahorra {fmtPrecio(ahorroSel.monto)}</p>
+            )}
             <p className="text-xs text-muted">
               Precio sin impuestos {fmtPrecio(cotizacion?.subtotal ?? 0)}
             </p>
           </div>
 
-          {errorEnvio && estado !== "no_auth" && (
-            <p className="mt-4 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>
+          {/* En el paso Pago el botón va al pie de la sección (y en el celular, en la barra fija). */}
+          {pasoActual !== "pago" && (
+            <>
+              {errorEnvio && estado !== "no_auth" && (
+                <p className="mt-4 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>
+              )}
+              <Button className="mt-5 w-full" disabled={!puedeConfirmar} onClick={confirmar}>
+                {textoBotonConfirmar}
+              </Button>
+              {motivoNoConfirmar && <p className="mt-2 text-center text-xs text-muted">{motivoNoConfirmar}</p>}
+              <p className="mt-3 text-center text-xs text-muted">{pieConfirmar}</p>
+            </>
           )}
-
-          <Button className="mt-5 w-full" disabled={!puedeConfirmar} onClick={confirmar}>
-            {enviando ? "Confirmando…" : pasoActual === "pago" ? textoConfirmar(opcionSel) : "Confirmar pedido"}
-          </Button>
-
-          {!puedeConfirmar && !enviando && (
-            <p className="mt-2 text-center text-xs text-muted">
-              {estado === "no_auth"
-                ? "Inicie sesión para confirmar el pedido."
-                : !facturacionCompleta
-                ? "Cargue sus datos de facturación para continuar."
-                : pasoActual !== "pago"
-                  ? "Complete los pasos para confirmar el pedido."
-                : cotizacion?.hayProblemas
-                  ? "Revise los productos marcados en rojo."
-                  : !datosCompletos
-                    ? "Complete todos los campos para continuar."
-                    : aDomicilio && !envioDisponible
-                      ? "Elija retiro en el local: el envío no está disponible."
-                      : "Confirmando precios y stock…"}
-            </p>
-          )}
-
-          <p className="mt-3 text-center text-xs text-muted">
-            {conCuenta ? PIE_TRANSFERENCIA : opcionSel?.forma === "cuenta_mp" ? PIE_CUENTA_MP : pieDelMedio(medioSel)}
-          </p>
         </div>
       </div>
     </main>

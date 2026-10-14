@@ -54,7 +54,8 @@ import { sincronizarContactoConPerfil } from "./contacto-write-through";
 import { enmascararEmail, enviarEmail } from "./email";
 import { getPerfilFacturacion } from "./facturacion-db";
 import { urlSitioMail } from "./mail-layout";
-import { armarMailCodigoVinculacion, urlLogoMail } from "./vinculacion-mail";
+import { armarMailCodigoVinculacion, urlLogoMarca } from "./vinculacion-mail";
+import { getMarca } from "./marca";
 import { permitirAsync } from "./rate-limit";
 
 /** Ventana de validez del código. */
@@ -464,13 +465,14 @@ export async function solicitarVinculacion(
     expiresAt,
   });
 
+  const marca = await getMarca();
   const envio = await enviarEmail({
     to: email,
     ...armarMailCodigoVinculacion({
       codigo,
       vigenciaMin: VIGENCIA_MIN,
-      tienda: "Central LED",
-      logoUrl: urlLogoMail(),
+      tienda: marca.nombre,
+      logoUrl: urlLogoMarca(marca),
       sitioUrl: urlSitioMail(),
     }),
   });

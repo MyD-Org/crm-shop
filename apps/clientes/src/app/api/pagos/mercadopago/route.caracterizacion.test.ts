@@ -210,6 +210,15 @@ describe("POST /api/pagos/mercadopago — caracterización", () => {
     );
   });
 
+  it("la descripción del cobro lleva la marca de la tienda: otra marca no menciona a Central", async () => {
+    const { getMarca } = await import("@/lib/marca");
+    const { resolverMarca } = await import("@/lib/marca-base");
+    vi.mocked(getMarca).mockResolvedValueOnce(resolverMarca({ base: "generica", nombre: "Tienda Uno" }));
+    const r = await pagar({ ...base, monto: 1 });
+    expect(r.status).toBe(200);
+    expect(crearPago).toHaveBeenCalledWith(expect.objectContaining({ descripcion: "Pedido PED-1 — Tienda Uno" }));
+  });
+
   it("sin email en el pedido usa el de la sesión; documento no argentino no se manda", async () => {
     getPedidoParaPago.mockResolvedValue(
       pedidoBase({ clienteEmail: null, facturacionTipoDoc: "RUC", facturacionNroDoc: "123" }),

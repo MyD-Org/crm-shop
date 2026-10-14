@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { REGISTRO, infracciones } from "@/test/registro-usted";
-import { armarMailCodigoVinculacion, urlLogoMail } from "./vinculacion-mail";
+import { armarMailCodigoVinculacion, urlLogoMail, urlLogoMarca } from "./vinculacion-mail";
+import { MARCA_POR_DEFECTO, resolverMarca } from "./marca-base";
 
 const mail = armarMailCodigoVinculacion({ codigo: "123456", vigenciaMin: 10, tienda: "Tienda Ejemplo" });
 
@@ -67,5 +68,31 @@ describe("urlLogoMail", () => {
     );
     expect(urlLogoMail("")).toBeNull();
     expect(urlLogoMail("no es una url")).toBeNull();
+  });
+});
+
+describe("urlLogoMarca", () => {
+  it("Central: el logo de siempre, igual que urlLogoMail", () => {
+    expect(urlLogoMarca(MARCA_POR_DEFECTO, "https://tienda.cliente.example")).toBe(
+      urlLogoMail("https://tienda.cliente.example"),
+    );
+  });
+
+  it("marca propia con logo de mail: ese logo", () => {
+    const marca = resolverMarca({ base: "generica", nombre: "T", logoMailUrl: "https://media.example/m/mail.png" }, undefined, [
+      "media.example",
+    ]);
+    expect(urlLogoMarca(marca, "https://tienda.cliente.example")).toBe("https://media.example/m/mail.png");
+  });
+
+  it("marca propia sin logo de mail: sin logo, nunca el de Central", () => {
+    expect(urlLogoMarca(resolverMarca({ base: "generica", nombre: "T" }), "https://tienda.cliente.example")).toBeNull();
+  });
+
+  it("el mail de otra marca lleva su nombre y nada de Central", () => {
+    const mail = armarMailCodigoVinculacion({ codigo: "123456", vigenciaMin: 15, tienda: "Tienda Uno", logoUrl: null });
+    expect(mail.html).toContain("Tienda Uno");
+    expect(mail.text).toContain("Tienda Uno");
+    expect(`${mail.subject}${mail.html}${mail.text}`).not.toMatch(/central/i);
   });
 });

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { enviarEmail } from "./email";
+import { getMarca } from "./marca";
+import { resolverMarca } from "./marca-base";
 
 /** Envío por Resend (HTTP): lo que suma el aviso de comprobantes. */
 
@@ -7,6 +9,37 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("remitente por defecto (sin EMAIL_FROM)", () => {
+  async function desde(): Promise<string> {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    vi.stubEnv("EMAIL_FROM", "");
+    const fetchMock = vi.fn(async () => Response.json({ id: "m1" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await enviarEmail({ to: "a@cliente.example", subject: "s", html: "h", text: "t" });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    return JSON.parse(init.body as string).from;
+  }
+
+  it("Central: el de siempre", async () => {
+    expect(await desde()).toBe("Central LED <onboarding@resend.dev>");
+  });
+
+  it("otra marca: su nombre, no el de Central", async () => {
+    vi.mocked(getMarca).mockResolvedValueOnce(resolverMarca({ base: "generica", nombre: "Tienda Uno" }));
+    expect(await desde()).toBe("Tienda Uno <onboarding@resend.dev>");
+  });
+
+  it("con EMAIL_FROM manda ese", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    vi.stubEnv("EMAIL_FROM", "Tienda <hola@tienda.example>");
+    const fetchMock = vi.fn(async () => Response.json({ id: "m1" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await enviarEmail({ to: "a@cliente.example", subject: "s", html: "h", text: "t" });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).from).toBe("Tienda <hola@tienda.example>");
+  });
 });
 
 describe("enviarEmail", () => {

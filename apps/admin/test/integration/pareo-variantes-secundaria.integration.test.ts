@@ -503,3 +503,45 @@ describe("claveVarianteSql = claveVariante (paridad TS<->SQL)", () => {
     expect(fila.k).toBeNull()
   })
 })
+
+describe("fila solo-secundaria reactivada por error sobre un modelo que IGZ ya tiene (EMBPISO-LPR)", () => {
+  const baseCfg = { id: A, alegraEmail: "igz@cliente.example", alegraToken: "tok-igz", alegraMock: false } as TenantConfig
+  const vivos: Record<string, AlegraProduct | null> = {}
+  const deps = { getItem: async (_c: TenantConfig, id: string) => vivos[id] ?? null }
+
+  // Estado de producción: el modelo se cargó antes en MDP (una sola fila sobrevivía por modelo),
+  // IGZ lo cargó después, la sync parió el par (stock de MDP en la fila de IGZ) y la fila vieja
+  // quedó ACTIVA y sin marca de absorción.
+  async function conSueltaActiva() {
+    await sembrarPrincipal("20", "XXS", { tipo: "padre", stock: 0 })
+    await sembrarPrincipal("21", "XXS", { tipo: "variante", padre: "20", opcion: "Blanco cálido" })
+    await sembrarPrincipal("22", "XXS", { tipo: "variante", padre: "20", opcion: "Verde" })
+    items["tok-mdp"] = [
+      padre("300", "XXS"),
+      hija("301", "300", "XXS", "Blanco cálido", 0),
+      hija("302", "300", "XXS", "Verde", 0),
+    ]
+    await sincronizar()
+    await db().execute(sql`
+      INSERT INTO catalog_products (tenant_id, alegra_id, code, name, status, stock, tipo, padre_alegra_id, variante, variante_clave, cuenta_id, alegra_id_cuenta)
+      VALUES (${A}, 'mdp:301', 'XXS', 'Modelo / Blanco cálido', 'active', 0, 'variante', 'mdp:300',
+              ${JSON.stringify([{ atributo: "Color", opcion: "Blanco cálido" }])}::jsonb, 'blanco calido',
+              (SELECT id FROM alegra_cuentas WHERE tenant_id = ${A} AND slug = 'mdp'), '301')
+    `)
+  }
+
+  it("el aviso de la variante suelta no queda en error ni la deja activa: se absorbe y su stock va a IGZ", async () => {
+    await conSueltaActiva()
+    expect((await stockDe("mdp", "21")).item_id_cuenta).toBe("301")
+    vivos["301"] = hija("301", "300", "XXS", "Blanco cálido", 5)
+    expect(await refrescarItemDeCuenta(baseCfg, "mdp:301", new Date(Date.now() + 1000), {}, deps)).toBe("pareado")
+    expect(await producto("mdp:301")).toMatchObject({ status: "inactive", reemplazado_por_alegra_id: "21" })
+    expect(Number((await stockDe("mdp", "21")).stock)).toBe(5)
+  })
+
+  it("la sync de MDP absorbe la suelta que quedó activa", async () => {
+    await conSueltaActiva()
+    await sincronizar()
+    expect(await producto("mdp:301")).toMatchObject({ status: "inactive", reemplazado_por_alegra_id: "21" })
+  })
+})

@@ -30,6 +30,10 @@ async function estadoPrevio() {
   assertLocalTestDb(process.env.DATABASE_URL || "");
   const db = getDb();
   await db.execute(sql`truncate table shop.home_content, shop.carts, shop.clientes, shop.orders restart identity cascade`);
+  // Vuelve al esquema previo a la 0038 (PK(key), sin índice (tenant_id, key)); el globalSetup ya migró todo.
+  await db.execute(sql`alter table shop.home_content drop constraint if exists home_content_pkey`);
+  await db.execute(sql`drop index if exists shop.home_content_tenant_key`);
+  await db.execute(sql`alter table shop.home_content add primary key (key)`);
   await db.execute(sql`alter table shop.home_content alter column tenant_id drop not null`);
   await db.execute(sql`alter table shop.home_content alter column tenant_id drop default`);
 }
@@ -54,10 +58,14 @@ const carrito = (tenant: string) =>
 beforeEach(estadoPrevio);
 
 afterAll(async () => {
-  // Estado final = el de una base migrada: NOT NULL, sin default (tests de otros archivos insertan con tenant).
+  // Estado final = el de una base migrada hasta la 0038 (PK compuesta, NOT NULL, sin default).
   await estadoPrevio();
   await aplicar0037();
-  await getDb().execute(sql`alter table shop.home_content alter column tenant_id drop default`);
+  const m38 = readFileSync(
+    fileURLToPath(new URL("../../drizzle/0038_home_content_pk_tenant.sql", import.meta.url)),
+    "utf8",
+  );
+  for (const s of m38.split("--> statement-breakpoint").map((x) => x.trim())) await getDb().execute(sql.raw(s));
 });
 
 describe("migración 0037 home_content_tenant", () => {

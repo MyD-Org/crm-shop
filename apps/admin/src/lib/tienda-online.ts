@@ -222,10 +222,84 @@ export function parseSitio(raw: unknown, campo: "shopUrl" | "shopInternalUrl"): 
   return { ok: true, value: u.origin }
 }
 
+/** Temas de partida que existen en el Shop (data-theme). El de hoy de Central es "calido-azul". */
+export const BASES_TEMA = ["calido-azul", "calido"] as const
+export type ShopTemaBase = (typeof BASES_TEMA)[number]
+
+/**
+ * Los ocho colores que elige la empresa. El Shop deriva el resto de los tokens (--color-*) a partir
+ * de ellos con color-mix. Correspondencia con las variables del Shop (rebanada 4b):
+ *   bg → --color-bg · surface → --color-surface · text → --color-text · muted → --color-muted
+ *   primary → --color-primary · onPrimary → --color-on-primary · accent → --color-accent
+ *   surfaceDark → --color-surface-dark
+ */
+export const COLORES_TEMA = ["bg", "surface", "text", "muted", "primary", "onPrimary", "accent", "surfaceDark"] as const
+export type ColorTema = (typeof COLORES_TEMA)[number]
+export type ColoresTema = Record<ColorTema, string>
+
+/** Etiquetas de pantalla de cada color (usted, sin tecnicismos). */
+export const ETIQUETAS_COLOR_TEMA: Record<ColorTema, string> = {
+  bg: "Fondo de la página",
+  surface: "Fondo de las tarjetas",
+  text: "Texto",
+  muted: "Texto secundario",
+  primary: "Color principal (botones y barras)",
+  onPrimary: "Texto sobre el color principal",
+  accent: "Color de acento",
+  surfaceDark: "Fondo del pie de página",
+}
+
+/**
+ * Tema de la tienda (`tenants.shop_tema`, migración 0086). `{}` = el Shop conserva su tema de
+ * hoy. `colores` es todo o nada (los ocho): la paleta se valida entera por contraste.
+ */
+export interface ShopTema {
+  base?: ShopTemaBase
+  colores?: ColoresTema
+}
+
+const HEX_RE = /^#[0-9a-f]{6}$/i
+
+/** Valida y normaliza el tema (hex en minúsculas). Descarta claves desconocidas y vacíos. */
+export function parseShopTema(raw: unknown): Parse<ShopTema> {
+  if (raw === undefined || raw === null) return { ok: true, value: {} }
+  if (typeof raw !== "object" || Array.isArray(raw)) return falla("tema", "El tema de la tienda no es válido")
+  const b = raw as Record<string, unknown>
+  const out: ShopTema = {}
+
+  if (b.base !== undefined && b.base !== null && b.base !== "") {
+    if (!(BASES_TEMA as readonly unknown[]).includes(b.base)) return falla("temaBase", "El tema de partida no es válido")
+    out.base = b.base as ShopTemaBase
+  }
+
+  if (b.colores !== undefined && b.colores !== null) {
+    if (typeof b.colores !== "object" || Array.isArray(b.colores)) return falla("colores", "Los colores del tema no son válidos")
+    const c = b.colores as Record<string, unknown>
+    if (Object.keys(c).length > 0) {
+      const colores = {} as ColoresTema
+      for (const clave of COLORES_TEMA) {
+        const v = c[clave]
+        if (v === undefined || v === null || v === "") {
+          return falla("colores", "Indique los ocho colores del tema; si prefiere los de partida, déjelos todos vacíos")
+        }
+        if (typeof v !== "string" || !HEX_RE.test(v.trim())) {
+          return falla(clave, `${ETIQUETAS_COLOR_TEMA[clave]}: el color debe tener el formato #rrggbb, por ejemplo #1e5aa8`)
+        }
+        colores[clave] = v.trim().toLowerCase()
+      }
+      out.colores = colores
+    }
+  }
+
+  return { ok: true, value: out }
+}
+
 export interface TiendaOnline {
   marca: ShopMarca
   shopUrl: string
   shopInternalUrl: string
+  /** Ausente = el cuerpo no traía `tema`: no se toca lo guardado. */
+  tema?: ShopTema
 }
 
 /** Valida el cuerpo completo del PUT. Cuerpo vacío o roto = todo vacío. */
@@ -237,7 +311,13 @@ export function parseTiendaOnline(body: unknown, ctx: ContextoMedia): Parse<Tien
   if (!shopUrl.ok) return shopUrl
   const shopInternalUrl = parseSitio(b.shopInternalUrl, "shopInternalUrl")
   if (!shopInternalUrl.ok) return shopInternalUrl
-  return { ok: true, value: { marca: marca.value, shopUrl: shopUrl.value, shopInternalUrl: shopInternalUrl.value } }
+  const value: TiendaOnline = { marca: marca.value, shopUrl: shopUrl.value, shopInternalUrl: shopInternalUrl.value }
+  if (b.tema !== undefined) {
+    const tema = parseShopTema(b.tema)
+    if (!tema.ok) return tema
+    value.tema = tema.value
+  }
+  return { ok: true, value }
 }
 
 const CAMPOS_IMAGEN = ["logoUrl", "logoMailUrl", "faviconUrl", "ogImagenUrl"] as const

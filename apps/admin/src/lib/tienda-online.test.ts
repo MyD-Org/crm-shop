@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest"
 import fixture from "./__fixtures__/marca-contrato.json"
+import temaFixture from "./__fixtures__/tema-contrato.json"
 import {
   hostsMedia,
   parseShopMarca,
+  parseShopTema,
+  COLORES_TEMA,
   parseSitio,
   parseTiendaOnline,
   DESCRIPCION_MAX,
@@ -113,5 +116,49 @@ describe("hostsMedia", () => {
   })
   it("ignora una URL pública que no se puede leer", () => {
     expect(hostsMedia({ R2_SHOP_MEDIA_PUBLIC_URL: "nada" })).toEqual([])
+  })
+})
+
+describe("parseShopTema (fixture tema-contrato.json)", () => {
+  it.each(temaFixture.validos)("válido: $nombre", ({ entrada, salida }) => {
+    expect(parseShopTema(entrada)).toEqual({ ok: true, value: salida })
+  })
+
+  it.each(temaFixture.invalidos)("inválido: $nombre", ({ entrada, campo }) => {
+    const r = parseShopTema(entrada)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.campo).toBe(campo)
+      expect(r.error).not.toMatch(/\b(tu|tus|te|vos|ingresá|probá)\b/i)
+      expect(r.error.length).toBeGreaterThan(10)
+    }
+  })
+
+  it("la salida es idempotente", () => {
+    for (const caso of temaFixture.validos) {
+      const una = parseShopTema(caso.entrada)
+      expect(una.ok).toBe(true)
+      if (una.ok) expect(parseShopTema(una.value)).toEqual(una)
+    }
+  })
+
+  it("los ocho colores de entrada, con sus nombres", () => {
+    expect([...COLORES_TEMA]).toEqual(["bg", "surface", "text", "muted", "primary", "onPrimary", "accent", "surfaceDark"])
+  })
+})
+
+describe("parseTiendaOnline con tema", () => {
+  it("sin la clave tema, el resultado no trae tema (no se pisa lo guardado)", () => {
+    const r = parseTiendaOnline({ marca: {} }, ctx)
+    expect(r.ok && "tema" in r.value).toBe(false)
+  })
+
+  it("con tema, lo valida y lo devuelve", () => {
+    const r = parseTiendaOnline({ tema: { base: "calido" } }, ctx)
+    expect(r).toMatchObject({ ok: true, value: { tema: { base: "calido" } } })
+  })
+
+  it("tema inválido propaga el error", () => {
+    expect(parseTiendaOnline({ tema: { base: "x" } }, ctx).ok).toBe(false)
   })
 })

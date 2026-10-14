@@ -4,6 +4,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import type { ProductImage } from "@/data/products";
+import { partesNombre } from "@/lib/marca-base";
+import { useMarca } from "./MarcaProvider";
 
 /**
  * Visor de fotos a pantalla completa de la ficha (como el de Mercado Libre):
@@ -34,6 +36,7 @@ export function VisorFotos({
   inicial: number;
   onCerrar: (activa: number) => void;
 }) {
+  const { principal, acento } = partesNombre(useMarca());
   const [activa, setActiva] = useState(inicial);
   const pistaRef = useRef<HTMLDivElement>(null);
   const cerrarRef = useRef<HTMLButtonElement>(null);
@@ -97,7 +100,13 @@ export function VisorFotos({
       >
         <div className="flex shrink-0 items-center justify-between px-4 py-3 md:px-6">
           <span className="font-display text-xl font-semibold tracking-tight text-text" aria-hidden="true">
-            Central <span className="text-accent">Led</span>
+            {acento ? (
+              <>
+                {principal} <span className="text-accent">{acento}</span>
+              </>
+            ) : (
+              principal
+            )}
           </span>
           <button
             ref={cerrarRef}

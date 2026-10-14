@@ -28,6 +28,7 @@ import {
   OPCIONES_COBRO,
   ROTULO_OPCION,
   errorDeOpcionesResultantes,
+  lineaEnLaTienda,
   opcionesAplicables,
   opcionesDelMedio,
   type OpcionCobro,
@@ -474,6 +475,9 @@ export function MediosPagoShopCard() {
                           <Badge key={i} tone={TONO_BADGE_DE_CHIP[c.tono]}>{c.texto}</Badge>
                         ))}
                       </div>
+                    )}
+                    {lineaEnLaTienda(m, medios) && (
+                      <span className="text-xs font-medium" style={{ color: "var(--ink)" }}>{lineaEnLaTienda(m, medios)}</span>
                     )}
                     {esSlugCobro(m.slug) && (
                       <span className="text-xs" role="note" style={{ color: "var(--ink-soft)" }}>

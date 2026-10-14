@@ -24,6 +24,11 @@ const RUTAS = [
   "components/SiteFooter.tsx",
   "components/footer",
   "data/footer.ts",
+  "lib/institucional",
+  "lib/paginas-acciones.ts",
+  "components/paginas",
+  "app/editar-paginas",
+  "app/(institucional)",
 ].map((r) => join(SRC, r));
 
 const esFuente = (nombre: string) => /\.tsx?$/.test(nombre) && !/\.test\.tsx?$/.test(nombre);

@@ -57,6 +57,8 @@ export function reglasRobots(sitio: string | undefined): MetadataRoute.Robots {
 export function entradasSitemap(
   sitio: string | undefined,
   idsProductos: readonly string[],
+  /** Rutas de las páginas institucionales publicadas del tenant (p. ej. "/garantia"). */
+  paginasExtra: readonly string[] = [],
 ): MetadataRoute.Sitemap {
   const base = baseDelSitio(sitio);
   if (!base) return [];
@@ -65,6 +67,11 @@ export function entradasSitemap(
       url: `${base}${ruta === "/" ? "" : ruta}`,
       changeFrequency: ruta === "/" || ruta === "/catalogo" ? ("daily" as const) : ("monthly" as const),
       priority: ruta === "/" ? 1 : ruta === "/catalogo" ? 0.9 : 0.3,
+    })),
+    ...paginasExtra.map((ruta) => ({
+      url: `${base}${ruta}`,
+      changeFrequency: "monthly" as const,
+      priority: 0.3,
     })),
     ...idsProductos.map((id) => ({
       url: `${base}/producto/${encodeURIComponent(id)}`,

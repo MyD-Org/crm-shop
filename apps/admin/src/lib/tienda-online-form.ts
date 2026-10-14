@@ -2,6 +2,7 @@
 // pasar entre lo que guarda la API y los campos de texto del formulario, y elegir la extensión de
 // la imagen a subir. Va aparte del componente para poder probarla sin navegador.
 
+import partida from "@/lib/__fixtures__/marca-partida.json"
 import { contrasteTema, UMBRAL_CONTRASTE, validarContrasteTema } from "@/lib/tema-contraste"
 import { COLORES_TEMA, type ColoresTema, type ShopMarca, type ShopMarcaBase, type ShopTema, type ShopTemaBase } from "@/lib/tienda-online"
 
@@ -170,4 +171,51 @@ export function mensajeSubida(body: { error?: unknown } | null | undefined): str
   return typeof body?.error === "string" && body.error
     ? body.error
     : "No se pudo subir la imagen. Inténtelo nuevamente."
+}
+
+export interface PlaceholdersMarca {
+  nombre: string
+  titulo: string
+  descripcion: string
+  ogEyebrow: string
+  ogBajada: string
+  ogLugar: string
+  emailContacto: string
+  /** El valor en uso de algún campo depende de una variable de entorno del Shop que el admin no conoce. */
+  dependeDelEntorno: boolean
+}
+
+/**
+ * Valor en uso de cada texto de marca cuando su campo está vacío, según la base elegida (mismo
+ * cálculo que `resolverMarca` del Shop; los textos vienen del fixture compartido marca-partida.json).
+ * Vacío = no hay valor de partida que el admin conozca. `nombre` es el nombre ya cargado, si lo hay.
+ */
+export function placeholdersMarca(base: ShopMarcaBase, nombre: string): PlaceholdersMarca {
+  const n = nombre.replace(/\s+/g, " ").trim()
+  if (base === "central") {
+    const c = partida.central
+    const cambia = n !== "" && n !== c.nombre
+    return {
+      nombre: c.nombre,
+      titulo: cambia ? c.tituloConNombre.replace("{nombre}", n) : c.titulo,
+      descripcion: c.descripcion,
+      ogEyebrow: c.ogTextos.eyebrow,
+      ogBajada: c.ogTextos.bajada,
+      ogLugar: c.ogTextos.lugar,
+      emailContacto: "",
+      dependeDelEntorno: false,
+    }
+  }
+  const g = partida.generica
+  return {
+    // Sin nombre cargado, el de partida sale de una variable del Shop: no se inventa.
+    nombre: "",
+    titulo: n ? g.tituloConNombre.replace("{nombre}", n) : "",
+    descripcion: n ? g.descripcionConNombre.replace("{nombre}", n) : "",
+    ogEyebrow: g.ogTextos.eyebrow,
+    ogBajada: g.ogTextos.bajada,
+    ogLugar: g.ogTextos.lugar,
+    emailContacto: "",
+    dependeDelEntorno: true,
+  }
 }

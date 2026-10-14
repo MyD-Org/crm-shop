@@ -19,23 +19,26 @@ export function PaginaLegal({
 }: {
   titulo: string;
   bloques: Bloque[];
-  datos: DatosLegales;
+  /** Sin datos no hay botón "Editar datos legales" (páginas institucionales). */
+  datos?: DatosLegales;
   children?: ReactNode;
 }) {
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-3xl font-medium tracking-tight text-text">{titulo}</h1>
-        <Suspense fallback={null}>
-          <BotonDatosLegalesSiAdmin datos={datos} />
-        </Suspense>
+        {datos ? (
+          <Suspense fallback={null}>
+            <BotonDatosLegalesSiAdmin datos={datos} />
+          </Suspense>
+        ) : null}
       </div>
       <div className="flex flex-col gap-8">
-        {bloques.map((b) => (
-          <section key={b.titulo} className="flex flex-col gap-3">
+        {bloques.map((b, i) => (
+          <section key={`${i}-${b.titulo}`} className="flex flex-col gap-3">
             <h2 className="font-display text-xl font-medium tracking-tight text-text">{b.titulo}</h2>
-            {b.parrafos.map((p) => (
-              <p key={p} className="text-base leading-relaxed text-muted">
+            {b.parrafos.map((p, j) => (
+              <p key={`${j}-${p}`} className="text-base leading-relaxed text-muted">
                 {p}
               </p>
             ))}

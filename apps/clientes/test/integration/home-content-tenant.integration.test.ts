@@ -10,10 +10,8 @@ import { getContenidoHome } from "@/lib/home-datos";
 import { DEFAULTS_HOME } from "@/data/home-defaults";
 
 /**
- * home_content por tenant contra Postgres REAL (local), sobre la migración 0037 (fase expand: la PK sigue
- * siendo `key`; el índice único (tenant_id, key) respalda el ON CONFLICT). Datos inventados.
- *
- * "Misma key en dos tenants" recién es posible con la 0038 (PK compuesta): ver el `it.todo` del final.
+ * home_content por tenant contra Postgres REAL (local), con la PK compuesta (tenant_id, key) de la 0038.
+ * Datos inventados.
  */
 
 const T1 = "tenant-uno";
@@ -80,5 +78,19 @@ describe("home_content por tenant", () => {
     expect(t2).toEqual(DEFAULTS_HOME);
   });
 
-  it.todo("misma key en dos tenants convive (requiere la PK compuesta de la 0038, rebanada 1b)");
+  it("misma key en dos tenants convive sin pisarse (incluida pagina:garantia)", async () => {
+    for (const key of ["hero", "pagina:garantia"]) {
+      await como(T1, () => guardarSeccionHome(key, { de: "uno" }));
+      await como(T2, () => guardarSeccionHome(key, { de: "dos" }));
+    }
+    await como(T1, () => guardarSeccionHome("pagina:garantia", { de: "uno", v: 2 }));
+    expect(await como(T1, () => leerSeccionHome("pagina:garantia"))).toEqual({ de: "uno", v: 2 });
+    expect(await como(T2, () => leerSeccionHome("pagina:garantia"))).toEqual({ de: "dos" });
+    await como(T1, () => borrarSeccionHome("pagina:garantia"));
+    expect(await como(T1, () => leerSeccionHome("pagina:garantia"))).toBeUndefined();
+    expect(await como(T2, () => leerSeccionHome("pagina:garantia"))).toEqual({ de: "dos" });
+    expect(await como(T2, () => leerSeccionHome("hero"))).toEqual({ de: "dos" });
+    const [{ n }] = (await getDb().execute(sql`select count(*)::int as n from shop.home_content`)) as unknown as { n: number }[];
+    expect(n).toBe(3);
+  });
 });

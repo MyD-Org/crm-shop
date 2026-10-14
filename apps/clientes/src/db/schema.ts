@@ -903,21 +903,18 @@ export const paymentConfigCache = shop.table("payment_config_cache", {
  *  escriben las server actions de src/lib/home-acciones.ts (usuario admin) y la
  *  home la mergea con defaults en código. navBadge apagado = jsonb 'null'.
  *
- *  `tenant_id` (migración 0037, change `shop-para-avantec`): la base es
- *  compartida y toda lectura/escritura filtra por `shopTenantId()`. Fase
- *  "expand": la PK sigue siendo `key` (el código viejo sigue andando) y el
- *  `ON CONFLICT` nuevo se apoya en el índice único (tenant_id, key). La 0038
- *  pasa la PK a (tenant_id, key). La 0037 también deja en la base un DEFAULT
- *  dinámico de `tenant_id` (solo SQL, no modelable acá) que la 0038 quita. */
+ *  `tenant_id` (migraciones 0037 y 0038, change `shop-para-avantec`): la base
+ *  es compartida y toda lectura/escritura filtra por `shopTenantId()`. La PK es
+ *  (tenant_id, key) y `tenant_id` no tiene default: toda escritura lo indica. */
 export const homeContent = shop.table(
   "home_content",
   {
-    key: text("key").primaryKey(),
+    key: text("key").notNull(),
     tenantId: text("tenant_id").notNull(),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("home_content_tenant_key").on(t.tenantId, t.key)],
+  (t) => [primaryKey({ name: "home_content_pkey", columns: [t.tenantId, t.key] })],
 );
 
 /**

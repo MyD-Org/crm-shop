@@ -7,6 +7,7 @@ import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
 import { getContenidoHome } from "@/lib/home-datos";
 import { sinCamposOcultos, sinMarcasDeAcento, visibilidadDe } from "@/data/home-defaults";
 import { jsonLdSitioHtml } from "@/lib/sitio-jsonld";
+import { getMarca } from "@/lib/marca";
 
 /**
  * Home: contenido administrable desde la home por un admin (server actions en
@@ -25,11 +26,11 @@ import { jsonLdSitioHtml } from "@/lib/sitio-jsonld";
  * sección los pide el Dialog al abrirse (`leerSeccionParaEditar`).
  */
 export default async function Home() {
-  const contenido = await getContenidoHome();
+  const [contenido, marca] = await Promise.all([getContenidoHome(), getMarca()]);
   const { cantidad, skus = [] } = contenido.destacados;
   const secDestacados = sinCamposOcultos(contenido.destacados);
   const label = sinMarcasDeAcento(secDestacados.titulo ?? "") || "Productos destacados";
-  const jsonLdSitio = jsonLdSitioHtml(process.env.NEXT_PUBLIC_SITE_URL);
+  const jsonLdSitio = jsonLdSitioHtml(process.env.NEXT_PUBLIC_SITE_URL, marca.titulo);
 
   return (
     <ModoEdicionProvider>

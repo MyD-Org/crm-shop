@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Info, Settings } from "lucide-react"
 import { Alert, Badge, Button, Checkbox, Dialog, EmptyState, Field, Input, Select, Tooltip } from "@myd-org/ui"
 import type { CambioPrecios } from "@/lib/precios-online-cambios"
-import type { ConfigPrecios, ListaAlegraDto, ListaDto } from "@/lib/precios-online-repo"
+import type { ConfigPrecios, ListaAlegraDto, ListaDto, MarcaDto } from "@/lib/precios-online-repo"
 import { VistaPreviaDialog } from "./VistaPreviaDialog"
 import { TEXTOS, fmtCoef } from "./precios-online-textos"
 import { api, ErrorApi, type CategoriaDto } from "./tipos"
@@ -32,6 +32,7 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
   const [listas, setListas] = useState<ListaDto[] | null>(null)
   const [config, setConfig] = useState<ConfigPrecios | null>(null)
   const [listasAlegra, setListasAlegra] = useState<ListaAlegraDto[]>([])
+  const [marcas, setMarcas] = useState<MarcaDto[]>([])
   const [cuentasConAviso, setCuentasConAviso] = useState<string[]>([])
   const [enlace, setEnlace] = useState<FormEnlace | null>(null)
   const [confirmarPublica, setConfirmarPublica] = useState<ListaDto | null>(null)
@@ -44,8 +45,9 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
 
   const cargar = useCallback(async () => {
     try {
-      const r = await api<{ listas: ListaDto[]; listasAlegra: ListaAlegraDto[]; cuentasConAviso?: string[]; config: ConfigPrecios }>("/api/admin/precios-online/listas")
+      const r = await api<{ listas: ListaDto[]; listasAlegra: ListaAlegraDto[]; cuentasConAviso?: string[]; config: ConfigPrecios; marcas?: MarcaDto[] }>("/api/admin/precios-online/listas")
       setListas(r.listas)
+      setMarcas(r.marcas ?? [])
       setListasAlegra(r.listasAlegra)
       setCuentasConAviso(r.cuentasConAviso ?? [])
       setConfig(r.config)
@@ -240,7 +242,7 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
               <ul className="flex flex-col gap-1">
                 {l.overrides.map((o) => (
                   <li key={o.id} className="flex items-center gap-2 text-sm">
-                    <span>{o.tipo === "marca" ? `Marca ${o.marca}` : `Categoría ${o.categoriaNombre ?? ""}`}</span>
+                    <span>{o.tipo === "marca" ? `Marca ${marcas.find((m) => m.clave === o.marca)?.nombre ?? o.marca}` : `Categoría ${o.categoriaNombre ?? ""}`}</span>
                     <span className="tabular-nums">× {fmtCoef(o.coeficiente)}</span>
                     <span className="flex-1" />
                     <Button size="sm" variant="ghost" onClick={() => pedirPrevia([{ op: "borrarOverride", overrideId: o.id }], TEXTOS.listas.quitarAjuste, l.nombre)}>
@@ -410,7 +412,12 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
             </Field>
             {ajuste.tipo === "marca" ? (
               <Field label={TEXTOS.grilla.marca}>
-                <Input value={ajuste.marca} onChange={(e) => setAjuste({ ...ajuste, marca: e.target.value })} maxLength={80} />
+                <Select
+                  value={ajuste.marca}
+                  onValueChange={(v) => setAjuste({ ...ajuste, marca: v })}
+                  placeholder="Seleccione una marca"
+                  options={marcas.map((m) => ({ value: m.clave, label: m.nombre }))}
+                />
               </Field>
             ) : (
               <Field label={TEXTOS.grilla.categoria}>

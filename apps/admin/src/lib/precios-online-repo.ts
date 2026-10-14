@@ -1103,6 +1103,27 @@ export interface ListasAlegraResultado {
   cuentasConAviso: string[]
 }
 
+/** Una marca del catálogo para elegir en un ajuste: `clave` normalizada (lo que se guarda) y cómo se ve. */
+export interface MarcaDto {
+  clave: string
+  nombre: string
+}
+
+/**
+ * Marcas del espejo del catálogo, para el desplegable del ajuste por marca. La clave es la misma
+ * normalización que usa el cálculo (`lower(btrim(brand))`), así el ajuste siempre pega con algún
+ * producto; el nombre es una de las grafías reales de Alegra.
+ */
+export async function listarMarcas(tenantId: string): Promise<MarcaDto[]> {
+  return (await getDb().execute(sql`
+    SELECT lower(btrim(brand)) AS clave, min(btrim(brand)) AS nombre
+    FROM catalog_products
+    WHERE tenant_id = ${tenantId} AND nullif(btrim(brand), '') IS NOT NULL
+    GROUP BY 1
+    ORDER BY 2
+  `)) as unknown as MarcaDto[]
+}
+
 /**
  * Listas de precio de Alegra que se pueden enlazar, por cuenta: TODAS las que existen en Alegra
  * (GET /price-lists de cada cuenta, con caché; ver listas-alegra-selector.ts), con la cantidad de

@@ -343,6 +343,23 @@ describe("API del panel de catálogo — productos", () => {
       expect((await listar("?precio=con")).body.items.map((i) => i.alegraId)).toEqual(["1"])
     })
 
+    it("el filtro de Alegra «activos» deja afuera a los de baja y a los que el sync ya no ve; «de baja» los trae", async () => {
+      await seedProducto(TENANT_A, "1", { alegraStatus: "active" })
+      await seedProducto(TENANT_A, "2") // sin sincronizar con el sync nuevo: cuenta como activo
+      await seedProducto(TENANT_A, "3", { alegraStatus: "inactive" })
+      await seedProducto(TENANT_A, "4", { status: "inactive", alegraStatus: "active" })
+
+      const activos = await listar("?alegra=active")
+      expect(activos.body.items.map((i) => i.alegraId).sort()).toEqual(["1", "2"])
+      expect(activos.body.total).toBe(2)
+
+      const deBaja = await listar("?alegra=inactive")
+      expect(deBaja.body.items.map((i) => i.alegraId).sort()).toEqual(["3", "4"])
+      expect(deBaja.body.total).toBe(2)
+
+      expect((await listar()).body.total).toBe(4)
+    })
+
     it("un overlay sin producto espejado no rompe el listado", async () => {
       await seedProducto(TENANT_A, "1")
       await guardarOverlay(TENANT_A, "huerfano", { visible: true, nombre: "Sin espejo" })

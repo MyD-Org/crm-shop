@@ -18,6 +18,7 @@ import {
 } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 import type { WeeklySchedule, ScheduleException } from "@/lib/schedule"
+import type { ShopMarca, ShopTema } from "@/lib/tienda-online"
 
 const bytea = customType<{ data: Buffer }>({
   dataType() { return "bytea" },
@@ -76,6 +77,15 @@ export const tenants = pgTable("tenants", {
   // textos por defecto (apps/clientes/src/lib/chat-ia-textos.ts). Validación: src/lib/chat-tienda.ts.
   chatEmptyState: text("chat_empty_state").notNull().default(""),
   chatSuggestions: jsonb("chat_suggestions").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  // Shop del tenant (0084). shopUrl = URL pública (enlaces); shopInternalUrl = base del ping de
+  // revalidación. El secreto del ping NO va acá: env SHOP_CRM_SECRET_<SLUG>. '' = sin Shop propio
+  // (rige el par histórico de envs). Ver src/lib/shop-destino.ts.
+  shopUrl: text("shop_url").notNull().default(""),
+  shopInternalUrl: text("shop_internal_url").notNull().default(""),
+  // Marca de la tienda (0085): '{}' = el Shop se ve como siempre. Forma y validación en
+  // src/lib/tienda-online.ts; el Shop (`shop_app`) la lee con GRANT por columna.
+  shopMarca: jsonb("shop_marca").$type<ShopMarca>().notNull().default(sql`'{}'::jsonb`),
+  shopTema: jsonb("shop_tema").$type<ShopTema>().notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })

@@ -292,6 +292,18 @@ export const crmTenants = publico.table("tenants", {
   /** Textos del chat (0078 del CRM, GRANT por columna). '' / [] = usar los del Shop. */
   chatEmptyState: text("chat_empty_state").notNull(),
   chatSuggestions: jsonb("chat_suggestions").$type<string[]>().notNull(),
+  /**
+   * Marca de la tienda (0085 del CRM, GRANT por columna): objeto con nombre, textos y logos.
+   * '{}' = la de Central. Se lee SIEMPRE con un select de esta sola columna y tolerando que no
+   * exista (`marca.ts`): ningún otro select de la tabla la nombra.
+   */
+  shopMarca: jsonb("shop_marca").$type<unknown>().notNull(),
+  /**
+   * Tema de la tienda (0086 del CRM, GRANT por columna): `{ base?, colores? }`. '{}' = el de
+   * Central. Igual que `shopMarca`, se lee SIEMPRE con un select de esta sola columna y
+   * tolerando que no exista (`tema-tenant-datos.ts`).
+   */
+  shopTema: jsonb("shop_tema").$type<unknown>().notNull(),
 });
 
 /**

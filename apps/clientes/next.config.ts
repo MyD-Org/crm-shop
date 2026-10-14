@@ -33,6 +33,10 @@ const nextConfig: NextConfig = {
     // guardar (tag `sucursales`); si se pierde, vencen solas a los 5 minutos. expire no baja de
     // 300 (ver `degradado`).
     sucursales: { stale: 60, revalidate: 300, expire: 300 },
+    // Marca de la tienda (nombre, textos, logos): cambia casi nunca; la renueva el ping del CRM al
+    // guardar (tag `marca`) y, si se pierde, vence a la hora. Con el perfil `degradado` si la
+    // lectura falla (ver src/lib/marca.ts).
+    marca: { stale: 60, revalidate: 600, expire: 3600 },
     // Búsquedas frecuentes de la guía del buscador (flag `busqueda-ia`): salen
     // de la caché de interpretaciones y cambian despacio. Una hora.
     busquedas: { stale: 300, revalidate: 3600, expire: 3600 },

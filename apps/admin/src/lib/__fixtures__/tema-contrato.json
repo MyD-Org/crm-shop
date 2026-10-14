@@ -1,0 +1,48 @@
+{
+  "descripcion": "Contrato del tema de la tienda (tenants.shop_tema). Lo comparten el validador del admin (src/lib/tienda-online.ts + src/lib/tema-contraste.ts) y, en la rebanada 4b, el saneo del Shop. Datos inventados.",
+  "paletas": {
+    "calido-azul": { "bg": "#f8f8f6", "surface": "#ffffff", "text": "#1c2733", "muted": "#5f6770", "primary": "#16283f", "onPrimary": "#eaf1f8", "accent": "#1e5aa8", "surfaceDark": "#1c2733" },
+    "calido": { "bg": "#faf6ef", "surface": "#fffdf8", "text": "#2a2118", "muted": "#70665a", "primary": "#241c14", "onPrimary": "#f2e8d8", "accent": "#b45f2e", "surfaceDark": "#2a2118" }
+  },
+  "validos": [
+    { "nombre": "objeto vacío", "entrada": {}, "salida": {} },
+    { "nombre": "null equivale a vacío", "entrada": null, "salida": {} },
+    { "nombre": "claves desconocidas se descartan", "entrada": { "fuentes": "x", "base": "calido" }, "salida": { "base": "calido" } },
+    { "nombre": "base calido-azul", "entrada": { "base": "calido-azul" }, "salida": { "base": "calido-azul" } },
+    { "nombre": "base vacía se descarta", "entrada": { "base": "" }, "salida": {} },
+    { "nombre": "colores vacíos se descartan", "entrada": { "colores": {} }, "salida": {} },
+    {
+      "nombre": "ocho colores: se normalizan a minúsculas y sin espacios",
+      "entrada": { "colores": { "bg": " #F8F8F6 ", "surface": "#FFFFFF", "text": "#1C2733", "muted": "#5F6770", "primary": "#16283F", "onPrimary": "#EAF1F8", "accent": "#1E5AA8", "surfaceDark": "#1C2733" } },
+      "salida": { "colores": { "bg": "#f8f8f6", "surface": "#ffffff", "text": "#1c2733", "muted": "#5f6770", "primary": "#16283f", "onPrimary": "#eaf1f8", "accent": "#1e5aa8", "surfaceDark": "#1c2733" } }
+    }
+  ],
+  "invalidos": [
+    { "nombre": "no es objeto", "entrada": "hola", "campo": "tema" },
+    { "nombre": "es un arreglo", "entrada": [], "campo": "tema" },
+    { "nombre": "base desconocida", "entrada": { "base": "oscuro" }, "campo": "temaBase" },
+    { "nombre": "colores no es objeto", "entrada": { "colores": "azul" }, "campo": "colores" },
+    { "nombre": "faltan colores", "entrada": { "colores": { "bg": "#ffffff" } }, "campo": "colores" },
+    { "nombre": "hex corto", "entrada": { "colores": { "bg": "#fff", "surface": "#ffffff", "text": "#1c2733", "muted": "#5f6770", "primary": "#16283f", "onPrimary": "#eaf1f8", "accent": "#1e5aa8", "surfaceDark": "#1c2733" } }, "campo": "bg" },
+    { "nombre": "sin numeral", "entrada": { "colores": { "bg": "f8f8f6", "surface": "#ffffff", "text": "#1c2733", "muted": "#5f6770", "primary": "#16283f", "onPrimary": "#eaf1f8", "accent": "#1e5aa8", "surfaceDark": "#1c2733" } }, "campo": "bg" },
+    { "nombre": "color con alfa", "entrada": { "colores": { "bg": "#f8f8f6ff", "surface": "#ffffff", "text": "#1c2733", "muted": "#5f6770", "primary": "#16283f", "onPrimary": "#eaf1f8", "accent": "#1e5aa8", "surfaceDark": "#1c2733" } }, "campo": "bg" },
+    { "nombre": "inyección de CSS", "entrada": { "colores": { "bg": "#ffffff;}body{display:none", "surface": "#ffffff", "text": "#1c2733", "muted": "#5f6770", "primary": "#16283f", "onPrimary": "#eaf1f8", "accent": "#1e5aa8", "surfaceDark": "#1c2733" } }, "campo": "bg" },
+    { "nombre": "color no es texto", "entrada": { "colores": { "bg": 3, "surface": "#ffffff", "text": "#1c2733", "muted": "#5f6770", "primary": "#16283f", "onPrimary": "#eaf1f8", "accent": "#1e5aa8", "surfaceDark": "#1c2733" } }, "campo": "bg" }
+  ],
+  "contraste": [
+    { "nombre": "paleta calido-azul (la de hoy) pasa", "paleta": "calido-azul", "cambios": {}, "ok": true },
+    { "nombre": "la terracota de partida queda apenas bajo 4,5 en el acento (4,47): se pide oscurecerlo", "paleta": "calido", "cambios": {}, "ok": false, "campo": "accent" },
+    { "nombre": "terracota con el acento un poco más oscuro pasa", "paleta": "calido", "cambios": { "accent": "#a8562a" }, "ok": true },
+    { "nombre": "texto casi igual al fondo", "paleta": "calido-azul", "cambios": { "text": "#f0f0ee" }, "ok": false, "campo": "text" },
+    { "nombre": "texto con contraste justo bajo 4,5", "paleta": "calido-azul", "cambios": { "text": "#8a8a8a", "bg": "#ffffff" }, "ok": false, "campo": "text" },
+    { "nombre": "texto sobre el color primario ilegible", "paleta": "calido-azul", "cambios": { "onPrimary": "#2a3f5c" }, "ok": false, "campo": "onPrimary" },
+    { "nombre": "acento claro sobre la superficie clara", "paleta": "calido-azul", "cambios": { "accent": "#f2c94c" }, "ok": false, "campo": "accent" },
+    { "nombre": "marca derivada sobre un pie claro no se lee", "paleta": "calido-azul", "cambios": { "accent": "#1e5aa8", "surfaceDark": "#cfd8e3" }, "ok": false, "campo": "surfaceDark" },
+    { "nombre": "blanco sobre negro puro pasa", "paleta": "calido-azul", "cambios": { "text": "#000000", "bg": "#ffffff", "primary": "#000000", "onPrimary": "#ffffff" }, "ok": true }
+  ],
+  "razones": [
+    { "a": "#000000", "b": "#ffffff", "ratio": 21 },
+    { "a": "#ffffff", "b": "#ffffff", "ratio": 1 },
+    { "a": "#767676", "b": "#ffffff", "ratio": 4.54 }
+  ]
+}

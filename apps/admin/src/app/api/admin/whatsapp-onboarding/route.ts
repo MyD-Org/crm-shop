@@ -4,12 +4,11 @@ import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 
-// Genera el link de Embedded Signup para conectar un número de WhatsApp.
-//
-// Sirve para los dos modelos: un número más para el propio tenant (Central Led), o el
-// número de una empresa cliente (Avantec como tech provider). Lo único que cambia es el
-// tenantId que se manda, y por eso es superadmin: emitir un link para OTRO tenant es
-// poder enchufar un número en la cuenta de otro cliente.
+// Genera el link de Embedded Signup para conectar OTRO número de WhatsApp al tenant de la
+// sesión. El tenant sale siempre de la sesión (aiTenantId del tenant del superadmin): un
+// body.tenantId distinto se rechaza con 403 sin llamar a ai-api, porque emitir un link para
+// otra empresa es poder enchufar un número en la cuenta de otro cliente. El alta de números
+// de empresas clientes se atiende desde el dashboard de plataforma (ai-dashboard), no desde acá.
 //
 // El link lo firma la ai-api, no el CRM: la clave de firma vive en un solo lado.
 async function requireSuperadmin(req: Request) {
@@ -32,12 +31,13 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as
     | { tenantId?: string; metaAppSlug?: string }
     | null
-  if (!body?.metaAppSlug) return NextResponse.json({ error: "falta metaAppSlug" }, { status: 400 })
+  if (typeof body?.metaAppSlug !== "string" || !body.metaAppSlug.trim()) return NextResponse.json({ error: "falta metaAppSlug" }, { status: 400 })
 
-  // Sin tenantId explícito, el alta es para el tenant de la sesión (el caso "otro número
-  // para nosotros mismos"), que es el default seguro.
-  const tenantId = body.tenantId ?? ctx.ownAiTenantId
+  const tenantId = ctx.ownAiTenantId
   if (!tenantId) return NextResponse.json({ error: "falta tenantId" }, { status: 400 })
+  if (body.tenantId && body.tenantId !== tenantId) {
+    return NextResponse.json({ error: "No puede emitir enlaces para otra empresa." }, { status: 403 })
+  }
 
   const res = await fetch(`${ctx.aiApiUrl.replace(/\/$/, "")}/onboarding/whatsapp/links`, {
     method: "POST",

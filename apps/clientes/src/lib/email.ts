@@ -5,6 +5,8 @@
  * es un POST con un bearer, y una dependencia menos que auditar.
  */
 
+import { getMarca } from "./marca";
+
 const API_URL = "https://api.resend.com/emails";
 
 /**
@@ -12,8 +14,11 @@ const API_URL = "https://api.resend.com/emails";
  * `cliente.example` lo esté, `onboarding@resend.dev` funciona pero SOLO
  * entrega al dueño de la cuenta de Resend. Sirve para probar, no para producción.
  */
-function remitente(): string {
-  return process.env.EMAIL_FROM ?? "Central LED <onboarding@resend.dev>";
+async function remitente(): Promise<string> {
+  if (process.env.EMAIL_FROM) return process.env.EMAIL_FROM;
+  // Sin EMAIL_FROM: el remitente de prueba de Resend con el nombre de la tienda (no tira: `getMarca`
+  // cae a la marca de entorno).
+  return `${(await getMarca()).nombre} <onboarding@resend.dev>`;
 }
 
 export interface EmailEnviado {
@@ -57,7 +62,7 @@ export async function enviarEmail(opts: OpcionesEmail): Promise<EmailEnviado> {
         ...(opts.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {}),
       },
       body: JSON.stringify({
-        from: opts.from ?? remitente(),
+        from: opts.from ?? (await remitente()),
         to: [opts.to],
         subject: opts.subject,
         html: opts.html,

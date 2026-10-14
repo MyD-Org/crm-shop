@@ -31,11 +31,16 @@ const DIRECTIVA = /^\s*["']use cache(?::\s*(?:remote|private))?["'];?\s*$/m;
  * catálogo público y los archivos de la
  * imagen OG del sitio. También las búsquedas frecuentes de la guía del
  * buscador (iguales para todos; salen de la caché de interpretaciones). Y la lista
- * de tarjetas que acepta Mercado Pago (footer y checkout): igual para todos, no cotiza.
+ * de tarjetas que acepta Mercado Pago (footer y checkout): igual para todos, no cotiza. Y la marca
+ * de la tienda (nombre, textos, logos) y `lib/tema-tenant-datos.ts` su tema (paleta): una por
+ * proyecto, no dependen del visitante.
  */
 const CON_CACHE = [
   "app/opengraph-image.tsx",
   "lib/home-datos.ts",
+  "lib/institucional/datos.ts",
+  "lib/marca.ts",
+  "lib/tema-tenant-datos.ts",
   "components/SiteFooter.tsx",
   "lib/catalogo-publico.ts",
   "lib/sucursales-datos.ts",

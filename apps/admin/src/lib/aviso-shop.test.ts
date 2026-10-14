@@ -27,6 +27,13 @@ describe("avisarShop", () => {
     expect(registrarMock).toHaveBeenCalledWith("tenant-a", true)
   })
 
+  it("el ping va con el tenant del aviso (nunca el de otro)", async () => {
+    pingMock.mockResolvedValue({ propagado: true })
+    registrarMock.mockResolvedValue(undefined)
+    await avisarShop("tenant-b")
+    expect(pingMock).toHaveBeenCalledWith("tenant-b")
+  })
+
   it("ping no entregado → registra el intento sin ok", async () => {
     pingMock.mockResolvedValue({ propagado: false })
     registrarMock.mockResolvedValue(undefined)

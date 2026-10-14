@@ -239,6 +239,70 @@ describe("proveedor ligado a una cuenta: llamadas HTTP", () => {
     expect(autorizacion(1)).toBe("Bearer TEST-token-igz");
   });
 
+  /** Calidad de la integración: emisor, datos del pedido e id de dispositivo en el cobro con tarjeta. */
+  const cuerpoEnviado = (i = 0) => JSON.parse(fetchMock.mock.calls[i][1].body as string) as Record<string, unknown>;
+  const headersEnviados = (i = 0) => fetchMock.mock.calls[i][1].headers as Record<string, string>;
+
+  it("tarjeta: manda issuer_id (número), additional_info y el header X-meli-session-id cuando existen", async () => {
+    conRespuesta(201, { id: 9, status: "approved", status_detail: "accredited" });
+    await mdp.crearPago({
+      ...base,
+      token: "tok",
+      issuerId: "310",
+      deviceId: "armor.abc-123_x",
+      infoAdicional: {
+        items: [{ id: "SKU-1", titulo: "Lámpara LED 9 W", cantidad: 2, precioUnitario: 500 }],
+        nombre: "Ana",
+        apellido: "Pérez Gómez",
+        envio: { direccion: "Calle Falsa 123", ciudad: "Mar del Plata" },
+      },
+    });
+    const cuerpo = cuerpoEnviado();
+    expect(cuerpo.issuer_id).toBe(310);
+    expect(cuerpo.additional_info).toEqual({
+      items: [{ id: "SKU-1", title: "Lámpara LED 9 W", quantity: 2, unit_price: 500 }],
+      payer: { first_name: "Ana", last_name: "Pérez Gómez" },
+      shipments: { receiver_address: { street_name: "Calle Falsa 123", city_name: "Mar del Plata" } },
+    });
+    expect(headersEnviados()["X-meli-session-id"]).toBe("armor.abc-123_x");
+    // Lo de siempre no cambia: el monto y la idempotencia siguen saliendo del pedido y del token.
+    expect(cuerpo.transaction_amount).toBe(1000);
+    expect(headersEnviados()["X-Idempotency-Key"]).toBe(claveIdempotencia({ ...base, token: "tok" }));
+  });
+
+  it("tarjeta sin esos datos: el cuerpo y los headers quedan como antes", async () => {
+    conRespuesta(201, { id: 9, status: "approved", status_detail: "accredited" });
+    await mdp.crearPago({ ...base, token: "tok", infoAdicional: { items: [] } });
+    const cuerpo = cuerpoEnviado();
+    expect(cuerpo).not.toHaveProperty("issuer_id");
+    expect(cuerpo).not.toHaveProperty("additional_info");
+    expect(headersEnviados()).not.toHaveProperty("X-meli-session-id");
+  });
+
+  it("additional_info: sin apellido va sólo first_name, y sin envío no hay shipments", async () => {
+    conRespuesta(201, { id: 9, status: "approved", status_detail: "accredited" });
+    await mdp.crearPago({ ...base, token: "tok", infoAdicional: { items: [], nombre: "Ana" } });
+    expect(cuerpoEnviado().additional_info).toEqual({ payer: { first_name: "Ana" } });
+  });
+
+  it("dinero en cuenta: no lleva issuer_id ni additional_info", async () => {
+    conRespuesta(201, { id: 9, status: "approved", status_detail: "accredited" });
+    await mdp.crearPago({
+      ...base,
+      medio: "cuenta_mp",
+      issuerId: "310",
+      infoAdicional: { items: [{ id: "a", titulo: "b", cantidad: 1, precioUnitario: 1 }] },
+    });
+    const cuerpo = cuerpoEnviado();
+    expect(cuerpo.payment_method_id).toBe("account_money");
+    expect(cuerpo).not.toHaveProperty("issuer_id");
+    expect(cuerpo).not.toHaveProperty("additional_info");
+  });
+
+  it("el proveedor declara que aprovecha los datos adicionales", () => {
+    expect(mdp.aceptaInfoAdicional).toBe(true);
+  });
+
   it("consulta y cancela con la cuenta ligada", async () => {
     conRespuesta(200, { id: 7, status: "cancelled", status_detail: "by_collector" });
     await mdp.consultarPago("7");

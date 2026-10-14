@@ -19,6 +19,7 @@
  */
 
 import { escapeHtml } from "./escape-html";
+import { MARCA_POR_DEFECTO, type Marca } from "./marca-base";
 import { FUENTE_MAIL, pieTexto, tarjetaMail } from "./mail-layout";
 
 export interface MailCodigoVinculacion {
@@ -32,15 +33,28 @@ function agrupar(codigo: string): string {
   return /^\d{6}$/.test(codigo) ? `${codigo.slice(0, 3)} ${codigo.slice(3)}` : codigo;
 }
 
-/** Ruta del logo para mails: PNG (Gmail y Outlook no muestran SVG), a 2x de 180×23. */
+/** Ruta del logo para mails de Central: PNG (Gmail y Outlook no muestran SVG), a 2x de 180×23. */
 export const RUTA_LOGO_MAIL = "/images/central-led/logo-mail.png";
 
 /**
- * URL absoluta del logo, o null sin `NEXT_PUBLIC_SITE_URL`: un mail no puede
+ * URL absoluta del logo de Central, o null sin `NEXT_PUBLIC_SITE_URL`: un mail no puede
  * usar rutas relativas, y la URL de producción no va escrita en el repo.
  */
 export function urlLogoMail(sitio = process.env.NEXT_PUBLIC_SITE_URL): string | null {
-  if (!sitio) return null;
+  return urlLogoMarca(MARCA_POR_DEFECTO, sitio);
+}
+
+/**
+ * Logo de los mails de una marca: el `logoMailUrl` que cargó (PNG/JPG absoluto) o, si es la de
+ * Central, el de siempre. Una marca propia sin logo de mail va sin logo (el mail pone su nombre en
+ * texto) y NUNCA con el de Central.
+ */
+export function urlLogoMarca(
+  marca: Pick<Marca, "base" | "logoMailUrl">,
+  sitio = process.env.NEXT_PUBLIC_SITE_URL,
+): string | null {
+  if (marca.logoMailUrl) return marca.logoMailUrl;
+  if (marca.base !== "central" || !sitio) return null;
   try {
     return new URL(RUTA_LOGO_MAIL, sitio).toString();
   } catch {

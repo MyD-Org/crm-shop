@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MARCA_POR_DEFECTO } from "../marca-base";
 import { armarPreferencia, urlRetorno, volvioConPagoDeMercadoPago } from "./mercadopago-preferencia";
 
 const base = {
@@ -6,6 +7,7 @@ const base = {
   numero: "000123",
   total: 1500.5,
   origen: "https://tienda.example",
+  marca: MARCA_POR_DEFECTO,
 };
 
 describe("urlRetorno", () => {
@@ -23,6 +25,10 @@ describe("urlRetorno", () => {
 });
 
 describe("armarPreferencia", () => {
+  it("el título lleva la marca de la tienda: otra marca no menciona a Central", () => {
+    const p = armarPreferencia({ ...base, marca: { nombre: "Tienda Uno" } });
+    expect(p.items[0].title).toBe("Pedido 000123 — Tienda Uno");
+  });
   it("un ítem con el total del pedido en ARS, un pago, sólo dinero en cuenta y propósito wallet", () => {
     const p = armarPreferencia(base);
     expect(p.purpose).toBe("wallet_purchase");

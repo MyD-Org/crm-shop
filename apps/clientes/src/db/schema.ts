@@ -899,14 +899,23 @@ export const paymentConfigCache = shop.table("payment_config_cache", {
   lastError: text("last_error"),
 });
 
-/** Contenido administrable de la home. Una fila por sección; la escriben las
- *  server actions de src/lib/home-acciones.ts (usuario admin) y la home la
- *  mergea con defaults en código. navBadge apagado = jsonb 'null'. */
-export const homeContent = shop.table("home_content", {
-  key: text("key").primaryKey(),
-  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+/** Contenido administrable de la home. Una fila por sección y por tienda; la
+ *  escriben las server actions de src/lib/home-acciones.ts (usuario admin) y la
+ *  home la mergea con defaults en código. navBadge apagado = jsonb 'null'.
+ *
+ *  `tenant_id` (migraciones 0037 y 0038, change `shop-para-avantec`): la base
+ *  es compartida y toda lectura/escritura filtra por `shopTenantId()`. La PK es
+ *  (tenant_id, key) y `tenant_id` no tiene default: toda escritura lo indica. */
+export const homeContent = shop.table(
+  "home_content",
+  {
+    key: text("key").notNull(),
+    tenantId: text("tenant_id").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ name: "home_content_pkey", columns: [t.tenantId, t.key] })],
+);
 
 /**
  * Favoritos de Mi cuenta: qué productos guardó cada usuario de Clerk.

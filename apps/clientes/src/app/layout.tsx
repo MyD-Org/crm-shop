@@ -8,10 +8,15 @@ import { Header } from "@/components/HeaderServer";
 import { SiteFooter } from "@/components/SiteFooter";
 import { getContenidoHome } from "@/lib/home-datos";
 import { clasesVisibilidad, visibilidadDe } from "@/data/home-defaults";
-import { TEMA_POR_DEFECTO, scriptTema } from "@/lib/tema-ip";
+import { scriptTema } from "@/lib/tema-ip";
+import { atributosHtmlTema } from "@/lib/tema-tenant";
+import { getTemaTenant } from "@/lib/tema-tenant-datos";
 import { BloqueoFavoritos } from "@/components/BloqueoFavoritos";
 import { ChatIaServidor } from "@/components/chat/ChatIaServidor";
 import { TrackingServidor } from "@/components/tracking/TrackingServidor";
+import { MarcaProvider } from "@/components/MarcaProvider";
+import { getMarca } from "@/lib/marca";
+import { metadataDeMarca } from "@/lib/metadata-marca";
 import "./globals.css";
 
 // Fuentes del diseño aprobado, self-hosted vía next/font; la paleta cálida las
@@ -31,25 +36,17 @@ const sora = Sora({
   variable: "--font-sora",
 });
 
-export const metadata: Metadata = {
-  // Base de las URLs absolutas de metadata (canonical). Por entorno: el repo
-  // no lleva el dominio. Sin la variable, las páginas omiten el canonical.
-  metadataBase: process.env.NEXT_PUBLIC_SITE_URL
-    ? new URL(process.env.NEXT_PUBLIC_SITE_URL)
-    : undefined,
-  title: "Central LED — Tienda Online",
-  description:
-    "Iluminación, materiales eléctricos, herramientas y mucho más en Puerto Iguazú, Misiones. Stock en tiempo real.",
-  // Verificación del dominio en Meta: el token es de la cuenta de la tienda y
-  // va por entorno (repo público). Sin la variable no se emite el meta.
-  ...(process.env.FACEBOOK_DOMAIN_VERIFICATION
-    ? {
-        verification: {
-          other: { "facebook-domain-verification": process.env.FACEBOOK_DOMAIN_VERIFICATION },
-        },
-      }
-    : {}),
-};
+/**
+ * Metadata del sitio: título, descripción y verificación de Meta salen de la marca de la tienda
+ * (`tenants.shop_marca`, cacheada; ver src/lib/marca.ts). Con la marca de Central es el `metadata`
+ * de siempre (src/lib/metadata-marca.test.ts).
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  return metadataDeMarca(await getMarca(), {
+    siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+    facebookToken: process.env.FACEBOOK_DOMAIN_VERIFICATION,
+  });
+}
 
 /**
  * `viewport-fit=cover`: la página ocupa también el área de la muesca y del
@@ -100,27 +97,33 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Anuncio global: contenido administrable (mismo contrato que la home).
-  const { anuncio, visibilidad } = await getContenidoHome();
+  const [{ anuncio, visibilidad }, marca, temaTenant] = await Promise.all([getContenidoHome(), getMarca(), getTemaTenant()]);
+  // Tema de la tienda (`tenants.shop_tema`): sin paleta propia (Central) no hay `data-tema` ni
+  // `<style>` y el HTML es el de siempre; con ella, UNA regla de variables (src/lib/tema-tenant.ts).
+  const tema = atributosHtmlTema(temaTenant);
   const vAnuncio = visibilidadDe(visibilidad, "anuncio");
 
   return (
-    // Tema: el shell trae el de todos (geo-IP apagada, ver tema-ip.ts). El
-    // `?tema=azul|calido` de QA lo aplica el script del <head> antes del primer
+    // Tema: el shell trae el de la tienda (base de `shop_tema`; geo-IP apagada, ver
+    // tema-ip.ts). El `?tema=azul|calido` de QA lo aplica el script del <head> antes del primer
     // pintado; por eso `suppressHydrationWarning` en <html>.
     <html
       lang="es"
-      data-theme={TEMA_POR_DEFECTO}
+      data-theme={tema.dataTheme}
+      data-tema={tema.dataTema}
       suppressHydrationWarning
       className={`h-full antialiased ${nunito.variable} ${sora.variable}`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: scriptTema() }} />
+        {tema.css ? <style dangerouslySetInnerHTML={{ __html: tema.css }} /> : null}
       </head>
       <body className="flex min-h-full flex-col">
         {/* ClerkProvider DENTRO de <body> y sin `dynamic`: con `dynamic` (o
             envolviendo <html>) todo el árbol pasa a depender del request. */}
         <ClerkProvider localization={esAR} appearance={aparienciaClerk}>
           <Providers>
+           <MarcaProvider marca={{ base: marca.base, nombre: marca.nombre, lema: marca.lema, logoUrl: marca.logoUrl }}>
             {/* Anuncio global (contenido administrable): arriba de todo, sobre el header.
                 Dónde se ve lo decide el editor (default: solo desktop, porque en
                 mobile el texto ocupa varias filas hasta que sea un carrusel). */}
@@ -145,6 +148,7 @@ export default async function RootLayout({
             <Suspense fallback={null}>
               <TrackingServidor />
             </Suspense>
+           </MarcaProvider>
           </Providers>
         </ClerkProvider>
       </body>

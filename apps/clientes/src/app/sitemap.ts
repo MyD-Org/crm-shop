@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { idsProductosPublicos } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
+import { getPaginasPublicadas } from "@/lib/institucional/datos";
 import { baseDelSitio, entradasSitemap } from "@/lib/seo";
 
 /**
@@ -12,5 +13,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const sitio = process.env.NEXT_PUBLIC_SITE_URL;
   if (!baseDelSitio(sitio)) return [];
   const { soloVisibles, variantes } = await flagsPublicos();
-  return entradasSitemap(sitio, await (variantes ? idsProductosPublicos(soloVisibles, true) : idsProductosPublicos(soloVisibles)));
+  const [ids, paginas] = await Promise.all([
+    variantes ? idsProductosPublicos(soloVisibles, true) : idsProductosPublicos(soloVisibles),
+    getPaginasPublicadas(),
+  ]);
+  return entradasSitemap(sitio, ids, paginas.map((p) => p.href));
 }

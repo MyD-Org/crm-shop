@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { TEMA_POR_DEFECTO } from "@/lib/tema-ip";
+import { nombreMarcaEntorno } from "@/lib/marca-base";
 import "./globals.css";
 
 /**
@@ -24,7 +25,7 @@ export default function GlobalError({
   return (
     <html lang="es" data-theme={TEMA_POR_DEFECTO} className="h-full antialiased">
       <body className="flex min-h-full flex-col bg-bg text-text">
-        <title>Error — Central LED</title>
+        <title>{`Error — ${nombreMarcaEntorno()}`}</title>
         <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-4 py-16 text-center">
           <h1 className="text-xl font-semibold">No pudimos cargar la tienda</h1>
           <p className="text-muted">Ocurrió un error inesperado. Inténtelo de nuevo en unos instantes.</p>

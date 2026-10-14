@@ -33,7 +33,8 @@ import { armarMailArrepentimientoCliente, armarMailArrepentimientoComercio } fro
 import { contarRecientesPorEmail, insertarSolicitud, marcarEnvios } from "./arrepentimiento-repo";
 import { urlSitioMail } from "./mail-layout";
 import { permitirAsync } from "./rate-limit";
-import { urlLogoMail } from "./vinculacion-mail";
+import { urlLogoMarca } from "./vinculacion-mail";
+import { getMarca } from "./marca";
 
 const ERROR_GENERICO = "No se pudo registrar la solicitud. Inténtelo de nuevo en unos minutos.";
 const ERROR_DEMASIADAS = "Recibimos demasiadas solicitudes. Inténtelo nuevamente más tarde.";
@@ -131,7 +132,7 @@ export async function enviarSolicitudArrepentimiento(
     pedido: valores.pedido || undefined,
     motivo: valores.motivo || undefined,
     comercio: tenant?.nombre || legal.razonSocial,
-    logoUrl: urlLogoMail(),
+    logoUrl: urlLogoMarca(await getMarca()),
     sitioUrl,
   });
   const mailComercio = armarMailArrepentimientoComercio({

@@ -1,0 +1,62 @@
+{
+  "descripcion": "Contrato de la marca de la tienda (tenants.shop_marca). Lo comparten el validador del admin (src/lib/tienda-online.ts) y, en la rebanada 3b, el saneo del Shop. Datos inventados; dominios .example.",
+  "contexto": { "hosts": ["media.example"] },
+  "validos": [
+    { "nombre": "objeto vacío", "entrada": {}, "salida": {} },
+    { "nombre": "null / no objeto equivalen a vacío", "entrada": null, "salida": {} },
+    { "nombre": "claves desconocidas se descartan", "entrada": { "nombre": "Tienda Uno", "otraCosa": 1 }, "salida": { "nombre": "Tienda Uno" } },
+    { "nombre": "recorte y espacios colapsados", "entrada": { "nombre": "  Tienda   Uno  " }, "salida": { "nombre": "Tienda Uno" } },
+    { "nombre": "cadenas vacías se descartan", "entrada": { "nombre": "", "titulo": "   ", "logoUrl": "" }, "salida": {} },
+    { "nombre": "base generica", "entrada": { "base": "generica" }, "salida": { "base": "generica" } },
+    { "nombre": "base central", "entrada": { "base": "central" }, "salida": { "base": "central" } },
+    { "nombre": "descripción de 200 caracteres", "entrada": { "descripcion": { "$repetir": ["x", 200] } }, "salida": { "descripcion": { "$repetir": ["x", 200] } } },
+    { "nombre": "logo svg en el host de medios", "entrada": { "logoUrl": "https://media.example/marca/tienda-uno/logo.svg" }, "salida": { "logoUrl": "https://media.example/marca/tienda-uno/logo.svg" } },
+    { "nombre": "favicon png, og webp", "entrada": { "faviconUrl": "https://media.example/m/f.png", "ogImagenUrl": "https://media.example/m/og.webp" }, "salida": { "faviconUrl": "https://media.example/m/f.png", "ogImagenUrl": "https://media.example/m/og.webp" } },
+    { "nombre": "logo de mail jpg", "entrada": { "logoMailUrl": "https://media.example/m/mail.jpg" }, "salida": { "logoMailUrl": "https://media.example/m/mail.jpg" } },
+    { "nombre": "textos de la imagen OG", "entrada": { "ogTextos": { "eyebrow": " Tienda ", "bajada": "Iluminación", "lugar": "" } }, "salida": { "ogTextos": { "eyebrow": "Tienda", "bajada": "Iluminación" } } },
+    { "nombre": "ogTextos vacío se descarta", "entrada": { "ogTextos": { "eyebrow": "" } }, "salida": {} },
+    { "nombre": "email de contacto", "entrada": { "emailContacto": " Ventas@Tienda.example " }, "salida": { "emailContacto": "Ventas@Tienda.example" } }
+  ],
+  "invalidos": [
+    { "nombre": "no es objeto", "entrada": "hola", "campo": "marca" },
+    { "nombre": "es un arreglo", "entrada": [], "campo": "marca" },
+    { "nombre": "base desconocida", "entrada": { "base": "otra" }, "campo": "base" },
+    { "nombre": "nombre no es texto", "entrada": { "nombre": 3 }, "campo": "nombre" },
+    { "nombre": "nombre demasiado largo", "entrada": { "nombre": { "$repetir": ["n", 61] } }, "campo": "nombre" },
+    { "nombre": "título demasiado largo", "entrada": { "titulo": { "$repetir": ["t", 81] } }, "campo": "titulo" },
+    { "nombre": "descripción de 201 caracteres", "entrada": { "descripcion": { "$repetir": ["d", 201] } }, "campo": "descripcion" },
+    { "nombre": "logo fuera de los hosts permitidos", "entrada": { "logoUrl": "https://otro.example/logo.svg" }, "campo": "logoUrl" },
+    { "nombre": "logo con http", "entrada": { "logoUrl": "http://media.example/logo.svg" }, "campo": "logoUrl" },
+    { "nombre": "logo con credenciales", "entrada": { "logoUrl": "https://u:p@media.example/logo.svg" }, "campo": "logoUrl" },
+    { "nombre": "logo con query", "entrada": { "logoUrl": "https://media.example/logo.svg?x=1" }, "campo": "logoUrl" },
+    { "nombre": "logo con extensión no permitida", "entrada": { "logoUrl": "https://media.example/logo.gif" }, "campo": "logoUrl" },
+    { "nombre": "logo sin extensión", "entrada": { "logoUrl": "https://media.example/logo" }, "campo": "logoUrl" },
+    { "nombre": "no es una URL", "entrada": { "faviconUrl": "logo.png" }, "campo": "faviconUrl" },
+    { "nombre": "logo de mail svg (los mails no lo soportan)", "entrada": { "logoMailUrl": "https://media.example/m/mail.svg" }, "campo": "logoMailUrl" },
+    { "nombre": "logo de mail webp", "entrada": { "logoMailUrl": "https://media.example/m/mail.webp" }, "campo": "logoMailUrl" },
+    { "nombre": "ogTextos no es objeto", "entrada": { "ogTextos": "x" }, "campo": "ogTextos" },
+    { "nombre": "eyebrow demasiado largo", "entrada": { "ogTextos": { "eyebrow": { "$repetir": ["e", 41] } } }, "campo": "ogTextos" },
+    { "nombre": "email sin arroba", "entrada": { "emailContacto": "ventas.tienda.example" }, "campo": "emailContacto" },
+    { "nombre": "email con espacios", "entrada": { "emailContacto": "a b@tienda.example" }, "campo": "emailContacto" }
+  ],
+  "sitio": {
+    "validos": [
+      { "entrada": "", "salida": "" },
+      { "entrada": "   ", "salida": "" },
+      { "entrada": "https://tienda.example", "salida": "https://tienda.example" },
+      { "entrada": " https://tienda.example/ ", "salida": "https://tienda.example" },
+      { "entrada": "https://tienda.example:8443", "salida": "https://tienda.example:8443" },
+      { "entrada": "https://TIENDA.example", "salida": "https://tienda.example" }
+    ],
+    "invalidos": [
+      "tienda.example",
+      "http://tienda.example",
+      "https://tienda.example/catalogo",
+      "https://usuario:clave@tienda.example",
+      "https://tienda.example?x=1",
+      "https://tienda.example#a",
+      "ftp://tienda.example",
+      "no es una url"
+    ]
+  }
+}

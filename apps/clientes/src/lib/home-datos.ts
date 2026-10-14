@@ -1,20 +1,27 @@
 import { cacheLife, cacheTag } from "next/cache";
+import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { homeContent } from "@/db/schema";
 import {
   combinarContenidoHome as combinar,
+  defaultsHomeDe,
   DEFAULTS_LEGAL,
   KEY_LEGAL,
   resolverDatosLegales,
   type DatosLegales,
   type HomeContent,
 } from "@/data/home-defaults";
-import { DEFAULTS_FOOTER, KEY_FOOTER, resolverDatosFooter, type DatosFooter } from "@/data/footer";
+import { KEY_FOOTER, defaultsFooterDe, resolverDatosFooter, type DatosFooter } from "@/data/footer";
+import { getMarca } from "@/lib/marca";
 import { leerSeccionesHome } from "@/lib/home-guardar";
 import { TAG_HOME } from "@/lib/cache-tags";
+import { shopTenantId } from "@/lib/tenant";
 
-export function combinarContenidoHome(filas: { key: string; payload: unknown }[]): HomeContent {
-  return combinar(filas);
+export function combinarContenidoHome(
+  filas: { key: string; payload: unknown }[],
+  defaults?: HomeContent,
+): HomeContent {
+  return combinar(filas, defaults);
 }
 
 /**
@@ -32,15 +39,19 @@ export async function getContenidoHome(): Promise<HomeContent> {
   "use cache";
   cacheTag(TAG_HOME);
   console.info("[cache] home miss");
+  // Los defaults dependen de la marca (Central o genérica). `getMarca` no lanza.
+  const defaults = defaultsHomeDe(await getMarca());
   try {
-    const filas = await getDb().select().from(homeContent);
+    const filas = await getDb()
+      .select()
+      .from(homeContent)
+      .where(eq(homeContent.tenantId, shopTenantId()));
     cacheLife("home");
-    return combinar(filas);
+    return combinar(filas, defaults);
   } catch (err) {
     console.error("[home] home_content no disponible, uso defaults:", err);
     cacheLife("degradado");
-    const { DEFAULTS_HOME } = await import("@/data/home-defaults");
-    return DEFAULTS_HOME;
+    return defaults;
   }
 }
 
@@ -79,6 +90,7 @@ export async function getDatosLegales(): Promise<DatosLegales> {
  * los defaults: el footer de siempre.
  */
 export async function getDatosFooter(): Promise<DatosFooter> {
+  const defaults = defaultsFooterDe(await getMarca());
   const filas = await filasFooter();
-  return filas ? resolverDatosFooter(filas.footer) : DEFAULTS_FOOTER;
+  return filas ? resolverDatosFooter(filas.footer, defaults) : defaults;
 }

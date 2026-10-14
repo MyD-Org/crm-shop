@@ -26,7 +26,7 @@ export function desactivarAvisoShop(): void {
  */
 export async function avisarShop(tenantId: string): Promise<{ propagado: boolean }> {
   if (avisoDesactivado) return { propagado: false }
-  const { propagado } = await pingShopRevalidarCatalogo()
+  const { propagado } = await pingShopRevalidarCatalogo(tenantId)
   try {
     await registrarAvisoShop(tenantId, propagado)
   } catch (err) {

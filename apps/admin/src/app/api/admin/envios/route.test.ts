@@ -11,11 +11,13 @@ const state = vi.hoisted(() => ({
   ping: 0,
   propagado: true,
   guardado: [] as unknown[],
+  pingTenants: [] as string[],
 }))
 
 vi.mock("@/lib/admin-session", () => ({ getGuardedAdminSession: async () => state.guarded }))
 vi.mock("@/lib/shop-revalidar", () => ({
-  pingShopRevalidarSucursales: async () => {
+  pingShopRevalidarSucursales: async (tenantId: string) => {
+    state.pingTenants.push(tenantId)
     state.ping++
     return { propagado: state.propagado }
   },
@@ -43,6 +45,7 @@ const req = (method: string, body?: unknown) =>
 beforeEach(() => {
   state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } }
   state.ping = 0
+  state.pingTenants = []
   state.propagado = true
   state.guardado = []
   vi.spyOn(console, "warn").mockImplementation(() => {})
@@ -63,6 +66,13 @@ describe("/api/admin/envios", () => {
     const res = await PUT(req("PUT", { domicilioActivo: true, gratisActivo: false }))
     expect(res.status).toBe(403)
     expect(state.guardado).toEqual([])
+  })
+
+  it("PUT válido avisa al Shop del tenant del guard", async () => {
+    const { PUT } = await import("@/app/api/admin/envios/route")
+    const res = await PUT(req("PUT", { domicilioActivo: true, gratisActivo: false }))
+    expect(res.status).toBe(200)
+    expect(state.pingTenants).toEqual(["tenant-a"])
   })
 
   it("GET devuelve los defaults: domicilio activo y gratis apagado", async () => {

@@ -10,6 +10,8 @@ import {
   cookieDeTema,
   resolverTema,
 } from "@/lib/tema-ip";
+import { escapeHtml } from "@/lib/escape-html";
+import { nombreMarcaEntorno } from "@/lib/marca-base";
 import { LOCAL_COOKIE, LOCAL_MAX_AGE, decidirLocal, type DecisionLocal } from "@/lib/local-recordado";
 
 const GATE_COOKIE = "site_gate";
@@ -34,6 +36,8 @@ const RUTAS_PUBLICAS = [
   "/api/internal/catalogo/revalidar",
   // Lo mismo para el aviso de que cambiaron las sucursales o las zonas.
   "/api/internal/sucursales/revalidar",
+  // Y para el aviso de que cambió la marca de la tienda (nombre, textos, logos).
+  "/api/internal/marca/revalidar",
   // Webhook de Clerk (espejo de usuarios en shop.clientes): Clerk/Svix no tiene cookie de gate
   // y se autentica con la firma. Sin esto la cortina responde 200 con HTML, Clerk da el evento
   // por entregado y el alta nunca llega al espejo.
@@ -242,12 +246,14 @@ function metaVerificacionFacebook() {
 }
 
 function gateHtml({ error }: { error: boolean }) {
+  // La cortina no espera a la base: el nombre sale de la variable pública del proyecto.
+  const nombre = escapeHtml(nombreMarcaEntorno());
   return `<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-${metaVerificacionFacebook()}<title>Central LED — Próximamente</title>
+${metaVerificacionFacebook()}<title>${nombre} — Próximamente</title>
 <style>
   * { box-sizing: border-box; }
   html, body {
@@ -406,7 +412,7 @@ ${metaVerificacionFacebook()}<title>Central LED — Próximamente</title>
 <body>
   <div class="wrap">
     <div class="card">
-      <div class="logo">Central LED</div>
+      <div class="logo">${nombre}</div>
       <div class="badge"><span class="dot"></span>Próximamente</div>
       <h1>Estamos preparando algo nuevo</h1>
       <p class="lead">Nuestra tienda online está en construcción. Muy pronto vas a poder comprar acá.</p>
@@ -444,7 +450,7 @@ ${metaVerificacionFacebook()}<title>Central LED — Próximamente</title>
 export const config = {
   matcher: [
     // `images/`: los archivos de public/images no pasan por el gate. Los mails
-    // enlazan el logo desde el sitio (/images/central-led/logo-mail.png) y con
+    // enlazan el logo desde el sitio (la ruta `RUTA_LOGO_MAIL`) y con
     // el gate puesto esa URL devolvía la página de "Próximamente" (200 HTML):
     // en todos los mails el logo salía roto. Son imágenes públicas del sitio.
     "/((?!_next/static|_next/image|favicon.ico|api/cron|images/).*)",

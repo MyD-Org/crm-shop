@@ -56,7 +56,7 @@ export async function PUT(req: NextRequest) {
   if (r.kind === "not_found") return noExiste()
 
   // El Shop muestra el horario de cada sucursal: se avisa DESPUÉS de persistir (nunca tira).
-  if (slug) await pingShopRevalidarSucursales()
+  if (slug) await pingShopRevalidarSucursales(guard.tenantId)
 
   return NextResponse.json({ ok: true, schedule: parsed.schedule, exceptions: parsedEx.exceptions })
 }

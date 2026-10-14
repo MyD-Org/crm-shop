@@ -7,9 +7,12 @@ import { isStudioImage, STUDIO_IMAGE } from "../hero-lights";
 import { ListaEditable } from "../ListaEditable";
 import { CampoImagen } from "./CampoImagen";
 import { CamposTitulo } from "./CamposTitulo";
+import { useMarca } from "../../MarcaProvider";
 import type { EditorProps } from "./index";
 
 export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
+  // La foto del estudio es un recurso de la tienda de Central: no se ofrece a otra marca.
+  const esCentral = useMarca().base === "central";
   return (
     <div className="flex flex-col gap-4">
       <CamposTitulo valor={valor} onChange={onChange} conEyebrow />
@@ -20,7 +23,7 @@ export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
         onAltChange={(imagenAlt) => onChange({ ...valor, imagenAlt })}
       />
       {/* La foto del estudio es la única que prende las luces interactivas del hero. */}
-      {!isStudioImage(valor.imagen) ? (
+      {esCentral && !isStudioImage(valor.imagen) ? (
         <Button
           type="button"
           variant="outline"

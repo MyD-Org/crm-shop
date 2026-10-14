@@ -838,7 +838,7 @@ async function avisarTrasCommit(tenantId: string, hubo: { condiciones?: boolean 
   }
   if (hubo.condiciones) {
     try {
-      await pingShopRevalidarSucursales()
+      await pingShopRevalidarSucursales(tenantId)
     } catch (err) {
       console.warn(`[precios-online] aviso de condiciones al Shop falló: ${err instanceof Error ? err.name : "error"}`)
     }

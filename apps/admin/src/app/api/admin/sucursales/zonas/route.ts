@@ -22,6 +22,6 @@ export async function PUT(req: Request) {
   if (r.kind === "not_found") return noEncontrado()
   if (r.kind !== "ok") return errorDeResultado(r)
 
-  const { propagado } = await pingShopRevalidarSucursales()
+  const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado, zona: r.zona }, { headers: NO_STORE })
 }

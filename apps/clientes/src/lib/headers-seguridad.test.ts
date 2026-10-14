@@ -42,6 +42,10 @@ describe("politicaCsp", () => {
     });
     expect(csp).toMatch(/script-src [^;]*https:\/\/sdk\.mercadopago\.com/);
     expect(csp).toMatch(/frame-src [^;]*https:\/\/\*\.mercadopago\.com/);
+    // Script de seguridad (www.mercadopago.com/v2/security.js) y su llamada a api.mercadopago.com: los
+    // cubre el comodín, sin orígenes nuevos.
+    expect(csp).toMatch(/script-src [^;]*https:\/\/\*\.mercadopago\.com/);
+    expect(csp).toMatch(/connect-src [^;]*https:\/\/\*\.mercadopago\.com/);
     expect(csp).toMatch(/frame-src [^;]*https:\/\/\*\.mercadopago\.com\.ar/);
     expect(csp).toMatch(/form-action [^;]*https:\/\/\*\.mercadopago\.com\.ar/);
     expect(csp).toMatch(/img-src [^;]*https:\/\/media\.plataforma\.example [^;]*https:\/\/otro\.example/);

@@ -22,7 +22,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const r = await actualizarCuenta(guard.tenantId, id, body)
   if (r.kind !== "ok") return errorDeCuenta(r)
 
-  const { propagado } = await pingShopRevalidarSucursales()
+  const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado, cuenta: r.cuenta }, { headers: NO_STORE })
 }
 
@@ -35,6 +35,6 @@ export async function DELETE(req: Request, { params }: Ctx) {
   const r = await eliminarCuenta(guard.tenantId, id)
   if (r.kind === "not_found") return adminNotFoundResponse()
 
-  const { propagado } = await pingShopRevalidarSucursales()
+  const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado }, { headers: NO_STORE })
 }

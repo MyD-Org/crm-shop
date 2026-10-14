@@ -31,6 +31,9 @@ vi.mock("@/lib/shop-media", () => ({
   urlPublicaHome: vi.fn((k: string) => `https://media.plataforma.example/${k}`),
 }));
 
+vi.mock("@/lib/marca", async () => ({
+  getMarca: async () => (await import("@/lib/marca-base")).MARCA_POR_DEFECTO,
+}));
 vi.mock("@/lib/tenant", () => ({
   shopTenantId: () => "central-led",
 }));

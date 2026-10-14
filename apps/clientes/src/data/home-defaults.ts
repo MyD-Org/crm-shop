@@ -1,6 +1,7 @@
 import type { VisibleOn } from "@myd-org/ui";
 import { hostsDeMedios } from "../lib/catalogo-medios";
 import { cuitValido, formatearCuit } from "../lib/facturacion";
+import type { Marca } from "../lib/marca-base";
 
 /**
  * Contenido por defecto de la home, editable desde la home por un usuario
@@ -279,6 +280,73 @@ export const DEFAULTS_HOME: HomeContent = {
   // sea un carrusel de mensajes. El admin lo puede cambiar desde el editor.
   visibilidad: { anuncio: "desktop" },
 };
+
+/**
+ * Home de una tienda con `marca.base = "generica"` (change `shop-para-avantec`): nada de Central
+ * (ni su texto, ni sus marcas, ni su ciudad). Arranca con el héroe, la cinta de marcas, los
+ * ambientes y los banners decorativos OCULTOS ("nunca") hasta que el editor los arme y los muestre;
+ * quedan visibles los destacados, los servicios y el WhatsApp. Las imágenes son las neutras del
+ * sitio (fotos de producto genéricas, no de ninguna empresa).
+ */
+export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent {
+  return {
+    anuncio: {},
+    hero: {
+      titulo: `Bienvenido a ${marca.nombre}`,
+      imagen: "/images/hero-neutral.webp",
+      imagenAlt: "Imagen principal de la tienda",
+      ctas: [{ label: "Ver catálogo →", href: "/catalogo" }],
+      usps: [],
+    },
+    marquee: { items: [] },
+    ambientes: {
+      titulo: "Compre por *ambiente*",
+      linkTodos: "/catalogo",
+      items: [],
+    },
+    destacados: {
+      titulo: "Productos *destacados*",
+      linkTodos: "/catalogo",
+      cantidad: 4,
+      skus: [],
+      imagenes: DEFAULTS_HOME.destacados.imagenes,
+    },
+    bannerDeco: {
+      titulo: "Conozca nuestras *novedades*",
+      cta: { label: "Ver catálogo →", href: "/catalogo" },
+      imagen: "/images/deco-guirnalda.webp",
+    },
+    decoGrid: {
+      titulo: "Más *productos*",
+      linkTodos: "/catalogo",
+      items: [],
+      chips: [],
+    },
+    servicios: {
+      items: [
+        {
+          titulo: "Asesoramiento personalizado",
+          texto: "Escríbanos por WhatsApp y lo ayudamos a elegir el producto correcto.",
+        },
+      ],
+    },
+    navBadge: null,
+    whatsapp: DEFAULTS_HOME.whatsapp,
+    busquedaAsistida: DEFAULTS_HOME.busquedaAsistida,
+    visibilidad: {
+      hero: "nunca",
+      marquee: "nunca",
+      ambientes: "nunca",
+      bannerDeco: "nunca",
+      decoGrid: "nunca",
+    },
+  };
+}
+
+/** Defaults de la home según la base de la marca: la de Central, o la genérica. */
+export function defaultsHomeDe(marca: Pick<Marca, "base" | "nombre">): HomeContent {
+  return marca.base === "generica" ? defaultsHomeGenerica(marca) : DEFAULTS_HOME;
+}
 
 // ---------------------------------------------------------------------------
 // Validación por sección (la usan las server actions y combinarContenidoHome)
@@ -750,9 +818,12 @@ export function clasesVisibilidad(v: Visibilidad | undefined): string {
 }
 
 /** Mergea filas de la DB sobre los defaults, sección por sección. */
-export function combinarContenidoHome(filas: { key: string; payload: unknown }[]): HomeContent {
+export function combinarContenidoHome(
+  filas: { key: string; payload: unknown }[],
+  defaults: HomeContent = DEFAULTS_HOME,
+): HomeContent {
   const porKey = new Map(filas.map((f) => [f.key, f.payload]));
-  const resultado: HomeContent = { ...DEFAULTS_HOME };
+  const resultado: HomeContent = { ...defaults };
   for (const key of SECCIONES_HOME) {
     if (!porKey.has(key)) continue;
     const payload = resolverSeccion(key, porKey.get(key));
@@ -763,8 +834,8 @@ export function combinarContenidoHome(filas: { key: string; payload: unknown }[]
       const seccion =
         key === "destacados" && typeof payload === "object"
           ? {
-              skus: DEFAULTS_HOME.destacados.skus,
-              imagenes: DEFAULTS_HOME.destacados.imagenes,
+              skus: defaults.destacados.skus,
+              imagenes: defaults.destacados.imagenes,
               ...(payload as Record<string, unknown>),
             }
           : payload;
@@ -774,7 +845,7 @@ export function combinarContenidoHome(filas: { key: string; payload: unknown }[]
     }
   }
   if (porKey.has(KEY_OCULTAS)) {
-    resultado.visibilidad = { ...DEFAULTS_HOME.visibilidad, ...resolverVisibilidad(porKey.get(KEY_OCULTAS)) };
+    resultado.visibilidad = { ...defaults.visibilidad, ...resolverVisibilidad(porKey.get(KEY_OCULTAS)) };
   }
   return resultado;
 }

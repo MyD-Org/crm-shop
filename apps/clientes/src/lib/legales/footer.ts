@@ -23,7 +23,12 @@ export function linksContacto(footer: DatosFooter): SiteFooterLink[] {
   ];
 }
 
-export function columnasFooter(ctx: { arrepentimiento: boolean; footer?: DatosFooter }): SiteFooterColumn[] {
+export function columnasFooter(ctx: {
+  arrepentimiento: boolean;
+  footer?: DatosFooter;
+  /** Páginas institucionales publicadas del tenant. Sin ninguna, no hay columna "Información". */
+  paginas?: readonly { label: string; href: string }[];
+}): SiteFooterColumn[] {
   const contacto = linksContacto(ctx.footer ?? DEFAULTS_FOOTER);
   return [
     {
@@ -34,6 +39,7 @@ export function columnasFooter(ctx: { arrepentimiento: boolean; footer?: DatosFo
       ],
     },
     ...(contacto.length ? [{ title: "Contacto", links: contacto }] : []),
+    ...(ctx.paginas?.length ? [{ title: "Información", links: ctx.paginas.map((p) => ({ ...p })) }] : []),
     {
       title: "Legales",
       links: [

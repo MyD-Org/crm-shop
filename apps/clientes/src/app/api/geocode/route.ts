@@ -1,3 +1,5 @@
+import { getMarca } from "@/lib/marca";
+import { idTecnico } from "@/lib/marca-base";
 import { NextResponse } from "next/server";
 import { claveSolicitante } from "@/lib/auth";
 import { codigoPaisGeocode, idiomaGeocode } from "@/lib/geocode-pais";
@@ -117,7 +119,7 @@ export async function GET(req: Request) {
       // La política de Nominatim exige identificarse con un contacto real: va en
       // GEOCODE_CONTACT_EMAIL. El respaldo es una dirección de ejemplo, solo para desarrollo.
       headers: {
-        "User-Agent": `CentralLed-Shop/1.0 (${process.env.GEOCODE_CONTACT_EMAIL ?? "contacto@cliente.example"})`,
+        "User-Agent": `${idTecnico(await getMarca())}-Shop/1.0 (${process.env.GEOCODE_CONTACT_EMAIL ?? "contacto@cliente.example"})`,
       },
       signal: AbortSignal.timeout(5000),
       next: { revalidate: CACHE_SEGUNDOS },

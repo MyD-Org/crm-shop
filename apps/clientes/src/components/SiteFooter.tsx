@@ -5,6 +5,9 @@ import { linkNext } from "@/components/catalogo/link-next";
 import { BotonEditarFooterSiAdmin } from "@/components/footer/BotonEditarFooterSiAdmin";
 import { textoBarra } from "@/data/footer";
 import { getDatosFooter, getDatosLegales } from "@/lib/home-datos";
+import { getPaginasPublicadas } from "@/lib/institucional/datos";
+import { getMarca } from "@/lib/marca";
+import { partesNombre } from "@/lib/marca-base";
 import { columnasFooter } from "@/lib/legales/footer";
 import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
 import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
@@ -33,12 +36,15 @@ import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
  * (`BotonEditarFooterSiAdmin` dentro de `<Suspense fallback={null}>`).
  */
 export async function SiteFooter() {
-  const [anio, legal, footer, tarjetas] = await Promise.all([
+  const [anio, legal, footer, tarjetas, marca, paginas] = await Promise.all([
     anioActual(),
     getDatosLegales(),
     getDatosFooter(),
     getTarjetasMercadoPago(),
+    getMarca(),
+    getPaginasPublicadas(),
   ]);
+  const { principal, acento } = partesNombre(marca);
   const logos = logosTarjetas(tarjetas);
   return (
     <div className="footer-global">
@@ -48,10 +54,10 @@ export async function SiteFooter() {
       <SiteFooterDS
         className="site-footer"
         renderLink={linkNext}
-        brandName="Central"
-        brandAccent="Led"
+        brandName={principal}
+        brandAccent={acento}
         description={footer.descripcion}
-        columns={columnasFooter({ arrepentimiento: true, footer })}
+        columns={columnasFooter({ arrepentimiento: true, footer, paginas })}
         barLeft={textoBarra(footer.barraIzquierda, anio)}
         barRight={textoBarra(footer.barraDerecha, anio)}
         payments={{ title: "Medios de pago", logos }}

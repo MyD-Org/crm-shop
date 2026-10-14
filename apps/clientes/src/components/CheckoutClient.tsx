@@ -1927,20 +1927,17 @@ export function CheckoutClient({
                 <p className="text-sm text-muted">{AVISO_PAGO_A_COORDINAR}</p>
               </>
             )}
-          </section>
-
-          <section className="rounded-[20px] border border-border/50 bg-surface p-5">
-            <h2 className="mb-4 font-display text-2xl font-medium text-text">
-              Aclaraciones <span className="font-normal text-muted">(opcional)</span>
-            </h2>
-            <textarea
-              value={notas}
-              onChange={(e) => setNotas(e.target.value)}
-              rows={3}
-              maxLength={500}
-              placeholder="Horario de entrega, referencia del domicilio, etc."
-              className="w-full rounded-sm border-[1.5px] border-border-strong bg-surface px-3 py-2 text-sm text-text outline-none focus-visible:border-primary"
-            />
+            {/* Aclaraciones en una línea, dentro del paso: el botón de confirmar queda a la vista sin scroll. */}
+            <div className="mt-5">
+              <Field label="Aclaraciones (opcional)">
+                <Input
+                  value={notas}
+                  onChange={(e) => setNotas(e.target.value)}
+                  maxLength={500}
+                  placeholder="Horario de entrega, referencia del domicilio, etc."
+                />
+              </Field>
+            </div>
             <div className="mt-5">
               {errorEnvio && estado !== "no_auth" && (
                 <p className="mb-3 hidden rounded-lg bg-danger/5 p-3 text-xs text-danger lg:block">{errorEnvio}</p>

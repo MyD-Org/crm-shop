@@ -26,7 +26,7 @@ describe("CheckoutClient: cuenta para transferir", () => {
   });
 
   it("el pie del resumen con transferencia avisa que los datos aparecen al confirmar; otros medios mantienen su texto", () => {
-    expect(fuente).toContain("? PIE_TRANSFERENCIA : pieDelMedio(medioSel)");
+    expect(fuente).toContain('? PIE_TRANSFERENCIA : opcionSel?.forma === "cuenta_mp" ? PIE_CUENTA_MP : pieDelMedio(medioSel)');
   });
 
   it("la pantalla de transferencia usa la cuenta congelada que devolvió el pedido", () => {

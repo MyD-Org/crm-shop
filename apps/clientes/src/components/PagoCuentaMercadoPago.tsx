@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Button } from "@myd-org/ui";
 import { IconoSalida } from "./PagoIconos";
 
@@ -13,10 +13,16 @@ import { IconoSalida } from "./PagoIconos";
 export function PagoCuentaMercadoPago({
   pedidoId,
   antesDeIr,
+  irAlMontar = false,
 }: {
   pedidoId: string;
   /** Deja el pedido listo para este cobro (en 1 pago); devuelve el error a mostrar, o null. */
   antesDeIr?: () => Promise<string | null>;
+  /**
+   * El comprador ya eligió "Mercado Pago" en el paso Pago: se lo lleva sin esperar el clic. Una sola
+   * vez por montaje; si falla, queda el botón con el error.
+   */
+  irAlMontar?: boolean;
 }) {
   const [yendo, setYendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +36,15 @@ export function PagoCuentaMercadoPago({
     window.addEventListener("pageshow", alVolver);
     return () => window.removeEventListener("pageshow", alVolver);
   }, []);
+
+  const yaFue = useRef(false);
+  useEffect(() => {
+    if (!irAlMontar || yaFue.current) return;
+    yaFue.current = true;
+    void irAMercadoPago();
+    // Sólo al montar: `irAMercadoPago` cambia en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [irAlMontar]);
 
   async function irAMercadoPago() {
     setYendo(true);

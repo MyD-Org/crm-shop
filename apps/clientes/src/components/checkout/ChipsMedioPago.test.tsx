@@ -41,7 +41,8 @@ describe("ChipsMedioPago", () => {
 describe("CheckoutClient usa los chips en la lista de medios", () => {
   const fuente = readFileSync(join(__dirname, "..", "CheckoutClient.tsx"), "utf8");
   it("cada opción de medio recibe sus chips; el medio de cuenta corriente (sin elección) no los muestra", () => {
-    expect(fuente).toContain("chips={m.chips}");
+    expect(fuente).toContain("medio={m}");
+    expect(readFileSync(join(__dirname, "CardOpcionPago.tsx"), "utf8")).toContain("<ChipsMedioPago chips={medio.chips} />");
     expect(fuente).toContain("<ChipsMedioPago chips={chips} />");
     // El bloque de cuenta corriente es un texto sin RadioCard: no lleva chips.
     const bloqueCc = fuente.slice(fuente.indexOf("// Cuenta corriente: un único medio, sin elección."));

@@ -44,6 +44,8 @@ export interface CotizacionResponse extends Cotizacion {
   proximoEscalon?: { cuotas: number; falta: number };
   /** Barra de cuotas del carrito (`conProgresoCuotas`) o del medio elegido (`conCuotas`): ver `progresoCuotas`. */
   progresoCuotas?: ProgresoCuotas;
+  /** Sólo con `conTotalesOpciones`: el total de cada card del paso Pago (clave de `opcionesDePago`); null = no se pudo. */
+  totalesOpciones?: Record<string, number | null>;
 }
 
 export type EstadoCotizacion = "vacio" | "cargando" | "ok" | "error" | "no_auth";
@@ -127,6 +129,8 @@ export function useCotizacion(opts: {
   conCuotas?: boolean;
   /** Pide el progreso combinado hacia más cuotas sin interés (barra del carrito; sin medio elegido). */
   conProgresoCuotas?: boolean;
+  /** Pide el total de cada card del paso Pago (checkout). Es fijo por pantalla: no dispara refetch. */
+  conTotalesOpciones?: boolean;
   /** false para no cotizar todavía (ej. el carrito aún no se hidrató). */
   activo?: boolean;
 }) {
@@ -145,6 +149,7 @@ export function useCotizacion(opts: {
   const cuotas = opts.cuotas ?? 1;
   const conCuotas = opts.conCuotas ?? false;
   const conProgresoCuotas = opts.conProgresoCuotas ?? false;
+  const conTotalesOpciones = opts.conTotalesOpciones ?? false;
   const { entregaTipo } = opts;
 
   // Solo `id` y `qty` disparan una recotización. Sin esta clave, cualquier
@@ -195,6 +200,7 @@ export function useCotizacion(opts: {
             cuotas: cuotas > 1 ? cuotas : undefined,
             conCuotas: conCuotas || undefined,
             progresoCuotas: conProgresoCuotas || undefined,
+            totalesOpciones: conTotalesOpciones || undefined,
           }),
         });
 
@@ -248,7 +254,7 @@ export function useCotizacion(opts: {
       clearTimeout(reintento);
       ctrl.abort();
     };
-  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, nonce]);
+  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, conTotalesOpciones, nonce]);
 
   // Estado DERIVADO de los inputs actuales vs. los del último resultado. Nada
   // de esto vive en useState: setear estado desde un efecto para algo que ya se

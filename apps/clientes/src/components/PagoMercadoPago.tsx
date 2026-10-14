@@ -14,7 +14,7 @@ import {
 } from "./pago-opciones";
 import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { AvisoProcesador } from "./AvisoProcesador";
-import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "./PagoIconos";
+import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, OpcionElegida, TituloComoPagar } from "./PagoIconos";
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
 import type { TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import { asegurarCuotasDelPedido, cambiarFormaDelPedido } from "@/lib/checkout-cuotas-cliente";
@@ -121,6 +121,13 @@ interface Props {
   onConfirmacionAgotada?: () => void;
   /** Tarjetas que acepta Mercado Pago: sus logos van arriba del formulario (crédito o débito, según la opción). */
   tarjetas?: TarjetasAceptadas;
+  /**
+   * Forma elegida en el paso Pago del checkout: abre directo en ella, sin "¿Cómo quiere pagar?". Sin
+   * valor (pedido retomado), las opciones de siempre.
+   */
+  formaFija?: OpcionCobro | null;
+  /** Con la cuenta de Mercado Pago fija: lleva al comprador a Mercado Pago sin esperar el clic. */
+  irDirecto?: boolean;
 }
 
 interface RespuestaPago {
@@ -155,11 +162,16 @@ export function PagoMercadoPago({
   onCobroEnCurso,
   onConfirmacionAgotada,
   tarjetas,
+  formaFija = null,
+  irDirecto = false,
 }: Props) {
   const habilitadas = opcionesHabilitadas(opcionesCobro);
+  const fija = opcionDeFormaMercadoPago(formaFija, habilitadas);
   // Arranca en la forma del pedido (si el medio tiene precios por forma) o en la primera habilitada (el
   // débito y la cuenta pasan el pedido a 1 pago al cobrar).
-  const [opcion, setOpcion] = useState<Opcion>(() => opcionDeFormaMercadoPago(formaCobroPedido, habilitadas) ?? habilitadas[0] ?? "credito");
+  const [opcion, setOpcion] = useState<Opcion>(
+    () => fija ?? opcionDeFormaMercadoPago(formaCobroPedido, habilitadas) ?? habilitadas[0] ?? "credito",
+  );
   /** Se está recotizando el pedido para otra pestaña: nada se cobra ni se cambia hasta que el servidor conteste. */
   const [recotizando, setRecotizando] = useState(false);
   const [errorForma, setErrorForma] = useState<string | null>(null);
@@ -686,11 +698,18 @@ export function PagoMercadoPago({
       label: "Cuenta de Mercado Pago",
       description: "Con el dinero disponible en su cuenta",
       icon: <IconoBilletera />,
-      content: <PagoCuentaMercadoPago pedidoId={pedidoId} antesDeIr={() => asegurarCuotas(1, unPago.total)} />,
+      content: (
+        <PagoCuentaMercadoPago
+          pedidoId={pedidoId}
+          antesDeIr={() => asegurarCuotas(1, unPago.total)}
+          irAlMontar={fija === "cuenta" && irDirecto}
+        />
+      ),
       disabled: procesando || recotizando,
     },
   ];
   const opciones = todas.filter((o) => habilitadas.includes(o.value as Opcion));
+  const elegida = fija ? opciones.find((o) => o.value === opcion) : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -704,14 +723,20 @@ export function PagoMercadoPago({
         </Alert>
       )}
 
-      <TituloComoPagar />
-      <RadioGroup
-        legend="¿Cómo quiere pagar?"
-        hideLegend
-        options={opciones}
-        value={opcion}
-        onValueChange={(v) => void elegir(v as Opcion)}
-      />
+      {elegida ? (
+        <OpcionElegida opcion={elegida} />
+      ) : (
+        <>
+          <TituloComoPagar />
+          <RadioGroup
+            legend="¿Cómo quiere pagar?"
+            hideLegend
+            options={opciones}
+            value={opcion}
+            onValueChange={(v) => void elegir(v as Opcion)}
+          />
+        </>
+      )}
 
       <AvisoProcesador>Mercado Pago procesa el pago. Los datos de su tarjeta no pasan por nuestro sitio.</AvisoProcesador>
     </div>

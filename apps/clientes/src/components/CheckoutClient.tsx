@@ -11,6 +11,7 @@ import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, S
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { formaInicialDelMedio, pagoParaCotizar } from "@/lib/lista-medio";
+import { ahorroFrente, bajadaOpcion, opcionElegida, opcionesDePago, PIE_CUENTA_MP, textoConfirmar, tituloOpcion } from "@/lib/opciones-pago";
 import { leerFormaCobro, type OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { contenidoDistinto, COPY_CARRITO, type CartItem } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
@@ -59,6 +60,7 @@ import { provinciaCanonica } from "@/lib/provincias";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
+import { CardOpcionPago } from "@/components/checkout/CardOpcionPago";
 import type { ChipMedio } from "@/lib/medios-pago-chips";
 import { logosTarjetas, type TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import { tarjetasPayway } from "@/lib/pagos/tarjetas-payway";
@@ -418,8 +420,8 @@ export function CheckoutClient({
     track({ tipo: "iniciar_checkout", items: items.map((i) => itemDe(i, i.qty)) });
   }, [ready, items]);
 
-  // Slug del medio del CRM que eligió el comprador ("" = el primero que aplique).
-  const [medioSlug, setMedioSlug] = useState("");
+  // Card del paso Pago que eligió el comprador (`slug` o `slug:forma`; "" = la primera que aplique).
+  const [opcionClave, setOpcionClave] = useState("");
   // Dos opciones: retiro en local o envío a domicilio. El "envío a coordinar" aparte se fusionó
   // con el domicilio: si el envío no es gratis, su costo se coordina después (src/lib/envio.ts).
   // Los valores iniciales salen de la elección de «Enviar a» (cookie ya validada en el server).
@@ -573,6 +575,8 @@ export function CheckoutClient({
     pagoMetodo?: string;
     /** Forma de pago congelada (precios por forma); null = el medio no tiene precios por forma. */
     formaCobro?: OpcionCobro | null;
+    /** Forma de la card elegida en el paso Pago: el formulario abre directo en ella. Ausente = pedido retomado. */
+    formaElegida?: OpcionCobro | null;
     /** Mercado Pago: public key de la cuenta que cobra el pedido y esa cuenta (los manda el servidor). */
     mpPublicKey?: string;
     mpCuenta?: string;
@@ -763,7 +767,10 @@ export function CheckoutClient({
   /** Formas de pago (crédito, débito, cuenta de Mercado Pago) que el admin habilitó para el medio del procesador. */
   const opcionesCobroDe = (procesador: string | null | undefined) =>
     mediosPago.find((m) => procesador && procesadorDeMedio(m.slug) === procesador)?.opcionesCobro;
-  const medioSel = medioElegido(mediosPago, entrega, medioSlug, opcionesMedios);
+  // Una card por forma de pagar (Mercado Pago se abre en cuenta, crédito y débito). Cuenta corriente: sin elección.
+  const opcionesPago = esCuentaCorriente ? [] : opcionesDePago(mediosParaElegir);
+  const opcionSel = opcionElegida(opcionesPago, opcionClave);
+  const medioSel = medioElegido(mediosPago, entrega, opcionSel?.slug ?? "", opcionesMedios);
   const pagoParaEnviar: string = medioSel?.slug ?? "a_coordinar";
   const pagaEnLinea = esPagoEnLinea(pagoParaEnviar);
   // Cuotas sin interés: el medio de cobro en línea con condiciones las pide al servidor, que sólo
@@ -771,7 +778,9 @@ export function CheckoutClient({
   const pideCuotas = Boolean(medioSel?.cobroOnline && (medioSel.condicionesCuotas?.length ?? 0) > 0);
   // Medio con precios distintos por forma de pago: el pedido nace en la primera forma que ofrece y el
   // total que se ve ya es el de su lista (después se cambia de pestaña o modalidad en el pago).
-  const formaDelMedio = medioSel && !esCuentaCorriente ? formaInicialDelMedio(medioSel) : null;
+  // La forma es la de la card elegida.
+  const formaDelMedio =
+    medioSel && !esCuentaCorriente && formaInicialDelMedio(medioSel) ? (opcionSel?.forma ?? formaInicialDelMedio(medioSel)) : null;
   // Las cuotas se eligen dentro del formulario de pago (Mercado Pago y Payway), según la tarjeta
   // (`SelectorCuotas`). El pedido se crea en 1 pago y acá sólo queda la meta "Sume $X más…".
 
@@ -803,11 +812,17 @@ export function CheckoutClient({
     })(),
     cuotas: 1,
     conCuotas: pideCuotas,
+    // El total de cada card del paso Pago.
+    conTotalesOpciones: opcionesPago.length > 1,
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
 
   const opcionesCuotas = pideCuotas ? (cotizacion?.cuotasOpciones ?? ultimasCuotasOpciones ?? []) : [];
+  // Totales de las cards: no dependen de la card elegida, así que se conservan mientras se recotiza.
+  const [totalesOpciones, setTotalesOpciones] = useState<Record<string, number | null>>({});
+  const totalesRecibidos = cotizacion?.totalesOpciones;
+  if (totalesRecibidos && totalesRecibidos !== totalesOpciones) setTotalesOpciones(totalesRecibidos);
 
   /** Lo elegido en el formulario de pago (para el resumen); null fuera de él. */
   const [eleccionCuotas, setEleccionCuotas] = useState<EleccionCuotas | null>(null);
@@ -914,6 +929,7 @@ export function CheckoutClient({
           procesador: procesadorDeMedio(pagoParaEnviar),
           pagoMetodo: pagoParaEnviar,
           formaCobro: leerFormaCobro(json.formaCobro),
+          formaElegida: opcionSel?.forma ?? null,
           ...(typeof json.mpPublicKey === "string" ? { mpPublicKey: json.mpPublicKey } : {}),
           ...(typeof json.mpCuenta === "string" ? { mpCuenta: json.mpCuenta } : {}),
           contacto: json.contacto ?? null,
@@ -1042,6 +1058,7 @@ export function CheckoutClient({
         procesador: procesadorDeMedio(pagoParaEnviar),
         pagoMetodo: pagoParaEnviar,
         formaCobro: leerFormaCobro(json.formaCobro),
+        formaElegida: opcionSel?.forma ?? null,
         ...(typeof json.mpPublicKey === "string" ? { mpPublicKey: json.mpPublicKey } : {}),
         ...(typeof json.mpCuenta === "string" ? { mpCuenta: json.mpCuenta } : {}),
         contacto: json.contacto ?? null,
@@ -1207,6 +1224,7 @@ export function CheckoutClient({
               onPedidoActualizado={alActualizarPedido}
               opcionesCobro={opcionesCobroDe(confirmado.procesador)}
               tarjetas={tarjetasDelConvenioPayway}
+              formaFija={confirmado.formaElegida}
               onCobroEnCurso={setCobroEnCurso}
               onConfirmacionAgotada={alAgotarConfirmacion}
               onPagado={alPagar}
@@ -1235,6 +1253,8 @@ export function CheckoutClient({
               onCobroEnCurso={setCobroEnCurso}
               onConfirmacionAgotada={alAgotarConfirmacion}
               tarjetas={tarjetasMercadoPago}
+              formaFija={confirmado.formaElegida}
+              irDirecto={!pagoEnConfirmacion}
               onPagado={alPagar}
               onPendiente={alQuedarPendiente}
               onRechazado={() => {
@@ -1822,31 +1842,38 @@ export function CheckoutClient({
             {cabeceraPasos}
             {medioSel ? (
               <>
-                <h2 className="mb-4 font-display text-2xl font-medium text-text">Medio de pago</h2>
+                <h2 className="mb-1 font-display text-2xl font-medium text-text">{esCuentaCorriente ? "Medio de pago" : "¿Cómo quiere pagar?"}</h2>
+                {!esCuentaCorriente && <p className="mb-4 text-sm text-muted">Cada opción muestra el total que pagará con ese medio.</p>}
                 {esCuentaCorriente ? (
                   // Cuenta corriente: un único medio, sin elección.
                   <p className="text-sm font-semibold text-text">{textoPagaConMedio(medioSel.nombre)}</p>
                 ) : (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {mediosParaElegir.map((m) => (
-                      <RadioCard
-                        key={m.slug}
-                        selected={medioSel.slug === m.slug}
-                        onClick={() => setMedioSlug(m.slug)}
-                        title={m.nombre}
-                        chips={m.chips}
-                        logos={
-                          m.slug === SLUG_MERCADOPAGO && tarjetasMercadoPago
-                            ? logosTarjetas(tarjetasMercadoPago)
-                            : m.slug === SLUG_PAYWAY
-                              ? logosTarjetas(tarjetasDelConvenioPayway)
+                  <div role="radiogroup" aria-label="Medio de pago" className="flex flex-col gap-3">
+                    {opcionesPago.map((o) => {
+                      const m = mediosParaElegir.find((x) => x.slug === o.slug)!;
+                      return (
+                        <CardOpcionPago
+                          key={o.clave}
+                          opcion={o}
+                          medio={m}
+                          selected={opcionSel?.clave === o.clave}
+                          onClick={() => setOpcionClave(o.clave)}
+                          total={totalesOpciones[o.clave]}
+                          ahorro={o.slug === SLUG_TRANSFERENCIA ? ahorroFrente(totalesOpciones, opcionesPago, o.clave) : null}
+                          titulo={tituloOpcion(o, m.nombre)}
+                          bajada={bajadaOpcion(o)}
+                          ahorroFrenteA={(x) => tituloOpcion(x, mediosParaElegir.find((y) => y.slug === x.slug)?.nombre ?? "")}
+                          logos={
+                            o.forma === "credito" || o.forma === "debito"
+                              ? (o.slug === SLUG_PAYWAY ? tarjetasDelConvenioPayway : tarjetasMercadoPago)?.[o.forma]?.map((t) => ({ name: t.nombre, src: t.logo }))
                               : undefined
-                        }
-                      />
-                    ))}
+                          }
+                        />
+                      );
+                    })}
                   </div>
                 )}
-                {medioSel.instrucciones.trim() && (
+                {esCuentaCorriente && medioSel.instrucciones.trim() && (
                   <p className="mt-3 whitespace-pre-line text-sm text-text">{medioSel.instrucciones.trim()}</p>
                 )}
                 {pagaEnLinea && <MetaCuotas progreso={cotizacion?.progresoCuotas} />}
@@ -1974,7 +2001,7 @@ export function CheckoutClient({
           )}
 
           <Button className="mt-5 w-full" disabled={!puedeConfirmar} onClick={confirmar}>
-            {enviando ? "Confirmando…" : "Confirmar pedido"}
+            {enviando ? "Confirmando…" : pasoActual === "pago" ? textoConfirmar(opcionSel) : "Confirmar pedido"}
           </Button>
 
           {!puedeConfirmar && !enviando && (
@@ -1996,7 +2023,7 @@ export function CheckoutClient({
           )}
 
           <p className="mt-3 text-center text-xs text-muted">
-            {conCuenta ? PIE_TRANSFERENCIA : pieDelMedio(medioSel)}
+            {conCuenta ? PIE_TRANSFERENCIA : opcionSel?.forma === "cuenta_mp" ? PIE_CUENTA_MP : pieDelMedio(medioSel)}
           </p>
         </div>
       </div>

@@ -23,6 +23,7 @@ import {
   extensionDeArchivo,
   formDesdeDatos,
   mensajeSubida,
+  placeholdersMarca,
   razonesContrasteForm,
   type CampoImagen,
   type DatosTiendaOnline,
@@ -83,6 +84,7 @@ export function TiendaOnlineForm({ initial, imagenesDisponibles }: Props) {
     // Si todavía no personalizó, los selectores acompañan al tema de partida elegido.
     setForm((p) => ({ ...p, temaBase: base, colores: p.temaPropio ? p.colores : { ...PALETAS_TEMA[base] } }))
 
+  const enUso = placeholdersMarca(form.base, form.nombre)
   const avisoContraste = avisoContrasteForm(form)
   const razones = form.temaPropio ? razonesContrasteForm(form) : null
 
@@ -149,19 +151,19 @@ export function TiendaOnlineForm({ initial, imagenesDisponibles }: Props) {
 
   return (
     <div className="flex flex-col gap-5 max-w-2xl">
-      <Card title="Marca" description="Cómo se presenta la tienda. Los campos vacíos usan el valor de partida.">
+      <Card title="Marca" description="Cómo se presenta la tienda. Los campos vacíos usan el valor de partida y muestran en gris el valor en uso.">
         <div className="flex flex-col gap-4">
           <Field label="Textos de partida" hint="Qué textos y secciones se muestran mientras no los edite." error={errores.base}>
             <Select value={form.base} onValueChange={(v) => cambiar("base", v === "generica" ? "generica" : "central")} options={BASES} />
           </Field>
-          <Field label="Nombre de la tienda" hint={`Hasta ${NOMBRE_MAX} caracteres.`} error={errores.nombre}>
-            <Input value={form.nombre} maxLength={NOMBRE_MAX} onChange={(e) => cambiar("nombre", e.target.value)} />
+          <Field label="Nombre de la tienda" hint={`Hasta ${NOMBRE_MAX} caracteres.${hintEntorno(enUso.dependeDelEntorno, form.nombre)}`} error={errores.nombre}>
+            <Input value={form.nombre} placeholder={enUso.nombre} maxLength={NOMBRE_MAX} onChange={(e) => cambiar("nombre", e.target.value)} />
           </Field>
           <Field label="Título del sitio" hint={`Lo que ve en la pestaña del navegador. Hasta ${TITULO_MAX} caracteres.`} error={errores.titulo}>
-            <Input value={form.titulo} maxLength={TITULO_MAX} onChange={(e) => cambiar("titulo", e.target.value)} />
+            <Input value={form.titulo} placeholder={enUso.titulo} maxLength={TITULO_MAX} onChange={(e) => cambiar("titulo", e.target.value)} />
           </Field>
           <Field label="Descripción" hint={`Para buscadores y al compartir el enlace. Hasta ${DESCRIPCION_MAX} caracteres.`} error={errores.descripcion}>
-            <Textarea value={form.descripcion} maxLength={DESCRIPCION_MAX} rows={3} onChange={(e) => cambiar("descripcion", e.target.value)} />
+            <Textarea value={form.descripcion} placeholder={enUso.descripcion} maxLength={DESCRIPCION_MAX} rows={3} onChange={(e) => cambiar("descripcion", e.target.value)} />
           </Field>
           <Field label="Email de contacto" hint={`Hasta ${EMAIL_MAX} caracteres.`} error={errores.emailContacto}>
             <Input type="email" value={form.emailContacto} maxLength={EMAIL_MAX} onChange={(e) => cambiar("emailContacto", e.target.value)} />
@@ -179,6 +181,11 @@ export function TiendaOnlineForm({ initial, imagenesDisponibles }: Props) {
           {IMAGENES.map(({ campo, label, hint }) => (
             <Field key={campo} label={label} hint={hint} error={errores[campo]}>
               <div className="flex flex-col gap-2">
+                {!form[campo] && (
+                  <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
+                    En uso: el de la tienda
+                  </p>
+                )}
                 {form[campo] && (
                   <div className="flex items-center gap-3">
                     {/* eslint-disable-next-line @next/next/no-img-element -- el host es el bucket público de medios, fuera de los dominios de next/image */}
@@ -205,20 +212,20 @@ export function TiendaOnlineForm({ initial, imagenesDisponibles }: Props) {
       <Card title="Imagen para compartir" description="Textos que acompañan la imagen que se ve al compartir el enlace de la tienda.">
         <div className="flex flex-col gap-4">
           <Field label="Texto superior" hint={`Hasta ${OG_EYEBROW_MAX} caracteres.`} error={errores.ogTextos}>
-            <Input value={form.ogEyebrow} maxLength={OG_EYEBROW_MAX} onChange={(e) => cambiar("ogEyebrow", e.target.value)} />
+            <Input value={form.ogEyebrow} placeholder={enUso.ogEyebrow} maxLength={OG_EYEBROW_MAX} onChange={(e) => cambiar("ogEyebrow", e.target.value)} />
           </Field>
           <Field label="Bajada" hint={`Hasta ${OG_BAJADA_MAX} caracteres.`}>
-            <Input value={form.ogBajada} maxLength={OG_BAJADA_MAX} onChange={(e) => cambiar("ogBajada", e.target.value)} />
+            <Input value={form.ogBajada} placeholder={enUso.ogBajada} maxLength={OG_BAJADA_MAX} onChange={(e) => cambiar("ogBajada", e.target.value)} />
           </Field>
           <Field label="Lugar" hint={`Hasta ${OG_LUGAR_MAX} caracteres.`}>
-            <Input value={form.ogLugar} maxLength={OG_LUGAR_MAX} onChange={(e) => cambiar("ogLugar", e.target.value)} />
+            <Input value={form.ogLugar} placeholder={enUso.ogLugar} maxLength={OG_LUGAR_MAX} onChange={(e) => cambiar("ogLugar", e.target.value)} />
           </Field>
         </div>
       </Card>
 
       <Card
         title="Tema"
-        description="Los colores de la tienda. Si no los personaliza, se usa el tema de partida."
+        description="Los colores de la tienda. Si no los personaliza, se usa el tema de partida, cuyos colores se muestran abajo."
       >
         <div className="flex flex-col gap-4">
           <Field label="Tema de partida" error={errores.temaBase}>
@@ -232,6 +239,7 @@ export function TiendaOnlineForm({ initial, imagenesDisponibles }: Props) {
             }}
             label="Personalizar los colores"
           />
+          {!form.temaPropio && <PaletaEnUso colores={PALETAS_TEMA[form.temaBase]} />}
           {form.temaPropio && (
             <>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -307,6 +315,28 @@ export function TiendaOnlineForm({ initial, imagenesDisponibles }: Props) {
         </Button>
       </div>
     </div>
+  )
+}
+
+/** Aviso cuando el valor en uso depende de una variable del Shop: el admin no lo conoce y no lo inventa. */
+function hintEntorno(depende: boolean, nombre: string): string {
+  return depende && !nombre.trim() ? " Con los textos neutros, el valor en uso depende de la configuración de la tienda." : ""
+}
+
+/** Colores en uso del tema de partida (solo lectura). Los colores van en línea: son datos, no estilos del sistema. */
+function PaletaEnUso({ colores }: { colores: Record<ColorTema, string> }) {
+  return (
+    <ul aria-label="Colores en uso" className="grid gap-3 sm:grid-cols-2">
+      {COLORES_TEMA.map((c) => (
+        <li key={c} className="flex items-center gap-2">
+          <span aria-hidden className="h-9 w-12 shrink-0 rounded border" style={{ background: colores[c] }} />
+          <span className="text-sm">
+            {ETIQUETAS_COLOR_TEMA[c]}
+            <span className="block text-xs" style={{ color: "var(--ink-soft)" }}>{colores[c]}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }
 

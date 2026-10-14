@@ -1,7 +1,7 @@
 // Validación pura de los medios de pago del checkout (sin DB, sin Next): la comparten la API y el
 // formulario de Configuración → Sucursales y ventas. Textos en usted.
 
-import { validarChips, type ChipMedio } from "@/lib/medios-pago-shop-chips"
+import { validarChips, type ElementoChips } from "@/lib/medios-pago-shop-chips"
 import { validarOpciones, type OpcionCobro } from "@/lib/medios-pago-shop-opciones"
 
 export const SLUG_MEDIO_RE = /^[a-z0-9-]{2,30}$/
@@ -64,7 +64,7 @@ export interface MedioPagoValido {
   /** Ausente en el alta = rige el default de la base ('publico'). */
   audiencia?: AudienciaMedio
   /** Etiquetas del medio en el checkout (migración 0071). Ausente en el alta = [] (default de la base). */
-  chips?: ChipMedio[]
+  chips?: ElementoChips[]
   /**
    * Formas de pago del cobro en línea (migración 0073). Ausente = no cambia (default de la base: todas).
    * La regla "activo con cobro en línea => al menos una aplicable" se valida sobre el estado

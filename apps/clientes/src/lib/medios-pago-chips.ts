@@ -51,8 +51,45 @@ export function esChipDeAhorro(c: Pick<ChipMedio, "texto">): boolean {
   return c.texto.includes("{ahorro}");
 }
 
-/** Franja de ahorro de la transferencia cuando el admin no cargó una etiqueta de ahorro propia. */
+/** Banner de ahorro de la transferencia cuando el admin no guardó uno. */
 export const TEXTO_AHORRO_POR_DEFECTO = "Ahorra {ahorro} frente a {frente}";
+
+/**
+ * Banner de ahorro del medio (la franja verde del checkout). El CRM lo guarda como un elemento más
+ * de `chips` con `banner: true` (sin `tono`, así `leerChipsMedio` lo ignora): `activo` y `texto`, con
+ * `{ahorro}` = monto y `{frente}` = la opción más cara. null = no hay guardado (Transferencia lo
+ * muestra igual, con `TEXTO_AHORRO_POR_DEFECTO`).
+ */
+export interface BannerAhorro {
+  activo: boolean;
+  texto: string;
+}
+
+const MAX_TEXTO_BANNER = 80;
+
+/** Lectura TOLERANTE del banner dentro de `chips`: lo mal formado es null. */
+export function leerBannerMedio(valor: unknown): BannerAhorro | null {
+  if (!Array.isArray(valor)) return null;
+  const b = valor.find((c) => typeof c === "object" && c !== null && (c as { banner?: unknown }).banner === true) as
+    | { activo?: unknown; texto?: unknown }
+    | undefined;
+  if (!b || typeof b.activo !== "boolean" || typeof b.texto !== "string") return null;
+  const texto = b.texto.trim();
+  if (texto === "" || texto.length > MAX_TEXTO_BANNER || PROHIBIDOS.test(texto)) return null;
+  return { activo: b.activo, texto };
+}
+
+/**
+ * Texto del banner de un medio, o null si no se muestra: el guardado (si está activo); si no hay, una
+ * etiqueta vieja con {ahorro}; si tampoco, el de por defecto en Transferencia.
+ */
+export function textoBannerDelMedio(
+  medio: { slug: string; banner?: BannerAhorro | null; chips?: readonly ChipMedio[] },
+  slugTransferencia: string,
+): string | null {
+  if (medio.banner) return medio.banner.activo ? medio.banner.texto : null;
+  return medio.chips?.find(esChipDeAhorro)?.texto ?? (medio.slug === slugTransferencia ? TEXTO_AHORRO_POR_DEFECTO : null);
+}
 
 /** El texto de la etiqueta de ahorro con los montos y el nombre reemplazados. */
 export function textoDeAhorro(texto: string, ahorro: string, frente: string): string {

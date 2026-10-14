@@ -1587,11 +1587,13 @@ export const listaPrecioOverrides = pgTable(
     listaId: uuid("lista_id")
       .notNull()
       .references(() => listasPrecioOnline.id, { onDelete: "cascade" }),
-    // 'marca' | 'categoria' (CHECK de coherencia en la migración).
+    // 'marca' | 'categoria' | 'producto' (0088) (CHECK de coherencia en la migración).
     tipo: text("tipo").notNull(),
     // Marca normalizada: lower(btrim(brand)).
     marca: text("marca"),
     categoriaId: uuid("categoria_id").references(() => shopCategories.id, { onDelete: "cascade" }),
+    // Producto (catalog_products.alegra_id) del ajuste por producto (0088). Sin FK a propósito.
+    alegraId: text("alegra_id"),
     coeficiente: numeric("coeficiente", { precision: 7, scale: 4 }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1601,6 +1603,9 @@ export const listaPrecioOverrides = pgTable(
     uniqueIndex("lista_precio_overrides_categoria_uniq")
       .on(t.listaId, t.categoriaId)
       .where(sql`${t.tipo} = 'categoria'`),
+    uniqueIndex("lista_precio_overrides_producto_uniq")
+      .on(t.listaId, t.alegraId)
+      .where(sql`${t.tipo} = 'producto'`),
     index("lista_precio_overrides_tenant_idx").on(t.tenantId, t.tipo),
   ],
 )

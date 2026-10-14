@@ -68,7 +68,7 @@ export function parsearQueryGrilla(url: URL): ParseGrilla {
 }
 
 export interface OrigenCoeficiente {
-  tipo: "general" | "marca" | "categoria"
+  tipo: "general" | "producto" | "marca" | "categoria"
   marca?: string
   categoriaId?: string
   categoriaNombre?: string | null
@@ -169,6 +169,7 @@ function estadoDe(f: FilaSql, tienePrecios: boolean): EstadoGrilla {
 }
 
 function parsearOrigen(origen: string, categoriaProducto: string | null, nombres: Map<string, string>): OrigenCoeficiente {
+  if (origen.startsWith("producto:")) return { tipo: "producto" }
   if (origen.startsWith("marca:")) return { tipo: "marca", marca: origen.slice(6) }
   if (origen.startsWith("categoria:")) {
     const id = origen.slice(10)

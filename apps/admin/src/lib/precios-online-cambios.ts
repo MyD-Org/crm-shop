@@ -18,6 +18,7 @@ const LISTA_ALEGRA_RE = /^[A-Za-z0-9_-]{1,40}$/
 export const MAX_CAMBIOS = 50
 export const MAX_NOMBRE_LISTA = 60
 export const MAX_MARCA = 80
+const MAX_ALEGRA_ID = 100
 export const COEF_MAX = 100
 export const UMBRAL_MAX = 1000
 
@@ -46,6 +47,7 @@ export type CambioPrecios =
   | { op: "setReferencia"; listaId: string }
   | { op: "upsertOverride"; listaId: string; tipo: "marca"; marca: string; coeficiente: string }
   | { op: "upsertOverride"; listaId: string; tipo: "categoria"; categoriaId: string; coeficiente: string }
+  | { op: "upsertOverride"; listaId: string; tipo: "producto"; alegraId: string; coeficiente: string }
   | { op: "borrarOverride"; overrideId: string }
   | { op: "setUmbrales"; confirmacionPct?: string; retencionPct?: string }
   /**
@@ -85,7 +87,13 @@ export type CambioPrecios =
         esReferencia: boolean
         privada?: boolean
       }
-      overrides: { tipo: "marca" | "categoria"; marca: string | null; categoriaId: string | null; coeficiente: string }[]
+      overrides: {
+        tipo: "marca" | "categoria" | "producto"
+        marca: string | null
+        categoriaId: string | null
+        alegraId?: string | null
+        coeficiente: string
+      }[]
       mapeos?: { alegraAccount: string; alegraPriceListId: string }[]
     }
 
@@ -255,7 +263,12 @@ function validarUno(raw: unknown, i: number): { ok: true; cambio: CambioPrecios 
           cambio: { op: "upsertOverride", listaId: raw.listaId, tipo: "categoria", categoriaId: raw.categoriaId, coeficiente: c.coef },
         }
       }
-      return invalido(`${campo}.tipo`, "Indique si el ajuste es por marca o por categoría.")
+      if (raw.tipo === "producto") {
+        const alegraId = typeof raw.alegraId === "string" ? raw.alegraId.trim() : ""
+        if (alegraId === "" || alegraId.length > MAX_ALEGRA_ID) return invalido(`${campo}.alegraId`, "Seleccione el producto.")
+        return { ok: true, cambio: { op: "upsertOverride", listaId: raw.listaId, tipo: "producto", alegraId, coeficiente: c.coef } }
+      }
+      return invalido(`${campo}.tipo`, "Indique si el ajuste es por producto, por marca o por categoría.")
     }
     case "borrarOverride": {
       if (!esUuid(raw.overrideId)) return invalido(`${campo}.overrideId`, MSG_BODY)

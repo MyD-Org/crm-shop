@@ -36,7 +36,8 @@ export function EditorChipsMedio({ chips, onChange, error }: EditorChipsMedioPro
       <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
         Para mostrar cuánto ahorra el cliente con este medio, escriba {"{ahorro}"} donde va el monto y, si quiere,
         {" "}{"{frente}"} donde va la opción más cara. Por ejemplo «Ahorra {"{ahorro}"} frente a {"{frente}"}». Esa
-        etiqueta se muestra como una franja verde en la tienda, sólo cuando hay ahorro.
+        etiqueta se muestra como una franja verde en la tienda, sólo cuando hay ahorro. Transferencia ya la muestra sin
+        cargar nada; una etiqueta así sólo le cambia el texto.
       </p>
       {chips.map((c, i) => (
         <div key={i} className="flex flex-wrap items-end gap-2">

@@ -51,6 +51,9 @@ export function esChipDeAhorro(c: Pick<ChipMedio, "texto">): boolean {
   return c.texto.includes("{ahorro}");
 }
 
+/** Franja de ahorro de la transferencia cuando el admin no cargó una etiqueta de ahorro propia. */
+export const TEXTO_AHORRO_POR_DEFECTO = "Ahorra {ahorro} frente a {frente}";
+
 /** El texto de la etiqueta de ahorro con los montos y el nombre reemplazados. */
 export function textoDeAhorro(texto: string, ahorro: string, frente: string): string {
   return texto.replaceAll("{ahorro}", ahorro).replaceAll("{frente}", frente);

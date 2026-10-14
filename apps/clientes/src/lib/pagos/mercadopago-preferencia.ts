@@ -7,6 +7,7 @@
  */
 
 import { urlNotificacion } from "./mercadopago";
+import { descripcionPedido, type Marca } from "../marca-base";
 
 export interface DatosPreferencia {
   pedidoId: string;
@@ -16,6 +17,8 @@ export interface DatosPreferencia {
   /** Origen por el que entró el comprador (para volver al mismo entorno). */
   origen: string | null | undefined;
   emailComprador?: string;
+  /** Marca de la tienda: el título del cobro es "Pedido N — <nombre>". */
+  marca: Pick<Marca, "nombre">;
   /**
    * Hasta cuándo se puede pagar (el vencimiento del pedido con cobro en línea). Pasado eso Mercado
    * Pago no deja pagar: antes el link servía siempre y se podía pagar un pedido ya vencido o cancelado.
@@ -63,7 +66,7 @@ export function armarPreferencia(d: DatosPreferencia): Preferencia {
     items: [
       {
         id: d.pedidoId,
-        title: `Pedido ${d.numero} — Central LED`,
+        title: descripcionPedido(d.numero, d.marca),
         quantity: 1,
         unit_price: Math.round(d.total * 100) / 100,
         currency_id: "ARS",

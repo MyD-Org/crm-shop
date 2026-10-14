@@ -16,6 +16,8 @@ import { linkNext } from "./catalogo/link-next";
 import { MenuUsuario } from "./MenuUsuario";
 import { BotonAsistente } from "./chat/BotonAsistente";
 import logo from "@/assets/central-led-logo.svg";
+import { MARCA_POR_DEFECTO, altLogo, partesNombre } from "@/lib/marca-base";
+import { useMarca } from "./MarcaProvider";
 
 function UserIcon() {
   return (
@@ -94,6 +96,18 @@ function HeaderVista({
   ubicacionEnLinea,
   pathname,
 }: PropsHeader & { pathname: string | null }) {
+  // Marca de la tienda: nombre en una o dos tintas, línea de abajo y logo. Central usa el SVG de
+  // código (letras en trazos); una marca con logo propio, el suyo; sin ninguno de los dos, el
+  // nombre en texto.
+  const marca = useMarca();
+  const { principal, acento } = partesNombre(marca);
+  const logoMarca = (className: string, prioridad: boolean) =>
+    marca.logoUrl ? (
+      // `unoptimized`: un SVG remoto no pasa por el optimizador y el logo ya viene dimensionado.
+      <Image src={marca.logoUrl} alt={altLogo(marca)} width={160} height={32} unoptimized priority={prioridad} className={className} />
+    ) : marca.nombre === MARCA_POR_DEFECTO.nombre ? (
+      <Image src={logo} alt={altLogo(marca)} priority={prioridad} className={className} />
+    ) : undefined;
 
   // La barra de categorías va SÓLO en la home. En /catalogo el panel de
   // filtros hace ese trabajo y mejor —es exhaustivo y dice cuántos productos
@@ -188,13 +202,13 @@ function HeaderVista({
         brandPlacement="start"
         compactOnScroll
         compactActions={<CartPreview pathname={pathname} />}
-        brandName="Central"
-        brandAccent="Led"
-        brandSub="Iluminación · Electricidad"
+        brandName={principal}
+        brandAccent={acento}
+        brandSub={marca.lema}
         // Logo en SVG (letras en trazos, no depende de ninguna fuente): el
         // mismo archivo en las tres barras. La compacta sólo se ve desde lg.
-        brandLogo={<Image src={logo} alt="Central Led" priority className="h-6 w-auto lg:h-8" />}
-        compactBrandLogo={<Image src={logo} alt="Central Led" className="h-[26px] w-auto" />}
+        brandLogo={logoMarca("h-6 w-auto lg:h-8", true)}
+        compactBrandLogo={logoMarca("h-[26px] w-auto", false)}
         // En mobile (la búsqueda ocupa su propia fila) el "Enviar a" va en una línea debajo.
         // La barra compacta lleva sólo el buscador.
         search={

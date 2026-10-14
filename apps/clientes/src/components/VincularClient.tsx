@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { Button, Card, Field, Input } from "@myd-org/ui";
 import { documentoEnLinea } from "@/lib/facturacion";
 import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
+import { useMarca } from "./MarcaProvider";
 
 type Paso = "documento" | "codigo" | "confirmar";
 
 /** Título y bajada de la card: todo el flujo vive en una sola card. */
 const TITULO = "Vincule su cuenta de cliente";
-const BAJADA = "Compre con sus precios y condiciones de cliente de Central LED.";
+const bajada = (tienda: string) => `Compre con sus precios y condiciones de cliente de ${tienda}.`;
 
 export function VincularClient({
   volver,
@@ -34,6 +35,7 @@ export function VincularClient({
   enviarAlAbrir?: boolean;
 }) {
   const router = useRouter();
+  const marca = useMarca();
   const [paso, setPaso] = useState<Paso>("documento");
   const [documento, setDocumento] = useState(documentoSugerido);
   const [codigo, setCodigo] = useState("");
@@ -192,7 +194,7 @@ export function VincularClient({
 
   return contenedor(
     TITULO,
-    embebido ? null : BAJADA,
+    embebido ? null : bajada(marca.nombre),
     <>
       {aviso && <p className="mb-4 rounded-lg bg-elevated p-3 text-sm text-text">{aviso}</p>}
       {paso === "documento" && documentoFijo ? (

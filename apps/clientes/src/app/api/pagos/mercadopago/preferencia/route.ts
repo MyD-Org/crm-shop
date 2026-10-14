@@ -8,6 +8,7 @@ import { procesadorConfigurado } from "@/lib/pagos";
 import { candidatasDelPedido } from "@/lib/pagos/cuentas-sucursales";
 import { MENSAJE_RECHAZO, esCredencialRechazada } from "@/lib/pagos/tipos";
 import { armarPreferencia } from "@/lib/pagos/mercadopago-preferencia";
+import { getMarca } from "@/lib/marca";
 import { rechazoPorOpcionDeCobro } from "@/lib/pagos/opcion-cobro-guard";
 
 const MAX_PEDIDOS = 20;
@@ -84,6 +85,7 @@ export async function POST(req: Request) {
   const { prevista, candidatas } = await candidatasDelPedido("mercadopago", pedido);
   const usables = candidatas.filter((c) => c.configurada && !c.rechazada).map((c) => c.cuenta);
   if (usables.length === 0) return sinCuenta();
+  const marca = await getMarca();
   for (const cuenta of usables) {
     try {
       const url = await crearPreferencia(
@@ -95,6 +97,7 @@ export async function POST(req: Request) {
           total: pedido.total,
           origen: new URL(req.url).origin,
           emailComprador: pedido.clienteEmail ?? cliente?.email ?? email ?? undefined,
+          marca,
           venceEn: new Date(pedido.creadoEn.getTime() + VENTANA_PAGO_MS),
         }),
       );

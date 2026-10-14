@@ -11,6 +11,8 @@
  * nada cambia. Módulo puro (lo importan el editor cliente y el servidor).
  */
 
+import type { Marca } from "../lib/marca-base";
+
 export const KEY_FOOTER = "footer";
 
 /** Marcador de la barra inferior que se reemplaza por el año en curso. */
@@ -66,6 +68,23 @@ export const DEFAULTS_FOOTER: DatosFooter = {
   barraIzquierda: `© ${MARCADOR_ANIO} Central Led — Puerto Iguazú, Misiones`,
   barraDerecha: "Av. República Argentina · Lun a Sáb",
 };
+
+/**
+ * Footer de partida según la base de la marca: el de Central, o el genérico (la descripción de la
+ * marca, sin locales ni WhatsApp ni enlaces, y la barra con el nombre y el año). Una tienda
+ * genérica carga lo suyo desde el editor del footer.
+ */
+export function defaultsFooterDe(marca: Pick<Marca, "base" | "nombre" | "descripcion">): DatosFooter {
+  if (marca.base !== "generica") return DEFAULTS_FOOTER;
+  return {
+    descripcion: marca.descripcion,
+    whatsapp: "",
+    locales: [],
+    enlaces: [],
+    barraIzquierda: `© ${MARCADOR_ANIO} ${marca.nombre}`,
+    barraDerecha: "",
+  };
+}
 
 export const MAX_FOOTER = {
   descripcion: 300,
@@ -269,8 +288,8 @@ export function validarDatosFooter(
  * heredan del default (filas guardadas antes de sumar un campo); si lo que
  * queda no valida, vuelve el default entero: el footer nunca se rompe.
  */
-export function resolverDatosFooter(raw: unknown): DatosFooter {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return DEFAULTS_FOOTER;
-  const r = validarDatosFooter({ ...DEFAULTS_FOOTER, ...(raw as Record<string, unknown>) });
-  return r.ok ? r.datos : DEFAULTS_FOOTER;
+export function resolverDatosFooter(raw: unknown, defaults: DatosFooter = DEFAULTS_FOOTER): DatosFooter {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return defaults;
+  const r = validarDatosFooter({ ...defaults, ...(raw as Record<string, unknown>) });
+  return r.ok ? r.datos : defaults;
 }

@@ -36,6 +36,8 @@ import { rechazoPorOpcionDeCobro } from "@/lib/pagos/opcion-cobro-guard";
 import { consultarPlanesMP } from "@/lib/pagos/mercadopago-planes";
 import { marcaDeMercadoPago, marcaDePayway } from "@/lib/pagos/marcas";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
+import { getMarca } from "@/lib/marca";
+import { descripcionPedido } from "@/lib/marca-base";
 
 /** Intentos de cobro por usuario. Alto para no molestar a quien reintenta bien. */
 const MAX_INTENTOS = 10;
@@ -428,7 +430,7 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
     const resultado = await proveedor.crearPago({
       pedidoId: pedido.id,
       monto: pedido.total,
-      descripcion: `Pedido ${pedido.numero} — Central LED`,
+      descripcion: descripcionPedido(pedido.numero, await getMarca()),
       // El dominio por el que entró el comprador: www en producción, dev en
       // staging. Así el webhook vuelve al mismo entorno que creó el pago.
       urlNotificacion: proveedor.urlNotificacion?.(new URL(req.url).origin),

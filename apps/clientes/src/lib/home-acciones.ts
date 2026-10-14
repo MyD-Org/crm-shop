@@ -13,6 +13,7 @@ import {
   SECCIONES_HOME,
   VISIBILIDADES,
   combinarContenidoHome,
+  defaultsHomeDe,
   erroresSeccion,
   resolverVisibilidad,
   validarDatosLegales,
@@ -22,6 +23,7 @@ import { KEY_FOOTER, validarDatosFooter } from "@/data/footer";
 import { borrarSeccionHome, guardarSeccionHome, leerSeccionHome } from "@/lib/home-guardar";
 import { getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
 import { shopTenantId } from "@/lib/tenant";
+import { getMarca } from "@/lib/marca";
 
 export type ResultadoGuardar =
   | { ok: true; updatedAt: string | null }
@@ -81,7 +83,7 @@ export async function leerSeccionParaEditar(seccion: string): Promise<ResultadoL
   try {
     const payload = await leerSeccionHome(seccion);
     const filas = payload === undefined ? [] : [{ key: seccion, payload }];
-    return { ok: true, valor: combinarContenidoHome(filas)[seccion as SeccionHome] };
+    return { ok: true, valor: combinarContenidoHome(filas, defaultsHomeDe(await getMarca()))[seccion as SeccionHome] };
   } catch (err) {
     console.error(`[home-acciones] no se pudo leer ${seccion}:`, err);
     return { ok: false, error: ERROR_LEER };

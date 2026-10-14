@@ -26,7 +26,8 @@ import {
   type AvisoPedidoShop,
 } from "./pedido-mail";
 import { shopTenantId } from "./tenant";
-import { urlLogoMail } from "./vinculacion-mail";
+import { urlLogoMarca } from "./vinculacion-mail";
+import { getMarca } from "./marca";
 
 const RUTA_PEDIDOS = "/mi-cuenta/pedidos";
 const RUTA_CHECKOUT = "/checkout";
@@ -106,7 +107,7 @@ async function enviarAviso(
       numero,
       contactoNombre: pedido.contactoNombre,
       comercio: comercio || "Su pedido",
-      logoUrl: urlLogoMail(),
+      logoUrl: urlLogoMarca(await getMarca()),
       pedidosUrl: urlPedidos(),
       checkoutUrl: aviso === "pago_rechazado" ? urlPedidos(undefined, `${RUTA_CHECKOUT}?pedido=${encodeURIComponent(pedidoId)}`) : null,
       sitioUrl: urlSitioMail(),
@@ -319,7 +320,7 @@ export async function avisarOperadorPedidoNuevo(
         ? { pagado: { total: Number(pedido.pagoTotalPagado), cuotas: pedido.pagoCuotas } }
         : {}),
       pedidoUrl: urlPedidoAdmin(pedidoId),
-      logoUrl: urlLogoMail(),
+      logoUrl: urlLogoMarca(await getMarca()),
       sitioUrl: urlSitioMail(),
       ...(cambio ? { medioAnterior: nombreDelPago(cambio.medioAnterior, null) } : {}),
     });

@@ -60,7 +60,8 @@
     "whatsapp_number": "text",
     "receipts_email": "text",
     "chat_empty_state": "text",
-    "chat_suggestions": "jsonb"
+    "chat_suggestions": "jsonb",
+    "shop_marca": "jsonb"
   },
   "public.client_commercial_conditions": {
     "id": "uuid",

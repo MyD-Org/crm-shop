@@ -21,6 +21,7 @@ import {
   ErrorProveedor,
   type DatosPago,
   type EstadoPago,
+  type InfoAdicionalPago,
   type ProveedorPago,
 } from "./tipos";
 import {
@@ -229,6 +230,40 @@ export function modo3DS(monto: number): "mandatory" | "optional" {
 }
 
 /**
+ * `additional_info` del pago con tarjeta: líneas, comprador y domicilio de entrega del pedido. Mercado
+ * Pago lo usa en su control de fraude (aprueba más pagos) y en el puntaje de calidad de la integración;
+ * no valida que las líneas sumen el monto. Sin nada que informar, no se manda.
+ */
+export function infoAdicionalMP(info: InfoAdicionalPago): Record<string, unknown> | undefined {
+  const adicional = {
+    ...(info.items.length > 0
+      ? {
+          items: info.items.map((i) => ({
+            id: i.id,
+            title: i.titulo,
+            quantity: i.cantidad,
+            unit_price: i.precioUnitario,
+          })),
+        }
+      : {}),
+    ...(info.nombre
+      ? { payer: { first_name: info.nombre, ...(info.apellido ? { last_name: info.apellido } : {}) } }
+      : {}),
+    ...(info.envio
+      ? {
+          shipments: {
+            receiver_address: {
+              street_name: info.envio.direccion,
+              ...(info.envio.ciudad ? { city_name: info.envio.ciudad } : {}),
+            },
+          },
+        }
+      : {}),
+  };
+  return Object.keys(adicional).length > 0 ? adicional : undefined;
+}
+
+/**
  * Proveedor Mercado Pago LIGADO a una cuenta (slug de la sucursal): todas sus llamadas usan las
  * credenciales de esa cuenta. Se arma con `proveedorPago("mercadopago", cuenta)` (index.ts).
  */
@@ -239,6 +274,8 @@ export function crearMercadoPago(cuenta: string): ProveedorPago {
     cuenta,
 
     configurado: () => cuentaConfigurada("mercadopago", cuenta),
+
+    aceptaInfoAdicional: true,
 
     urlNotificacion: (origen) => urlNotificacion(origen, cuenta),
 
@@ -272,6 +309,11 @@ export function crearMercadoPago(cuenta: string): ProveedorPago {
         cuerpo.token = datos.token;
         cuerpo.installments = datos.cuotas ?? 1;
         if (datos.metodoPagoId) cuerpo.payment_method_id = datos.metodoPagoId;
+        // Emisor que informó el Brick: evita que Mercado Pago lo deduzca del BIN (y rechace si no puede).
+        const emisor = Number(datos.issuerId);
+        if (datos.issuerId && Number.isSafeInteger(emisor)) cuerpo.issuer_id = emisor;
+        const adicional = datos.infoAdicional ? infoAdicionalMP(datos.infoAdicional) : undefined;
+        if (adicional) cuerpo.additional_info = adicional;
       }
 
       if (datos.emailComprador || datos.numeroDocumento) {
@@ -293,6 +335,8 @@ export function crearMercadoPago(cuenta: string): ProveedorPago {
           method: "POST",
           body: JSON.stringify(cuerpo),
           idempotencyKey: claveIdempotencia(datos),
+          // Id de dispositivo del script de seguridad de Mercado Pago (control de fraude).
+          ...(datos.deviceId ? { headers: { "X-meli-session-id": datos.deviceId } } : {}),
         }),
       );
     },

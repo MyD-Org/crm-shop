@@ -2,9 +2,9 @@ import { cache, Suspense } from "react";
 import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
 import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { idDeRuta } from "@/lib/id-producto";
-import { productoPublico, rutaCategoriaPublica } from "@/lib/catalogo-publico";
+import { alternativaDeVariantePublica, productoPublico, rutaCategoriaPublica } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { metadataProducto } from "@/lib/producto-metadata";
 import { jsonLdProductoHtml } from "@/lib/producto-jsonld";
@@ -67,7 +67,13 @@ export default async function ProductoPage({ params }: Props) {
   // Envío elegido: la dirección guardada (calle y altura) o, si es una localidad, su nombre.
   const envioElegido = eleccion?.tipo === "envio" ? (eleccion.direccion?.calle || eleccion.localidad || null) : null;
 
-  if (!producto) notFound();
+  if (!producto) {
+    // Variante oculta por el admin o inactiva en Alegra (flag `variantes-selector`): no se muestra
+    // como comprable. Si el modelo tiene otra opción disponible, la ficha de esa; si no, 404.
+    const alternativa = variantes ? await alternativaDeVariantePublica(id, soloVisibles, disp) : null;
+    if (alternativa) redirect(`/producto/${encodeURIComponent(alternativa)}`);
+    notFound();
+  }
   // "Retiro en <local>: ..." por cada local y "Envío a domicilio: ..." (sólo con el flag
   // `disponibilidad-sucursal`), sin que el visitante elija nada. El envío usa la zona del visitante
   // (perfil o predeterminada) sólo para el plazo; no cambia qué se ve.

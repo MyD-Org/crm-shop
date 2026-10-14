@@ -137,6 +137,20 @@ export function fichaKey(tenantId: string, alegraId: string, id: string): string
   return `${prefijoProducto(tenantId, alegraId)}ficha-${id}.pdf`
 }
 
+/**
+ * Key de un logo o imagen de la marca del tenant: `marca/{tenant}/{uuid}.{ext}`.
+ *
+ * Prefijo propio (`marca/`), distinto de `productos/` y `categorias/`: la ruta que firma la subida
+ * y el validador de la marca atan la key al tenant del guard. El uuid evita que dos cargas con el
+ * mismo nombre de archivo choquen, y nunca va el nombre original.
+ */
+export function marcaKey(tenantId: string, id: string, ext: "svg" | "png" | "webp" | "jpg"): string {
+  if (!TENANT_ID_RE.test(tenantId)) throw new Error(`tenantId inválido para key de R2: ${JSON.stringify(tenantId)}`)
+  if (!UUID_RE.test(id)) throw new Error(`id inválido para key de R2: ${JSON.stringify(id)}`)
+  if (!["svg", "png", "webp", "jpg"].includes(ext)) throw new Error(`extensión inválida para key de R2: ${JSON.stringify(ext)}`)
+  return `marca/${tenantId}/${id}.${ext}`
+}
+
 const SHA256_RE = /^[0-9a-f]{64}$/
 
 /**

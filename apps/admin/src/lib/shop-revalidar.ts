@@ -23,6 +23,9 @@ export const PING_TIMEOUT_MS = 5000
 
 const PATH_CATALOGO = "/api/internal/catalogo/revalidar"
 const PATH_SUCURSALES = "/api/internal/sucursales/revalidar"
+// Marca del tenant (nombre, logos, textos): el Shop descarta su caché de marca y de home/footer.
+// La ruta del lado del Shop es la rebanada 3b; hasta que exista responde 404 → no propagado.
+const PATH_MARCA = "/api/internal/marca/revalidar"
 
 /** `{ ok: true }` en JSON; cualquier otra cosa (HTML, JSON sin `ok: true`, cuerpo roto) es false. */
 async function esRespuestaOk(res: Response): Promise<boolean> {
@@ -78,3 +81,6 @@ export const pingShopRevalidarCatalogo = (tenantId: string): Promise<{ propagado
 
 export const pingShopRevalidarSucursales = (tenantId: string): Promise<{ propagado: boolean }> =>
   pingShopRevalidar(tenantId, PATH_SUCURSALES, "sucursales")
+
+export const pingShopRevalidarMarca = (tenantId: string): Promise<{ propagado: boolean }> =>
+  pingShopRevalidar(tenantId, PATH_MARCA, "marca")

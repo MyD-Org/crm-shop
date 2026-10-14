@@ -6,6 +6,7 @@ import {
   fichaKey,
   fotoKey,
   idDeRuta,
+  marcaKey,
   prefijoProducto,
   segmentoProducto,
   shaDeFichaContenidoKey,
@@ -169,5 +170,28 @@ describe("idDeRuta", () => {
     expect(idDeRuta("mdp:12")).toBe("mdp:12")
     expect(idDeRuta("12")).toBe("12")
     expect(idDeRuta("%E0%A4%A")).toBe("%E0%A4%A")
+  })
+})
+
+describe("marcaKey", () => {
+  it("arma marca/{tenant}/{uuid}.{ext}", () => {
+    expect(marcaKey("tienda-uno", UUID, "svg")).toBe(`marca/tienda-uno/${UUID}.svg`)
+    expect(marcaKey("tienda-uno", UUID, "png")).toBe(`marca/tienda-uno/${UUID}.png`)
+    expect(marcaKey("t", UUID, "webp")).toBe(`marca/t/${UUID}.webp`)
+    expect(marcaKey("t", UUID, "jpg")).toBe(`marca/t/${UUID}.jpg`)
+  })
+
+  it("rechaza tenant, uuid o extensión inválidos", () => {
+    expect(() => marcaKey("../t", UUID, "png")).toThrow()
+    expect(() => marcaKey("T", UUID, "png")).toThrow()
+    expect(() => marcaKey("t", "no-es-uuid", "png")).toThrow()
+    expect(() => marcaKey("t", UUID, "gif" as never)).toThrow()
+    expect(() => marcaKey("t", UUID, "png/../x" as never)).toThrow()
+  })
+
+  it("no puede pisar las keys de productos ni de categorías", () => {
+    const k = marcaKey("t", UUID, "png")
+    expect(k.startsWith("productos/")).toBe(false)
+    expect(k.startsWith("categorias/")).toBe(false)
   })
 })

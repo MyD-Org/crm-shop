@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { pingShopRevalidarCatalogo, pingShopRevalidarSucursales, PING_TIMEOUT_MS } from "@/lib/shop-revalidar"
+import { pingShopRevalidarCatalogo, pingShopRevalidarMarca, pingShopRevalidarSucursales, PING_TIMEOUT_MS } from "@/lib/shop-revalidar"
 
 const fetchMock = vi.fn()
 
@@ -234,5 +234,46 @@ describe("tenantId obligatorio", () => {
       void pingShopRevalidarSucursales()
     }
     expect(typeof sinTenant).toBe("function")
+  })
+})
+
+describe("pingShopRevalidarMarca", () => {
+  it("POST con Bearer a /api/internal/marca/revalidar del Shop del tenant; JSON ok → propagado", async () => {
+    filas.set("tienda-uno", { shopUrl: "https://uno.example", shopInternalUrl: "https://uno-interno.example" })
+    vi.stubEnv("SHOP_CRM_SECRET_TIENDA_UNO", "secreto-uno")
+    fetchMock.mockResolvedValue(Response.json({ ok: true }))
+    await expect(pingShopRevalidarMarca("tienda-uno")).resolves.toEqual({ propagado: true })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("https://uno-interno.example/api/internal/marca/revalidar")
+    expect(init.method).toBe("POST")
+    expect(init.body).toBeUndefined()
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer secreto-uno")
+  })
+
+  it("el ping de un tenant no llega al Shop de otro ni lleva su secreto", async () => {
+    filas.set("tienda-uno", { shopUrl: "https://uno.example", shopInternalUrl: "" })
+    vi.stubEnv("SHOP_CRM_SECRET_TIENDA_UNO", "secreto-uno")
+    vi.stubEnv("SHOP_TENANT_LEGACY", "tienda-dos")
+    fetchMock.mockResolvedValue(Response.json({ ok: true }))
+    await pingShopRevalidarMarca("tienda-uno")
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(["https://uno.example/api/internal/marca/revalidar"])
+    // Un tenant con URL propia sin su secreto NO cae al secreto sin sufijo.
+    fetchMock.mockClear()
+    vi.stubEnv("SHOP_CRM_SECRET_TIENDA_UNO", "")
+    await expect(pingShopRevalidarMarca("tienda-uno")).resolves.toEqual({ propagado: false })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("error de red o 502 → no propagado, sin tirar", async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"))
+    await expect(pingShopRevalidarMarca("tenant-a")).resolves.toEqual({ propagado: false })
+    fetchMock.mockResolvedValueOnce(new Response("bad gateway", { status: 502 }))
+    await expect(pingShopRevalidarMarca("tenant-a")).resolves.toEqual({ propagado: false })
+  })
+
+  it("el Shop aún sin la ruta (404) → no propagado", async () => {
+    fetchMock.mockResolvedValue(new Response("nf", { status: 404 }))
+    await expect(pingShopRevalidarMarca("tenant-a")).resolves.toEqual({ propagado: false })
   })
 })

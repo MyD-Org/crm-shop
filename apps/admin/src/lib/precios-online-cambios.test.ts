@@ -73,6 +73,12 @@ describe("validarCambios: overrides", () => {
     expect(validarCambios([{ op: "upsertOverride", listaId: ID, tipo: "marca", marca: "  ", coeficiente: 1.5 }])).toMatchObject({ ok: false })
     expect(validarCambios([{ op: "upsertOverride", listaId: ID, tipo: "categoria", coeficiente: 1.5 }])).toMatchObject({ ok: false })
     expect(validarCambios([{ op: "upsertOverride", listaId: ID, tipo: "otro", coeficiente: 1.5 }])).toMatchObject({ ok: false })
+    expect(validarCambios([{ op: "upsertOverride", listaId: ID, tipo: "producto", alegraId: " 123 ", coeficiente: 1.1 }])).toMatchObject({
+      ok: true,
+      cambios: [{ op: "upsertOverride", tipo: "producto", alegraId: "123", coeficiente: "1.1000" }],
+    })
+    expect(validarCambios([{ op: "upsertOverride", listaId: ID, tipo: "producto", alegraId: "  ", coeficiente: 1.1 }])).toMatchObject({ ok: false })
+    expect(validarCambios([{ op: "upsertOverride", listaId: ID, tipo: "producto", coeficiente: 1.1 }])).toMatchObject({ ok: false })
     expect(validarCambios([{ op: "upsertOverride", listaId: ID, tipo: "marca", marca: "x", coeficiente: 0.9 }])).toMatchObject({
       ok: false,
       error: MSG_COEF,

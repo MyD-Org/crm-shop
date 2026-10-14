@@ -40,11 +40,11 @@ describe("carga inicial del formulario de Mercado Pago", () => {
     expect(html).not.toContain(SIN_KEY);
   });
 
-  it("pregunta cómo pagar: crédito (abierta), débito y cuenta de Mercado Pago", () => {
+  it("sin forma elegida abre directo en crédito, sin preguntar cómo pagar", () => {
     const html = renderPago(6, "TEST-public-key");
-    expect(html).toContain("¿Cómo quiere pagar?");
+    expect(html).not.toContain("¿Cómo quiere pagar?");
     expect(html).toContain("Tarjeta de crédito");
-    expect(html).toContain("Cuenta de Mercado Pago");
+    expect(html).not.toContain("Cuenta de Mercado Pago");
     // Las cuotas se eligen dentro del formulario: el débito se puede elegir siempre (el pedido pasa
     // a 1 pago al cobrar) y la opción de crédito no lleva las cuotas del pedido.
     expect(html).not.toContain("Sólo en un pago");

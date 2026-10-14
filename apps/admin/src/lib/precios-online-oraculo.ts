@@ -6,7 +6,7 @@
 // (incluido un barrido aleatorio con semilla fija). Si las dos implementaciones difieren, falla.
 //
 // Regla: precio_neto = round_half_up(costo_aplicado x coeficiente_efectivo, 2). Precedencia del
-// coeficiente: override de marca > override de categoría > general de la lista. La categoría
+// coeficiente: override de producto (0088) > de marca > de categoría > general de la lista. La categoría
 // ganadora es la MÁS PROFUNDA entre las categorías del producto y sus ancestros; empate en
 // profundidad = mayor coeficiente (DC1). Costo nulo o <= 0 => sin precio (nunca 0).
 
@@ -17,10 +17,11 @@ export interface CategoriaOraculo {
 }
 
 export interface OverrideOraculo {
-  tipo: "marca" | "categoria"
+  tipo: "marca" | "categoria" | "producto"
   /** Marca ya normalizada (lower + trim). */
   marca?: string
   categoriaId?: string
+  alegraId?: string
   coeficiente: string
 }
 
@@ -32,6 +33,8 @@ export interface ListaOraculo {
 }
 
 export interface ProductoOraculo {
+  /** Id del producto en el espejo (para el ajuste por producto). */
+  alegraId?: string
   /** Costo aplicado (decimal como string, hasta 4 decimales) o null. */
   costo: string | null
   marca: string | null
@@ -97,6 +100,9 @@ export function calcularOraculo(
   return listas
     .filter((l) => l.activa)
     .map((l) => {
+      const prodOv = producto.alegraId
+        ? l.overrides.find((o) => o.tipo === "producto" && o.alegraId === producto.alegraId)
+        : undefined
       const marcaOv = producto.marca
         ? l.overrides.find((o) => o.tipo === "marca" && o.marca === producto.marca)
         : undefined
@@ -113,8 +119,14 @@ export function calcularOraculo(
           catOv = { cat, coef: o.coeficiente }
         }
       }
-      const coef = marcaOv ? marcaOv.coeficiente : catOv ? catOv.coef : l.coeficiente
-      const origen = marcaOv ? `marca:${producto.marca}` : catOv ? `categoria:${catOv.cat.id}` : "general"
+      const coef = prodOv ? prodOv.coeficiente : marcaOv ? marcaOv.coeficiente : catOv ? catOv.coef : l.coeficiente
+      const origen = prodOv
+        ? `producto:${producto.alegraId}`
+        : marcaOv
+          ? `marca:${producto.marca}`
+          : catOv
+            ? `categoria:${catOv.cat.id}`
+            : "general"
       return {
         listaId: l.id,
         coef: coefCanonico(coef),

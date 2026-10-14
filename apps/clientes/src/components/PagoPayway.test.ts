@@ -148,6 +148,6 @@ describe("PagoPayway: tarjetas del convenio (Visa, Mastercard, American Express 
 
   it("el checkout le pasa los logos y los muestra bajo la tarjeta del medio Payway", () => {
     expect(checkout).toMatch(/<PagoPayway[\s\S]*tarjetas=\{tarjetasDelConvenioPayway\}/);
-    expect(checkout).toMatch(/m\.slug === SLUG_PAYWAY\s*\?\s*logosTarjetas\(tarjetasDelConvenioPayway\)/);
+    expect(checkout).toMatch(/o\.slug === SLUG_PAYWAY \? tarjetasDelConvenioPayway : tarjetasMercadoPago/);
   });
 });

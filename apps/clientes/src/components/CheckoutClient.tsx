@@ -11,6 +11,7 @@ import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, S
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { formaInicialDelMedio, pagoParaCotizar } from "@/lib/lista-medio";
+import { ahorroFrente, bajadaOpcion, opcionElegida, opcionesDePago, PIE_CUENTA_MP, textoConfirmar, tituloEnFrase, tituloOpcion, type OpcionPago } from "@/lib/opciones-pago";
 import { leerFormaCobro, type OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { contenidoDistinto, COPY_CARRITO, type CartItem } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
@@ -59,7 +60,8 @@ import { provinciaCanonica } from "@/lib/provincias";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
-import type { ChipMedio } from "@/lib/medios-pago-chips";
+import { CardOpcionPago } from "@/components/checkout/CardOpcionPago";
+import { esChipDeAhorro, TEXTO_AHORRO_POR_DEFECTO, textoDeAhorro, type ChipMedio } from "@/lib/medios-pago-chips";
 import { logosTarjetas, type TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import { tarjetasPayway } from "@/lib/pagos/tarjetas-payway";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
@@ -181,6 +183,15 @@ function NavPaso({
         )}
       </div>
     </div>
+  );
+}
+
+function IconoFlechaConfirmar() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M5 12h14" />
+      <path d="M13 6l6 6-6 6" />
+    </svg>
   );
 }
 
@@ -418,8 +429,8 @@ export function CheckoutClient({
     track({ tipo: "iniciar_checkout", items: items.map((i) => itemDe(i, i.qty)) });
   }, [ready, items]);
 
-  // Slug del medio del CRM que eligió el comprador ("" = el primero que aplique).
-  const [medioSlug, setMedioSlug] = useState("");
+  // Card del paso Pago que eligió el comprador (`slug` o `slug:forma`; "" = la primera que aplique).
+  const [opcionClave, setOpcionClave] = useState("");
   // Dos opciones: retiro en local o envío a domicilio. El "envío a coordinar" aparte se fusionó
   // con el domicilio: si el envío no es gratis, su costo se coordina después (src/lib/envio.ts).
   // Los valores iniciales salen de la elección de «Enviar a» (cookie ya validada en el server).
@@ -573,6 +584,8 @@ export function CheckoutClient({
     pagoMetodo?: string;
     /** Forma de pago congelada (precios por forma); null = el medio no tiene precios por forma. */
     formaCobro?: OpcionCobro | null;
+    /** Forma de la card elegida en el paso Pago: el formulario abre directo en ella. Ausente = pedido retomado. */
+    formaElegida?: OpcionCobro | null;
     /** Mercado Pago: public key de la cuenta que cobra el pedido y esa cuenta (los manda el servidor). */
     mpPublicKey?: string;
     mpCuenta?: string;
@@ -763,7 +776,10 @@ export function CheckoutClient({
   /** Formas de pago (crédito, débito, cuenta de Mercado Pago) que el admin habilitó para el medio del procesador. */
   const opcionesCobroDe = (procesador: string | null | undefined) =>
     mediosPago.find((m) => procesador && procesadorDeMedio(m.slug) === procesador)?.opcionesCobro;
-  const medioSel = medioElegido(mediosPago, entrega, medioSlug, opcionesMedios);
+  // Una card por forma de pagar (Mercado Pago se abre en cuenta, crédito y débito). Cuenta corriente: sin elección.
+  const opcionesPago = esCuentaCorriente ? [] : opcionesDePago(mediosParaElegir);
+  const opcionSel = opcionElegida(opcionesPago, opcionClave);
+  const medioSel = medioElegido(mediosPago, entrega, opcionSel?.slug ?? "", opcionesMedios);
   const pagoParaEnviar: string = medioSel?.slug ?? "a_coordinar";
   const pagaEnLinea = esPagoEnLinea(pagoParaEnviar);
   // Cuotas sin interés: el medio de cobro en línea con condiciones las pide al servidor, que sólo
@@ -771,7 +787,12 @@ export function CheckoutClient({
   const pideCuotas = Boolean(medioSel?.cobroOnline && (medioSel.condicionesCuotas?.length ?? 0) > 0);
   // Medio con precios distintos por forma de pago: el pedido nace en la primera forma que ofrece y el
   // total que se ve ya es el de su lista (después se cambia de pestaña o modalidad en el pago).
-  const formaDelMedio = medioSel && !esCuentaCorriente ? formaInicialDelMedio(medioSel) : null;
+  // La forma es la de la card elegida.
+  const formaDelMedio =
+    medioSel && !esCuentaCorriente && formaInicialDelMedio(medioSel) ? (opcionSel?.forma ?? formaInicialDelMedio(medioSel)) : null;
+  // El pedido congela la forma de la card elegida (aunque el medio no tenga precios por forma): el
+  // formulario de pago abre directo en ella, también al retomar el pedido.
+  const formaDelPedido = esCuentaCorriente ? null : (formaDelMedio ?? opcionSel?.forma ?? null);
   // Las cuotas se eligen dentro del formulario de pago (Mercado Pago y Payway), según la tarjeta
   // (`SelectorCuotas`). El pedido se crea en 1 pago y acá sólo queda la meta "Sume $X más…".
 
@@ -803,11 +824,29 @@ export function CheckoutClient({
     })(),
     cuotas: 1,
     conCuotas: pideCuotas,
+    // El total de cada card del paso Pago.
+    conTotalesOpciones: opcionesPago.length > 1,
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
 
   const opcionesCuotas = pideCuotas ? (cotizacion?.cuotasOpciones ?? ultimasCuotasOpciones ?? []) : [];
+  // Totales de las cards: no dependen de la card elegida, así que se conservan mientras se recotiza.
+  const [totalesOpciones, setTotalesOpciones] = useState<Record<string, number | null>>({});
+  const totalesRecibidos = cotizacion?.totalesOpciones;
+  if (totalesRecibidos && totalesRecibidos !== totalesOpciones) setTotalesOpciones(totalesRecibidos);
+  // Lo que ahorra la card elegida (transferencia): se repite bajo el total del resumen.
+  // Franja de ahorro: sólo en las cards cuyo medio tiene una etiqueta con {ahorro} (la carga el admin).
+  // Transferencia la muestra siempre (con el texto de siempre, salvo que el admin cargue el suyo).
+  const ahorroDe = (o: OpcionPago) => {
+    const chip = mediosParaElegir.find((m) => m.slug === o.slug)?.chips?.find(esChipDeAhorro);
+    const texto = chip?.texto ?? (o.slug === SLUG_TRANSFERENCIA ? TEXTO_AHORRO_POR_DEFECTO : null);
+    const a = texto ? ahorroFrente(totalesOpciones, opcionesPago, o.clave) : null;
+    if (!texto || !a) return null;
+    const frente = tituloEnFrase(a.frente, mediosParaElegir.find((m) => m.slug === a.frente.slug)?.nombre ?? "");
+    return { monto: a.monto, texto: textoDeAhorro(texto, fmtPrecio(a.monto), frente) };
+  };
+  const ahorroSel = opcionSel ? ahorroDe(opcionSel) : null;
 
   /** Lo elegido en el formulario de pago (para el resumen); null fuera de él. */
   const [eleccionCuotas, setEleccionCuotas] = useState<EleccionCuotas | null>(null);
@@ -890,7 +929,7 @@ export function CheckoutClient({
         body: JSON.stringify({
           pagoMetodo: pagoParaEnviar,
           cuotas: pideCuotas && opcionesCuotas.length > 0 ? 1 : undefined,
-          ...(formaDelMedio ? { forma: formaDelMedio } : {}),
+          ...(formaDelPedido ? { forma: formaDelPedido } : {}),
           totalVisto: cotizacion?.total,
         }),
       });
@@ -914,6 +953,7 @@ export function CheckoutClient({
           procesador: procesadorDeMedio(pagoParaEnviar),
           pagoMetodo: pagoParaEnviar,
           formaCobro: leerFormaCobro(json.formaCobro),
+          formaElegida: opcionSel?.forma ?? null,
           ...(typeof json.mpPublicKey === "string" ? { mpPublicKey: json.mpPublicKey } : {}),
           ...(typeof json.mpCuenta === "string" ? { mpCuenta: json.mpCuenta } : {}),
           contacto: json.contacto ?? null,
@@ -979,7 +1019,7 @@ export function CheckoutClient({
           pagoMetodo: pagoParaEnviar,
           // Sólo si el servidor ofreció cuotas: la cantidad elegida (1 = un pago). El monto no viaja.
           cuotas: pideCuotas && opcionesCuotas.length > 0 ? 1 : undefined,
-          ...(formaDelMedio ? { forma: formaDelMedio } : {}),
+          ...(formaDelPedido ? { forma: formaDelPedido } : {}),
           notas,
           complementoFacturacion: complementoFacturacion ?? undefined,
           // Sólo con el flag `sucursales` (props presentes): local de retiro y provincia de entrega.
@@ -1042,6 +1082,7 @@ export function CheckoutClient({
         procesador: procesadorDeMedio(pagoParaEnviar),
         pagoMetodo: pagoParaEnviar,
         formaCobro: leerFormaCobro(json.formaCobro),
+        formaElegida: opcionSel?.forma ?? null,
         ...(typeof json.mpPublicKey === "string" ? { mpPublicKey: json.mpPublicKey } : {}),
         ...(typeof json.mpCuenta === "string" ? { mpCuenta: json.mpCuenta } : {}),
         contacto: json.contacto ?? null,
@@ -1207,6 +1248,7 @@ export function CheckoutClient({
               onPedidoActualizado={alActualizarPedido}
               opcionesCobro={opcionesCobroDe(confirmado.procesador)}
               tarjetas={tarjetasDelConvenioPayway}
+              formaFija={confirmado.formaElegida}
               onCobroEnCurso={setCobroEnCurso}
               onConfirmacionAgotada={alAgotarConfirmacion}
               onPagado={alPagar}
@@ -1235,6 +1277,8 @@ export function CheckoutClient({
               onCobroEnCurso={setCobroEnCurso}
               onConfirmacionAgotada={alAgotarConfirmacion}
               tarjetas={tarjetasMercadoPago}
+              formaFija={confirmado.formaElegida}
+              irDirecto={!pagoEnConfirmacion}
               onPagado={alPagar}
               onPendiente={alQuedarPendiente}
               onRechazado={() => {
@@ -1631,8 +1675,28 @@ export function CheckoutClient({
     </>
   );
 
+  const textoBotonConfirmar = enviando ? "Confirmando…" : pasoActual === "pago" ? textoConfirmar(opcionSel) : "Confirmar pedido";
+  const motivoNoConfirmar =
+    !puedeConfirmar && !enviando
+      ? estado === "no_auth"
+                ? "Inicie sesión para confirmar el pedido."
+                : !facturacionCompleta
+                ? "Cargue sus datos de facturación para continuar."
+                : pasoActual !== "pago"
+                  ? "Complete los pasos para confirmar el pedido."
+                : cotizacion?.hayProblemas
+                  ? "Revise los productos marcados en rojo."
+                  : !datosCompletos
+                    ? "Complete todos los campos para continuar."
+                    : aDomicilio && !envioDisponible
+                      ? "Elija retiro en el local: el envío no está disponible."
+                      : "Confirmando precios y stock…"
+      : null;
+  const pieConfirmar = conCuenta ? PIE_TRANSFERENCIA : opcionSel?.forma === "cuenta_mp" ? PIE_CUENTA_MP : pieDelMedio(medioSel);
+  const nombreOpcionSel = opcionSel ? tituloEnFrase(opcionSel, medioSel?.nombre ?? "") : null;
+
   return (
-    <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
+    <main className={`mx-auto w-full max-w-contenido flex-1 px-4 py-8 ${pasoActual === "pago" ? "pb-56 lg:pb-8" : ""}`}>
       <nav className="mb-6 text-sm text-muted">
         <Link href="/carrito" className="hover:text-primary">Carrito</Link>
         {" / "}
@@ -1822,31 +1886,37 @@ export function CheckoutClient({
             {cabeceraPasos}
             {medioSel ? (
               <>
-                <h2 className="mb-4 font-display text-2xl font-medium text-text">Medio de pago</h2>
+                <h2 className="mb-1 font-display text-2xl font-medium text-text">{esCuentaCorriente ? "Medio de pago" : "¿Cómo quiere pagar?"}</h2>
+                {!esCuentaCorriente && <p className="mb-4 text-sm text-muted">Cada opción muestra el total que pagará con ese medio.</p>}
                 {esCuentaCorriente ? (
                   // Cuenta corriente: un único medio, sin elección.
                   <p className="text-sm font-semibold text-text">{textoPagaConMedio(medioSel.nombre)}</p>
                 ) : (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {mediosParaElegir.map((m) => (
-                      <RadioCard
-                        key={m.slug}
-                        selected={medioSel.slug === m.slug}
-                        onClick={() => setMedioSlug(m.slug)}
-                        title={m.nombre}
-                        chips={m.chips}
-                        logos={
-                          m.slug === SLUG_MERCADOPAGO && tarjetasMercadoPago
-                            ? logosTarjetas(tarjetasMercadoPago)
-                            : m.slug === SLUG_PAYWAY
-                              ? logosTarjetas(tarjetasDelConvenioPayway)
+                  <div role="radiogroup" aria-label="Medio de pago" className="flex flex-col gap-3">
+                    {opcionesPago.map((o) => {
+                      const m = mediosParaElegir.find((x) => x.slug === o.slug)!;
+                      return (
+                        <CardOpcionPago
+                          key={o.clave}
+                          opcion={o}
+                          medio={m}
+                          selected={opcionSel?.clave === o.clave}
+                          onClick={() => setOpcionClave(o.clave)}
+                          total={totalesOpciones[o.clave]}
+                          textoAhorro={ahorroDe(o)?.texto ?? null}
+                          titulo={tituloOpcion(o, m.nombre)}
+                          bajada={bajadaOpcion(o)}
+                          logos={
+                            o.forma === "credito" || o.forma === "debito"
+                              ? (o.slug === SLUG_PAYWAY ? tarjetasDelConvenioPayway : tarjetasMercadoPago)?.[o.forma]?.map((t) => ({ name: t.nombre, src: t.logo }))
                               : undefined
-                        }
-                      />
-                    ))}
+                          }
+                        />
+                      );
+                    })}
                   </div>
                 )}
-                {medioSel.instrucciones.trim() && (
+                {esCuentaCorriente && medioSel.instrucciones.trim() && (
                   <p className="mt-3 whitespace-pre-line text-sm text-text">{medioSel.instrucciones.trim()}</p>
                 )}
                 {pagaEnLinea && <MetaCuotas progreso={cotizacion?.progresoCuotas} />}
@@ -1857,22 +1927,54 @@ export function CheckoutClient({
                 <p className="text-sm text-muted">{AVISO_PAGO_A_COORDINAR}</p>
               </>
             )}
+            {/* Aclaraciones en una línea, dentro del paso: el botón de confirmar queda a la vista sin scroll. */}
+            <div className="mt-5">
+              <Field label="Aclaraciones (opcional)">
+                <Input
+                  value={notas}
+                  onChange={(e) => setNotas(e.target.value)}
+                  maxLength={500}
+                  placeholder="Horario de entrega, referencia del domicilio, etc."
+                />
+              </Field>
+            </div>
+            <div className="mt-5">
+              {errorEnvio && estado !== "no_auth" && (
+                <p className="mb-3 hidden rounded-lg bg-danger/5 p-3 text-xs text-danger lg:block">{errorEnvio}</p>
+              )}
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" onClick={() => irAPaso("entrega")}>
+                  Volver
+                </Button>
+                <span className="ml-auto hidden lg:block">
+                  <Button size="lg" disabled={!puedeConfirmar} onClick={confirmar}>
+                    {textoBotonConfirmar}
+                    <IconoFlechaConfirmar />
+                  </Button>
+                </span>
+              </div>
+              {motivoNoConfirmar && <p className="mt-2 hidden text-right text-xs text-muted lg:block">{motivoNoConfirmar}</p>}
+              <p className="mt-2 hidden text-right text-xs text-muted lg:block">{pieConfirmar}</p>
+            </div>
           </section>
 
-          <section className="rounded-[20px] border border-border/50 bg-surface p-5">
-            <h2 className="mb-4 font-display text-2xl font-medium text-text">
-              Aclaraciones <span className="font-normal text-muted">(opcional)</span>
-            </h2>
-            <textarea
-              value={notas}
-              onChange={(e) => setNotas(e.target.value)}
-              rows={3}
-              maxLength={500}
-              placeholder="Horario de entrega, referencia del domicilio, etc."
-              className="w-full rounded-sm border-[1.5px] border-border-strong bg-surface px-3 py-2 text-sm text-text outline-none focus-visible:border-primary"
-            />
-            <NavPaso onVolver={() => irAPaso("entrega")} />
-          </section>
+          {/* Celular: total y botón siempre a mano, en una barra fija abajo. */}
+          <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2 border-t border-border bg-surface px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] lg:hidden">
+            {errorEnvio && estado !== "no_auth" && (
+              <p className="rounded-lg bg-danger/5 p-2 text-xs text-danger">{errorEnvio}</p>
+            )}
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[13px] font-bold text-text">Total</span>
+              <span className="flex items-baseline gap-2">
+                {ahorroSel && <span className="text-xs font-bold text-success">Ahorra {fmtPrecio(ahorroSel.monto)}</span>}
+                <span className="font-display text-xl font-semibold text-text tabular-nums">{fmtPrecio(cotizacion?.total ?? 0)}</span>
+              </span>
+            </div>
+            <Button size="lg" className="w-full" disabled={!puedeConfirmar} onClick={confirmar}>
+              {textoBotonConfirmar}
+            </Button>
+            <p className="text-center text-[11px] text-muted">{motivoNoConfirmar ?? pieConfirmar}</p>
+          </div>
           </>
           )}
         </div>
@@ -1959,45 +2061,34 @@ export function CheckoutClient({
               </div>
             )}
             <div className="flex justify-between pt-2">
-              <span className="font-bold text-text">Total</span>
+              <span className="font-bold text-text">
+                Total{pasoActual === "pago" && nombreOpcionSel ? ` con ${nombreOpcionSel}` : ""}
+              </span>
               <span className="text-lg font-extrabold text-text">
                 {fmtPrecio(cotizacion?.total ?? 0)}
               </span>
             </div>
+            {pasoActual === "pago" && ahorroSel && (
+              <p className="text-right text-[13px] font-bold text-success">Ahorra {fmtPrecio(ahorroSel.monto)}</p>
+            )}
             <p className="text-xs text-muted">
               Precio sin impuestos {fmtPrecio(cotizacion?.subtotal ?? 0)}
             </p>
           </div>
 
-          {errorEnvio && estado !== "no_auth" && (
-            <p className="mt-4 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>
+          {/* En el paso Pago el botón va al pie de la sección (y en el celular, en la barra fija). */}
+          {pasoActual !== "pago" && (
+            <>
+              {errorEnvio && estado !== "no_auth" && (
+                <p className="mt-4 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>
+              )}
+              <Button className="mt-5 w-full" disabled={!puedeConfirmar} onClick={confirmar}>
+                {textoBotonConfirmar}
+              </Button>
+              {motivoNoConfirmar && <p className="mt-2 text-center text-xs text-muted">{motivoNoConfirmar}</p>}
+              <p className="mt-3 text-center text-xs text-muted">{pieConfirmar}</p>
+            </>
           )}
-
-          <Button className="mt-5 w-full" disabled={!puedeConfirmar} onClick={confirmar}>
-            {enviando ? "Confirmando…" : "Confirmar pedido"}
-          </Button>
-
-          {!puedeConfirmar && !enviando && (
-            <p className="mt-2 text-center text-xs text-muted">
-              {estado === "no_auth"
-                ? "Inicie sesión para confirmar el pedido."
-                : !facturacionCompleta
-                ? "Cargue sus datos de facturación para continuar."
-                : pasoActual !== "pago"
-                  ? "Complete los pasos para confirmar el pedido."
-                : cotizacion?.hayProblemas
-                  ? "Revise los productos marcados en rojo."
-                  : !datosCompletos
-                    ? "Complete todos los campos para continuar."
-                    : aDomicilio && !envioDisponible
-                      ? "Elija retiro en el local: el envío no está disponible."
-                      : "Confirmando precios y stock…"}
-            </p>
-          )}
-
-          <p className="mt-3 text-center text-xs text-muted">
-            {conCuenta ? PIE_TRANSFERENCIA : pieDelMedio(medioSel)}
-          </p>
         </div>
       </div>
     </main>

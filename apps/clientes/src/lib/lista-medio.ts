@@ -59,9 +59,10 @@ export function formaInicialDelMedio(
 
 /**
  * Forma con la que se cotiza y congela el pedido. Una forma pedida inválida o no habilitada para el
- * procesador del medio (p. ej. `cuenta_mp` con Payway) se rechaza siempre. Sin precios distintos por
- * forma da `null` (el pedido no valida la forma). Con ellos, la pedida o, si falta, la primera que el
- * medio ofrece (crédito, débito, cuenta MP): el pedido nace con forma y el cobro no queda sin validar.
+ * procesador del medio (p. ej. `cuenta_mp` con Payway) se rechaza siempre. La pedida se congela siempre:
+ * es la card que eligió el comprador en el paso Pago, y el formulario de pago abre directo en ella
+ * (también al retomar el pedido). Sin forma pedida: con precios distintos por forma, la primera que el
+ * medio ofrece (crédito, débito, cuenta MP); sin ellos, `null` (el pedido no valida la forma).
  * Un medio que no es de Mercado Pago ni de Payway ignora la forma. `pedida` es la forma pedida ya validada
  * (aunque no se congele), para rechazar cuotas con una forma que no es crédito.
  */
@@ -79,7 +80,7 @@ export function resolverForma(
     if (!formas.includes(pedida as OpcionCobro)) return { ok: false };
     forma = pedida as OpcionCobro;
   }
-  if (!hayPreciosPorForma(medio)) return { ok: true, forma: null, pedida: forma };
+  if (!hayPreciosPorForma(medio)) return { ok: true, forma, pedida: forma };
   return { ok: true, forma: forma ?? formas[0] ?? null, pedida: forma };
 }
 

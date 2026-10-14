@@ -48,6 +48,10 @@ export async function seedOverrideMarca(tenantId: string, listaId: string, marca
   await getDb().insert(listaPrecioOverrides).values({ tenantId, listaId, tipo: "marca", marca, coeficiente })
 }
 
+export async function seedOverrideProducto(tenantId: string, listaId: string, alegraId: string, coeficiente: string) {
+  await getDb().insert(listaPrecioOverrides).values({ tenantId, listaId, tipo: "producto", alegraId, coeficiente })
+}
+
 export async function seedOverrideCategoria(tenantId: string, listaId: string, categoriaId: string, coeficiente: string) {
   await getDb().insert(listaPrecioOverrides).values({ tenantId, listaId, tipo: "categoria", categoriaId, coeficiente })
 }

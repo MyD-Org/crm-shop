@@ -69,9 +69,10 @@ describe("cotizarConMedio con forma", () => {
     expect(await llamar(MP)).toMatchObject({ ok: true, formaCobro: "credito", idListaMedio: "A" });
   });
 
-  it("medio sin precios por forma: forma null (no se congela) y la lista del medio", async () => {
+  it("medio sin precios por forma: congela la forma pedida y cotiza con la lista del medio", async () => {
     const r = await llamar(medio({}), { formaPedida: "debito" });
-    expect(r).toMatchObject({ ok: true, formaCobro: null, idListaMedio: "A" });
+    expect(r).toMatchObject({ ok: true, formaCobro: "debito", idListaMedio: "A" });
+    expect(await llamar(medio({}), {})).toMatchObject({ ok: true, formaCobro: null, idListaMedio: "A" });
   });
 
   it("forma inválida o no habilitada: forma_no_disponible", async () => {

@@ -41,7 +41,8 @@ function detalle(h: HistorialDto): string {
     case "override_edicion":
     case "override_baja": {
       const o = (h.despues ?? h.antes ?? {}) as Record<string, unknown>
-      return `${o.tipo === "marca" ? `Marca ${o.marca}` : "Categoría"}: ${a.coeficiente ?? "—"} → ${d.coeficiente ?? "—"}`
+      const objeto = o.tipo === "marca" ? `Marca ${o.marca}` : o.tipo === "producto" ? `Producto ${o.productoNombre ?? o.alegraId}` : "Categoría"
+      return `${objeto}: ${a.coeficiente ?? "—"} → ${d.coeficiente ?? "—"}`
     }
     case "condicion": {
       const o = (h.despues ?? h.antes ?? {}) as Record<string, unknown>

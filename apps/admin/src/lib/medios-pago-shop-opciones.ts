@@ -53,3 +53,29 @@ export function errorDeOpcionesResultantes(m: {
   if (!m.activo || !m.cobroOnline) return null
   return opcionesAplicables(m.slug, m.opcionesCobro).length === 0 ? MSG_SIN_OPCIONES : null
 }
+
+/** Título de cada card del checkout (en el orden en que el Shop las muestra). */
+const CARD_DE_OPCION: ReadonlyArray<[OpcionCobro, string]> = [
+  ["cuenta_mp", "Mercado Pago"],
+  ["credito", "Tarjeta de crédito"],
+  ["debito", "Tarjeta de débito"],
+]
+
+/**
+ * Qué ve el comprador en el paso Pago por este medio. Espeja `opcionesDePago` del Shop
+ * (`apps/clientes/src/lib/opciones-pago.ts`): Mercado Pago se abre en una card por forma y Payway solo
+ * aporta las tarjetas que un Mercado Pago activo no ofrece. Un medio inactivo no se ve: null.
+ */
+export function lineaEnLaTienda(
+  medio: { slug: string; nombre: string; activo: boolean; opcionesCobro?: readonly OpcionCobro[] },
+  medios: readonly { slug: string; activo: boolean; opcionesCobro?: readonly OpcionCobro[] }[],
+): string | null {
+  if (!medio.activo) return null
+  if (!OPCIONES_POR_MEDIO[medio.slug]) return `En la tienda: ${medio.nombre}`
+  const formas = opcionesAplicables(medio.slug, medio.opcionesCobro ?? OPCIONES_COBRO)
+  const mp = medio.slug === "payway" ? medios.find((m) => m.slug === "mercadopago" && m.activo) : undefined
+  const cubiertas = mp ? opcionesAplicables("mercadopago", mp.opcionesCobro ?? OPCIONES_COBRO) : []
+  const cards = CARD_DE_OPCION.filter(([o]) => formas.includes(o) && !cubiertas.includes(o)).map(([, t]) => t)
+  if (cards.length === 0) return "No se muestra en la tienda: las tarjetas las cobra Mercado Pago."
+  return `En la tienda: ${cards.join(" · ")}`
+}

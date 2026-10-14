@@ -24,6 +24,7 @@ import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { procesadorConfigurado } from "@/lib/pagos";
 import { esCompradorCuentaCorriente, mediosParaModalidad } from "@/lib/medios-pago";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
+import { listaDeOpcion, opcionesDePago } from "@/lib/opciones-pago";
 
 /**
  * Techo por usuario.
@@ -101,6 +102,7 @@ export async function POST(req: Request) {
     precioLineas?: unknown;
     conCuotas?: unknown;
     forma?: unknown;
+    totalesOpciones?: unknown;
   };
   try {
     body = await req.json();
@@ -311,8 +313,34 @@ export async function POST(req: Request) {
       });
     }
 
+    // Paso Pago del checkout (`totalesOpciones: true`): el total de cada card (forma de pago), una
+    // cotización por lista distinta. Cuenta corriente y lista privada no eligen medio: nada.
+    let totalesOpciones: Record<string, number | null> | undefined;
+    if (body.totalesOpciones === true && !esCuentaCorriente && !idListaPrivada) {
+      const medios = mediosParaModalidad(mediosCrm.length > 0 ? mediosCrm : await leerMediosPagoTolerante(), entregaTipo, {
+        procesadorDisponible: procesadorConfigurado,
+      });
+      const opciones = opcionesDePago(medios);
+      const listas = [...new Set(opciones.map((o) => listaDeOpcion(medios, o)))];
+      const porLista = new Map(
+        await Promise.all(
+          listas.map(async (l): Promise<[string, number | null]> => {
+            try {
+              const q = await cotizarConLista(l || undefined);
+              return [l, q.hayProblemas ? null : q.total];
+            } catch (err) {
+              console.error("[/api/carrito/cotizar] total de una opción de pago:", err);
+              return [l, null];
+            }
+          }),
+        ),
+      );
+      totalesOpciones = Object.fromEntries(opciones.map((o) => [o.clave, porLista.get(listaDeOpcion(medios, o)) ?? null]));
+    }
+
     return NextResponse.json({
       ...cotizacion,
+      ...(totalesOpciones ? { totalesOpciones } : {}),
       ...(cuotasOpciones ? { cuotasOpciones } : {}),
       ...(escalon ? { proximoEscalon: escalon } : {}),
       ...(progreso ? { progresoCuotas: progreso } : {}),

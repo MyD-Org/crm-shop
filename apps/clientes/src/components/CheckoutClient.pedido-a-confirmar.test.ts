@@ -22,7 +22,7 @@ function archivos(dir: string): string[] {
 describe("CheckoutClient con medios de pago de la tabla", () => {
   it("el paso Pago ofrece los medios aplicables a la modalidad, sin notas debajo", () => {
     expect(fuente).toContain("const mediosParaElegir = mediosParaModalidad(mediosPago, entrega, opcionesMedios);");
-    expect(fuente).toContain(">Medio de pago</h2>");
+    expect(fuente).toContain('{esCuentaCorriente ? "Medio de pago" : "¿Cómo quiere pagar?"}</h2>');
     expect(fuente).not.toContain("El total se actualiza según el medio de pago.");
     expect(fuente).not.toContain("NOTA_PAGO_A_CONFIRMAR");
   });
@@ -80,7 +80,7 @@ describe("CheckoutClient con cuenta corriente", () => {
   it("recibe el flag del server y lo usa para elegir los medios (sin decidirlo en el navegador)", () => {
     expect(fuente).toContain("esCuentaCorriente = false,");
     expect(fuente).toContain("const opcionesMedios = { esCuentaCorriente };");
-    expect(fuente).toContain("medioElegido(mediosPago, entrega, medioSlug, opcionesMedios)");
+    expect(fuente).toContain('medioElegido(mediosPago, entrega, opcionSel?.slug ?? "", opcionesMedios)');
   });
 
   it("muestra el único medio como texto informativo y no ofrece cuotas ni lista por medio", () => {

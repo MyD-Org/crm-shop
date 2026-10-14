@@ -191,9 +191,9 @@ describe("hayPreciosPorForma", () => {
 describe("resolverForma", () => {
   const conPrecios = mp({ listasPorForma: { debito: "B" } });
 
-  it("sin precios por forma: forma null (también con una forma válida pedida)", () => {
+  it("sin precios por forma: la pedida se congela; sin pedida, null", () => {
     expect(resolverForma(mp(), undefined)).toEqual({ ok: true, forma: null, pedida: null });
-    expect(resolverForma(mp(), "debito")).toEqual({ ok: true, forma: null, pedida: "debito" });
+    expect(resolverForma(mp(), "debito")).toEqual({ ok: true, forma: "debito", pedida: "debito" });
   });
 
   it("con precios: la pedida", () => {

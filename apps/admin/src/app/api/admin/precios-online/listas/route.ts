@@ -1,20 +1,22 @@
 import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { NO_STORE } from "@/lib/precios-online-http"
-import { leerConfig, listarListas, listarListasAlegra } from "@/lib/precios-online-repo"
+import { leerConfig, listarListas, listarListasAlegra, listarMarcas } from "@/lib/precios-online-repo"
 
 // GET /api/admin/precios-online/listas — listas de precio online del tenant con sus ajustes por
 // marca y por categoría, su condición de privada y sus enlaces con la lista de Alegra; las listas de
 // Alegra disponibles para enlazar (todas las de cada cuenta, con su cantidad de clientes); y la configuración
-// (versión y umbrales). Los cambios NO se hacen acá: pasan por previsualizar -> aplicar.
+// (versión y umbrales); y las marcas del catálogo para el desplegable del ajuste por marca. Los
+// cambios NO se hacen acá: pasan por previsualizar -> aplicar.
 // admin+ (requireAdminPlus: operator -> 404). Tenant = el del guard.
 
 export async function GET(req: Request) {
   const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
-  const [listas, alegra, config] = await Promise.all([
+  const [listas, alegra, config, marcas] = await Promise.all([
     listarListas(guard.tenantId),
     listarListasAlegra(guard.tenantId),
     leerConfig(guard.tenantId),
+    listarMarcas(guard.tenantId),
   ])
-  return Response.json({ listas, listasAlegra: alegra.listas, cuentasConAviso: alegra.cuentasConAviso, config }, { headers: NO_STORE })
+  return Response.json({ listas, listasAlegra: alegra.listas, cuentasConAviso: alegra.cuentasConAviso, config, marcas }, { headers: NO_STORE })
 }

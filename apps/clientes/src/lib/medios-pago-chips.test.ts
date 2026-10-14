@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CHIPS_MEDIO, leerChipsMedio, tonoBadgeDeChip } from "./medios-pago-chips";
+import { MAX_CHIPS_MEDIO, esChipDeAhorro, leerChipsMedio, textoDeAhorro, tonoBadgeDeChip } from "./medios-pago-chips";
 
 describe("leerChipsMedio (tolerante)", () => {
   it("lo ausente o inválido da []", () => {
@@ -29,10 +29,10 @@ describe("leerChipsMedio (tolerante)", () => {
     ).toEqual([{ texto: "Bien", tono: "exito" }]);
   });
 
-  it("recorta el texto y descarta lo que trae HTML o pasa de 30 caracteres", () => {
+  it("recorta el texto y descarta lo que trae HTML o pasa de 40 caracteres", () => {
     expect(leerChipsMedio([{ texto: "  Recomendado ", tono: "info" }])).toEqual([{ texto: "Recomendado", tono: "info" }]);
     expect(leerChipsMedio([{ texto: "<b>Oferta</b>", tono: "info" }])).toEqual([]);
-    expect(leerChipsMedio([{ texto: "a".repeat(31), tono: "info" }])).toEqual([]);
+    expect(leerChipsMedio([{ texto: "a".repeat(41), tono: "info" }])).toEqual([]);
   });
 
   it("muestra a lo sumo 3", () => {
@@ -48,5 +48,15 @@ describe("tonoBadgeDeChip", () => {
     expect(tonoBadgeDeChip("destacado")).toBe("warning");
     expect(tonoBadgeDeChip("exito")).toBe("success");
     expect(tonoBadgeDeChip("info")).toBe("info");
+  });
+});
+
+describe("etiqueta de ahorro", () => {
+  it("se reconoce por {ahorro} y se arma con el monto y la opción", () => {
+    expect(esChipDeAhorro({ texto: "Ahorra {ahorro} frente a {frente}" })).toBe(true);
+    expect(esChipDeAhorro({ texto: "Recomendado" })).toBe(false);
+    expect(textoDeAhorro("Ahorra {ahorro} frente a {frente}", "$ 100", "tarjeta de crédito")).toBe(
+      "Ahorra $ 100 frente a tarjeta de crédito",
+    );
   });
 });

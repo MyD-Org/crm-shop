@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Field, Input, PaymentLogos, RadioGroup, Select, type RadioOption } from "@myd-org/ui";
+import { Alert, Button, Field, Input, PaymentLogos, Select, type RadioOption } from "@myd-org/ui";
 import { fmtPrecio } from "@/lib/format";
 import {
   MARCAS,
@@ -27,7 +27,7 @@ import { enviarCobro } from "@/lib/pagos/payway-cobro-cliente";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { AvisoProcesador } from "@/components/AvisoProcesador";
 import { modalidadesPaywayHabilitadas } from "@/components/pago-opciones";
-import { asegurarCuotasDelPedido, cambiarFormaDelPedido } from "@/lib/checkout-cuotas-cliente";
+import { asegurarCuotasDelPedido } from "@/lib/checkout-cuotas-cliente";
 import {
   avisoCuotasNoDisponibles,
   claveDelPedido,
@@ -40,7 +40,7 @@ import {
 import { SelectorCuotas } from "@/components/checkout/SelectorCuotas";
 import { useOpcionesCuotas } from "@/components/checkout/useOpcionesCuotas";
 import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
-import { IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "@/components/PagoIconos";
+import { IconoCandado, IconoTarjeta, IconoTarjetaDebito, OpcionElegida } from "@/components/PagoIconos";
 
 /**
  * Cobro con tarjeta de crédito o débito con Payway, dentro del sitio: "¿Cómo quiere pagar?" con las dos
@@ -104,6 +104,8 @@ interface Props {
   onCobroEnCurso?: (enCurso: boolean) => void;
   /** "Estamos confirmando" se agotó sin resultado: el checkout vuelve a ofrecer otras salidas. */
   onConfirmacionAgotada?: () => void;
+  /** Modalidad elegida en el paso Pago del checkout: abre directo en ella. Sin valor, las dos opciones. */
+  formaFija?: OpcionCobro | null;
 }
 
 type Errores = Partial<Record<"pan" | "venc" | "cvv" | "titular" | "doc" | "marca", string>>;
@@ -134,6 +136,7 @@ export function PagoPayway({
   iniciarEnConfirmacion = false,
   onCobroEnCurso,
   onConfirmacionAgotada,
+  formaFija = null,
 }: Props) {
   const [estado, setEstado] = useState<Estado>(iniciarEnConfirmacion ? { fase: "pendiente" } : { fase: "formulario" });
   const cobroEnCurso = estado.fase === "procesando";
@@ -150,12 +153,10 @@ export function PagoPayway({
   const habilitadas = modalidadesPaywayHabilitadas(opcionesCobro);
   // Arranca en la modalidad del pedido (si el medio tiene precios por forma) o en la primera habilitada
   // (el débito pasa el pedido a 1 pago al cobrar).
-  const [modalidad, setModalidad] = useState<ModalidadTarjeta>(
-    () => habilitadas.find((m) => m === formaCobroPedido) ?? habilitadas[0] ?? "credito",
+  // La modalidad la eligió el comprador en el paso Pago y el pedido la congela: sin volver a preguntar.
+  const [modalidad] = useState<ModalidadTarjeta>(
+    () => habilitadas.find((m) => m === (formaFija ?? formaCobroPedido)) ?? habilitadas[0] ?? "credito",
   );
-  /** Se está recotizando el pedido para otra modalidad: nada se cobra ni se cambia hasta que el servidor conteste. */
-  const [recotizando, setRecotizando] = useState(false);
-  const [errorForma, setErrorForma] = useState<string | null>(null);
   // null = se usa la sugerencia por el prefijo del número.
   const [marcaElegida, setMarcaElegida] = useState<Marca | null>(null);
   // La marca se detecta por el número: el selector aparece sólo si no se reconoce o si la quiere cambiar.
@@ -228,32 +229,6 @@ export function PagoPayway({
   const sinReconocer = conSeisDigitos && (!sugerida || marcaNoAceptada);
   const avisoMarca = conSeisDigitos && marcaNoAceptada ? validarMarcaDelConvenio(marca, modalidad) : null;
   const mostrarSelectorMarca = cambiarMarca || sinReconocer || marcaElegida !== null || Boolean(errores.marca);
-
-  /**
-   * Con precios por forma de pago, cambiar de modalidad recotiza el pedido ANTES de mostrar la nueva: el
-   * total y el resumen son los de la lista de esa modalidad, y las cuotas vuelven a 1 pago (el débito no
-   * admite cuotas). Si el servidor no lo acepta (cobro en vuelo, demasiados cambios), la modalidad no cambia.
-   */
-  async function elegirModalidad(nueva: ModalidadTarjeta) {
-    if (nueva === modalidad || estado.fase === "procesando" || recotizando) return;
-    if (formaCobroPedido == null || nueva === formaCobroPedido) {
-      setErrorForma(null);
-      setModalidad(nueva);
-      return;
-    }
-    setRecotizando(true);
-    setErrorForma(null);
-    const r = await cambiarFormaDelPedido({ pedidoId, pagoMetodo, forma: nueva });
-    setRecotizando(false);
-    if (!r.ok) {
-      setErrorForma(r.error);
-      return;
-    }
-    setClaveCuotas(null);
-    onPedidoActualizado?.({ cuotas: r.cuotas, total: r.total, formaCobro: r.formaCobro });
-    setModalidad(nueva);
-    cuotas.recargar();
-  }
 
   function validar(): Errores {
     const e: Errores = {};
@@ -517,7 +492,7 @@ export function PagoPayway({
         />
       )}
 
-      <Button type="submit" size="lg" loading={procesando} disabled={procesando || recotizando || config === null}>
+      <Button type="submit" size="lg" loading={procesando} disabled={procesando || config === null}>
         <IconoCandado />
         {procesando ? (
           "Procesando su pago…"
@@ -551,7 +526,7 @@ export function PagoPayway({
         : { description: textoMarcasPayway("credito") }),
       icon: <IconoTarjeta />,
       content: campos,
-      disabled: (procesando && modalidad !== "credito") || recotizando,
+      disabled: procesando && modalidad !== "credito",
     },
     {
       value: "debito",
@@ -561,10 +536,11 @@ export function PagoPayway({
         : { description: textoMarcasPayway("debito") }),
       icon: <IconoTarjetaDebito />,
       content: campos,
-      disabled: (procesando && modalidad !== "debito") || recotizando,
+      disabled: procesando && modalidad !== "debito",
     },
   ];
   const opciones = todas.filter((o) => habilitadas.includes(o.value as ModalidadTarjeta));
+  const elegida = opciones.find((o) => o.value === modalidad) ?? opciones[0];
 
   return (
     <form ref={formRef} onSubmit={pagar} noValidate autoComplete="on" className="flex flex-col gap-4">
@@ -574,20 +550,8 @@ export function PagoPayway({
         </Alert>
       )}
 
-      {errorForma && (
-        <Alert tone="danger" title="No se pudo cambiar la forma de pago">
-          {errorForma}
-        </Alert>
-      )}
 
-      <TituloComoPagar />
-      <RadioGroup
-        legend="¿Cómo quiere pagar?"
-        hideLegend
-        options={opciones}
-        value={modalidad}
-        onValueChange={(v) => void elegirModalidad(v as ModalidadTarjeta)}
-      />
+      {elegida && <OpcionElegida opcion={elegida} />}
 
       <AvisoProcesador>Payway procesa el pago. Los datos de su tarjeta van directo a Payway y no se guardan en nuestro sitio.</AvisoProcesador>
     </form>

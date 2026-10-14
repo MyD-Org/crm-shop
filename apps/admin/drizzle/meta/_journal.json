@@ -610,6 +610,13 @@
       "when": 1793366900000,
       "tag": "0086_tenants_shop_tema",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1793367000000,
+      "tag": "0087_overlay_oculta_en_tienda",
+      "breakpoints": true
     }
   ]
 }

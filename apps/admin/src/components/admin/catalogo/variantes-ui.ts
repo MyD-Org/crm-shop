@@ -104,3 +104,23 @@ export function etiquetaSugerida(nombre: string): string {
 /** Texto de la confirmación para quitar un producto del modelo. */
 export const textoQuitar = (nombre: string): string =>
   `Va a quitar «${nombre}» del modelo. Volverá a mostrarse como un producto propio en la tienda.`
+
+export const TEXTO_MOSTRAR_EN_TIENDA = "Mostrar en la tienda"
+export const AYUDA_DE_BAJA_EN_TIENDA = "De baja en Alegra: no se muestra en la tienda"
+
+export interface EstadoInterruptor {
+  prendido: boolean
+  deshabilitado: boolean
+  ayuda: string | null
+}
+
+/**
+ * Estado del interruptor «Mostrar en la tienda» de una variante. null = sin interruptor (la base de un
+ * grupo armado a mano es el modelo mismo: se oculta con la visibilidad del modelo). Una variante de
+ * baja en Alegra no se muestra nunca: el interruptor queda apagado y deshabilitado, con su ayuda.
+ */
+export function interruptorTienda(v: Pick<VarianteDto, "ocultaEnTienda" | "esAncla" | "status" | "alegraStatus">): EstadoInterruptor | null {
+  if (v.esAncla) return null
+  if (!estaActiva(v)) return { prendido: false, deshabilitado: true, ayuda: AYUDA_DE_BAJA_EN_TIENDA }
+  return { prendido: !v.ocultaEnTienda, deshabilitado: false, ayuda: null }
+}

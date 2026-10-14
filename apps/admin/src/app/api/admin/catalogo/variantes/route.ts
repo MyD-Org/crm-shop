@@ -1,13 +1,17 @@
 import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { avisarShop, conUrlDeFotos, invalidResponse, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
 import { detalleProducto } from "@/lib/catalogo-overlay-repo"
-import { quitarDelGrupo, sumarAGrupo, type ResultadoGrupoManual } from "@/lib/catalogo-variantes-repo"
+import { ocultarVariante, quitarDelGrupo, sumarAGrupo, type ResultadoGrupoManual } from "@/lib/catalogo-variantes-repo"
 
 // POST   /api/admin/catalogo/variantes — suma un producto suelto a un modelo (grupo armado a mano).
 //        Cuerpo: { alegraId, grupoId, etiqueta, orden?, etiquetaAncla? }. `grupoId` es el modelo
 //        elegido: un padre de Alegra, la base de un grupo manual, o un producto suelto que pasa a
 //        ser la base de un grupo nuevo (en ese caso hace falta `etiquetaAncla`).
 // DELETE /api/admin/catalogo/variantes — quita un producto de su grupo. Cuerpo: { alegraId }.
+//
+// PATCH  /api/admin/catalogo/variantes — «Mostrar en la tienda» de una variante. Cuerpo:
+//        { alegraId, ocultaEnTienda }. Escribe sólo `oculta_en_tienda` del overlay propio de la
+//        variante, recalcula el representante del modelo y avisa al Shop.
 //
 // Caso real: el "RGB" es otro producto de Alegra (otro precio) y en la tienda tiene que verse como
 // una opción más del modelo. Las reglas (sólo productos sueltos, un solo grupo por producto, sin
@@ -77,5 +81,25 @@ export async function DELETE(req: Request) {
 
   const { propagado } = await avisarShop(guard.tenantId)
   // El modelo puede haberse disuelto (la base quedó sola): en ese caso sigue existiendo como producto suelto.
+  return Response.json({ ok: true, propagado, producto: await modeloActualizado(guard.tenantId, r.grupoId) }, { headers: NO_STORE })
+}
+
+export async function PATCH(req: Request) {
+  const guard = await requireAdminPlus(req)
+  if (!guard.ok) return guard.response
+
+  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
+  if (!body || typeof body !== "object") return invalidResponse("El cuerpo del pedido no es válido.", "body")
+  if (typeof body.ocultaEnTienda !== "boolean") {
+    return validacionResponse("Indique si la variante se muestra o no en la tienda.", "ocultaEnTienda")
+  }
+
+  const r = await ocultarVariante(guard.tenantId, texto(body.alegraId), body.ocultaEnTienda, guard.user.id)
+  if (r.kind === "invalid") return validacionResponse(r.error, r.campo)
+  if (r.kind === "not_found") {
+    return Response.json({ error: r.error, code: "not_found", campo: r.campo }, { status: 404, headers: NO_STORE })
+  }
+
+  const { propagado } = await avisarShop(guard.tenantId)
   return Response.json({ ok: true, propagado, producto: await modeloActualizado(guard.tenantId, r.grupoId) }, { headers: NO_STORE })
 }

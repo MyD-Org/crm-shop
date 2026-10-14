@@ -8,6 +8,9 @@ import {
   esModelo,
   esSuelto,
   etiquetaSugerida,
+  interruptorTienda,
+  AYUDA_DE_BAJA_EN_TIENDA,
+  TEXTO_MOSTRAR_EN_TIENDA,
   necesitaEtiquetaBase,
   nombreDeVariante,
   resumenPrecio,
@@ -30,6 +33,7 @@ const variante = (o: Partial<VarianteDto> = {}): VarianteDto => ({
   manual: false,
   orden: null,
   esRepresentante: false,
+  ocultaEnTienda: false,
   esAncla: false,
   stockSucursales: [],
   ...o,
@@ -146,5 +150,25 @@ describe("textos", () => {
     expect(AVISO_MODELOS).toBe("Los cambios al modelo se verán en la tienda cuando se active el selector de variantes.")
     expect(textoQuitar("RGB")).toMatch(/^Va a quitar «RGB» del modelo\./)
     for (const t of [AVISO_MODELOS, textoQuitar("x")]) expect(t).not.toMatch(/\b(tu|tus|vos|podés|querés)\b/i)
+  })
+})
+
+describe("interruptorTienda", () => {
+  it("prendido por defecto y habilitado en una variante activa", () => {
+    expect(interruptorTienda(variante())).toEqual({ prendido: true, deshabilitado: false, ayuda: null })
+  })
+  it("apagado cuando está oculta", () => {
+    expect(interruptorTienda(variante({ ocultaEnTienda: true }))).toEqual({ prendido: false, deshabilitado: false, ayuda: null })
+  })
+  it("una variante de baja en Alegra no se muestra: deshabilitado con ayuda", () => {
+    const r = interruptorTienda(variante({ alegraStatus: "inactive" }))
+    expect(r).toEqual({ prendido: false, deshabilitado: true, ayuda: AYUDA_DE_BAJA_EN_TIENDA })
+    expect(AYUDA_DE_BAJA_EN_TIENDA).toBe("De baja en Alegra: no se muestra en la tienda")
+  })
+  it("el ancla de un grupo manual no tiene interruptor propio", () => {
+    expect(interruptorTienda(variante({ esAncla: true }))).toBeNull()
+  })
+  it("textos en usted", () => {
+    expect(TEXTO_MOSTRAR_EN_TIENDA).toBe("Mostrar en la tienda")
   })
 })

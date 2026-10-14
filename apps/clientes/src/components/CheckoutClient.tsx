@@ -61,7 +61,7 @@ import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
 import { CardOpcionPago } from "@/components/checkout/CardOpcionPago";
-import { esChipDeAhorro, textoDeAhorro, type ChipMedio } from "@/lib/medios-pago-chips";
+import { esChipDeAhorro, TEXTO_AHORRO_POR_DEFECTO, textoDeAhorro, type ChipMedio } from "@/lib/medios-pago-chips";
 import { logosTarjetas, type TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import { tarjetasPayway } from "@/lib/pagos/tarjetas-payway";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
@@ -834,12 +834,14 @@ export function CheckoutClient({
   if (totalesRecibidos && totalesRecibidos !== totalesOpciones) setTotalesOpciones(totalesRecibidos);
   // Lo que ahorra la card elegida (transferencia): se repite bajo el total del resumen.
   // Franja de ahorro: sólo en las cards cuyo medio tiene una etiqueta con {ahorro} (la carga el admin).
+  // Transferencia la muestra siempre (con el texto de siempre, salvo que el admin cargue el suyo).
   const ahorroDe = (o: OpcionPago) => {
     const chip = mediosParaElegir.find((m) => m.slug === o.slug)?.chips?.find(esChipDeAhorro);
-    const a = chip ? ahorroFrente(totalesOpciones, opcionesPago, o.clave) : null;
-    if (!chip || !a) return null;
+    const texto = chip?.texto ?? (o.slug === SLUG_TRANSFERENCIA ? TEXTO_AHORRO_POR_DEFECTO : null);
+    const a = texto ? ahorroFrente(totalesOpciones, opcionesPago, o.clave) : null;
+    if (!texto || !a) return null;
     const frente = tituloEnFrase(a.frente, mediosParaElegir.find((m) => m.slug === a.frente.slug)?.nombre ?? "");
-    return { monto: a.monto, texto: textoDeAhorro(chip.texto, fmtPrecio(a.monto), frente) };
+    return { monto: a.monto, texto: textoDeAhorro(texto, fmtPrecio(a.monto), frente) };
   };
   const ahorroSel = opcionSel ? ahorroDe(opcionSel) : null;
 

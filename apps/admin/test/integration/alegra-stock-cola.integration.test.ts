@@ -215,7 +215,8 @@ describe("drenarTenant", () => {
     const r2 = await drenarTenant(config, { deadline: Date.now() + 1_000_000, dormir })
     expect(r2).toMatchObject({ leidos: 140, pendientes: 0, corte: "vacia" })
     for (const id of ids) expect(pedidosDe(id)).toBe(1)
-  })
+    // 200 lecturas contra la base: en CI pasa los 5 s por defecto según la carga del runner.
+  }, 30_000)
 })
 
 describe("drenarTenant: aviso al Shop", () => {

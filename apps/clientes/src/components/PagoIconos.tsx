@@ -1,3 +1,5 @@
+import type { RadioOption } from "@myd-org/ui";
+
 /** Íconos y título compartidos por las pantallas de pago (Mercado Pago y Payway). */
 
 const trazo = {
@@ -42,6 +44,17 @@ export function IconoBilletera() {
   );
 }
 
+export function IconoBanco() {
+  return (
+    <svg {...trazo}>
+      <path d="M3 10h18" />
+      <path d="M12 3l9 5H3z" />
+      <path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8" />
+      <path d="M3 21h18" />
+    </svg>
+  );
+}
+
 /** Flecha "sale del sitio" (la cuenta de Mercado Pago se completa allá). */
 export function IconoSalida() {
   return (
@@ -67,5 +80,24 @@ export function TituloComoPagar() {
     <h2 aria-hidden="true" className="text-lg font-bold text-text">
       ¿Cómo quiere pagar?
     </h2>
+  );
+}
+
+/**
+ * La forma de pago ya elegida en el paso Pago del checkout: su título y lo suyo, sin la pregunta
+ * "¿Cómo quiere pagar?" (para cambiarla está "Cambiar medio de pago").
+ */
+export function OpcionElegida({ opcion }: { opcion: RadioOption }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">{opcion.icon}</span>
+        <div className="flex min-w-0 flex-col gap-1">
+          <h2 className="text-lg font-bold text-text">{opcion.label}</h2>
+          {opcion.media ?? (opcion.description ? <p className="text-sm text-muted">{opcion.description}</p> : null)}
+        </div>
+      </div>
+      {opcion.content}
+    </div>
   );
 }

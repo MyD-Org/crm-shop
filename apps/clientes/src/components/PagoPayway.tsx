@@ -40,7 +40,7 @@ import {
 import { SelectorCuotas } from "@/components/checkout/SelectorCuotas";
 import { useOpcionesCuotas } from "@/components/checkout/useOpcionesCuotas";
 import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
-import { IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "@/components/PagoIconos";
+import { IconoCandado, IconoTarjeta, IconoTarjetaDebito, OpcionElegida, TituloComoPagar } from "@/components/PagoIconos";
 
 /**
  * Cobro con tarjeta de crédito o débito con Payway, dentro del sitio: "¿Cómo quiere pagar?" con las dos
@@ -104,6 +104,8 @@ interface Props {
   onCobroEnCurso?: (enCurso: boolean) => void;
   /** "Estamos confirmando" se agotó sin resultado: el checkout vuelve a ofrecer otras salidas. */
   onConfirmacionAgotada?: () => void;
+  /** Modalidad elegida en el paso Pago del checkout: abre directo en ella. Sin valor, las dos opciones. */
+  formaFija?: OpcionCobro | null;
 }
 
 type Errores = Partial<Record<"pan" | "venc" | "cvv" | "titular" | "doc" | "marca", string>>;
@@ -134,6 +136,7 @@ export function PagoPayway({
   iniciarEnConfirmacion = false,
   onCobroEnCurso,
   onConfirmacionAgotada,
+  formaFija = null,
 }: Props) {
   const [estado, setEstado] = useState<Estado>(iniciarEnConfirmacion ? { fase: "pendiente" } : { fase: "formulario" });
   const cobroEnCurso = estado.fase === "procesando";
@@ -150,8 +153,9 @@ export function PagoPayway({
   const habilitadas = modalidadesPaywayHabilitadas(opcionesCobro);
   // Arranca en la modalidad del pedido (si el medio tiene precios por forma) o en la primera habilitada
   // (el débito pasa el pedido a 1 pago al cobrar).
+  const fija = habilitadas.find((m) => m === formaFija) ?? null;
   const [modalidad, setModalidad] = useState<ModalidadTarjeta>(
-    () => habilitadas.find((m) => m === formaCobroPedido) ?? habilitadas[0] ?? "credito",
+    () => fija ?? habilitadas.find((m) => m === formaCobroPedido) ?? habilitadas[0] ?? "credito",
   );
   /** Se está recotizando el pedido para otra modalidad: nada se cobra ni se cambia hasta que el servidor conteste. */
   const [recotizando, setRecotizando] = useState(false);
@@ -565,6 +569,7 @@ export function PagoPayway({
     },
   ];
   const opciones = todas.filter((o) => habilitadas.includes(o.value as ModalidadTarjeta));
+  const elegida = fija ? opciones.find((o) => o.value === modalidad) : undefined;
 
   return (
     <form ref={formRef} onSubmit={pagar} noValidate autoComplete="on" className="flex flex-col gap-4">
@@ -580,14 +585,20 @@ export function PagoPayway({
         </Alert>
       )}
 
-      <TituloComoPagar />
-      <RadioGroup
-        legend="¿Cómo quiere pagar?"
-        hideLegend
-        options={opciones}
-        value={modalidad}
-        onValueChange={(v) => void elegirModalidad(v as ModalidadTarjeta)}
-      />
+      {elegida ? (
+        <OpcionElegida opcion={elegida} />
+      ) : (
+        <>
+          <TituloComoPagar />
+          <RadioGroup
+            legend="¿Cómo quiere pagar?"
+            hideLegend
+            options={opciones}
+            value={modalidad}
+            onValueChange={(v) => void elegirModalidad(v as ModalidadTarjeta)}
+          />
+        </>
+      )}
 
       <AvisoProcesador>Payway procesa el pago. Los datos de su tarjeta van directo a Payway y no se guardan en nuestro sitio.</AvisoProcesador>
     </form>

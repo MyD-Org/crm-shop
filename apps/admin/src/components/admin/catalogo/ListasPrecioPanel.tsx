@@ -16,7 +16,8 @@ interface Props {
   onCambio: () => void
 }
 
-type Previa = { cambios: CambioPrecios[]; titulo: string; nombre: string }
+/** `volver`: reabre el formulario de donde salió el cambio, con lo que se había cargado. */
+type Previa = { cambios: CambioPrecios[]; titulo: string; nombre: string; volver?: () => void }
 type FormLista = { id: string | null; nombre: string; coeficiente: string; orden: string; privada: boolean }
 type FormEnlace = { listaId: string; clave: string }
 type TipoAjuste = "producto" | "marca" | "categoria"
@@ -25,7 +26,7 @@ type FormAjuste = {
   tipo: TipoAjuste
   marca: string
   categoriaId: string
-  producto: ProductoElegido | null
+  productos: ProductoElegido[]
   coeficiente: string
 }
 
@@ -75,8 +76,8 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
 
   const nombreReferencia = listas?.find((l) => l.esReferencia)?.nombre ?? listas?.[0]?.nombre ?? ""
 
-  const pedirPrevia = (cambios: CambioPrecios[], titulo: string, nombre?: string) =>
-    setPrevia({ cambios, titulo, nombre: nombre ?? nombreReferencia })
+  const pedirPrevia = (cambios: CambioPrecios[], titulo: string, nombre?: string, volver?: () => void) =>
+    setPrevia({ cambios, titulo, nombre: nombre ?? nombreReferencia, volver })
 
   const guardarLista = () => {
     if (!form) return
@@ -89,23 +90,26 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
     const cambio: CambioPrecios = form.id
       ? { op: "editarLista", listaId: form.id, nombre: form.nombre, coeficiente, privada: form.privada, ...(orden !== undefined ? { orden } : {}) }
       : { op: "crearLista", nombre: form.nombre, coeficiente, privada: form.privada, ...(orden !== undefined ? { orden } : {}) }
+    const anterior = form
     setErrorForm("")
     setForm(null)
-    pedirPrevia([cambio], form.id ? `${TEXTOS.listas.editar}: ${form.nombre}` : TEXTOS.listas.nueva, form.nombre)
+    pedirPrevia([cambio], form.id ? `${TEXTOS.listas.editar}: ${form.nombre}` : TEXTOS.listas.nueva, form.nombre, () => setForm(anterior))
   }
 
   const guardarAjuste = () => {
     if (!ajuste) return
     const coeficiente = aPunto(ajuste.coeficiente)
-    const cambio: CambioPrecios =
+    // Por producto: un cambio por producto elegido, todos en la misma vista previa.
+    const cambios: CambioPrecios[] =
       ajuste.tipo === "producto"
-        ? { op: "upsertOverride", listaId: ajuste.listaId, tipo: "producto", alegraId: ajuste.producto?.alegraId ?? "", coeficiente }
+        ? ajuste.productos.map((p) => ({ op: "upsertOverride", listaId: ajuste.listaId, tipo: "producto", alegraId: p.alegraId, coeficiente }))
         : ajuste.tipo === "marca"
-          ? { op: "upsertOverride", listaId: ajuste.listaId, tipo: "marca", marca: ajuste.marca, coeficiente }
-          : { op: "upsertOverride", listaId: ajuste.listaId, tipo: "categoria", categoriaId: ajuste.categoriaId, coeficiente }
+          ? [{ op: "upsertOverride", listaId: ajuste.listaId, tipo: "marca", marca: ajuste.marca, coeficiente }]
+          : [{ op: "upsertOverride", listaId: ajuste.listaId, tipo: "categoria", categoriaId: ajuste.categoriaId, coeficiente }]
     const lista = listas?.find((l) => l.id === ajuste.listaId)
+    const anterior = ajuste
     setAjuste(null)
-    pedirPrevia([cambio], TEXTOS.listas.nuevoAjuste, lista?.nombre)
+    pedirPrevia(cambios, TEXTOS.listas.nuevoAjuste, lista?.nombre, () => setAjuste(anterior))
   }
 
   const textoAjuste = (o: ListaDto["overrides"][number]) => {
@@ -154,8 +158,9 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
     const [alegraAccount, ...resto] = enlace.clave.split("|")
     const lista = listas?.find((l) => l.id === enlace.listaId)
     const cambio: CambioPrecios = { op: "setMapeo", alegraAccount, alegraPriceListId: resto.join("|"), listaId: enlace.listaId }
+    const anterior = enlace
     setEnlace(null)
-    pedirPrevia([cambio], TEXTOS.listas.agregarEnlace, lista?.nombre)
+    pedirPrevia([cambio], TEXTOS.listas.agregarEnlace, lista?.nombre, () => setEnlace(anterior))
   }
 
   return (
@@ -252,7 +257,7 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-sm" style={{ color: "var(--ink-soft)" }}>{TEXTOS.listas.ajustes}</h4>
-              <Button size="sm" variant="ghost" onClick={() => setAjuste({ listaId: l.id, tipo: "marca", marca: "", categoriaId: "", producto: null, coeficiente: "" })}>
+              <Button size="sm" variant="ghost" onClick={() => setAjuste({ listaId: l.id, tipo: "marca", marca: "", categoriaId: "", productos: [], coeficiente: "" })}>
                 {TEXTOS.listas.nuevoAjuste}
               </Button>
             </div>
@@ -414,7 +419,9 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setAjuste(null)}>{TEXTOS.listas.cancelar}</Button>
-            <Button onClick={guardarAjuste}>{TEXTOS.listas.guardar}</Button>
+            <Button onClick={guardarAjuste} disabled={ajuste?.tipo === "producto" && ajuste.productos.length === 0}>
+              {TEXTOS.listas.guardar}
+            </Button>
           </div>
         }
       >
@@ -433,7 +440,7 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
             </Field>
             {ajuste.tipo === "producto" ? (
               <Field label="Producto">
-                <BuscadorProducto elegido={ajuste.producto} onElegir={(p) => setAjuste({ ...ajuste, producto: p })} />
+                <BuscadorProducto elegidos={ajuste.productos} onCambiar={(p) => setAjuste({ ...ajuste, productos: p })} />
               </Field>
             ) : ajuste.tipo === "marca" ? (
               <Field label={TEXTOS.grilla.marca}>
@@ -488,6 +495,13 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
         <VistaPreviaDialog
           open
           onClose={() => setPrevia(null)}
+          onVolver={
+            previa.volver &&
+            (() => {
+              previa.volver?.()
+              setPrevia(null)
+            })
+          }
           cambios={previa.cambios}
           titulo={previa.titulo}
           nombreParaConfirmar={previa.nombre}

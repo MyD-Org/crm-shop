@@ -6,7 +6,7 @@ import { TEST_DATABASE_URL, assertLocalTestDb } from "./db-url"
 
 /**
  * Migración 0087 (variantes ocultables): shop_app lee de `catalog_overlay` la columna nueva
- * `oculta_en_tienda` y nada más, y no escribe. Mismo patrón que tienda-online-grants-0086: se corre el
+ * `oculta_en_tienda` y no escribe. Mismo patrón que tienda-online-grants-0086: se corre el
  * MISMO bloque de GRANTs leído del .sql y se verifica como `shop_app`. Datos inventados.
  */
 
@@ -82,8 +82,11 @@ describe("migración 0087: shop_app y oculta_en_tienda (DB real)", () => {
     expect(r).toEqual({ ok: true, filas: [{ oculta_en_tienda: false }] })
   })
 
-  it("SELECT * → sin permiso (sólo la columna concedida)", async () => {
-    expect(await comoShopApp("SELECT * FROM public.catalog_overlay")).toEqual(SIN_PERMISO)
+  // No se prueba `SELECT *`: la 0038 ya concede SELECT sobre TODA la tabla cuando el rol existe (así
+  // está en prod), así que el resultado depende de si `shop_app` existía al migrar la base de test.
+  it("la columna nueva queda concedida a shop_app", async () => {
+    const [{ ok }] = await sql`SELECT has_column_privilege('shop_app', 'public.catalog_overlay', 'oculta_en_tienda', 'SELECT') AS ok`
+    expect(ok).toBe(true)
   })
 
   it("no escribe", async () => {

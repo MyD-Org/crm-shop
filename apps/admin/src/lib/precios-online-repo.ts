@@ -4,6 +4,8 @@ import { getDb, type Db } from "@/db"
 import {
   alegraContacts,
   alegraCuentas,
+  catalogOverlay,
+  catalogProducts,
   listaPrecioAlegraMapeo,
   listaPrecioCondiciones,
   listaPrecioOverrides,
@@ -138,6 +140,16 @@ async function nombreLibre(tx: Tx, tenantId: string, nombre: string, exceptoId?:
   if (dup.some((d) => d.id !== exceptoId)) throw new PreciosOnlineError(422, "duplicado", MSG_NOMBRE_DUPLICADO)
 }
 
+/** Nombre visible del producto (overlay o Alegra) para el historial del ajuste por producto; null si no existe. */
+async function nombreProducto(tx: Tx, tenantId: string, alegraId: string): Promise<string | null> {
+  const [p] = await tx
+    .select({ nombre: sql<string>`coalesce(${catalogOverlay.nombre}, ${catalogProducts.name})` })
+    .from(catalogProducts)
+    .leftJoin(catalogOverlay, and(eq(catalogOverlay.tenantId, catalogProducts.tenantId), eq(catalogOverlay.alegraId, catalogProducts.alegraId)))
+    .where(and(eq(catalogProducts.tenantId, tenantId), eq(catalogProducts.alegraId, alegraId)))
+  return p?.nombre ?? null
+}
+
 type OverrideRow = typeof listaPrecioOverrides.$inferSelect
 const snapOverride = (o: OverrideRow) => ({
   id: o.id,
@@ -145,6 +157,7 @@ const snapOverride = (o: OverrideRow) => ({
   tipo: o.tipo,
   marca: o.marca,
   categoriaId: o.categoriaId,
+  alegraId: o.alegraId,
   coeficiente: o.coeficiente,
 })
 
@@ -289,6 +302,13 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
           .where(and(eq(shopCategories.tenantId, tenantId), eq(shopCategories.id, c.categoriaId)))
         if (!cat) throw new PreciosOnlineError(404, "categoria_no_existe", "La categoría indicada no existe.")
       }
+      // El historial guarda el nombre del producto: el id solo no le dice nada a quien lo lee.
+      const extra: { productoNombre?: string } = {}
+      if (c.tipo === "producto") {
+        const nombre = await nombreProducto(tx, tenantId, c.alegraId)
+        if (nombre === null) throw new PreciosOnlineError(404, "producto_no_existe", "El producto indicado no existe.")
+        extra.productoNombre = nombre
+      }
       const [previo] = await tx
         .select()
         .from(listaPrecioOverrides)
@@ -297,7 +317,9 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
             eq(listaPrecioOverrides.listaId, lista.id),
             c.tipo === "marca"
               ? and(eq(listaPrecioOverrides.tipo, "marca"), eq(listaPrecioOverrides.marca, c.marca))
-              : and(eq(listaPrecioOverrides.tipo, "categoria"), eq(listaPrecioOverrides.categoriaId, c.categoriaId)),
+              : c.tipo === "producto"
+                ? and(eq(listaPrecioOverrides.tipo, "producto"), eq(listaPrecioOverrides.alegraId, c.alegraId))
+                : and(eq(listaPrecioOverrides.tipo, "categoria"), eq(listaPrecioOverrides.categoriaId, c.categoriaId)),
           ),
         )
       if (previo) {
@@ -307,7 +329,7 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
           .where(eq(listaPrecioOverrides.id, previo.id))
           .returning()
         return [
-          { tipo: "override_edicion", objeto: `override:${n.id}`, listaId: lista.id, antes: snapOverride(previo), despues: snapOverride(n) },
+          { tipo: "override_edicion", objeto: `override:${n.id}`, listaId: lista.id, antes: { ...snapOverride(previo), ...extra }, despues: { ...snapOverride(n), ...extra } },
         ]
       }
       const [n] = await tx
@@ -318,10 +340,11 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
           tipo: c.tipo,
           marca: c.tipo === "marca" ? c.marca : null,
           categoriaId: c.tipo === "categoria" ? c.categoriaId : null,
+          alegraId: c.tipo === "producto" ? c.alegraId : null,
           coeficiente: c.coeficiente,
         })
         .returning()
-      return [{ tipo: "override_alta", objeto: `override:${n.id}`, listaId: lista.id, antes: null, despues: snapOverride(n) }]
+      return [{ tipo: "override_alta", objeto: `override:${n.id}`, listaId: lista.id, antes: null, despues: { ...snapOverride(n), ...extra } }]
     }
     case "borrarOverride": {
       const [o] = await tx
@@ -330,7 +353,9 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
         .where(and(eq(listaPrecioOverrides.tenantId, tenantId), eq(listaPrecioOverrides.id, c.overrideId)))
       if (!o) throw new PreciosOnlineError(404, "override_no_existe", "El ajuste indicado no existe.")
       await tx.delete(listaPrecioOverrides).where(eq(listaPrecioOverrides.id, o.id))
-      return [{ tipo: "override_baja", objeto: `override:${o.id}`, listaId: o.listaId, antes: snapOverride(o), despues: null }]
+      const nombre = o.tipo === "producto" && o.alegraId ? await nombreProducto(tx, tenantId, o.alegraId) : null
+      const antes = nombre ? { ...snapOverride(o), productoNombre: nombre } : snapOverride(o)
+      return [{ tipo: "override_baja", objeto: `override:${o.id}`, listaId: o.listaId, antes, despues: null }]
     }
     case "setUmbrales": {
       const previo = await asegurarConfig(tx, tenantId)
@@ -531,7 +556,9 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
       const existentes = new Set(
         (await tx.select({ id: shopCategories.id }).from(shopCategories).where(eq(shopCategories.tenantId, tenantId))).map((x) => x.id),
       )
-      const restaurables = c.overrides.filter((o) => o.tipo === "marca" || (o.categoriaId && existentes.has(o.categoriaId)))
+      const restaurables = c.overrides.filter(
+        (o) => o.tipo === "marca" || o.tipo === "producto" || (o.categoriaId && existentes.has(o.categoriaId)),
+      )
       const nuevos = restaurables.length
         ? await tx
             .insert(listaPrecioOverrides)
@@ -542,6 +569,7 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
                 tipo: o.tipo,
                 marca: o.marca,
                 categoriaId: o.categoriaId,
+                alegraId: o.alegraId ?? null,
                 coeficiente: o.coeficiente,
               })),
             )
@@ -940,9 +968,10 @@ async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Pro
             alegraPriceListId: String(m.alegraPriceListId),
           })),
           overrides: ((a.overrides as Record<string, unknown>[] | undefined) ?? []).map((o) => ({
-            tipo: o.tipo as "marca" | "categoria",
+            tipo: o.tipo as "marca" | "categoria" | "producto",
             marca: (o.marca as string | null) ?? null,
             categoriaId: (o.categoriaId as string | null) ?? null,
+            alegraId: (o.alegraId as string | null) ?? null,
             coeficiente: String(o.coeficiente),
           })),
         },
@@ -961,7 +990,9 @@ async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Pro
       cambios = [
         a.tipo === "marca"
           ? { op: "upsertOverride", listaId: String(a.listaId), tipo: "marca", marca: String(a.marca), coeficiente: String(a.coeficiente) }
-          : {
+          : a.tipo === "producto"
+            ? { op: "upsertOverride", listaId: String(a.listaId), tipo: "producto", alegraId: String(a.alegraId), coeficiente: String(a.coeficiente) }
+            : {
               op: "upsertOverride",
               listaId: String(a.listaId),
               tipo: "categoria",
@@ -1045,10 +1076,14 @@ export interface ListaDto {
   mapeos: { id: string; alegraAccount: string; alegraPriceListId: string }[]
   overrides: {
     id: string
-    tipo: "marca" | "categoria"
+    tipo: "marca" | "categoria" | "producto"
     marca: string | null
     categoriaId: string | null
     categoriaNombre: string | null
+    alegraId: string | null
+    /** Nombre y código del producto (ajuste por producto); null si ya no está en el catálogo. */
+    productoNombre: string | null
+    productoCodigo: string | null
     coeficiente: string
   }[]
 }
@@ -1061,9 +1096,22 @@ export async function listarListas(tenantId: string): Promise<ListaDto[]> {
     .where(eq(listasPrecioOnline.tenantId, tenantId))
     .orderBy(asc(listasPrecioOnline.orden), asc(listasPrecioOnline.nombre))
   const ovs = await db
-    .select({ o: listaPrecioOverrides, categoriaNombre: shopCategories.nombre })
+    .select({
+      o: listaPrecioOverrides,
+      categoriaNombre: shopCategories.nombre,
+      productoNombre: sql<string | null>`coalesce(${catalogOverlay.nombre}, ${catalogProducts.name})`,
+      productoCodigo: catalogProducts.code,
+    })
     .from(listaPrecioOverrides)
     .leftJoin(shopCategories, eq(shopCategories.id, listaPrecioOverrides.categoriaId))
+    .leftJoin(
+      catalogProducts,
+      and(eq(catalogProducts.tenantId, listaPrecioOverrides.tenantId), eq(catalogProducts.alegraId, listaPrecioOverrides.alegraId)),
+    )
+    .leftJoin(
+      catalogOverlay,
+      and(eq(catalogOverlay.tenantId, listaPrecioOverrides.tenantId), eq(catalogOverlay.alegraId, listaPrecioOverrides.alegraId)),
+    )
     .where(eq(listaPrecioOverrides.tenantId, tenantId))
     .orderBy(asc(listaPrecioOverrides.tipo), asc(listaPrecioOverrides.marca))
   const enlaces = await db
@@ -1086,10 +1134,13 @@ export async function listarListas(tenantId: string): Promise<ListaDto[]> {
       .filter((x) => x.o.listaId === l.id)
       .map((x) => ({
         id: x.o.id,
-        tipo: x.o.tipo as "marca" | "categoria",
+        tipo: x.o.tipo as "marca" | "categoria" | "producto",
         marca: x.o.marca,
         categoriaId: x.o.categoriaId,
         categoriaNombre: x.categoriaNombre,
+        alegraId: x.o.alegraId,
+        productoNombre: x.productoNombre,
+        productoCodigo: x.productoCodigo,
         coeficiente: x.o.coeficiente,
       })),
   }))

@@ -391,6 +391,34 @@ describe("revertir (solo la última entrada vigente de cada objeto)", () => {
     expect(listas[1].overrides).toMatchObject([{ marca: "x", coeficiente: "1.4000" }])
   })
 
+  it("ajuste por producto: alta, edición con nombre en el historial, baja revertida y producto inexistente", async () => {
+    await seedProducto(T, { alegraId: "1", costo: "100", brand: "Marca X" })
+    await seedProducto(T, { alegraId: "2", costo: "100", brand: "Marca X" })
+    await previaYAplicar([crear("Lista A", "1.5")])
+    const [lista] = await listarListas(T)
+    await previaYAplicar([{ op: "upsertOverride", listaId: lista.id, tipo: "marca", marca: "marca x", coeficiente: "1.4" }])
+    await previaYAplicar([{ op: "upsertOverride", listaId: lista.id, tipo: "producto", alegraId: "1", coeficiente: "1.1" }], { confirmaExtra: true }) // 140 -> 110
+    expect((await fila("1")).precioOnlineRef).toBe("110.00")
+    expect((await fila("2")).precioOnlineRef).toBe("140.00")
+    await previaYAplicar([{ op: "upsertOverride", listaId: lista.id, tipo: "producto", alegraId: "1", coeficiente: "1.2" }])
+    const [l] = await listarListas(T)
+    const ov = l.overrides.find((o) => o.tipo === "producto")!
+    expect(ov).toMatchObject({ alegraId: "1", coeficiente: "1.2000", productoNombre: expect.any(String) })
+    expect(l.overrides.filter((o) => o.tipo === "producto")).toHaveLength(1) // la edición no duplica
+    const edicion = (await listarHistorial(T, { start: 0, limit: 1 })).items[0]
+    expect(edicion).toMatchObject({ tipo: "override_edicion", despues: { tipo: "producto", alegraId: "1", productoNombre: ov.productoNombre } })
+
+    await previaYAplicar([{ op: "borrarOverride", overrideId: ov.id }])
+    expect((await fila("1")).precioOnlineRef).toBe("140.00") // vuelve a la marca
+    const baja = (await listarHistorial(T, { start: 0, limit: 1 })).items[0]
+    const previa = await previsualizarReversion(T, baja.id)
+    await aplicarReversion(T, ANA, baja.id, { baseVersion: previa.resultado.baseVersion, huella: previa.resultado.huella })
+    expect((await fila("1")).precioOnlineRef).toBe("120.00")
+
+    const e = await error(previsualizar(T, [{ op: "upsertOverride", listaId: lista.id, tipo: "producto", alegraId: "no-existe", coeficiente: "1.1" }]))
+    expect(e).toMatchObject({ status: 404, code: "producto_no_existe" })
+  })
+
   it("revertir un alta borra la lista; revertir un umbral lo restaura; ajustes se restauran", async () => {
     await previaYAplicar([crear("Lista A", "1.5")])
     await previaYAplicar([{ op: "setUmbrales", confirmacionPct: "35", retencionPct: "5" }])

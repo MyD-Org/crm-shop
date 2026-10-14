@@ -46,6 +46,7 @@ export const TEXTOS = {
   } as Record<string, string>,
   origen: {
     general: "General",
+    producto: "Ajuste del producto",
     marca: (m: string) => `Marca ${m}`,
     categoria: (n: string, heredado: boolean) => `Categoría ${n}${heredado ? " (heredado)" : ""}`,
   },
@@ -66,8 +67,10 @@ export const TEXTOS = {
     guardar: "Revisar cambio",
     cancelar: "Cancelar",
     ajustes: "Ajustes por marca o categoría",
-    ajustesAyuda: "El ajuste de marca tiene prioridad sobre el de categoría, y éste sobre el coeficiente general.",
+    ajustesAyuda:
+      "El ajuste de producto tiene prioridad sobre el de marca, éste sobre el de categoría, y éste sobre el coeficiente general.",
     nuevoAjuste: "Nuevo ajuste",
+    ajusteProducto: "Por producto",
     ajusteMarca: "Por marca",
     ajusteCategoria: "Por categoría",
     quitarAjuste: "Quitar",
@@ -223,6 +226,7 @@ export function fmtPct(n: number | null | undefined): string {
 }
 
 export function textoOrigen(o: OrigenCoeficiente): string {
+  if (o.tipo === "producto") return TEXTOS.origen.producto
   if (o.tipo === "marca") return TEXTOS.origen.marca(o.marca ?? "")
   if (o.tipo === "categoria") return TEXTOS.origen.categoria(o.categoriaNombre ?? "sin nombre", Boolean(o.heredado))
   return TEXTOS.origen.general

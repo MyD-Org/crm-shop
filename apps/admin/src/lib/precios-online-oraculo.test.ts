@@ -33,9 +33,9 @@ const ovCat = (categoriaId: string, coeficiente: string): OverrideOraculo => ({
 })
 
 const calc = (
-  p: { costo: string | null; marca?: string | null; categorias?: string[] },
+  p: { alegraId?: string; costo: string | null; marca?: string | null; categorias?: string[] },
   l: ListaOraculo,
-) => calcularOraculo({ costo: p.costo, marca: p.marca ?? null, categorias: p.categorias ?? [] }, [l], CATEGORIAS)[0]
+) => calcularOraculo({ alegraId: p.alegraId, costo: p.costo, marca: p.marca ?? null, categorias: p.categorias ?? [] }, [l], CATEGORIAS)[0]
 
 describe("redondeo half-up sobre el neto", () => {
   it("33,33 x 1,25 = 41,6625 => 41,66", () => expect(precioNeto("33.33", "1.25")).toBe("41.66"))
@@ -68,6 +68,15 @@ describe("precedencia del coeficiente", () => {
       origen: "marca:marca x",
       coef: "1.5000",
     })
+  })
+  it("producto gana sobre marca y categoría", () => {
+    const l = lista("1.6", [{ tipo: "producto", alegraId: "p1", coeficiente: "1.1" }, ovMarca("marca x", "1.5"), ovCat("cat-raiz", "1.3")])
+    expect(calc({ alegraId: "p1", costo: "100", marca: "marca x", categorias: ["cat-raiz"] }, l)).toMatchObject({
+      origen: "producto:p1",
+      coef: "1.1000",
+      precio: "110.00",
+    })
+    expect(calc({ alegraId: "p2", costo: "100", marca: "marca x" }, l)).toMatchObject({ origen: "marca:marca x" })
   })
   it("marca vacía no aplica override de marca", () => {
     expect(calc({ costo: "100", marca: null }, lista("1.6", [ovMarca("marca x", "1.5")]))).toMatchObject({ origen: "general" })

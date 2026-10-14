@@ -16,6 +16,7 @@ import {
   seedLista,
   seedOverrideCategoria,
   seedOverrideMarca,
+  seedOverrideProducto,
   seedProducto,
 } from "./precios-online-helpers"
 
@@ -76,6 +77,24 @@ describe("calcular_precios_online: precedencia y redondeo", () => {
     expect(por.c).toMatchObject({ coef: "1.3000", origen: `categoria:${cat}` })
     expect(por.g).toMatchObject({ origen: "general" })
     expect(por.v).toMatchObject({ origen: "general" })
+  })
+
+  it("producto gana sobre marca y categoría, solo en su lista; ajuste de otro tenant no pega", async () => {
+    const lista = await seedLista(T, "Lista A", "1.6", { esReferencia: true })
+    const otra = await seedLista(T, "Lista B", "1.8", { orden: 1 })
+    const cat = await seedCategoria(T, "cat")
+    await seedOverrideCategoria(T, lista, cat, "1.3")
+    await seedOverrideMarca(T, lista, "marca x", "1.5")
+    await seedOverrideProducto(T, lista, "p", "1.1")
+    const listaOtro = await seedLista(OTRO, "Lista A", "2", { esReferencia: true })
+    await seedOverrideProducto(OTRO, listaOtro, "q", "1.05")
+    await seedProducto(T, { alegraId: "p", costo: "100", brand: "Marca X", categoriaId: cat })
+    await seedProducto(T, { alegraId: "q", costo: "100", brand: "Marca X" })
+    const filas = await calcular(T)
+    const de = (id: string, l: string) => filas.find((f) => f.alegra_id === id && f.lista_id === l)
+    expect(de("p", lista)).toMatchObject({ coef: "1.1000", origen: "producto:p", precio: "110.00" })
+    expect(de("p", otra)).toMatchObject({ coef: "1.8000", origen: "general" })
+    expect(de("q", lista)).toMatchObject({ coef: "1.5000", origen: "marca:marca x" })
   })
 
   it("redondeo half-up: 33,33 x 1,25 = 41,66 y 0,02 x 1,25 = 0,03", async () => {
@@ -203,11 +222,26 @@ describe("calcular_precios_online contra el oráculo (barrido con semilla fija)"
       productos.push(p)
       await seedProducto(T, { alegraId: p.alegraId, costo: p.costo, brand: p.marca, categoriaId: p.cat })
     }
+    // Ajustes por producto (rng propio: no altera la secuencia del resto del barrido).
+    const rp = rng(20261014)
+    for (const l of listasOra) {
+      for (const p of productos) {
+        if (rp() < 0.1) {
+          const c = (1 + rp() * 1.5).toFixed(4)
+          await seedOverrideProducto(T, l.id, p.alegraId, c)
+          l.overrides.push({ tipo: "producto", alegraId: p.alegraId, coeficiente: c })
+        }
+      }
+    }
     const sql_ = await calcular(T)
     const porClave = new Map(sql_.map((f) => [`${f.alegra_id}|${f.lista_id}`, f]))
     let comparados = 0
     for (const p of productos) {
-      const esperado = calcularOraculo({ costo: p.costo, marca: p.marca, categorias: p.cat ? [p.cat] : [] }, listasOra, cats)
+      const esperado = calcularOraculo(
+        { alegraId: p.alegraId, costo: p.costo, marca: p.marca, categorias: p.cat ? [p.cat] : [] },
+        listasOra,
+        cats,
+      )
       for (const e of esperado) {
         const f = porClave.get(`${p.alegraId}|${e.listaId}`)
         expect(f, `${p.alegraId}`).toBeDefined()

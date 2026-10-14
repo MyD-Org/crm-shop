@@ -6,6 +6,7 @@ import { Alert, Badge, Button, Checkbox, Dialog, EmptyState, Field, Input, Selec
 import type { CambioPrecios } from "@/lib/precios-online-cambios"
 import type { ConfigPrecios, ListaAlegraDto, ListaDto, MarcaDto } from "@/lib/precios-online-repo"
 import { VistaPreviaDialog } from "./VistaPreviaDialog"
+import { BuscadorProducto, type ProductoElegido } from "./BuscadorProducto"
 import { TEXTOS, fmtCoef } from "./precios-online-textos"
 import { api, ErrorApi, type CategoriaDto } from "./tipos"
 
@@ -18,14 +19,22 @@ interface Props {
 type Previa = { cambios: CambioPrecios[]; titulo: string; nombre: string }
 type FormLista = { id: string | null; nombre: string; coeficiente: string; orden: string; privada: boolean }
 type FormEnlace = { listaId: string; clave: string }
-type FormAjuste = { listaId: string; tipo: "marca" | "categoria"; marca: string; categoriaId: string; coeficiente: string }
+type TipoAjuste = "producto" | "marca" | "categoria"
+type FormAjuste = {
+  listaId: string
+  tipo: TipoAjuste
+  marca: string
+  categoriaId: string
+  producto: ProductoElegido | null
+  coeficiente: string
+}
 
 /** "1,6" -> "1.6": el servidor valida el formato. */
 const aPunto = (v: string) => v.trim().replace(",", ".")
 
 /**
  * Solapa "Listas": alta, edición, referencia, activación y baja de las listas de precio online,
- * sus ajustes por marca o categoría y los umbrales. Ningún cambio se aplica directo: todos pasan
+ * sus ajustes por producto, marca o categoría y los umbrales. Ningún cambio se aplica directo: todos pasan
  * por la vista previa (VistaPreviaDialog), que muestra el efecto y exige confirmación.
  */
 export function ListasPrecioPanel({ categorias, onCambio }: Props) {
@@ -89,12 +98,23 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
     if (!ajuste) return
     const coeficiente = aPunto(ajuste.coeficiente)
     const cambio: CambioPrecios =
-      ajuste.tipo === "marca"
-        ? { op: "upsertOverride", listaId: ajuste.listaId, tipo: "marca", marca: ajuste.marca, coeficiente }
-        : { op: "upsertOverride", listaId: ajuste.listaId, tipo: "categoria", categoriaId: ajuste.categoriaId, coeficiente }
+      ajuste.tipo === "producto"
+        ? { op: "upsertOverride", listaId: ajuste.listaId, tipo: "producto", alegraId: ajuste.producto?.alegraId ?? "", coeficiente }
+        : ajuste.tipo === "marca"
+          ? { op: "upsertOverride", listaId: ajuste.listaId, tipo: "marca", marca: ajuste.marca, coeficiente }
+          : { op: "upsertOverride", listaId: ajuste.listaId, tipo: "categoria", categoriaId: ajuste.categoriaId, coeficiente }
     const lista = listas?.find((l) => l.id === ajuste.listaId)
     setAjuste(null)
     pedirPrevia([cambio], TEXTOS.listas.nuevoAjuste, lista?.nombre)
+  }
+
+  const textoAjuste = (o: ListaDto["overrides"][number]) => {
+    if (o.tipo === "producto") {
+      const nombre = o.productoNombre ?? `${o.alegraId} (ya no está en el catálogo)`
+      return `Producto ${nombre}${o.productoCodigo ? ` · ${o.productoCodigo}` : ""}`
+    }
+    if (o.tipo === "marca") return `Marca ${marcas.find((m) => m.clave === o.marca)?.nombre ?? o.marca}`
+    return `Categoría ${o.categoriaNombre ?? ""}`
   }
 
   const [avanzados, setAvanzados] = useState(false)
@@ -232,7 +252,7 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-sm" style={{ color: "var(--ink-soft)" }}>{TEXTOS.listas.ajustes}</h4>
-              <Button size="sm" variant="ghost" onClick={() => setAjuste({ listaId: l.id, tipo: "marca", marca: "", categoriaId: "", coeficiente: "" })}>
+              <Button size="sm" variant="ghost" onClick={() => setAjuste({ listaId: l.id, tipo: "marca", marca: "", categoriaId: "", producto: null, coeficiente: "" })}>
                 {TEXTOS.listas.nuevoAjuste}
               </Button>
             </div>
@@ -242,7 +262,7 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
               <ul className="flex flex-col gap-1">
                 {l.overrides.map((o) => (
                   <li key={o.id} className="flex items-center gap-2 text-sm">
-                    <span>{o.tipo === "marca" ? `Marca ${marcas.find((m) => m.clave === o.marca)?.nombre ?? o.marca}` : `Categoría ${o.categoriaNombre ?? ""}`}</span>
+                    <span className="min-w-0 truncate">{textoAjuste(o)}</span>
                     <span className="tabular-nums">× {fmtCoef(o.coeficiente)}</span>
                     <span className="flex-1" />
                     <Button size="sm" variant="ghost" onClick={() => pedirPrevia([{ op: "borrarOverride", overrideId: o.id }], TEXTOS.listas.quitarAjuste, l.nombre)}>
@@ -403,14 +423,19 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
             <Field label="Tipo de ajuste">
               <Select
                 value={ajuste.tipo}
-                onValueChange={(v) => setAjuste({ ...ajuste, tipo: v as "marca" | "categoria" })}
+                onValueChange={(v) => setAjuste({ ...ajuste, tipo: v as TipoAjuste })}
                 options={[
+                  { value: "producto", label: TEXTOS.listas.ajusteProducto },
                   { value: "marca", label: TEXTOS.listas.ajusteMarca },
                   { value: "categoria", label: TEXTOS.listas.ajusteCategoria },
                 ]}
               />
             </Field>
-            {ajuste.tipo === "marca" ? (
+            {ajuste.tipo === "producto" ? (
+              <Field label="Producto">
+                <BuscadorProducto elegido={ajuste.producto} onElegir={(p) => setAjuste({ ...ajuste, producto: p })} />
+              </Field>
+            ) : ajuste.tipo === "marca" ? (
               <Field label={TEXTOS.grilla.marca}>
                 <Select
                   value={ajuste.marca}

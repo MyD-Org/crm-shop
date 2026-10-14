@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import temaFixture from "./__fixtures__/tema-contrato.json"
+import partida from "./__fixtures__/marca-partida.json"
 import {
   CAMPOS_IMAGEN,
   PALETAS_TEMA,
@@ -9,6 +10,7 @@ import {
   formDesdeDatos,
   formVacio,
   mensajeSubida,
+  placeholdersMarca,
 } from "./tienda-online-form"
 
 describe("formDesdeDatos / construirPayload", () => {
@@ -129,5 +131,48 @@ describe("mensajeSubida", () => {
     const generico = mensajeSubida(null)
     expect(generico).toMatch(/Inténtelo/)
     expect(generico).not.toMatch(/\b(tu|vos|probá)\b/i)
+  })
+})
+
+describe("placeholdersMarca (valores en uso cuando el campo está vacío)", () => {
+  it("base central: los textos de partida del fixture", () => {
+    const p = placeholdersMarca("central", "")
+    expect(p).toMatchObject({
+      nombre: partida.central.nombre,
+      titulo: partida.central.titulo,
+      descripcion: partida.central.descripcion,
+      ogEyebrow: partida.central.ogTextos.eyebrow,
+      ogBajada: partida.central.ogTextos.bajada,
+      ogLugar: partida.central.ogTextos.lugar,
+      emailContacto: "",
+      dependeDelEntorno: false,
+    })
+  })
+
+  it("base central con nombre propio: el título deriva del nombre", () => {
+    const p = placeholdersMarca("central", "  Tienda Uno ")
+    expect(p.titulo).toBe("Tienda Uno — Tienda Online")
+    expect(p.descripcion).toBe(partida.central.descripcion)
+  })
+
+  it("base central con el nombre de partida escrito: título de partida", () => {
+    expect(placeholdersMarca("central", partida.central.nombre).titulo).toBe(partida.central.titulo)
+  })
+
+  it("base genérica sin nombre: no inventa nada (depende del entorno del Shop)", () => {
+    const p = placeholdersMarca("generica", "")
+    expect(p).toEqual({
+      nombre: "", titulo: "", descripcion: "", ogEyebrow: "", ogBajada: "", ogLugar: "", emailContacto: "",
+      dependeDelEntorno: true,
+    })
+  })
+
+  it("base genérica con nombre: título y descripción derivados; textos de la imagen vacíos", () => {
+    const p = placeholdersMarca("generica", "Tienda Uno")
+    expect(p.titulo).toBe("Tienda Uno — Tienda Online")
+    expect(p.descripcion).toBe("Tienda online de Tienda Uno.")
+    expect(p.nombre).toBe("")
+    expect(p.dependeDelEntorno).toBe(true)
+    expect(p.ogEyebrow).toBe("")
   })
 })

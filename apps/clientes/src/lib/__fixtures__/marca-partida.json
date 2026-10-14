@@ -1,0 +1,19 @@
+{
+  "descripcion": "Textos de partida de la marca de la tienda: lo que el Shop muestra cuando un campo de shop_marca está vacío. Copia idéntica en admin y clientes; el test del Shop la compara contra MARCA_POR_DEFECTO y resolverMarca. Son los textos de la base central, ya presentes en el código del Shop.",
+  "central": {
+    "nombre": "Central LED",
+    "titulo": "Central LED — Tienda Online",
+    "descripcion": "Iluminación, materiales eléctricos, herramientas y mucho más en Puerto Iguazú, Misiones. Stock en tiempo real.",
+    "ogTextos": {
+      "eyebrow": "ILUMINACIÓN · ELECTRICIDAD",
+      "bajada": "Iluminación, materiales eléctricos y mucho más",
+      "lugar": "Tienda online · Puerto Iguazú, Misiones"
+    },
+    "tituloConNombre": "{nombre} — Tienda Online"
+  },
+  "generica": {
+    "tituloConNombre": "{nombre} — Tienda Online",
+    "descripcionConNombre": "Tienda online de {nombre}.",
+    "ogTextos": { "eyebrow": "", "bajada": "", "lugar": "" }
+  }
+}

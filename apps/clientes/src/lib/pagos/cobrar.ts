@@ -17,7 +17,9 @@ import {
   convieneReintentar,
   esCredencialRechazada,
   type DatosAntifraude,
+  type DatosPago,
 } from "@/lib/pagos/tipos";
+import { infoAdicionalDelPedido, sanearDeviceId, sanearIssuerId } from "@/lib/pagos/calidad-cobro";
 import { proveedorPago, rasgosProcesador } from "@/lib/pagos";
 import { credencialesMercadoPago, hayCuentaConfigurada } from "@/lib/pagos/credenciales";
 import {
@@ -50,6 +52,10 @@ interface Body {
   bin?: unknown;
   /** Cuenta con la que el navegador tokenizó la tarjeta (la que le dio el servidor). Se valida acá. */
   cuenta?: unknown;
+  /** Emisor de la tarjeta que informó el formulario. Pista para el procesador, se sanea acá. */
+  issuerId?: unknown;
+  /** Id de dispositivo del script de seguridad del procesador. Se sanea acá. */
+  deviceId?: unknown;
 }
 
 /** Pedido cancelado, tomado por un operador o vencido. Ver `motivoNoCobrable`. */
@@ -361,6 +367,33 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
   }
 
   /**
+   * Datos opcionales del cobro con tarjeta que ayudan al procesador a aprobar más pagos (sólo si los
+   * aprovecha). Las líneas, el comprador y la entrega salen del pedido congelado; del navegador sólo se
+   * aceptan el emisor y el id de dispositivo, saneados, que no deciden monto, cuenta ni cuotas. NO
+   * bloquea: un dato inválido se descarta y, si las líneas no se pueden leer, se cobra sin ellas.
+   */
+  let calidad: Pick<DatosPago, "issuerId" | "deviceId" | "infoAdicional"> = {};
+  if (proveedor.aceptaInfoAdicional && medio === "tarjeta") {
+    const issuerId = sanearIssuerId(body.issuerId);
+    const deviceId = sanearDeviceId(body.deviceId);
+    let lineas: Awaited<ReturnType<typeof getItemsParaAntifraude>> = [];
+    try {
+      lineas = antifraude?.items ?? (await getItemsParaAntifraude(pedido.id));
+    } catch (err) {
+      console.error(
+        `[/api/pagos/${proveedor.id}] pedido=${pedido.id}: no se pudieron leer las líneas del pedido; se cobra sin ese dato`,
+        err,
+      );
+    }
+    const infoAdicional = infoAdicionalDelPedido(pedido, lineas);
+    calidad = {
+      ...(issuerId ? { issuerId } : {}),
+      ...(deviceId ? { deviceId } : {}),
+      ...(infoAdicional ? { infoAdicional } : {}),
+    };
+  }
+
+  /**
    * Un intento a la vez. Si hay otro abierto se intenta cerrarlo (cancelándolo
    * en Mercado Pago); si no se puede, el comprador espera. Dos pagos abiertos
    * pueden aprobarse los dos.
@@ -440,6 +473,7 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
       ...(referenciaPrevia ? { intentoId } : {}),
       ...(proveedor.requiereBin ? { bin } : {}),
       ...(antifraude ? { antifraude } : {}),
+      ...calidad,
       /**
        * Mercado Pago EXIGE `payer.email`: sin él responde 400 "Params Error",
        * sin decir cuál parámetro falta.

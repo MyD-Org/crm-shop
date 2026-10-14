@@ -30,6 +30,7 @@ import { SelectorCuotas } from "./checkout/SelectorCuotas";
 import { binValido } from "./checkout/consultor-cuotas";
 import { useOpcionesCuotas } from "./checkout/useOpcionesCuotas";
 import { alEstarListo, alFallarBrick, alVencerPlazo, iniciarPlazoCarga } from "./pago-mp-carga";
+import { cargarSeguridadMP, deviceIdMP } from "./pago-mp-seguridad";
 import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "./PagoMercadoPagoAvisos";
 import { cambioDeCuenta } from "@/lib/pagos/cuenta-rechazada-cliente";
 
@@ -292,7 +293,10 @@ export function PagoMercadoPago({
     const datos = formData as {
       token?: string;
       payment_method_id?: string;
+      issuer_id?: string | number;
     };
+    // Id de dispositivo del script de seguridad de Mercado Pago, si ya lo generó (opcional).
+    const deviceId = deviceIdMP();
 
     // Las cuotas son las de nuestro desplegable (el Brick va en un pago). Débito: siempre 1.
     const elegida = opcion === "credito" ? eleccion : unPago;
@@ -314,6 +318,10 @@ export function PagoMercadoPago({
           cuotas: elegida.cuotas,
           metodoPagoId: datos?.payment_method_id,
           ...(bin ? { bin } : {}),
+          // Emisor de la tarjeta e id de dispositivo: ayudan a Mercado Pago a aprobar el pago. El
+          // servidor los sanea y no deciden monto, cuenta ni cuotas.
+          ...(datos?.issuer_id ? { issuerId: datos.issuer_id } : {}),
+          ...(deviceId ? { deviceId } : {}),
           // La cuenta con la que se tokenizó: el servidor la valida contra la del pedido.
           ...(cuentaCobro ? { cuenta: cuentaCobro } : {}),
         }),
@@ -417,6 +425,9 @@ export function PagoMercadoPago({
     // El SDK puede recuperarse de un error de carga. Esto nunca borra un
     // rechazo real ni modifica un pago que ya se está procesando.
     setEstado(alEstarListo);
+    // Con el formulario de tarjeta listo, el script de seguridad de Mercado Pago (una sola vez; si el
+    // SDK ya lo cargó, no se duplica). El id que genera se lee al enviar el pago.
+    cargarSeguridadMP();
   }, []);
 
   /**

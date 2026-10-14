@@ -148,6 +148,31 @@ las credenciales (`mercadoPagoConfigurado()`); `pagosDisponibles()` y el flag `p
    un timeout o un 5xx queda abierta, porque el pago pudo haberse creado igual.
 6. El webhook confirma o corrige más tarde.
 
+### Datos de calidad del cobro con tarjeta
+
+Además de lo obligatorio, el pago con tarjeta lleva tres datos opcionales que
+Mercado Pago usa en su control de fraude (aprueba más pagos) y en el puntaje de
+calidad de la integración. **Ninguno bloquea**: si falta o es inválido, se cobra
+igual sin él (`lib/pagos/calidad-cobro.ts`, rasgo `aceptaInfoAdicional` del
+proveedor).
+
+- `issuer_id`: el emisor que devuelve el Brick en `formData`. Viaja del navegador
+  como `issuerId`, se sanea (sólo dígitos, máx. 20) y va como número. Es una
+  pista: no decide monto, cuenta ni cuotas.
+- `additional_info`: `items` (hasta 50 líneas de `order_items`: código o id de
+  Alegra, nombre, cantidad y precio unitario con IVA), `payer` (nombre de contacto
+  partido en el primer espacio) y `shipments.receiver_address` sólo si el pedido
+  se envía y tiene dirección. Sale **todo del pedido persistido**, nunca del body.
+- Id de dispositivo: con el Brick listo se carga
+  `https://www.mercadopago.com/v2/security.js` con `view="checkout"`
+  (`components/pago-mp-seguridad.ts`; una sola vez, y no se duplica si el SDK ya
+  lo cargó). Al enviar se lee `window.MP_DEVICE_SESSION_ID`, viaja como
+  `deviceId`, se sanea (letras, dígitos, `.`, `_`, `-`; máx. 100) y va en el
+  header `X-meli-session-id` del `POST /v1/payments`. La CSP no cambia: el script
+  y su llamada a `api.mercadopago.com` ya caen en `https://*.mercadopago.com`.
+
+El dinero en cuenta (preferencia) y Payway no cambian.
+
 ## 6. Flujo con dinero en cuenta — la salvedad
 
 El Wallet Brick permite pagar con saldo de Mercado Pago, pero **el comprador

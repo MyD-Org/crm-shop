@@ -237,6 +237,20 @@ export interface DatosAntifraude {
   items: { sku: string; nombre: string; cantidad: number; total: number }[];
 }
 
+/**
+ * Datos del pedido que un procesador usa para aprobar más pagos (no para decidir qué se cobra): líneas,
+ * nombre del comprador y domicilio de entrega. Salen SIEMPRE del pedido congelado, nunca del navegador.
+ * Sólo los recibe un proveedor con `aceptaInfoAdicional`; faltar no impide cobrar.
+ */
+export interface InfoAdicionalPago {
+  /** `precioUnitario` en pesos, con IVA. La suma no tiene por qué dar el total del pedido. */
+  items: { id: string; titulo: string; cantidad: number; precioUnitario: number }[];
+  nombre?: string;
+  apellido?: string;
+  /** Sólo si el pedido se envía. */
+  envio?: { direccion: string; ciudad?: string };
+}
+
 /** Lo que hace falta para crear un pago. El monto NUNCA sale del browser. */
 export interface DatosPago {
   pedidoId: string;
@@ -260,6 +274,15 @@ export interface DatosPago {
   bin?: string;
   /** Datos para el control de fraude. Sólo para proveedores con `requiereAntifraude`. */
   antifraude?: DatosAntifraude;
+  /**
+   * Emisor de la tarjeta que informó el formulario del navegador (sólo dígitos). Es una pista para el
+   * procesador: no decide monto, cuenta ni cuotas. Sólo para proveedores con `aceptaInfoAdicional`.
+   */
+  issuerId?: string;
+  /** Id de dispositivo que generó el script de seguridad del procesador en el navegador (saneado). */
+  deviceId?: string;
+  /** Líneas, comprador y entrega del pedido. Sólo para proveedores con `aceptaInfoAdicional`. */
+  infoAdicional?: InfoAdicionalPago;
   /**
    * URL del webhook del entorno que crea el pago. Ver `urlNotificacion()` en
    * mercadopago.ts: sin esto MP usa la URL del panel, que depende del modo de
@@ -294,6 +317,12 @@ export interface ProveedorPago {
    * sesión) y los pasa en `DatosPago.antifraude`, ANTES de reservar el intento.
    */
   readonly requiereAntifraude?: boolean;
+  /**
+   * El proveedor aprovecha datos opcionales del cobro con tarjeta (emisor, id de dispositivo y
+   * `DatosPago.infoAdicional`) para aprobar más pagos. La ruta los arma sin bloquear: si no se pueden
+   * leer, se cobra igual sin ellos.
+   */
+  readonly aceptaInfoAdicional?: boolean;
   /**
    * Referencia que va a tener el pago, conocida ANTES de crearlo. Si el proveedor la implementa, la
    * ruta la graba en el intento antes de llamarlo: así un timeout (el pago pudo crearse igual) deja un

@@ -9,9 +9,6 @@
  *   pedido tiene congeladas (N sin interés, o 1 para el pago único, las con interés, el débito y la
  *   cuenta de Mercado Pago), UN `POST /api/pedidos/[id]/medio` con el total visto. Se omite si ya
  *   coincide. El cobro igual lo revalida el servidor.
- * - `cambiarFormaDelPedido`: al pasar de pestaña (Mercado Pago) o de modalidad (Payway) en un medio con
- *   precios por forma de pago, UN `POST /api/pedidos/[id]/medio` con la forma: el servidor recotiza y
- *   vuelve a congelar total y forma. Cualquier cambio de forma deja el pedido en 1 pago.
  */
 import type { OpcionesCuotasPedido } from "@/app/api/pedidos/[id]/cuotas/route";
 import { hayQueRecongelar } from "./cuotas-formulario";
@@ -23,7 +20,6 @@ type Fetcher = (url: string, init: RequestInit & { body: string }) => Promise<Re
 
 const SIN_CONEXION = "No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.";
 const NO_SE_PUDO = "No pudimos actualizar las cuotas de su pedido. Inténtelo de nuevo.";
-const NO_SE_PUDO_FORMA = "No pudimos actualizar la forma de pago de su pedido. Inténtelo de nuevo.";
 
 /** Con qué tarjeta se consultan las cuotas: Mercado Pago manda el BIN; Payway, la marca (detectada o elegida). */
 export interface ConsultaCuotas {
@@ -97,44 +93,6 @@ export async function asegurarCuotasDelPedido(a: {
       cuotas: typeof json.cuotas === "number" ? json.cuotas : null,
       total: typeof json.total === "number" ? json.total : (a.totalVisto ?? a.actual.total),
       ...(json.formaCobro !== undefined ? { formaCobro: leerFormaCobro(json.formaCobro) } : {}),
-    };
-  } catch {
-    return { ok: false, error: SIN_CONEXION };
-  }
-}
-
-/**
- * Cambia la forma de pago del pedido (pestaña o modalidad nueva): el servidor recotiza con la lista de
- * esa forma y vuelve a congelar total y forma, en 1 pago (cambiar de forma invalida las cuotas).
- * Un 409 (cobro en vuelo, pago en revisión) o 429 (demasiados cambios) devuelve el mensaje del
- * servidor, ya en usted, y el pedido queda como estaba.
- */
-export async function cambiarFormaDelPedido(a: {
-  pedidoId: string;
-  pagoMetodo: string;
-  forma: OpcionCobro;
-  fetcher?: Fetcher;
-}): Promise<{ ok: true; total: number; cuotas: number | null; formaCobro: OpcionCobro | null } | { ok: false; error: string }> {
-  try {
-    const res = await (a.fetcher ?? fetch)(`/api/pedidos/${encodeURIComponent(a.pedidoId)}/medio`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pagoMetodo: a.pagoMetodo, forma: a.forma, cuotas: 1 }),
-    });
-    const json = (await res.json().catch(() => null)) as {
-      cuotas?: unknown;
-      total?: unknown;
-      formaCobro?: unknown;
-      error?: unknown;
-    } | null;
-    if (!res.ok || !json || typeof json.total !== "number") {
-      return { ok: false, error: typeof json?.error === "string" ? json.error : NO_SE_PUDO_FORMA };
-    }
-    return {
-      ok: true,
-      total: json.total,
-      cuotas: typeof json.cuotas === "number" ? json.cuotas : null,
-      formaCobro: leerFormaCobro(json.formaCobro),
     };
   } catch {
     return { ok: false, error: SIN_CONEXION };

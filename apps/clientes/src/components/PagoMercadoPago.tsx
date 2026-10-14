@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CardPayment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
-import { Alert, Button, PaymentLogos, RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
+import { Button, PaymentLogos, Spinner, type RadioOption } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
 import { customizacionBrick, type CustomizacionSdk, type TipoTarjeta } from "./pago-brick";
@@ -14,10 +14,10 @@ import {
 } from "./pago-opciones";
 import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { AvisoProcesador } from "./AvisoProcesador";
-import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, OpcionElegida, TituloComoPagar } from "./PagoIconos";
+import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, OpcionElegida } from "./PagoIconos";
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
 import type { TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
-import { asegurarCuotasDelPedido, cambiarFormaDelPedido } from "@/lib/checkout-cuotas-cliente";
+import { asegurarCuotasDelPedido } from "@/lib/checkout-cuotas-cliente";
 import {
   avisoCuotasNoDisponibles,
   claveDelPedido,
@@ -166,15 +166,12 @@ export function PagoMercadoPago({
   irDirecto = false,
 }: Props) {
   const habilitadas = opcionesHabilitadas(opcionesCobro);
-  const fija = opcionDeFormaMercadoPago(formaFija, habilitadas);
-  // Arranca en la forma del pedido (si el medio tiene precios por forma) o en la primera habilitada (el
-  // débito y la cuenta pasan el pedido a 1 pago al cobrar).
-  const [opcion, setOpcion] = useState<Opcion>(
-    () => fija ?? opcionDeFormaMercadoPago(formaCobroPedido, habilitadas) ?? habilitadas[0] ?? "credito",
+  // La forma la eligió el comprador en el paso Pago (la card) y el pedido la congela: el formulario abre
+  // directo en ella, sin volver a preguntar. Para cambiarla está "Cambiar medio de pago". Un pedido viejo
+  // sin forma abre en la primera habilitada (el débito y la cuenta pasan el pedido a 1 pago al cobrar).
+  const [opcion] = useState<Opcion>(
+    () => opcionDeFormaMercadoPago(formaFija ?? formaCobroPedido, habilitadas) ?? habilitadas[0] ?? "credito",
   );
-  /** Se está recotizando el pedido para otra pestaña: nada se cobra ni se cambia hasta que el servidor conteste. */
-  const [recotizando, setRecotizando] = useState(false);
-  const [errorForma, setErrorForma] = useState<string | null>(null);
   const [estado, setEstado] = useState<Estado>(
     iniciarEnConfirmacion ? { fase: "pendiente" } : opcion === "cuenta" ? { fase: "formulario" } : { fase: "cargando" },
   );
@@ -273,7 +270,7 @@ export function PagoMercadoPago({
    */
   // El monto del Brick queda congelado: elegir otras cuotas cambia el total del pedido, pero un monto
   // nuevo remontaría el Brick y borraría la tarjeta. El Brick no cobra: cobra el servidor con el pedido.
-  const [montoBrick, setMontoBrick] = useState(monto);
+  const [montoBrick] = useState(monto);
   const initialization = useMemo(
     () => ({
       amount: montoBrick,
@@ -489,45 +486,6 @@ export function PagoMercadoPago({
     if (datos) await enviarRef.current(datos);
   }
 
-  /** Otra opción: una tarjeta monta su Brick de cero; la cuenta no tiene nada que cargar. */
-  function aplicarOpcion(nueva: Opcion) {
-    setOpcion(nueva);
-    if (nueva === "cuenta") {
-      setEstado({ fase: "formulario" });
-    } else {
-      remontarBrick();
-      setEstado({ fase: "cargando" });
-    }
-  }
-
-  /**
-   * Con precios por forma de pago, cambiar de pestaña recotiza el pedido ANTES de mostrar la nueva: el
-   * total, el resumen y el monto del Brick son los de la lista de esa forma, y las cuotas vuelven a 1
-   * pago. Si el servidor no lo acepta (cobro en vuelo, demasiados cambios), la pestaña no cambia.
-   */
-  async function elegir(nueva: Opcion) {
-    if (nueva === opcion || estado.fase === "procesando" || recotizando) return;
-    const forma = formaDeOpcionMercadoPago(nueva);
-    if (formaCobroPedido == null || forma === formaCobroPedido) {
-      setErrorForma(null);
-      aplicarOpcion(nueva);
-      return;
-    }
-    setRecotizando(true);
-    setErrorForma(null);
-    const r = await cambiarFormaDelPedido({ pedidoId, pagoMetodo, forma });
-    setRecotizando(false);
-    if (!r.ok) {
-      setErrorForma(r.error);
-      return;
-    }
-    setMontoBrick(r.total);
-    setClaveCuotas(null);
-    onPedidoActualizado?.({ cuotas: r.cuotas, total: r.total, formaCobro: r.formaCobro });
-    aplicarOpcion(nueva);
-    cuotas.recargar();
-  }
-
   if (faltaKey) {
     return <AvisoSinConfigurar />;
   }
@@ -651,7 +609,7 @@ export function PagoMercadoPago({
       )}
       {estado.fase !== "cargando" && (
         <div className="mt-4 flex flex-col">
-          <Button size="lg" onClick={pagarConTarjeta} loading={procesando} disabled={procesando || recotizando}>
+          <Button size="lg" onClick={pagarConTarjeta} loading={procesando} disabled={procesando}>
             <IconoCandado />
             {procesando ? (
               "Procesando su pago…"
@@ -681,7 +639,7 @@ export function PagoMercadoPago({
         : { description: "Visa, Mastercard, American Express y más" }),
       icon: <IconoTarjeta />,
       content: formularioTarjeta,
-      disabled: (procesando && opcion !== "credito") || recotizando,
+      disabled: procesando && opcion !== "credito",
     },
     {
       value: "debito",
@@ -691,7 +649,7 @@ export function PagoMercadoPago({
         : { description: "Visa Débito, Maestro y más" }),
       icon: <IconoTarjetaDebito />,
       content: formularioTarjeta,
-      disabled: (procesando && opcion !== "debito") || recotizando,
+      disabled: procesando && opcion !== "debito",
     },
     {
       value: "cuenta",
@@ -702,14 +660,14 @@ export function PagoMercadoPago({
         <PagoCuentaMercadoPago
           pedidoId={pedidoId}
           antesDeIr={() => asegurarCuotas(1, unPago.total)}
-          irAlMontar={fija === "cuenta" && irDirecto}
+          irAlMontar={formaFija === "cuenta_mp" && irDirecto}
         />
       ),
-      disabled: procesando || recotizando,
+      disabled: procesando,
     },
   ];
   const opciones = todas.filter((o) => habilitadas.includes(o.value as Opcion));
-  const elegida = fija ? opciones.find((o) => o.value === opcion) : undefined;
+  const elegida = opciones.find((o) => o.value === opcion) ?? opciones[0];
 
   return (
     <div className="flex flex-col gap-4">
@@ -717,26 +675,8 @@ export function PagoMercadoPago({
       {estado.fase === "rechazado" && (
 <AvisoPagoRechazado mensaje={estado.mensaje} />
       )}
-      {errorForma && (
-        <Alert tone="danger" title="No se pudo cambiar la forma de pago">
-          {errorForma}
-        </Alert>
-      )}
 
-      {elegida ? (
-        <OpcionElegida opcion={elegida} />
-      ) : (
-        <>
-          <TituloComoPagar />
-          <RadioGroup
-            legend="¿Cómo quiere pagar?"
-            hideLegend
-            options={opciones}
-            value={opcion}
-            onValueChange={(v) => void elegir(v as Opcion)}
-          />
-        </>
-      )}
+      {elegida && <OpcionElegida opcion={elegida} />}
 
       <AvisoProcesador>Mercado Pago procesa el pago. Los datos de su tarjeta no pasan por nuestro sitio.</AvisoProcesador>
     </div>

@@ -58,13 +58,16 @@ describe("los formularios y el checkout usan las formas habilitadas", () => {
     expect(checkout.match(/opcionesCobro=\{opcionesCobroDe\(confirmado\.procesador\)\}/g)).toHaveLength(2);
   });
 
-  it("al cambiar de pestaña o modalidad se recotiza antes de mostrar la nueva (y las cuotas vuelven a 1 pago)", () => {
+  it("abren directo en la forma elegida (sin «¿Cómo quiere pagar?» ni cambio de pestaña)", () => {
     const mp = leer("./PagoMercadoPago.tsx");
     const pw = leer("./PagoPayway.tsx");
-    expect(mp).toMatch(/await cambiarFormaDelPedido\(\{ pedidoId, pagoMetodo, forma \}\)/);
-    expect(mp).toMatch(/formaCobroPedido == null \|\| forma === formaCobroPedido/);
-    expect(pw).toMatch(/await cambiarFormaDelPedido\(\{ pedidoId, pagoMetodo, forma: nueva \}\)/);
-    expect(pw).toMatch(/formaCobroPedido == null \|\| nueva === formaCobroPedido/);
+    for (const f of [mp, pw]) {
+      expect(f).not.toContain("<RadioGroup");
+      expect(f).not.toContain("cambiarFormaDelPedido");
+      expect(f).toContain("<OpcionElegida opcion={elegida} />");
+    }
+    expect(mp).toContain("formaFija ?? formaCobroPedido");
+    expect(pw).toContain("formaFija ?? formaCobroPedido");
     // El cobro siempre declara la forma que se paga: sin ella el servidor volvería a la de por defecto.
     expect(mp).toMatch(/forma: formaDeOpcionMercadoPago\(opcion\)/);
     expect(pw).toMatch(/forma: modalidad,/);
@@ -78,7 +81,8 @@ describe("los formularios y el checkout usan las formas habilitadas", () => {
   it("el checkout cotiza y crea el pedido con la forma inicial del medio (el total visto = el del pedido)", () => {
     const checkout = leer("./CheckoutClient.tsx");
     expect(checkout).toContain("formaInicialDelMedio(medioSel)");
-    expect(checkout.match(/\.\.\.\(formaDelMedio \? \{ forma: formaDelMedio \} : \{\}\)/g)).toHaveLength(2);
-    expect(checkout).toMatch(/forma: formaDelMedio \}/);
+    // El pedido congela la forma de la card elegida (con o sin precios por forma).
+    expect(checkout).toContain("const formaDelPedido = esCuentaCorriente ? null : (formaDelMedio ?? opcionSel?.forma ?? null);");
+    expect(checkout.match(/\.\.\.\(formaDelPedido \? \{ forma: formaDelPedido \} : \{\}\)/g)).toHaveLength(2);
   });
 });

@@ -75,14 +75,6 @@ export function IconoCandado() {
 }
 
 /** Título visible de "¿Cómo quiere pagar?". El `RadioGroup` conserva la leyenda para lectores de pantalla. */
-export function TituloComoPagar() {
-  return (
-    <h2 aria-hidden="true" className="text-lg font-bold text-text">
-      ¿Cómo quiere pagar?
-    </h2>
-  );
-}
-
 /**
  * La forma de pago ya elegida en el paso Pago del checkout: su título y lo suyo, sin la pregunta
  * "¿Cómo quiere pagar?" (para cambiarla está "Cambiar medio de pago").

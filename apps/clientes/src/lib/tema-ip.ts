@@ -18,6 +18,12 @@
  * cookie cuando viene `?tema=`: una vista normal no lleva Set-Cookie y el shell
  * se puede servir desde la CDN.
  *
+ * Tema propio de la tienda (`tenants.shop_tema`, src/lib/tema-tenant.ts): `base` reemplaza a
+ * TEMA_POR_DEFECTO en `<html data-theme>`, y con una paleta propia se suma `data-tema="propio"` y
+ * una regla de variables con más especificidad que cualquier `[data-theme]`. Por eso el QA
+ * `?tema=` NO aplica a una tienda con paleta propia (cambia `data-theme`, pero la regla propia
+ * queda por encima).
+ *
  * Volver a filtrar por IP NO es sólo pasar el flag a true: la decisión por
  * visitante no entra en un shell compartido. Haría falta, por ejemplo, que el
  * proxy reescriba a una variante del shell por tema, o leer la cookie en el

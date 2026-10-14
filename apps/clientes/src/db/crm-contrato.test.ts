@@ -171,9 +171,9 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
     }
   });
 
-  it("de tenants sólo se declaran las columnas del GRANT (0032, 0078 y 0085 del CRM)", () => {
+  it("de tenants sólo se declaran las columnas del GRANT (0032, 0078, 0085 y 0086 del CRM)", () => {
     expect(Object.keys(esperado["public.tenants"]).sort()).toEqual(
-      ["chat_empty_state", "chat_suggestions", "id", "name", "receipts_email", "shop_marca", "whatsapp_number"],
+      ["chat_empty_state", "chat_suggestions", "id", "name", "receipts_email", "shop_marca", "shop_tema", "whatsapp_number"],
     );
   });
 

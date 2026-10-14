@@ -29,6 +29,13 @@ vi.mock("@/lib/marca", async () => {
   return { ...base, getMarca: vi.fn(async () => base.MARCA_POR_DEFECTO) };
 });
 
+// Ídem para el tema: por defecto el de Central (sin paleta propia). `tema-tenant-datos.test.ts` prueba
+// la lectura real con `vi.unmock`.
+vi.mock("@/lib/tema-tenant-datos", async () => {
+  const base = await import("@/lib/tema-tenant");
+  return { getTemaTenant: vi.fn(async () => base.sanearTemaTenant(null)) };
+});
+
 beforeEach(() => {
   reiniciarFlags();
 });

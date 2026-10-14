@@ -298,6 +298,12 @@ export const crmTenants = publico.table("tenants", {
    * exista (`marca.ts`): ningún otro select de la tabla la nombra.
    */
   shopMarca: jsonb("shop_marca").$type<unknown>().notNull(),
+  /**
+   * Tema de la tienda (0086 del CRM, GRANT por columna): `{ base?, colores? }`. '{}' = el de
+   * Central. Igual que `shopMarca`, se lee SIEMPRE con un select de esta sola columna y
+   * tolerando que no exista (`tema-tenant-datos.ts`).
+   */
+  shopTema: jsonb("shop_tema").$type<unknown>().notNull(),
 });
 
 /**

@@ -360,6 +360,54 @@ describe("webhook de MDP con variantes", () => {
   })
 })
 
+describe("webhook de MDP sobre filas ya absorbidas por IGZ", () => {
+  const baseCfg = { id: A, alegraEmail: "igz@cliente.example", alegraToken: "tok-igz", alegraMock: false } as TenantConfig
+  const vivos: Record<string, AlegraProduct | null> = {}
+  const deps = { getItem: async (_c: TenantConfig, id: string) => vivos[id] ?? null }
+
+  // El modelo se cargó primero en MDP y después en IGZ; la sync lo absorbió. Un aviso posterior de
+  // MDP (p. ej. un cambio de nombre) no debe reactivar la copia como duplicado.
+  async function absorbido(code: string) {
+    items["tok-mdp"] = [padre("100", code), hija("101", "100", code, "Rojo", 4), it_("110", `${code}-S`, 6)]
+    await sincronizar()
+    await sembrarPrincipal("20", code, { tipo: "padre", stock: 0 })
+    await sembrarPrincipal("21", code, { tipo: "variante", padre: "20", opcion: "Rojo" })
+    await sembrarPrincipal("30", `${code}-S`)
+    expect((await absorberSoloSecundaria(A)).absorbidos).toBe(3)
+  }
+
+  it("el aviso del padre absorbido no lo reactiva", async () => {
+    await absorbido("XXP")
+    vivos["100"] = padre("100", "XXP", { name: "Modelo renombrado" })
+    expect(await refrescarItemDeCuenta(baseCfg, "mdp:100", new Date(Date.now() + 1000), {}, deps)).toBe("pareado")
+    expect(await producto("mdp:100")).toMatchObject({ status: "inactive", reemplazado_por_alegra_id: "20" })
+  })
+
+  it("el aviso de una variante absorbida no la reactiva y su stock va a la de IGZ", async () => {
+    await absorbido("XXQ")
+    vivos["101"] = hija("101", "100", "XXQ", "Rojo", 7, { name: "Modelo renombrado / Rojo" })
+    expect(await refrescarItemDeCuenta(baseCfg, "mdp:101", new Date(Date.now() + 1000), {}, deps)).toBe("pareado")
+    expect(await producto("mdp:101")).toMatchObject({ status: "inactive", reemplazado_por_alegra_id: "21" })
+    expect(Number((await stockDe("mdp", "21")).stock)).toBe(7)
+  })
+
+  it("el aviso de un simple absorbido no lo reactiva", async () => {
+    await absorbido("XXR")
+    vivos["110"] = it_("110", "XXR-S", 2)
+    expect(await refrescarItemDeCuenta(baseCfg, "mdp:110", new Date(Date.now() + 1000), {}, deps)).toBe("pareado")
+    expect(await producto("mdp:110")).toMatchObject({ status: "inactive", reemplazado_por_alegra_id: "30" })
+    expect(Number((await stockDe("mdp", "30")).stock)).toBe(2)
+  })
+
+  it("una fila propia SIN par en IGZ se sigue refrescando como solo-secundaria", async () => {
+    items["tok-mdp"] = [it_("120", "SOLO-MDP", 3)]
+    await sincronizar()
+    vivos["120"] = it_("120", "SOLO-MDP", 5, { name: "Solo MDP renombrado" })
+    expect(await refrescarItemDeCuenta(baseCfg, "mdp:120", new Date(Date.now() + 1000), {}, deps)).toBe("solo_secundaria")
+    expect(await producto("mdp:120")).toMatchObject({ status: "active", name: "Solo MDP renombrado", reemplazado_por_alegra_id: null })
+  })
+})
+
 describe("facturar una variante por la otra cuenta (asegurarItemsEnCuenta)", () => {
   const TAXES: AlegraTax[] = [{ alegraId: "1", name: "IVA 21%", percentage: 21, status: "active" }] as AlegraTax[]
   let existentesMdp: AlegraProduct[] = []

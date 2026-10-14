@@ -149,6 +149,42 @@ describe("POST/DELETE /api/admin/catalogo/variantes", () => {
   })
 })
 
+describe("PATCH /api/admin/catalogo/variantes (mostrar en la tienda)", () => {
+  it("oculta una variante, avisa al Shop y la devuelve marcada en el modelo", async () => {
+    const res = await variantes.PATCH(req("PATCH", { alegraId: "v2", ocultaEnTienda: true }))
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.producto.variantes.find((v: { alegraId: string }) => v.alegraId === "v2").ocultaEnTienda).toBe(true)
+    expect(json.producto.variantes.find((v: { alegraId: string }) => v.alegraId === "v1").ocultaEnTienda).toBe(false)
+    expect(aviso.llamadas).toBe(1)
+  })
+
+  it("volver a mostrarla la deja sin ocultar", async () => {
+    await variantes.PATCH(req("PATCH", { alegraId: "v2", ocultaEnTienda: true }))
+    const res = await variantes.PATCH(req("PATCH", { alegraId: "v2", ocultaEnTienda: false }))
+    const json = await res.json()
+    expect(json.producto.variantes.find((v: { alegraId: string }) => v.alegraId === "v2").ocultaEnTienda).toBe(false)
+  })
+
+  it("valida: ocultaEnTienda booleano, no padres ni sueltos; otro tenant es 404", async () => {
+    expect((await variantes.PATCH(req("PATCH", { alegraId: "v2", ocultaEnTienda: "si" }))).status).toBe(422)
+    const padre = await variantes.PATCH(req("PATCH", { alegraId: "P", ocultaEnTienda: true }))
+    expect(padre.status).toBe(422)
+    expect((await padre.json()).error).toMatch(/variante de un modelo/)
+    expect((await variantes.PATCH(req("PATCH", { alegraId: "otro", ocultaEnTienda: true }))).status).toBe(422)
+    expect((await variantes.PATCH(req("PATCH", { alegraId: "ajeno", ocultaEnTienda: true }))).status).toBe(404)
+    expect(aviso.llamadas).toBe(0)
+  })
+
+  it("un operador no entra y sin sesión es 401", async () => {
+    await loginComo("operator")
+    expect((await variantes.PATCH(req("PATCH", { alegraId: "v2", ocultaEnTienda: true }))).status).toBe(404)
+    session = {}
+    expect((await variantes.PATCH(req("PATCH", { alegraId: "v2", ocultaEnTienda: true }))).status).toBe(401)
+    expect(aviso.llamadas).toBe(0)
+  })
+})
+
 describe("la edición de una variante agrupada se rechaza; la del modelo (ancla) no", () => {
   it("PATCH del producto: la variante responde 400 en usted; el padre y los sueltos se editan", async () => {
     const res = await producto.PATCH(req("PATCH", { nombre: "Otro nombre" }), params("v1"))

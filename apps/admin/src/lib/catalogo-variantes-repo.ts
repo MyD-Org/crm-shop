@@ -139,8 +139,10 @@ export async function recalcularGrupos(
       SELECT DISTINCT ON (c.tenant_id, c.grupo_id) c.tenant_id, c.grupo_id, c.alegra_id AS rep
       FROM catalog_products c
       LEFT JOIN catalog_variantes_manuales m ON (m.tenant_id = c.tenant_id AND m.alegra_id = c.alegra_id)
+      LEFT JOIN catalog_overlay ov ON (ov.tenant_id = c.tenant_id AND ov.alegra_id = c.alegra_id)
       WHERE c.tenant_id = ${tenantId} AND c.grupo_id IS NOT NULL AND ${alcanceSql}
       ORDER BY c.tenant_id, c.grupo_id,
+               coalesce(ov.oculta_en_tienda, false) ASC,
                ${sql.raw(VENDIBLE("c"))} DESC,
                (c.stock IS NULL OR c.stock > 0) DESC,
                ${sql.raw(precioOnlineMax("c"))} ASC NULLS LAST,
@@ -437,4 +439,48 @@ export async function quitarDelGrupo(tenantId: string, alegraId: string): Promis
 
   await recalcularGrupos(tenantId, { alegraIds: tocados, grupoIds: [grupoId] })
   return { kind: "ok", grupoId, alegraIds: tocados }
+}
+
+// ─── Variantes ocultables en la tienda (change `variantes-ocultables`) ───────────────────
+
+export type ResultadoOcultar =
+  | { kind: "ok"; grupoId: string; ocultaEnTienda: boolean }
+  | { kind: "not_found"; campo: string; error: string }
+  | { kind: "invalid"; campo: string; error: string }
+
+/**
+ * Oculta (o vuelve a mostrar) una variante en la tienda. Sólo vale para una variante AGRUPADA (con
+ * modelo y que no sea el ancla). Hace upsert del overlay PROPIO de la variante tocando únicamente
+ * `oculta_en_tienda` (ni `visible` ni el resto de sus campos) y recalcula el grupo: si la variante
+ * oculta era la representante, pasa a serlo otra visible y activa.
+ */
+export async function ocultarVariante(
+  tenantId: string,
+  alegraId: string,
+  oculta: boolean,
+  updatedBy: string | null,
+  ej: Ejecutor = getDb(),
+): Promise<ResultadoOcultar> {
+  if (typeof alegraId !== "string" || !alegraId) {
+    return { kind: "invalid", campo: "alegraId", error: "Seleccione la variante." }
+  }
+  if (typeof oculta !== "boolean") {
+    return { kind: "invalid", campo: "ocultaEnTienda", error: "Indique si la variante se muestra o no en la tienda." }
+  }
+  const filas = (await ej.execute(sql`
+    SELECT tipo, grupo_id FROM catalog_products WHERE tenant_id = ${tenantId} AND alegra_id = ${alegraId} LIMIT 1
+  `)) as unknown as { tipo: string; grupo_id: string | null }[]
+  const fila = filas[0]
+  if (!fila) return { kind: "not_found", campo: "alegraId", error: "No encontramos el producto. Actualice el listado e inténtelo nuevamente." }
+  if (fila.tipo === "padre" || !fila.grupo_id || fila.grupo_id === alegraId) {
+    return { kind: "invalid", campo: "alegraId", error: "Solo se puede ocultar una variante de un modelo." }
+  }
+  await ej.execute(sql`
+    INSERT INTO catalog_overlay (tenant_id, alegra_id, oculta_en_tienda, updated_by, updated_at)
+    VALUES (${tenantId}, ${alegraId}, ${oculta}, ${updatedBy}, now())
+    ON CONFLICT (tenant_id, alegra_id)
+    DO UPDATE SET oculta_en_tienda = EXCLUDED.oculta_en_tienda, updated_by = EXCLUDED.updated_by, updated_at = now()
+  `)
+  await recalcularGrupos(tenantId, { alegraIds: [alegraId], grupoIds: [fila.grupo_id] }, ej)
+  return { kind: "ok", grupoId: fila.grupo_id, ocultaEnTienda: oculta }
 }

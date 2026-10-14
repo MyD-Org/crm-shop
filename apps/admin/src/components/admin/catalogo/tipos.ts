@@ -88,6 +88,8 @@ export interface VarianteDto {
   manual: boolean
   orden: number | null
   esRepresentante: boolean
+  /** true = oculta en la tienda (el interruptor «Mostrar en la tienda» está apagado). */
+  ocultaEnTienda: boolean
   /** true = es la base de un grupo armado a mano. */
   esAncla: boolean
   stockSucursales: { sucursal: string; stock: string; leidoAt: string | null }[]

@@ -603,6 +603,13 @@
       "when": 1793366800000,
       "tag": "0085_tenants_shop_marca",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1793366900000,
+      "tag": "0086_tenants_shop_tema",
+      "breakpoints": true
     }
   ]
 }

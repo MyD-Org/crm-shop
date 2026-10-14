@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
+import temaFixture from "./__fixtures__/tema-contrato.json"
 import {
   CAMPOS_IMAGEN,
+  PALETAS_TEMA,
+  avisoContrasteForm,
   construirPayload,
   extensionDeArchivo,
   formDesdeDatos,
@@ -12,7 +15,7 @@ describe("formDesdeDatos / construirPayload", () => {
   it("'{}' y direcciones vacías → formulario vacío → payload vacío (guardar sin cambios no altera nada)", () => {
     const form = formDesdeDatos({ marca: {}, shopUrl: "", shopInternalUrl: "" })
     expect(form).toEqual(formVacio())
-    expect(construirPayload(form)).toEqual({ marca: {}, shopUrl: "", shopInternalUrl: "" })
+    expect(construirPayload(form)).toEqual({ marca: {}, shopUrl: "", shopInternalUrl: "", tema: {} })
   })
 
   it("ida y vuelta sin pérdida", () => {
@@ -31,6 +34,7 @@ describe("formDesdeDatos / construirPayload", () => {
       },
       shopUrl: "https://tienda.example",
       shopInternalUrl: "https://interna.example",
+      tema: { base: "calido" as const, colores: PALETAS_TEMA["calido"] },
     }
     expect(construirPayload(formDesdeDatos(datos))).toEqual(datos)
   })
@@ -46,6 +50,56 @@ describe("formDesdeDatos / construirPayload", () => {
 
   it("lista los cuatro campos de imagen", () => {
     expect([...CAMPOS_IMAGEN]).toEqual(["logoUrl", "logoMailUrl", "faviconUrl", "ogImagenUrl"])
+  })
+})
+
+describe("tema en el formulario", () => {
+  it("las paletas de partida son las del fixture compartido", () => {
+    expect(PALETAS_TEMA).toEqual(temaFixture.paletas)
+  })
+
+  it("sin tema guardado: colores de partida precargados, sin 'personalizar'; el payload manda tema vacío", () => {
+    const f = formDesdeDatos({ marca: {}, shopUrl: "", shopInternalUrl: "" })
+    expect(f.temaPropio).toBe(false)
+    expect(f.temaBase).toBe("calido-azul")
+    expect(f.colores).toEqual(PALETAS_TEMA["calido-azul"])
+    expect(construirPayload(f).tema).toEqual({})
+  })
+
+  it("con colores guardados el formulario los muestra y marca 'personalizar'", () => {
+    const colores = { ...PALETAS_TEMA["calido-azul"], accent: "#2255aa" }
+    const f = formDesdeDatos({ marca: {}, shopUrl: "", shopInternalUrl: "", tema: { colores } })
+    expect(f.temaPropio).toBe(true)
+    expect(f.colores.accent).toBe("#2255aa")
+    expect(construirPayload(f).tema).toEqual({ colores })
+  })
+
+  it("solo base distinta de la de partida: viaja la base y no los colores", () => {
+    const f = { ...formVacio(), temaBase: "calido" as const }
+    expect(construirPayload(f).tema).toEqual({ base: "calido" })
+  })
+
+  it("desactivar 'personalizar' descarta los colores del payload", () => {
+    const f = { ...formVacio(), temaPropio: false, colores: { ...PALETAS_TEMA["calido-azul"], accent: "#2255aa" } }
+    expect(construirPayload(f).tema).toEqual({})
+  })
+
+  it("los hex se recortan; el servidor los normaliza", () => {
+    const f = { ...formVacio(), temaPropio: true, colores: { ...PALETAS_TEMA["calido-azul"], bg: " #F8F8F6 " } }
+    expect(construirPayload(f).tema?.colores?.bg).toBe("#F8F8F6")
+  })
+
+  it("avisoContrasteForm: null si no se personaliza o la paleta es legible; mensaje si no", () => {
+    expect(avisoContrasteForm(formVacio())).toBeNull()
+    const ok = { ...formVacio(), temaPropio: true }
+    expect(avisoContrasteForm(ok)).toBeNull()
+    const mal = { ...ok, colores: { ...PALETAS_TEMA["calido-azul"], text: "#f0f0ee" } }
+    expect(avisoContrasteForm(mal)).toMatchObject({ campo: "text" })
+  })
+
+  it("avisoContrasteForm no opina mientras algún color no es un hex completo", () => {
+    const f = { ...formVacio(), temaPropio: true, colores: { ...PALETAS_TEMA["calido-azul"], text: "#1c27" } }
+    expect(avisoContrasteForm(f)).toBeNull()
   })
 })
 

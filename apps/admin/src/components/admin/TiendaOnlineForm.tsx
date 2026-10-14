@@ -1,22 +1,29 @@
 "use client"
 
 import { useState } from "react"
-import { Button, Card, Field, FileDropZone, Input, Select, Textarea, useToast } from "@myd-org/ui"
+import { Button, Card, Field, FileDropZone, Input, Select, Switch, Textarea, useToast } from "@myd-org/ui"
 import { useUnsavedGuard } from "@/lib/unsaved-guard"
+import { marcaSobreOscuro } from "@/lib/tema-contraste"
 import {
+  COLORES_TEMA,
   DESCRIPCION_MAX,
+  ETIQUETAS_COLOR_TEMA,
   EMAIL_MAX,
   NOMBRE_MAX,
   OG_BAJADA_MAX,
   OG_EYEBROW_MAX,
   OG_LUGAR_MAX,
   TITULO_MAX,
+  type ColorTema,
 } from "@/lib/tienda-online"
 import {
+  PALETAS_TEMA,
+  avisoContrasteForm,
   construirPayload,
   extensionDeArchivo,
   formDesdeDatos,
   mensajeSubida,
+  razonesContrasteForm,
   type CampoImagen,
   type DatosTiendaOnline,
   type FormTiendaOnline,
@@ -33,6 +40,13 @@ const BASES = [
   { value: "generica", label: "Textos neutros (recomendado para una tienda nueva)" },
 ]
 
+const BASES_TEMA = [
+  { value: "calido-azul", label: "Azul (el tema actual de la tienda)" },
+  { value: "calido", label: "Terracota" },
+]
+
+const HEX_COMPLETO = /^#[0-9a-f]{6}$/i
+
 const ACCEPT_IMAGEN = ".svg,.png,.webp,.jpg,.jpeg,image/svg+xml,image/png,image/webp,image/jpeg"
 const MAX_IMAGEN = 2 * 1024 * 1024
 
@@ -43,8 +57,8 @@ const IMAGENES: { campo: CampoImagen; label: string; hint: string }[] = [
   { campo: "ogImagenUrl", label: "Imagen para compartir", hint: "Se ve al compartir el enlace de la tienda. Apaisada, PNG, WebP o JPG." },
 ]
 
-// Datos → Tienda online: marca que muestra la tienda (`tenants.shop_marca`) y direcciones del Shop
-// (`shop_url`, `shop_internal_url`). GET/PUT /api/admin/settings/tienda-online; las imágenes se
+// Datos → Tienda online: marca que muestra la tienda (`tenants.shop_marca`), su paleta de colores
+// (`tenants.shop_tema`) y direcciones del Shop (`shop_url`, `shop_internal_url`). GET/PUT /api/admin/settings/tienda-online; las imágenes se
 // suben directo al almacenamiento con una firma de /api/admin/settings/tienda-online/logo.
 export function TiendaOnlineForm({ initial, imagenesDisponibles }: Props) {
   const [form, setForm] = useState<FormTiendaOnline>(() => formDesdeDatos(initial))
@@ -61,6 +75,16 @@ export function TiendaOnlineForm({ initial, imagenesDisponibles }: Props) {
     setErrores((p) => (p[k] ? { ...p, [k]: "" } : p))
   }
   const ponerError = (campo: string, msg: string) => setErrores((p) => ({ ...p, [campo]: msg }))
+  const cambiarColor = (c: ColorTema, v: string) => {
+    setForm((p) => ({ ...p, colores: { ...p.colores, [c]: v } }))
+    setErrores((p) => (p[c] ? { ...p, [c]: "" } : p))
+  }
+  const cambiarBaseTema = (base: "calido-azul" | "calido") =>
+    // Si todavía no personalizó, los selectores acompañan al tema de partida elegido.
+    setForm((p) => ({ ...p, temaBase: base, colores: p.temaPropio ? p.colores : { ...PALETAS_TEMA[base] } }))
+
+  const avisoContraste = avisoContrasteForm(form)
+  const razones = form.temaPropio ? razonesContrasteForm(form) : null
 
   async function subirImagen(campo: CampoImagen, file: File | null) {
     if (!file) return
@@ -192,6 +216,66 @@ export function TiendaOnlineForm({ initial, imagenesDisponibles }: Props) {
         </div>
       </Card>
 
+      <Card
+        title="Tema"
+        description="Los colores de la tienda. Si no los personaliza, se usa el tema de partida."
+      >
+        <div className="flex flex-col gap-4">
+          <Field label="Tema de partida" error={errores.temaBase}>
+            <Select value={form.temaBase} onValueChange={(v) => cambiarBaseTema(v === "calido" ? "calido" : "calido-azul")} options={BASES_TEMA} />
+          </Field>
+          <Switch
+            checked={form.temaPropio}
+            onCheckedChange={(v) => {
+              setForm((p) => ({ ...p, temaPropio: v, colores: v ? p.colores : { ...PALETAS_TEMA[p.temaBase] } }))
+              setErrores((p) => ({ ...p, colores: "" }))
+            }}
+            label="Personalizar los colores"
+          />
+          {form.temaPropio && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {COLORES_TEMA.map((c) => {
+                  const valor = form.colores[c]
+                  return (
+                    <Field key={c} label={ETIQUETAS_COLOR_TEMA[c]} error={errores[c]}>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          aria-label={`Elegir color: ${ETIQUETAS_COLOR_TEMA[c]}`}
+                          value={HEX_COMPLETO.test(valor.trim()) ? valor.trim().toLowerCase() : "#000000"}
+                          onChange={(e) => cambiarColor(c, e.target.value)}
+                          className="h-9 w-12 shrink-0 cursor-pointer rounded border p-0.5"
+                        />
+                        <Input
+                          value={valor}
+                          maxLength={7}
+                          placeholder="#rrggbb"
+                          aria-label={`Código del color: ${ETIQUETAS_COLOR_TEMA[c]}`}
+                          onChange={(e) => cambiarColor(c, e.target.value)}
+                        />
+                      </div>
+                    </Field>
+                  )
+                })}
+              </div>
+              {errores.colores && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.colores}</p>}
+              {avisoContraste && <p className="text-sm" style={{ color: "var(--red)" }}>{avisoContraste.error}</p>}
+              {razones && (
+                <ul className="text-xs flex flex-col gap-0.5" style={{ color: "var(--ink-soft)" }}>
+                  {razones.map((r) => (
+                    <li key={r.campo}>
+                      {r.descripcion}: contraste {r.razon.toFixed(1).replace(".", ",")}:1 {r.ok ? "(correcto)" : "(insuficiente)"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <VistaPreviaTema colores={form.colores} />
+            </>
+          )}
+        </div>
+      </Card>
+
       <Card title="Sitio" description="Direcciones de la tienda de esta empresa. Vacías = rige la configuración general.">
         <div className="flex flex-col gap-4">
           <Field
@@ -221,6 +305,32 @@ export function TiendaOnlineForm({ initial, imagenesDisponibles }: Props) {
         <Button onClick={handleSave} loading={saving} disabled={saving || subiendo !== null}>
           {saving ? "Guardando…" : "Guardar"}
         </Button>
+      </div>
+    </div>
+  )
+}
+
+/** Maqueta mínima de la tienda con la paleta elegida (los colores del usuario van en línea: son datos, no estilos del sistema). */
+function VistaPreviaTema({ colores }: { colores: Record<ColorTema, string> }) {
+  const ok = COLORES_TEMA.every((c) => HEX_COMPLETO.test(colores[c].trim()))
+  if (!ok) return null
+  const c = Object.fromEntries(COLORES_TEMA.map((k) => [k, colores[k].trim().toLowerCase()])) as Record<ColorTema, string>
+  return (
+    <div aria-label="Vista previa del tema" className="overflow-hidden rounded-lg border" style={{ background: c.bg, color: c.text }}>
+      <div className="flex flex-col gap-3 p-4">
+        <p className="text-sm font-semibold">Así se verán los textos sobre el fondo</p>
+        <p className="text-xs" style={{ color: c.muted }}>Texto secundario, como descripciones y ayudas.</p>
+        <div className="rounded-md p-3 flex flex-col gap-2" style={{ background: c.surface }}>
+          <p className="text-sm">
+            Una tarjeta con un <span style={{ color: c.accent, fontWeight: 600 }}>enlace de acento</span>
+          </p>
+          <span className="inline-block self-start rounded-md px-3 py-1.5 text-sm" style={{ background: c.primary, color: c.onPrimary }}>
+            Botón principal
+          </span>
+        </div>
+      </div>
+      <div className="p-3 text-sm" style={{ background: c.surfaceDark, color: marcaSobreOscuro(c.accent) }}>
+        Pie de página
       </div>
     </div>
   )

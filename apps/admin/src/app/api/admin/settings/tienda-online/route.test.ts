@@ -47,6 +47,11 @@ vi.mock("@/lib/shop-revalidar", () => ({
   },
 }))
 
+const COLORES = {
+  bg: "#f8f8f6", surface: "#ffffff", text: "#1c2733", muted: "#5f6770",
+  primary: "#16283f", onPrimary: "#eaf1f8", accent: "#1e5aa8", surfaceDark: "#1c2733",
+}
+
 const req = (method: string, body?: unknown) =>
   new Request("http://admin.test/api/admin/settings/tienda-online", {
     method,
@@ -161,5 +166,55 @@ describe("/api/admin/settings/tienda-online", () => {
     const { PUT } = await import("./route")
     const res = await PUT(req("PUT", { marca: { logoUrl: "https://media.example/productos/tenant-a/1/x.png" } }))
     expect(res.status).toBe(400)
+  })
+
+  it("GET devuelve el tema guardado, o '{}' si no hay", async () => {
+    const { GET } = await import("./route")
+    expect((await (await GET(req("GET"))).json()).tema).toEqual({})
+    state.fila = [{ marca: {}, shopUrl: "", shopInternalUrl: "", tema: { base: "calido" } }]
+    expect((await (await GET(req("GET"))).json()).tema).toEqual({ base: "calido" })
+  })
+
+  it("PUT con paleta legible guarda el tema normalizado sólo en el tenant del guard y avisa al Shop", async () => {
+    const { PUT } = await import("./route")
+    const res = await PUT(req("PUT", { marca: {}, tema: { base: "calido-azul", colores: { ...COLORES, accent: "#1E5AA8" } } }))
+    expect(res.status).toBe(200)
+    expect((await res.json()).tema).toEqual({ base: "calido-azul", colores: COLORES })
+    expect(state.updates[0].set).toMatchObject({ shopTema: { base: "calido-azul", colores: COLORES } })
+    expect(state.updates[0].where).toEqual({ eq: "tenant-a" })
+    expect(state.pings).toEqual(["tenant-a"])
+  })
+
+  it("PUT con paleta de poco contraste → 400 en usted, sin escribir ni avisar", async () => {
+    const { PUT } = await import("./route")
+    const res = await PUT(req("PUT", { tema: { colores: { ...COLORES, text: "#f0f0ee" } } }))
+    expect(res.status).toBe(400)
+    const j = await res.json()
+    expect(j).toMatchObject({ code: "invalid", campo: "text" })
+    expect(j.error).toMatch(/contraste/i)
+    expect(j.error).not.toMatch(/\b(tu|tus|te|vos)\b/i)
+    expect(state.updates).toEqual([])
+    expect(state.pings).toEqual([])
+  })
+
+  it("PUT con color mal formado → 400 con el campo", async () => {
+    const { PUT } = await import("./route")
+    const res = await PUT(req("PUT", { tema: { colores: { ...COLORES, bg: "azul" } } }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).campo).toBe("bg")
+    expect(state.updates).toEqual([])
+  })
+
+  it("tema vacío ({}) restablece el tema de partida; sin la clave tema no se toca", async () => {
+    const { PUT } = await import("./route")
+    await PUT(req("PUT", { marca: {}, tema: {} }))
+    expect(state.updates[0].set).toMatchObject({ shopTema: {} })
+    await PUT(req("PUT", { marca: { nombre: "X" } }))
+    expect("shopTema" in state.updates[1].set).toBe(false)
+  })
+
+  it("solo base (sin colores) no pide contraste", async () => {
+    const { PUT } = await import("./route")
+    expect((await PUT(req("PUT", { tema: { base: "calido" } }))).status).toBe(200)
   })
 })

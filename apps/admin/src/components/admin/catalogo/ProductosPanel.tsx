@@ -9,6 +9,7 @@ import {
   Dialog,
   EmptyState,
   SearchInput,
+  Checkbox,
   Select,
   SelectionBar,
   Table,
@@ -55,6 +56,7 @@ import {
   type Seleccion,
   type TagDto,
 } from "./tipos"
+import { FILTROS_INICIALES, conInactivos, verInactivos } from "./inactivos"
 
 interface Props {
   categorias: CategoriaDto[]
@@ -93,7 +95,7 @@ interface Pendiente {
 const TODOS = "todos"
 
 /** Filtros que no son la búsqueda: cuentan para "Limpiar filtros". */
-const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "destacado", "tag", "cuenta", "sucursal", "stockEn"] as const
+const CLAVES_FILTRO = ["categoria", "estado", "foto", "precio", "stock", "destacado", "tag", "cuenta", "sucursal", "stockEn"] as const
 
 /** SKU con un botón para copiarlo sin abrir el producto (la fila entera abre el diálogo). */
 function Sku({ sku }: { sku: string }) {
@@ -138,13 +140,7 @@ function ConAyuda({ titulo, texto }: { titulo: string; texto: string }) {
 }
 
 export function ProductosPanel({ categorias, tags, cuentas, sucursales, busquedaInicial, onTagCreado, onCambio }: Props) {
-  const [filtros, setFiltros] = useState<Filtros>({
-    estado: "oculto",
-    foto: "con",
-    alegra: "active",
-    precio: "con",
-    stock: "con",
-  })
+  const [filtros, setFiltros] = useState<Filtros>(FILTROS_INICIALES)
   const [busqueda, setBusqueda] = useState(busquedaInicial ?? "")
   const [start, setStart] = useState(0)
   const [datos, setDatos] = useState<ListadoDto | null>(null)
@@ -209,6 +205,13 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
     setTodoElFiltro(false)
   }
 
+  function cambiarVerInactivos(ver: boolean) {
+    setFiltros((prev) => conInactivos(prev, ver))
+    setStart(0)
+    setSeleccion([])
+    setTodoElFiltro(false)
+  }
+
   /** El select de stock maneja dos parámetros excluyentes: `stock` (con/sin) y `stockEn` (sucursal). */
   function cambiarFiltroStock(valor: string) {
     setFiltros((prev) => {
@@ -224,10 +227,11 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
     setTodoElFiltro(false)
   }
 
-  const filtrosActivos = CLAVES_FILTRO.filter((k) => filtros[k] !== undefined).length
+  // Ocultar los inactivos es el estado normal: sólo cuenta como filtro cuando se los muestra.
+  const filtrosActivos = CLAVES_FILTRO.filter((k) => filtros[k] !== undefined).length + (verInactivos(filtros) ? 1 : 0)
 
   function limpiarFiltros() {
-    setFiltros((prev) => (prev.q ? { q: prev.q } : {}))
+    setFiltros((prev) => (prev.q ? { q: prev.q, alegra: "active" } : { alegra: "active" }))
     setStart(0)
     setSeleccion([])
     setTodoElFiltro(false)
@@ -560,6 +564,15 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
         )}
       </div>
 
+      <label className="flex items-center gap-2 text-sm">
+        <Checkbox
+          checked={verInactivos(filtros)}
+          onCheckedChange={cambiarVerInactivos}
+          aria-label="Ver también los inactivos"
+        />
+        Ver también los inactivos
+      </label>
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9">
         <Select
           aria-label="Filtrar por categoría"
@@ -589,16 +602,6 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
             { value: TODOS, label: "Fotos: todos" },
             { value: "con", label: "Fotos: con foto" },
             { value: "sin", label: "Fotos: sin foto" },
-          ]}
-        />
-        <Select
-          aria-label="Filtrar por estado en Alegra"
-          value={filtros.alegra ?? TODOS}
-          onValueChange={(v) => cambiarFiltro("alegra", v)}
-          options={[
-            { value: TODOS, label: "Alegra: todos" },
-            { value: "active", label: "Alegra: activos" },
-            { value: "inactive", label: "Alegra: de baja" },
           ]}
         />
         <Select

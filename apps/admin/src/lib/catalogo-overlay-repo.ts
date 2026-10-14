@@ -431,13 +431,13 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
 
   if (f.nombre === "sin") cond.push(sql`(o.nombre IS NULL OR btrim(o.nombre) = '')`)
 
-  // `p.status` es "visto en la última corrida", NO el estado de Alegra: ese vive en
-  // `alegra_status`. El filtro apuntaba a la columna equivocada, así que "inactivo" no devolvía
-  // nunca nada. Se acepta null como activo: son los que no pasaron por el sync nuevo todavía.
+  // `p.status` es "visto en la última corrida" y `alegra_status` el estado real de Alegra: un
+  // producto cuenta como inactivo si falla cualquiera de los dos (misma regla que el motivo
+  // `inactivo_en_alegra`). Null en `alegra_status` = sin sincronizar todavía, se toma como activo.
   if (f.alegra === "active") {
-    cond.push(sql`(p.alegra_status IS NULL OR p.alegra_status <> 'inactive')`)
+    cond.push(sql`(p.status = 'active' AND coalesce(p.alegra_status, 'active') <> 'inactive')`)
   } else if (f.alegra === "inactive") {
-    cond.push(sql`p.alegra_status = 'inactive'`)
+    cond.push(sql`(p.status <> 'active' OR coalesce(p.alegra_status, 'active') = 'inactive')`)
   }
 
   // "Sin precio": la misma regla que `tienePrecio()` en TypeScript, pero en SQL, porque el

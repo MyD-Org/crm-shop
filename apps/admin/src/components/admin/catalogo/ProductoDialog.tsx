@@ -21,6 +21,7 @@ import {
 } from "./tipos"
 import { AyudaTooltip } from "../AyudaTooltip"
 import { AYUDA_VISIBLE_EN } from "./ayudas"
+import { estadoAlegraTexto } from "./inactivos"
 import { FotosProducto } from "./FotosProducto"
 import { FichaTecnicaProducto } from "./FichaTecnicaProducto"
 import { AtributosProducto } from "./AtributosProducto"
@@ -209,7 +210,7 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
                   })}
               </div>
             )}
-            <DatoAlegra etiqueta="Estado" valor={producto.status === "active" ? "Activo" : "Inactivo"} />
+            <DatoAlegra etiqueta="Estado" valor={estadoAlegraTexto(producto.motivos)} />
             <DatoAlegra etiqueta="Última sincronización" valor={fmtFechaHora(producto.syncedAt)} />
             <p className="mt-1 text-xs" style={{ color: "var(--ink-faint)" }}>
               {esPadre

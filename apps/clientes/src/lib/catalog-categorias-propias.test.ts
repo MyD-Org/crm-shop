@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { dbGrabadora, sinLecturaDelArbol, esLecturaDelArbol, type ConsultaGrabada } from "@/db/__fixtures__/db-grabadora";
+import { ACTIVO_EN_TIENDA, dbGrabadora, sinLecturaDelArbol, esLecturaDelArbol, type ConsultaGrabada } from "@/db/__fixtures__/db-grabadora";
 
 /**
  * Categorías propias del CRM en la tienda: el árbol que llega por la sync del
@@ -226,7 +226,7 @@ describe("menú (getCategorias)", () => {
     grabadora = conArbol();
     await getCategorias(false);
     const conteo = sinLecturaDelArbol(grabadora.consultas).find(esConteoPorCategoria);
-    expect(conteo?.sql).toContain('and "catalog_products_shop"."activo" and');
+    expect(conteo?.sql).toContain(`and ${ACTIVO_EN_TIENDA} and`);
     expect(conteo?.sql).toMatch(/coalesce\(\s*case when jsonb_typeof[\s\S]*?\)\s*>\s*0/);
   });
 });
@@ -239,6 +239,6 @@ describe("menú sin árbol (categorías de Alegra de la vista del CRM)", () => {
     expect(m, c?.sql).not.toBeNull();
     expect(c!.params[Number(m![1]) - 1]).toBe(true);
     // ...y sólo si tiene algún producto activo del mismo tenant.
-    expect(c!.sql).toContain('and "catalog_products_shop"."activo")');
+    expect(c!.sql).toContain(`and ${ACTIVO_EN_TIENDA})`);
   });
 });

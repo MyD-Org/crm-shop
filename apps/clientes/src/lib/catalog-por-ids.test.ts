@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
+import { ACTIVO_EN_TIENDA, dbGrabadora } from "@/db/__fixtures__/db-grabadora";
 
 /**
  * `getProductosPorIds`: productos del catálogo del CRM por id de Alegra, para las líneas
@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 /** Activo según la vista del CRM (ver stock-disponible.ts). */
-const ACTIVO = 'and "catalog_products_shop"."activo"';
+const ACTIVO = `and ${ACTIVO_EN_TIENDA}`;
 
 const JOIN_OVERLAY =
   /left join "public"\."catalog_overlay" on \("public"\."catalog_overlay"\."alegra_id" = "catalog_products_shop"\."alegra_id" and "public"\."catalog_overlay"\."tenant_id" = \$\d+\)/;

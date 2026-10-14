@@ -73,3 +73,13 @@ export function valoresInsertados(
     }),
   );
 }
+
+/**
+ * `activoSql` tal como sale en el SQL: activo en Alegra Y sin ocultar a mano en la tienda
+ * (`catalog_overlay.oculta_en_tienda` de la propia fila de overlay del producto).
+ */
+export const ACTIVO_EN_TIENDA =
+  '("catalog_products_shop"."activo" and not exists (select 1 from "public"."catalog_overlay" where "public"."catalog_overlay"."tenant_id" = "catalog_products_shop"."tenant_id" and "public"."catalog_overlay"."alegra_id" = "catalog_products_shop"."alegra_id" and "public"."catalog_overlay"."oculta_en_tienda"))';
+
+/** El SQL sin esa subconsulta: para los tests que miran el JOIN al overlay y no la exclusión. */
+export const sinOculta = (sql: string) => sql.split(ACTIVO_EN_TIENDA).join("(activo)");

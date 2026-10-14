@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dbGrabadora, sinLecturaDelArbol } from "@/db/__fixtures__/db-grabadora";
+import { dbGrabadora, sinOculta, sinLecturaDelArbol } from "@/db/__fixtures__/db-grabadora";
 
 /**
  * Lectura del overlay del CRM en los listados públicos del espejo: join por
@@ -49,7 +49,7 @@ describe("join al overlay", () => {
 
   it("getCategorias no se toca", async () => {
     await getCategorias(false);
-    for (const c of sinLecturaDelArbol(grabadora.consultas)) expect(c.sql).not.toContain("catalog_overlay");
+    for (const c of sinLecturaDelArbol(grabadora.consultas)) expect(sinOculta(c.sql)).not.toContain("catalog_overlay");
   });
 });
 
@@ -107,6 +107,6 @@ describe("soloVisibles (flag catalogo-solo-visibles, lo evalúa quien llama)", (
 
   it("encendido: getCategorias sigue sin tocar el overlay", async () => {
     await getCategorias(true);
-    for (const c of sinLecturaDelArbol(grabadora.consultas)) expect(c.sql).not.toContain("catalog_overlay");
+    for (const c of sinLecturaDelArbol(grabadora.consultas)) expect(sinOculta(c.sql)).not.toContain("catalog_overlay");
   });
 });

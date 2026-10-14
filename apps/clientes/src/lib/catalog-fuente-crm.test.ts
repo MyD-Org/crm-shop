@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dbGrabadora, esLecturaDelArbol, sinLecturaDelArbol } from "@/db/__fixtures__/db-grabadora";
+import { ACTIVO_EN_TIENDA, dbGrabadora, esLecturaDelArbol, sinLecturaDelArbol } from "@/db/__fixtures__/db-grabadora";
 
 /**
  * El catálogo (listado, ficha, facetas, menú) y la cotización leen TODO de las
@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 const FROM_VISTA = 'from "public"."catalog_products_shop"';
-const ACTIVO = '"catalog_products_shop"."activo"';
+const ACTIVO = ACTIVO_EN_TIENDA;
 const STOCK_DISPONIBLE =
   '(case when "catalog_products_shop"."stock" is null then null else greatest(0, "catalog_products_shop"."stock" - coalesce("stock_reservado"."qty", 0)) end)';
 
@@ -131,7 +131,7 @@ describe("el catálogo lee del CRM, menos la reserva", () => {
       /from "public"\."catalog_categories_shop" inner join "public"\."catalog_products_shop" on \("catalog_products_shop"\."category_alegra_id" = "catalog_categories_shop"\."alegra_id" and "catalog_products_shop"\."tenant_id" = "catalog_categories_shop"\."tenant_id"\)/,
     );
     const where = c.sql.match(
-      /where \("catalog_categories_shop"\."tenant_id" = \$(\d+) and "catalog_products_shop"\."tenant_id" = \$(\d+) and "catalog_categories_shop"\."activo" = \$(\d+) and "catalog_products_shop"\."activo"\)/,
+      /where \("catalog_categories_shop"\."tenant_id" = \$(\d+) and "catalog_products_shop"\."tenant_id" = \$(\d+) and "catalog_categories_shop"\."activo" = \$(\d+) and \("catalog_products_shop"\."activo" and not exists \(select 1 from "public"\."catalog_overlay" where [^)]*\)\)\)/,
     );
     expect(where, c.sql).not.toBeNull();
     expect(c.params[Number(where![1]) - 1]).toBe("tenant-test");

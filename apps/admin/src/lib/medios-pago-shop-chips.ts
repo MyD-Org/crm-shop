@@ -4,7 +4,7 @@
 // CHECK de la base sólo exige que sea un array: la validación fina vive acá.
 
 export const MAX_CHIPS = 3
-export const MAX_TEXTO_CHIP = 30
+export const MAX_TEXTO_CHIP = 40
 export const TONOS_CHIP = ["destacado", "exito", "info"] as const
 export type TonoChip = (typeof TONOS_CHIP)[number]
 

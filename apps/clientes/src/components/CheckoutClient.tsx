@@ -11,7 +11,7 @@ import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, S
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { formaInicialDelMedio, pagoParaCotizar } from "@/lib/lista-medio";
-import { ahorroFrente, bajadaOpcion, opcionElegida, opcionesDePago, PIE_CUENTA_MP, textoConfirmar, tituloEnFrase, tituloOpcion } from "@/lib/opciones-pago";
+import { ahorroFrente, bajadaOpcion, opcionElegida, opcionesDePago, PIE_CUENTA_MP, textoConfirmar, tituloEnFrase, tituloOpcion, type OpcionPago } from "@/lib/opciones-pago";
 import { leerFormaCobro, type OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { contenidoDistinto, COPY_CARRITO, type CartItem } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
@@ -61,7 +61,7 @@ import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
 import { CardOpcionPago } from "@/components/checkout/CardOpcionPago";
-import type { ChipMedio } from "@/lib/medios-pago-chips";
+import { esChipDeAhorro, textoDeAhorro, type ChipMedio } from "@/lib/medios-pago-chips";
 import { logosTarjetas, type TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import { tarjetasPayway } from "@/lib/pagos/tarjetas-payway";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
@@ -833,7 +833,15 @@ export function CheckoutClient({
   const totalesRecibidos = cotizacion?.totalesOpciones;
   if (totalesRecibidos && totalesRecibidos !== totalesOpciones) setTotalesOpciones(totalesRecibidos);
   // Lo que ahorra la card elegida (transferencia): se repite bajo el total del resumen.
-  const ahorroSel = opcionSel?.slug === SLUG_TRANSFERENCIA ? ahorroFrente(totalesOpciones, opcionesPago, opcionSel.clave) : null;
+  // Franja de ahorro: sólo en las cards cuyo medio tiene una etiqueta con {ahorro} (la carga el admin).
+  const ahorroDe = (o: OpcionPago) => {
+    const chip = mediosParaElegir.find((m) => m.slug === o.slug)?.chips?.find(esChipDeAhorro);
+    const a = chip ? ahorroFrente(totalesOpciones, opcionesPago, o.clave) : null;
+    if (!chip || !a) return null;
+    const frente = tituloEnFrase(a.frente, mediosParaElegir.find((m) => m.slug === a.frente.slug)?.nombre ?? "");
+    return { monto: a.monto, texto: textoDeAhorro(chip.texto, fmtPrecio(a.monto), frente) };
+  };
+  const ahorroSel = opcionSel ? ahorroDe(opcionSel) : null;
 
   /** Lo elegido en el formulario de pago (para el resumen); null fuera de él. */
   const [eleccionCuotas, setEleccionCuotas] = useState<EleccionCuotas | null>(null);
@@ -1890,10 +1898,9 @@ export function CheckoutClient({
                           selected={opcionSel?.clave === o.clave}
                           onClick={() => setOpcionClave(o.clave)}
                           total={totalesOpciones[o.clave]}
-                          ahorro={o.clave === opcionSel?.clave ? ahorroSel : o.slug === SLUG_TRANSFERENCIA ? ahorroFrente(totalesOpciones, opcionesPago, o.clave) : null}
+                          textoAhorro={ahorroDe(o)?.texto ?? null}
                           titulo={tituloOpcion(o, m.nombre)}
                           bajada={bajadaOpcion(o)}
-                          ahorroFrenteA={(x) => tituloEnFrase(x, mediosParaElegir.find((y) => y.slug === x.slug)?.nombre ?? "")}
                           logos={
                             o.forma === "credito" || o.forma === "debito"
                               ? (o.slug === SLUG_PAYWAY ? tarjetasDelConvenioPayway : tarjetasMercadoPago)?.[o.forma]?.map((t) => ({ name: t.nombre, src: t.logo }))

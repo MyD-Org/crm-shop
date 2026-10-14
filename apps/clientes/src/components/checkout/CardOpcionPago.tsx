@@ -36,8 +36,8 @@ function detalleDe(opcion: OpcionPago, medio: MedioPago): string {
 }
 
 /**
- * Card del paso Pago: una forma de pagar con el total que se paga con ella. La de transferencia
- * resalta cuánto se ahorra frente a la opción más cara. La elegida se abre con lo que pasa al confirmar.
+ * Card del paso Pago: una forma de pagar con el total que se paga con ella. Si el medio tiene una
+ * etiqueta de ahorro (`{ahorro}`), resalta cuánto se ahorra frente a la opción más cara. La elegida se abre con lo que pasa al confirmar.
  */
 export function CardOpcionPago({
   opcion,
@@ -47,8 +47,7 @@ export function CardOpcionPago({
   selected,
   onClick,
   total,
-  ahorro,
-  ahorroFrenteA,
+  textoAhorro,
   logos,
 }: {
   opcion: OpcionPago;
@@ -59,13 +58,14 @@ export function CardOpcionPago({
   onClick: () => void;
   /** Total con esta card; `undefined` = todavía no llegó, `null` = no se pudo calcular. */
   total: number | null | undefined;
-  ahorro: { monto: number; frente: OpcionPago } | null;
-  ahorroFrenteA: (o: OpcionPago) => string;
+  /** Franja de ahorro (la etiqueta `{ahorro}` del medio, ya armada); null = sin franja. */
+  textoAhorro: string | null;
   logos?: PaymentLogo[];
 }) {
   const detalle = detalleDe(opcion, medio);
-  // Las etiquetas del admin ("Hasta 6 cuotas sin interés") son del medio: en Mercado Pago van con el crédito.
-  const conChips = opcion.forma === null || opcion.forma === "credito";
+  // Las etiquetas del admin son del medio y van en todas sus cards, salvo las de cuotas ("Hasta 6
+  // cuotas sin interés"), que sólo valen con crédito.
+  const chips = (medio.chips ?? []).filter((c) => opcion.forma === null || opcion.forma === "credito" || !/cuota/i.test(c.texto));
   return (
     <button
       type="button"
@@ -92,10 +92,12 @@ export function CardOpcionPago({
           <Icono opcion={opcion} />
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-[15px] font-extrabold text-text sm:text-base">{titulo}</span>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-[15px] font-extrabold text-text sm:text-base">{titulo}</span>
+            <ChipsMedioPago chips={chips} className="" />
+          </span>
           {bajada && <span className="text-xs text-muted sm:text-[13px]">{bajada}</span>}
           {logos && logos.length > 0 && <PaymentLogos logos={logos} className="mt-1" />}
-          {conChips && <ChipsMedioPago chips={medio.chips} />}
         </span>
         <span className="flex shrink-0 flex-col items-end">
           {total === undefined ? (
@@ -110,10 +112,10 @@ export function CardOpcionPago({
           {(opcion.forma === "credito" || opcion.forma === "debito") && <span className="text-[11px] text-muted sm:text-xs">en 1 pago</span>}
         </span>
       </span>
-      {ahorro && (
+      {textoAhorro && (
         <span className="mx-4 mb-4 flex items-center gap-2 rounded-xl bg-success-soft px-3 py-2 text-[13px] font-bold text-success sm:mr-5 sm:ml-[92px]">
           <IconoAhorro />
-          Ahorra {fmtPrecio(ahorro.monto)} frente a {ahorroFrenteA(ahorro.frente)}
+          {textoAhorro}
         </span>
       )}
       {selected && detalle && (

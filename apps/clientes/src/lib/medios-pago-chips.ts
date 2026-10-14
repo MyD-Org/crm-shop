@@ -1,14 +1,14 @@
 /**
  * Etiquetas ("chips") que el admin carga en cada medio de pago (`public.medios_pago_shop.chips`,
  * migración 0071 del CRM) y que el checkout muestra resaltadas sobre la opción del medio. Contrato
- * con el CRM: lista de `{ texto, tono }`, hasta 3, texto de 1 a 30 caracteres sin HTML, tono
+ * con el CRM: lista de `{ texto, tono }`, hasta 3, texto de 1 a 40 caracteres sin HTML, tono
  * `destacado` | `exito` | `info`. El CRM valida al escribir; acá se lee de forma TOLERANTE: lo que no
  * cumple se descarta y nunca rompe el checkout.
  */
 import type { BadgeTone } from "@myd-org/ui";
 
 export const MAX_CHIPS_MEDIO = 3;
-const MAX_TEXTO = 30;
+const MAX_TEXTO = 40;
 
 export type TonoChip = "destacado" | "exito" | "info";
 
@@ -40,4 +40,18 @@ export function leerChipsMedio(valor: unknown): ChipMedio[] {
 /** Tono del Badge del DS para cada tono de chip (el DS no tiene un tono de acento propio). */
 export function tonoBadgeDeChip(tono: TonoChip): BadgeTone {
   return tono === "exito" ? "success" : tono === "info" ? "info" : "warning";
+}
+
+/**
+ * Etiqueta de ahorro: su texto lleva `{ahorro}` (cuánto ahorra con el medio frente a la opción más
+ * cara) y puede llevar `{frente}` (esa opción). No se dibuja como etiqueta sino como la franja de
+ * ahorro de la card, y sólo cuando hay ahorro.
+ */
+export function esChipDeAhorro(c: Pick<ChipMedio, "texto">): boolean {
+  return c.texto.includes("{ahorro}");
+}
+
+/** El texto de la etiqueta de ahorro con los montos y el nombre reemplazados. */
+export function textoDeAhorro(texto: string, ahorro: string, frente: string): string {
+  return texto.replaceAll("{ahorro}", ahorro).replaceAll("{frente}", frente);
 }

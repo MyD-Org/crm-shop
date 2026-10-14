@@ -30,11 +30,11 @@ describe("validarChips", () => {
     expect(validarChips([{ texto: "   ", tono: "info" }])).toEqual({ ok: false, error: "Ingrese el texto de la etiqueta." })
   })
 
-  it("admite 30 caracteres y rechaza 31", () => {
+  it("admite 40 caracteres y rechaza 41", () => {
     expect(validarChips([{ texto: "a".repeat(MAX_TEXTO_CHIP), tono: "info" }]).ok).toBe(true)
     expect(validarChips([{ texto: "a".repeat(MAX_TEXTO_CHIP + 1), tono: "info" }])).toEqual({
       ok: false,
-      error: "El texto de la etiqueta admite hasta 30 caracteres.",
+      error: "El texto de la etiqueta admite hasta 40 caracteres.",
     })
   })
 

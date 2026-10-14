@@ -790,6 +790,9 @@ export function CheckoutClient({
   // La forma es la de la card elegida.
   const formaDelMedio =
     medioSel && !esCuentaCorriente && formaInicialDelMedio(medioSel) ? (opcionSel?.forma ?? formaInicialDelMedio(medioSel)) : null;
+  // El pedido congela la forma de la card elegida (aunque el medio no tenga precios por forma): el
+  // formulario de pago abre directo en ella, también al retomar el pedido.
+  const formaDelPedido = esCuentaCorriente ? null : (formaDelMedio ?? opcionSel?.forma ?? null);
   // Las cuotas se eligen dentro del formulario de pago (Mercado Pago y Payway), según la tarjeta
   // (`SelectorCuotas`). El pedido se crea en 1 pago y acá sólo queda la meta "Sume $X más…".
 
@@ -926,7 +929,7 @@ export function CheckoutClient({
         body: JSON.stringify({
           pagoMetodo: pagoParaEnviar,
           cuotas: pideCuotas && opcionesCuotas.length > 0 ? 1 : undefined,
-          ...(formaDelMedio ? { forma: formaDelMedio } : {}),
+          ...(formaDelPedido ? { forma: formaDelPedido } : {}),
           totalVisto: cotizacion?.total,
         }),
       });
@@ -1016,7 +1019,7 @@ export function CheckoutClient({
           pagoMetodo: pagoParaEnviar,
           // Sólo si el servidor ofreció cuotas: la cantidad elegida (1 = un pago). El monto no viaja.
           cuotas: pideCuotas && opcionesCuotas.length > 0 ? 1 : undefined,
-          ...(formaDelMedio ? { forma: formaDelMedio } : {}),
+          ...(formaDelPedido ? { forma: formaDelPedido } : {}),
           notas,
           complementoFacturacion: complementoFacturacion ?? undefined,
           // Sólo con el flag `sucursales` (props presentes): local de retiro y provincia de entrega.

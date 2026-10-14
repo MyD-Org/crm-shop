@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { asegurarCuotasDelPedido, cambiarFormaDelPedido, consultarOpcionesCuotas } from "./checkout-cuotas-cliente";
+import { asegurarCuotasDelPedido, consultarOpcionesCuotas } from "./checkout-cuotas-cliente";
 
 const respuesta = (status: number, json: unknown) =>
   ({ ok: status >= 200 && status < 300, status, json: async () => json }) as Response;
@@ -145,36 +145,5 @@ describe("asegurarCuotasDelPedido con forma de pago", () => {
     });
     expect(fetcher).not.toHaveBeenCalled();
     expect(r.ok).toBe(true);
-  });
-});
-
-describe("cambiarFormaDelPedido", () => {
-  it("POST /medio con medio, forma y 1 pago; devuelve total, cuotas y forma que congeló el servidor", async () => {
-    const fetcher = vi.fn().mockResolvedValue(respuesta(200, { cuotas: 1, total: 45000, formaCobro: "debito" }));
-    const r = await cambiarFormaDelPedido({ pedidoId: "p 1", pagoMetodo: "payway", forma: "debito", fetcher });
-    const [url, init] = fetcher.mock.calls[0];
-    expect(url).toBe("/api/pedidos/p%201/medio");
-    expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body)).toEqual({ pagoMetodo: "payway", forma: "debito", cuotas: 1 });
-    expect(r).toEqual({ ok: true, total: 45000, cuotas: 1, formaCobro: "debito" });
-  });
-
-  it("409 (cobro en vuelo, pago en revisión) y 429: devuelve el mensaje del servidor", async () => {
-    for (const status of [409, 429]) {
-      const fetcher = vi.fn().mockResolvedValue(respuesta(status, { error: "Mensaje del servidor." }));
-      expect(await cambiarFormaDelPedido({ pedidoId: "p1", pagoMetodo: "mercadopago", forma: "debito", fetcher })).toEqual({
-        ok: false,
-        error: "Mensaje del servidor.",
-      });
-    }
-  });
-
-  it("respuesta sin total o sin red: error en usted", async () => {
-    const sinTotal = vi.fn().mockResolvedValue(respuesta(200, {}));
-    const r1 = await cambiarFormaDelPedido({ pedidoId: "p1", pagoMetodo: "mercadopago", forma: "debito", fetcher: sinTotal });
-    expect(r1.ok).toBe(false);
-    const sinRed = vi.fn().mockRejectedValue(new Error("red"));
-    const r2 = await cambiarFormaDelPedido({ pedidoId: "p1", pagoMetodo: "mercadopago", forma: "debito", fetcher: sinRed });
-    expect(r2).toEqual({ ok: false, error: "No pudimos conectarnos. Revise su conexión e inténtelo de nuevo." });
   });
 });

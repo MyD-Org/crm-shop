@@ -5,6 +5,8 @@ import { ImageResponse } from "next/og";
 import { sora, type Fuente } from "@/lib/fuente-sora";
 import { getMarca } from "@/lib/marca";
 import { MARCA_POR_DEFECTO, PARTES_NOMBRE_CENTRAL, type Marca } from "@/lib/marca-base";
+import { coloresPwaDeTema } from "@/lib/tema-tenant";
+import { getTemaTenant } from "@/lib/tema-tenant-datos";
 
 /**
  * Imagen de vista previa del sitio (WhatsApp, Facebook, Google…) para toda
@@ -31,7 +33,7 @@ export const alt = "Central Led — Iluminación y electricidad";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-const COLOR = {
+const COLOR_CENTRAL = {
   fondo: "#f8f8f6",
   tinta: "#1c2733",
   suave: "#666e77",
@@ -69,8 +71,14 @@ function imagenPropia(marca: Marca): string | null {
 }
 
 export default async function OpengraphImage() {
-  const marca = await getMarca();
+  const [marca, tema] = await Promise.all([getMarca(), getTemaTenant()]);
   const central = esCentral(marca);
+  // Paleta propia del tenant (`tenants.shop_tema`): fondo, tinta y acento de su tema. Sin ella, los
+  // de Central de siempre.
+  const propiaPaleta = coloresPwaDeTema(tema);
+  const COLOR = propiaPaleta
+    ? { fondo: propiaPaleta.fondo, tinta: propiaPaleta.tinta, suave: propiaPaleta.suave, acento: propiaPaleta.acento }
+    : COLOR_CENTRAL;
   const propia = central ? null : imagenPropia(marca);
   const textos = marca.ogTextos;
   const { foto, fuentes } = await recursos(

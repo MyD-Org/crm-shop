@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import type { Marca } from "@/lib/marca-base";
+import type { ColoresPwa } from "@/lib/tema-tenant";
 
 /**
  * Manifest PWA de una marca. `name`: el mismo texto que `metadata.title` (`marca.titulo`);
@@ -12,9 +13,10 @@ import type { Marca } from "@/lib/marca-base";
  *
  * `background_color`/`theme_color`: tokens del tema `calido-azul` (el de por defecto,
  * `TEMA_POR_DEFECTO` en `src/lib/tema-ip.ts`) — `--color-bg` y `--color-primary` de
- * `src/app/globals.css`.
+ * `src/app/globals.css`. Con paleta propia del tenant (`tenants.shop_tema`, `coloresPwaDeTema`) son
+ * su `bg` y su `primary`.
  */
-export function manifestDeMarca(marca: Marca): MetadataRoute.Manifest {
+export function manifestDeMarca(marca: Marca, pwa: ColoresPwa | null = null): MetadataRoute.Manifest {
   const icono = marca.faviconUrl
     ? { src: marca.faviconUrl, sizes: "any", type: tipoImagen(marca.faviconUrl) }
     : { src: "/icon.svg", sizes: "any", type: "image/svg+xml" };
@@ -25,8 +27,8 @@ export function manifestDeMarca(marca: Marca): MetadataRoute.Manifest {
     lang: "es-AR",
     start_url: "/",
     display: "browser",
-    background_color: "#f8f8f6",
-    theme_color: "#16283f",
+    background_color: pwa?.fondo ?? "#f8f8f6",
+    theme_color: pwa?.tema ?? "#16283f",
     icons: [icono],
   };
 }

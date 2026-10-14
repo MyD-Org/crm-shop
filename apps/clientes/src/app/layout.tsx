@@ -8,7 +8,9 @@ import { Header } from "@/components/HeaderServer";
 import { SiteFooter } from "@/components/SiteFooter";
 import { getContenidoHome } from "@/lib/home-datos";
 import { clasesVisibilidad, visibilidadDe } from "@/data/home-defaults";
-import { TEMA_POR_DEFECTO, scriptTema } from "@/lib/tema-ip";
+import { scriptTema } from "@/lib/tema-ip";
+import { atributosHtmlTema } from "@/lib/tema-tenant";
+import { getTemaTenant } from "@/lib/tema-tenant-datos";
 import { BloqueoFavoritos } from "@/components/BloqueoFavoritos";
 import { ChatIaServidor } from "@/components/chat/ChatIaServidor";
 import { TrackingServidor } from "@/components/tracking/TrackingServidor";
@@ -95,21 +97,26 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Anuncio global: contenido administrable (mismo contrato que la home).
-  const [{ anuncio, visibilidad }, marca] = await Promise.all([getContenidoHome(), getMarca()]);
+  const [{ anuncio, visibilidad }, marca, temaTenant] = await Promise.all([getContenidoHome(), getMarca(), getTemaTenant()]);
+  // Tema de la tienda (`tenants.shop_tema`): sin paleta propia (Central) no hay `data-tema` ni
+  // `<style>` y el HTML es el de siempre; con ella, UNA regla de variables (src/lib/tema-tenant.ts).
+  const tema = atributosHtmlTema(temaTenant);
   const vAnuncio = visibilidadDe(visibilidad, "anuncio");
 
   return (
-    // Tema: el shell trae el de todos (geo-IP apagada, ver tema-ip.ts). El
-    // `?tema=azul|calido` de QA lo aplica el script del <head> antes del primer
+    // Tema: el shell trae el de la tienda (base de `shop_tema`; geo-IP apagada, ver
+    // tema-ip.ts). El `?tema=azul|calido` de QA lo aplica el script del <head> antes del primer
     // pintado; por eso `suppressHydrationWarning` en <html>.
     <html
       lang="es"
-      data-theme={TEMA_POR_DEFECTO}
+      data-theme={tema.dataTheme}
+      data-tema={tema.dataTema}
       suppressHydrationWarning
       className={`h-full antialiased ${nunito.variable} ${sora.variable}`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: scriptTema() }} />
+        {tema.css ? <style dangerouslySetInnerHTML={{ __html: tema.css }} /> : null}
       </head>
       <body className="flex min-h-full flex-col">
         {/* ClerkProvider DENTRO de <body> y sin `dynamic`: con `dynamic` (o

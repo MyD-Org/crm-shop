@@ -35,4 +35,17 @@ describe("manifestDeMarca — marca propia", () => {
       { src: "https://media.example/f.png", sizes: "any", type: "image/png" },
     ]);
   });
+
+  it("con paleta propia del tenant: fondo y tema salen de ella; el resto igual", () => {
+    const m = manifestDeMarca(MARCA_POR_DEFECTO, {
+      fondo: "#faf6ef",
+      tema: "#241c14",
+      tinta: "#2a2118",
+      suave: "#70665a",
+      acento: "#a8562a",
+    });
+    expect(m.background_color).toBe("#faf6ef");
+    expect(m.theme_color).toBe("#241c14");
+    expect(m.name).toBe("Central LED — Tienda Online");
+  });
 });

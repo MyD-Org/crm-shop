@@ -747,6 +747,9 @@ export const catalogOverlay = pgTable(
     // false = el Shop no exhibe la marca de este producto (ni en la card, ni en la ficha, ni en el
     // filtro de marcas). Migración 0048; el Shop la lee directo del overlay (GRANT por columna).
     mostrarMarca: boolean("mostrar_marca").notNull().default(true),
+    // true = esta variante no se muestra en la tienda aunque su modelo sí (overlay PROPIO de la variante;
+    // default false = se muestra). Migración 0087; el Shop la lee directo del overlay (GRANT por columna).
+    ocultaEnTienda: boolean("oculta_en_tienda").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // Insumo del delta hacia el Shop: lo setea el repo con now() de Postgres en CADA escritura.
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

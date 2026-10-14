@@ -1821,6 +1821,28 @@ export async function getProducto(
 }
 
 /**
+ * Flag `variantes-selector`: para un id que NO se puede mostrar (variante oculta por el admin o
+ * inactiva en Alegra, o el id del modelo mismo), el id de otra opción disponible de su modelo: la
+ * representante si sigue disponible, si no la primera por etiqueta. `null` si no pertenece a un
+ * grupo o ya no le queda ninguna opción (la ficha responde 404). Lee el grupo sin filtrar por
+ * activo (la pedida justamente no lo está) y las opciones por `getVariantesDeGrupo`, que sí.
+ */
+export async function getIdAlternativoDeVariante(
+  id: string,
+  opts: { soloVisibles: boolean; disp?: ContextoDisponibilidad },
+): Promise<string | null> {
+  if (!esIdProducto(id)) return null;
+  const [fila] = await getDb()
+    .select({ grupoId: crmCatalogo.grupoId })
+    .from(crmCatalogo)
+    .where(and(enTenantCatalogo(), eq(crmCatalogo.alegraId, id)))
+    .limit(1);
+  if (!fila?.grupoId) return null;
+  const opciones = (await getVariantesDeGrupo(fila.grupoId, opts)).filter((o) => o.id !== id);
+  return (opciones.find((o) => o.esRepresentante) ?? opciones[0])?.id ?? null;
+}
+
+/**
  * Con el flag `variantes-selector`: si el producto es una variante de un modelo con al menos 2
  * opciones activas (y él es una de ellas), le suma `grupo` para que la ficha dibuje el selector. Un
  * producto suelto, un modelo de una sola opción o una variante que no figura entre las opciones

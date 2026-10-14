@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
+import { ACTIVO_EN_TIENDA, dbGrabadora } from "@/db/__fixtures__/db-grabadora";
 import { crmCatalogo } from "@/db/crm";
 import { stockReservado } from "@/db/schema";
 import {
@@ -43,7 +43,7 @@ describe("una sola fuente: la vista del CRM", () => {
     expect(sql).not.toContain('"shop"."catalog_products"');
     expect(sql).not.toContain("alegra_leido_at");
     expect(sql).toContain('"catalog_products_shop"."precios_alegra"');
-    expect(sql).toContain(`(case when "catalog_products_shop"."activo" then 'active' else 'inactive' end)`);
+    expect(sql).toContain(`(case when ${ACTIVO_EN_TIENDA} then 'active' else 'inactive' end)`);
   });
 
   it("sin tenant no arma la consulta", () => {

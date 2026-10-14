@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dbGrabadora, esLecturaDelArbol, sinLecturaDelArbol } from "@/db/__fixtures__/db-grabadora";
+import { dbGrabadora, sinOculta, esLecturaDelArbol, sinLecturaDelArbol } from "@/db/__fixtures__/db-grabadora";
 
 /**
  * Contrato del flag `variantes-selector` en las consultas del catálogo (change
@@ -115,7 +115,7 @@ describe("agrupar prendido", () => {
     for (const sql of sqls) {
       expect(sql).toContain(REPRESENTANTE);
       expect(sql).toContain(OVERLAY_DEL_GRUPO);
-      expect(sql).not.toContain(OVERLAY_PROPIO);
+      expect(sinOculta(sql)).not.toContain(OVERLAY_PROPIO);
     }
   });
 

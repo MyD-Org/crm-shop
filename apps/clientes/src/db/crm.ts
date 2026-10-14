@@ -98,6 +98,11 @@ export const crmOverlay = publico.table("catalog_overlay", {
    * Columna de la migración 0027 del CRM (sin migración nueva: el SELECT de tabla de 0038 la cubre).
    */
   orden: integer("orden"),
+  /**
+   * true = esta variante (la fila es la del `alegra_id` de la variante, no la del grupo) no se
+   * muestra ni se vende en la tienda. Migración 0087 del CRM.
+   */
+  ocultaEnTienda: boolean("oculta_en_tienda").notNull(),
 });
 
 // ---------------------------------------------------------------------------

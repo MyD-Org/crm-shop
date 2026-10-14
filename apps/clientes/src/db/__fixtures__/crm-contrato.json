@@ -19,7 +19,8 @@
     "ficha_tecnica": "jsonb",
     "oculto_en_sucursales": "text[]",
     "mostrar_marca": "boolean",
-    "orden": "integer"
+    "orden": "integer",
+    "oculta_en_tienda": "boolean"
   },
   "public.alegra_contacts_shop": {
     "tenant_id": "text",

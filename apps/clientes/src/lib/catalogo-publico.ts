@@ -45,6 +45,7 @@ import {
   getCategorias,
   getFacetas,
   getFacetaCategorias,
+  getIdAlternativoDeVariante,
   getPaginaCatalogo,
   getProducto,
   getRutaCategoriaPropia,
@@ -309,6 +310,32 @@ export function productoPublico(
           : productoCacheado(id, soloVisibles, disp);
   return conRespaldoSinCache("producto", cacheada, () =>
     leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas, modal, agrupar),
+  );
+}
+
+async function alternativaCacheada(id: string, soloVisibles: boolean, disp?: ContextoDisponibilidad): Promise<string | null> {
+  "use cache: remote";
+  cacheTag(TAG_CATALOGO);
+  cacheLife("catalogo");
+  console.info("[cache] variante-alternativa miss");
+  return getIdAlternativoDeVariante(id, { soloVisibles, disp });
+}
+
+/**
+ * Ficha de una variante que ya no se puede mostrar (oculta por el admin o inactiva en Alegra): el
+ * id de otra opción disponible de su modelo, o `null` (404). Mismo criterio de cacheo que
+ * `productoPublico`; si la base falla, TIRA y no se cachea.
+ */
+export function alternativaDeVariantePublica(
+  id: string,
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+): Promise<string | null> {
+  if (!esIdProducto(id)) return Promise.resolve(null);
+  return conRespaldoSinCache(
+    "variante-alternativa",
+    () => (disp ? alternativaCacheada(id, soloVisibles, disp) : alternativaCacheada(id, soloVisibles)),
+    () => getIdAlternativoDeVariante(id, { soloVisibles, disp }),
   );
 }
 

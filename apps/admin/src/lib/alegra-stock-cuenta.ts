@@ -12,7 +12,7 @@ import {
 } from "./alegra-pareo"
 import { escribirStock } from "./alegra-sync-cuenta"
 import { upsertProductosSecundaria } from "./catalog-products-repo"
-import { claveEfectivaSql, copiarOverlaySiFalta, listasDeLaPrincipal, normCodigoSql } from "./catalogo-union-repo"
+import { absorberSoloSecundaria, claveEfectivaSql, copiarOverlaySiFalta, listasDeLaPrincipal, normCodigoSql } from "./catalogo-union-repo"
 import { configParaCuenta } from "./sucursales-cuenta"
 import type { TenantConfig } from "./tenants"
 import type { TipoItem } from "./variantes-puras"
@@ -35,6 +35,9 @@ import type { TipoItem } from "./variantes-puras"
 //    (código, opción). Un hijo desconocido entra como `<slug>:<id>` si no tiene par aunque un
 //    hermano comparta el código. Un PADRE nunca lleva stock vendible: si no se pareó con un padre de
 //    la principal se guarda como ancla del grupo (`tipo='padre'`).
+//  - Fila propia que la principal ya absorbió (el modelo se cargó primero acá y después en la
+//    principal): se corre la absorción de la sync y, si tiene par activo, NO se refresca —el upsert
+//    limpia `reemplazado_por_alegra_id` y la reactivaba como duplicado—; su stock va a la principal.
 // Nunca toca `catalog_products` de la principal ni la cola de otra cuenta.
 
 export type ResultadoCuenta = "pareado" | "solo_secundaria" | "nuevo" | "baja" | "ignorado"
@@ -120,6 +123,18 @@ export async function refrescarItemDeCuenta(
       `)
     }
     return "baja"
+  }
+
+  // Fila propia que la principal ya absorbió (o que hoy tiene par activo): no se refresca —eso la
+  // reactivaría—; su stock va a la fila de la principal, como en un par.
+  if (propio) {
+    const principal = await reabsorber(tenantId, sintetico)
+    if (principal) {
+      if (item.tipo !== "padre") {
+        await escribirStock(tenantId, slugs, [{ alegraId: principal, itemIdCuenta: idEnCuenta, stock: item.stock }], leidoAt, "webhook")
+      }
+      return "pareado"
+    }
   }
 
   const clave = normalizarCodigo(item.code)
@@ -229,6 +244,19 @@ export async function refrescarItemDeCuenta(
     return "nuevo"
   }
   return "ignorado"
+}
+
+/**
+ * Corre la absorción de la sync (`absorberSoloSecundaria`, idempotente) y devuelve la fila de la
+ * principal que absorbió a ESTA, o null si sigue siendo solo-secundaria.
+ */
+async function reabsorber(tenantId: string, sintetico: string): Promise<string | null> {
+  await absorberSoloSecundaria(tenantId)
+  const [fila] = await getDb()
+    .select({ reemplazadoPor: catalogProducts.reemplazadoPorAlegraId })
+    .from(catalogProducts)
+    .where(and(eq(catalogProducts.tenantId, tenantId), eq(catalogProducts.alegraId, sintetico)))
+  return fila?.reemplazadoPor ?? null
 }
 
 /** Padres ACTIVOS de la principal con ese código normalizado (para parear el padre de la secundaria). */

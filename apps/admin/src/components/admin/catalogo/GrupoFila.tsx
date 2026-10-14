@@ -2,13 +2,15 @@
 
 import { useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight } from "lucide-react"
-import { Badge, Button, Dialog, Tooltip } from "@myd-org/ui"
+import { Badge, Button, Dialog, Switch, Tooltip } from "@myd-org/ui"
 import { api, ErrorApi, precioDeLista, stockDe, type ProductoDto, type VarianteDto } from "./tipos"
 import {
   AYUDA_NO_SE_VENDE,
   TEXTO_NO_SE_VENDE,
   cantidadInactivas,
   estaActiva,
+  interruptorTienda,
+  TEXTO_MOSTRAR_EN_TIENDA,
   nombreDeVariante,
   textoCantidadVariantes,
   textoQuitar,
@@ -80,7 +82,7 @@ export function GrupoCelda({ producto, cabecera, onCambio, onError }: CeldaProps
       </div>
       {abierto && (
         <div onClick={(e) => e.stopPropagation()} className="mt-2">
-          <ListaVariantes variantes={producto.variantes} onQuitar={(v) => setQuitando(v)} />
+          <ListaVariantes variantes={producto.variantes} onQuitar={(v) => setQuitando(v)} onCambioTienda={onCambio} />
         </div>
       )}
 
@@ -116,12 +118,14 @@ interface ListaProps {
   variantes: VarianteDto[]
   /** Si se pasa, los productos sumados a mano (menos la base) muestran «Quitar del modelo». */
   onQuitar?: (variante: VarianteDto) => void
+  /** Se llama después de mostrar u ocultar una variante en la tienda (el panel recarga el listado). */
+  onCambioTienda?: () => void
   /** Algo más por variante (en el diálogo: el editor de la foto propia). */
   extra?: (variante: VarianteDto) => ReactNode
 }
 
 /** La lista de opciones de un modelo. Sólo lectura: lo de Alegra no se edita desde acá. */
-export function ListaVariantes({ variantes, onQuitar, extra }: ListaProps) {
+export function ListaVariantes({ variantes, onQuitar, onCambioTienda, extra }: ListaProps) {
   if (variantes.length === 0) return null
   return (
     <ul className="flex flex-col gap-1.5" aria-label="Variantes del modelo">
@@ -158,10 +162,64 @@ export function ListaVariantes({ variantes, onQuitar, extra }: ListaProps) {
                 </Button>
               )}
             </div>
+            <InterruptorTienda variante={v} onCambio={onCambioTienda} />
             {extra?.(v)}
           </li>
         )
       })}
     </ul>
+  )
+}
+
+/**
+ * «Mostrar en la tienda» de una variante: prendido por defecto. Apagarlo la oculta en la tienda sin
+ * tocar el resto de sus datos. Una variante de baja en Alegra queda apagada y deshabilitada.
+ */
+function InterruptorTienda({ variante, onCambio }: { variante: VarianteDto; onCambio?: () => void }) {
+  const [oculta, setOculta] = useState(variante.ocultaEnTienda)
+  const [enCurso, setEnCurso] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const estado = interruptorTienda({ ...variante, ocultaEnTienda: oculta })
+  if (!estado) return null
+  const ayudaId = `ayuda-tienda-${variante.alegraId}`
+
+  async function cambiar(mostrar: boolean) {
+    setEnCurso(true)
+    setError(null)
+    try {
+      await api("/api/admin/catalogo/variantes", {
+        method: "PATCH",
+        body: JSON.stringify({ alegraId: variante.alegraId, ocultaEnTienda: !mostrar }),
+      })
+      setOculta(!mostrar)
+      onCambio?.()
+    } catch (err) {
+      setError(err instanceof ErrorApi ? err.message : "No pudimos guardar el cambio. Inténtelo nuevamente.")
+    } finally {
+      setEnCurso(false)
+    }
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <Switch
+        size="sm"
+        label={TEXTO_MOSTRAR_EN_TIENDA}
+        checked={estado.prendido}
+        disabled={estado.deshabilitado || enCurso}
+        onCheckedChange={(v) => void cambiar(v)}
+        aria-describedby={estado.ayuda ? ayudaId : undefined}
+      />
+      {estado.ayuda && (
+        <span id={ayudaId} className="text-xs" style={{ color: "var(--ink-faint)" }}>
+          {estado.ayuda}
+        </span>
+      )}
+      {error && (
+        <span role="alert" className="text-xs" style={{ color: "var(--red)" }}>
+          {error}
+        </span>
+      )}
+    </div>
   )
 }

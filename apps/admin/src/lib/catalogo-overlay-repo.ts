@@ -1063,6 +1063,8 @@ export interface VarianteAdmin {
   /** Orden manual dentro del modelo (sólo en los sumados a mano). */
   orden: number | null
   esRepresentante: boolean
+  /** true = el operador la ocultó en la tienda (overlay propio de la variante). */
+  ocultaEnTienda: boolean
   /** true = es el ancla del grupo (base de un grupo manual, también figura entre las opciones). */
   esAncla: boolean
   stockSucursales: { sucursal: string; stock: string; leidoAt: string | null }[]
@@ -1119,6 +1121,7 @@ interface FilaVarianteCruda {
   stock: string | null
   fotos: FotoOverlay[] | null
   es_representante: boolean
+  oculta_en_tienda: boolean
   manual: boolean
   manual_orden: number | null
 }
@@ -1341,7 +1344,7 @@ async function variantesDeGrupos(tenantId: string, anclas: string[]): Promise<Ma
   if (anclas.length === 0) return mapa
   const filas = (await getDb().execute(sql`
     SELECT p.alegra_id, p.grupo_id, p.code, p.name, p.etiqueta, p.tipo, p.status, p.alegra_status, p.prices, p.stock,
-           p.es_representante, ov.fotos, (m.alegra_id IS NOT NULL) AS manual, m.orden AS manual_orden
+           p.es_representante, ov.fotos, coalesce(ov.oculta_en_tienda, false) AS oculta_en_tienda, (m.alegra_id IS NOT NULL) AS manual, m.orden AS manual_orden
     FROM ${catalogProducts} p
     LEFT JOIN ${catalogOverlay} ov ON (ov.tenant_id = p.tenant_id AND ov.alegra_id = p.alegra_id)
     LEFT JOIN catalog_variantes_manuales m ON (m.tenant_id = p.tenant_id AND m.alegra_id = p.alegra_id)
@@ -1366,6 +1369,7 @@ async function variantesDeGrupos(tenantId: string, anclas: string[]): Promise<Ma
       manual: f.manual,
       orden: f.manual_orden,
       esRepresentante: f.es_representante,
+      ocultaEnTienda: f.oculta_en_tienda,
       esAncla: f.alegra_id === f.grupo_id,
       stockSucursales: [],
     })

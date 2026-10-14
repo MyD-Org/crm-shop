@@ -51,8 +51,18 @@ export const stockSql = sql<string | null>`(case when ${crmCatalogo.stock} is nu
  */
 export const preciosSql = sql<unknown>`${crmCatalogo.preciosAlegra}`.mapWith(crmCatalogo.preciosAlegra);
 
-/** ¿El producto está activo? (visto en la última sync del CRM y no inactivo en Alegra). */
-export const activoSql = sql<boolean>`${crmCatalogo.activo}`;
+/**
+ * ¿El producto se puede mostrar y comprar? Visto en la última sync del CRM, no inactivo en Alegra
+ * Y no ocultado a mano en la tienda (`catalog_overlay.oculta_en_tienda` de SU PROPIA fila de
+ * overlay, por su `alegra_id`: no la del ancla del grupo, que es la visibilidad del modelo).
+ *
+ * Es el único punto por el que pasan listado, conteo, facetas, destacados, búsqueda, selector de
+ * variantes, carrito, favoritos, cotización y checkout, así que una variante oculta desaparece de
+ * todas esas superficies a la vez. Sin fila de overlay (o con la columna en false) no cambia nada.
+ * La subconsulta usa la tabla sin alias: dentro de su FROM tapa al `catalog_overlay` del join de
+ * afuera y se correlaciona sólo con la vista de productos.
+ */
+export const activoSql = sql<boolean>`(${crmCatalogo.activo} and not exists (select 1 from ${crmOverlay} where ${crmOverlay.tenantId} = ${crmCatalogo.tenantId} and ${crmOverlay.alegraId} = ${crmCatalogo.alegraId} and ${crmOverlay.ocultaEnTienda}))`;
 
 /** El mismo estado como texto (`active` | `inactive`), para quien espera la columna `status`. */
 export const estadoSql = sql<string>`(case when ${activoSql} then 'active' else 'inactive' end)`;

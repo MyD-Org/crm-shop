@@ -33,12 +33,6 @@ export function EditorChipsMedio({ chips, onChange, error }: EditorChipsMedioPro
         Se muestran resaltadas sobre este medio de pago en el checkout, en este orden. Hasta {MAX_CHIPS} etiquetas de
         {" "}{MAX_TEXTO_CHIP} caracteres, por ejemplo «Hasta 8 cuotas sin interés», «Recomendado» o «15% OFF».
       </p>
-      <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
-        Para mostrar cuánto ahorra el cliente con este medio, escriba {"{ahorro}"} donde va el monto y, si quiere,
-        {" "}{"{frente}"} donde va la opción más cara. Por ejemplo «Ahorra {"{ahorro}"} frente a {"{frente}"}». Esa
-        etiqueta se muestra como una franja verde en la tienda, sólo cuando hay ahorro. Transferencia ya la muestra sin
-        cargar nada; una etiqueta así sólo le cambia el texto.
-      </p>
       {chips.map((c, i) => (
         <div key={i} className="flex flex-wrap items-end gap-2">
           <Field label="Texto">

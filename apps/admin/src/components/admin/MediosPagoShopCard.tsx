@@ -23,7 +23,8 @@ import {
 import { normalizarIdentificador } from "@/lib/identificador"
 import { MARCAS_TARJETA } from "@/lib/marcas-tarjeta"
 import { EditorChipsMedio } from "@/components/admin/EditorChipsMedio"
-import { TONO_BADGE_DE_CHIP, type ChipMedio } from "@/lib/medios-pago-shop-chips"
+import { TONO_BADGE_DE_CHIP, bannerDelMedio, type BannerMedio, type ChipMedio } from "@/lib/medios-pago-shop-chips"
+import { EditorBannerMedio } from "@/components/admin/EditorBannerMedio"
 import {
   OPCIONES_COBRO,
   ROTULO_OPCION,
@@ -61,6 +62,8 @@ type Form = {
   soloCuentaCorriente: boolean
   /** Etiquetas del medio en el checkout (hasta 3), en el orden en que se muestran. */
   chips: ChipMedio[]
+  /** Banner de ahorro (se guarda dentro de `chips`). */
+  banner: BannerMedio
   /** Formas de pago del cobro en línea (sólo se editan en un medio con cobro en línea). */
   opcionesCobro: OpcionCobro[]
 }
@@ -83,6 +86,7 @@ const formVacio: Form = {
   mostrarEnFicha: false,
   soloCuentaCorriente: false,
   chips: [],
+  banner: bannerDelMedio("", null),
   opcionesCobro: [...OPCIONES_COBRO],
 }
 
@@ -112,6 +116,7 @@ const desdeDto = (m: MedioPagoDto, refId: string | null): Form => ({
   mostrarEnFicha: m.mostrarEnFicha,
   soloCuentaCorriente: m.audiencia === "cuenta_corriente",
   chips: m.chips ?? [],
+  banner: bannerDelMedio(m.slug, m.banner),
   opcionesCobro: m.opcionesCobro ?? [...OPCIONES_COBRO],
 })
 
@@ -125,7 +130,7 @@ const cuerpo = (f: Form) => ({
   aplicaEnvio: f.aplicaEnvio,
   activo: f.activo,
   audiencia: f.soloCuentaCorriente ? "cuenta_corriente" : "publico",
-  chips: f.chips,
+  chips: [...f.chips, f.banner],
 })
 
 const porOrden = (a: MedioPagoDto, b: MedioPagoDto) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)
@@ -476,6 +481,9 @@ export function MediosPagoShopCard() {
                         ))}
                       </div>
                     )}
+                    {bannerDelMedio(m.slug, m.banner).activo && (
+                      <span className="text-xs" style={{ color: "var(--ink-soft)" }}>Banner: {bannerDelMedio(m.slug, m.banner).texto}</span>
+                    )}
                     {lineaEnLaTienda(m, medios) && (
                       <span className="text-xs font-medium" style={{ color: "var(--ink)" }}>{lineaEnLaTienda(m, medios)}</span>
                     )}
@@ -605,7 +613,8 @@ export function MediosPagoShopCard() {
                 <Field label="Instrucciones para el cliente" hint="Se muestran al elegir este medio. No incluya datos que no quiera dejar visibles." error={errores.instrucciones}>
                   <Textarea rows={3} value={form.instrucciones} onChange={(e) => cambiar({ instrucciones: e.target.value })} aria-invalid={Boolean(errores.instrucciones)} />
                 </Field>
-                <EditorChipsMedio chips={form.chips} onChange={(chips) => cambiar({ chips })} error={errores.chips} />
+                <EditorChipsMedio chips={form.chips} onChange={(chips) => cambiar({ chips })} error={errores.chips?.includes("banner") ? undefined : errores.chips} />
+                <EditorBannerMedio id="medio-banner" banner={form.banner} onChange={(banner) => cambiar({ banner })} error={errores.chips?.includes("banner") ? errores.chips : undefined} />
                 <div className="flex flex-col gap-2">
                   <CheckboxLabel id="medio-retiro" checked={form.aplicaRetiro} disabled={form.soloCuentaCorriente} onChange={(v) => cambiar({ aplicaRetiro: v })} label="Retiro en el local" />
                   <CheckboxLabel id="medio-envio" checked={form.aplicaEnvio} disabled={form.soloCuentaCorriente} onChange={(v) => cambiar({ aplicaEnvio: v })} label="Envío a domicilio" />

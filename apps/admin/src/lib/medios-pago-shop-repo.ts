@@ -1,7 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { listaPrecioCondiciones, listasPrecioOnline, mediosPagoShop } from "@/db/schema"
-import { leerChips, type ChipMedio } from "@/lib/medios-pago-shop-chips"
+import { leerBanner, leerChips, type BannerMedio, type ChipMedio } from "@/lib/medios-pago-shop-chips"
 import { avisosDeMedio } from "@/lib/medios-pago-shop-avisos"
 import { OPCIONES_COBRO, errorDeOpcionesResultantes, type OpcionCobro } from "@/lib/medios-pago-shop-opciones"
 import { consultarInteresDeReferencia, type InteresMPCuenta } from "@/lib/mercadopago-planes-aviso"
@@ -56,6 +56,8 @@ export interface MedioPagoDto {
   audiencia: AudienciaMedio
   /** Etiquetas que el checkout muestra sobre este medio (hasta 3, en este orden). */
   chips: ChipMedio[]
+  /** Banner de ahorro guardado (dentro de `chips`); null = no hay, rige el de por defecto. */
+  banner?: BannerMedio | null
   /** Formas de pago del cobro en línea habilitadas (orden canónico). Sólo tienen efecto con cobro en línea. */
   opcionesCobro: OpcionCobro[]
   /**
@@ -113,6 +115,7 @@ export const toMedioPagoDto = (
   mostrarEnFicha: r.mostrarEnFicha,
   audiencia: r.audiencia === AUDIENCIA_CUENTA_CORRIENTE ? AUDIENCIA_CUENTA_CORRIENTE : "publico",
   chips: leerChips(r.chips),
+  banner: leerBanner(r.chips),
   opcionesCobro: OPCIONES_COBRO.filter((o) => r.opcionesCobro.includes(o)),
   listasPorForma,
 })

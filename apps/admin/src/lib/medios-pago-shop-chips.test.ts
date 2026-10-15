@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest"
-import { MAX_CHIPS, MAX_TEXTO_CHIP, TONOS_CHIP, TONO_BADGE_DE_CHIP, leerChips, moverChip, validarChips } from "@/lib/medios-pago-shop-chips"
+import {
+  MAX_CHIPS,
+  MAX_TEXTO_CHIP,
+  MSG_BANNER_VACIO,
+  TEXTO_BANNER_POR_DEFECTO,
+  TONOS_CHIP,
+  TONO_BADGE_DE_CHIP,
+  bannerDelMedio,
+  leerBanner,
+  leerChips,
+  moverChip,
+  validarChips,
+} from "@/lib/medios-pago-shop-chips"
 import { validarMedioPagoCambios, validarMedioPagoNuevo } from "@/lib/medios-pago-shop-validacion"
 
 describe("validarChips", () => {
@@ -115,5 +127,34 @@ describe("chips en la validación del medio", () => {
     expect(sin.ok && sin.valor.chips).toBeUndefined()
     const con = validarMedioPagoNuevo({ ...base, chips: [{ texto: "Promo", tono: "info" }] })
     expect(con.ok && con.valor.chips).toEqual([{ texto: "Promo", tono: "info" }])
+  })
+})
+
+describe("banner de ahorro (dentro de chips)", () => {
+  const banner = { banner: true, activo: true, texto: " Ahorra {ahorro} frente a otros medios de pago " }
+
+  it("se valida aparte de las etiquetas: no cuenta para el máximo y se recorta", () => {
+    const tres = [1, 2, 3].map((i) => ({ texto: `E${i}`, tono: "info" }))
+    const r = validarChips([...tres, banner])
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.chips).toContainEqual({ banner: true, activo: true, texto: "Ahorra {ahorro} frente a otros medios de pago" })
+  })
+
+  it("rechaza dos banners, texto vacío o con HTML", () => {
+    expect(validarChips([banner, banner]).ok).toBe(false)
+    expect(validarChips([{ ...banner, texto: " " }])).toEqual({ ok: false, error: MSG_BANNER_VACIO })
+    expect(validarChips([{ ...banner, texto: "<b>x</b>" }]).ok).toBe(false)
+  })
+
+  it("leerChips lo ignora y leerBanner lo devuelve", () => {
+    const guardado = [{ texto: "Recomendado", tono: "exito" }, { banner: true, activo: false, texto: "Ahorra {ahorro}" }]
+    expect(leerChips(guardado)).toEqual([{ texto: "Recomendado", tono: "exito" }])
+    expect(leerBanner(guardado)).toEqual({ banner: true, activo: false, texto: "Ahorra {ahorro}" })
+    expect(leerBanner([{ texto: "x", tono: "info" }])).toBeNull()
+  })
+
+  it("sin banner guardado: prendido solo en Transferencia, con el texto por defecto", () => {
+    expect(bannerDelMedio("transferencia", null)).toEqual({ banner: true, activo: true, texto: TEXTO_BANNER_POR_DEFECTO })
+    expect(bannerDelMedio("efectivo", null).activo).toBe(false)
   })
 })

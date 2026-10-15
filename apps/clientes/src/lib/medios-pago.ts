@@ -9,7 +9,7 @@
  * (`procesadorDisponible`).
  */
 import type { CondicionCuotas } from "./cuotas-sin-interes";
-import type { ChipMedio } from "./medios-pago-chips";
+import type { BannerAhorro, ChipMedio } from "./medios-pago-chips";
 import { opcionesAplicables, type OpcionCobro } from "./pagos/opciones-cobro";
 import { PAGO_LABEL, type EntregaTipo, type PagoMetodo } from "./envio";
 
@@ -56,6 +56,8 @@ export interface MedioPago {
    * sobre la opción del medio en el checkout, en este orden (hasta 3). Ausente = sin etiquetas.
    */
   chips?: ChipMedio[];
+  /** Banner de ahorro (franja verde) que guardó el admin; null/ausente = el de por defecto. */
+  banner?: BannerAhorro | null;
   /**
    * Formas de pago del cobro en línea (migración 0073 del CRM): `credito`, `debito`, `cuenta_mp`.
    * Ausente (columna sin migrar) = todas las del procesador; `[]` = ninguna: el medio no se ofrece.

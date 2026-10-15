@@ -17,7 +17,7 @@ import { crmListaPrecioCondiciones, crmMediosPagoShop } from "@/db/crm";
 import { shopTenantId } from "./tenant";
 import type { CondicionCuotas } from "./cuotas-sin-interes";
 import type { AudienciaMedio, MedioPago } from "./medios-pago";
-import { leerChipsMedio } from "./medios-pago-chips";
+import { leerBannerMedio, leerChipsMedio } from "./medios-pago-chips";
 import { OPCIONES_COBRO, leerOpcionesCobro, type OpcionCobro } from "./pagos/opciones-cobro";
 import { leerMarcas } from "./pagos/marcas";
 
@@ -238,6 +238,7 @@ export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[
     audiencia: (f.audiencia === "cuenta_corriente" ? "cuenta_corriente" : "publico") as AudienciaMedio,
     // Etiquetas del checkout: tolerante (lo inválido o ausente es []).
     chips: leerChipsMedio(f.chips),
+    banner: leerBannerMedio(f.chips),
     idListaPrecios: condiciones.get(f.slug)?.idListaPrecios ?? null,
     condicionesCuotas: condiciones.get(f.slug)?.condicionesCuotas ?? [],
     // Sólo si hay alguna: sin filas por forma el medio queda idéntico a antes.

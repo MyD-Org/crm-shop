@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CHIPS_MEDIO, esChipDeAhorro, leerChipsMedio, textoDeAhorro, tonoBadgeDeChip } from "./medios-pago-chips";
+import {
+  MAX_CHIPS_MEDIO,
+  TEXTO_AHORRO_POR_DEFECTO,
+  esChipDeAhorro,
+  leerBannerMedio,
+  leerChipsMedio,
+  textoBannerDelMedio,
+  textoDeAhorro,
+  tonoBadgeDeChip,
+} from "./medios-pago-chips";
 
 describe("leerChipsMedio (tolerante)", () => {
   it("lo ausente o inválido da []", () => {
@@ -58,5 +67,22 @@ describe("etiqueta de ahorro", () => {
     expect(textoDeAhorro("Ahorra {ahorro} frente a {frente}", "$ 100", "tarjeta de crédito")).toBe(
       "Ahorra $ 100 frente a tarjeta de crédito",
     );
+  });
+});
+
+describe("banner de ahorro", () => {
+  const guardado = [{ texto: "Recomendado", tono: "exito" }, { banner: true, activo: true, texto: "Ahorra {ahorro} frente a otros medios" }];
+
+  it("leerChipsMedio lo ignora y leerBannerMedio lo lee", () => {
+    expect(leerChipsMedio(guardado)).toEqual([{ texto: "Recomendado", tono: "exito" }]);
+    expect(leerBannerMedio(guardado)).toEqual({ activo: true, texto: "Ahorra {ahorro} frente a otros medios" });
+    expect(leerBannerMedio([{ banner: true, texto: "x" }])).toBeNull();
+  });
+
+  it("guardado manda (apagado = sin banner); sin guardar, Transferencia usa el de por defecto", () => {
+    expect(textoBannerDelMedio({ slug: "transferencia", banner: { activo: false, texto: "x" } }, "transferencia")).toBeNull();
+    expect(textoBannerDelMedio({ slug: "efectivo", banner: { activo: true, texto: "Ahorra {ahorro}" } }, "transferencia")).toBe("Ahorra {ahorro}");
+    expect(textoBannerDelMedio({ slug: "transferencia" }, "transferencia")).toBe(TEXTO_AHORRO_POR_DEFECTO);
+    expect(textoBannerDelMedio({ slug: "efectivo" }, "transferencia")).toBeNull();
   });
 });

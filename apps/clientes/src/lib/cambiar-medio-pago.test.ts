@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { medioAdmiteCambio, precargaDeEntrega, puedeCambiarMedioPago } from "./cambiar-medio-pago";
+import { medioAdmiteCambio, precargaDeEntrega, puedeCambiarMedioPago, retomaEnPasoPago } from "./cambiar-medio-pago";
 
 describe("puedeCambiarMedioPago", () => {
   it("con el formulario de pago sin enviar o tras un rechazo, sí", () => {
@@ -41,5 +41,17 @@ describe("medioAdmiteCambio", () => {
     expect(medioAdmiteCambio("mercadopago")).toBe(true);
     expect(medioAdmiteCambio("transferencia")).toBe(true);
     expect(medioAdmiteCambio("efectivo")).toBe(false);
+  });
+});
+
+describe("retomaEnPasoPago", () => {
+  const base = { explicito: false, retornoMercadoPago: false, pagoEnCurso: false };
+  it("rescate implícito (volvió al checkout sin pagar): al paso Pago, para elegir el medio de nuevo", () => {
+    expect(retomaEnPasoPago(base)).toBe(true);
+  });
+  it("«Reintentar el pago», la vuelta de Mercado Pago y un cobro en vuelo: directo a la pantalla de cobro", () => {
+    expect(retomaEnPasoPago({ ...base, explicito: true })).toBe(false);
+    expect(retomaEnPasoPago({ ...base, retornoMercadoPago: true })).toBe(false);
+    expect(retomaEnPasoPago({ ...base, pagoEnCurso: true })).toBe(false);
   });
 });

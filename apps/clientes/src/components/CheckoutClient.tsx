@@ -61,7 +61,7 @@ import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
 import { CardOpcionPago } from "@/components/checkout/CardOpcionPago";
-import { esChipDeAhorro, TEXTO_AHORRO_POR_DEFECTO, textoDeAhorro, type ChipMedio } from "@/lib/medios-pago-chips";
+import { textoBannerDelMedio, textoDeAhorro, type ChipMedio } from "@/lib/medios-pago-chips";
 import { logosTarjetas, type TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import { tarjetasPayway } from "@/lib/pagos/tarjetas-payway";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
@@ -88,7 +88,7 @@ import { PasoNumerado } from "@/components/PasoNumerado";
 import { useAvisarAlSalir } from "@/components/checkout/useAvisarAlSalir";
 import { PIE_TRANSFERENCIA } from "@/lib/pie-pago-transferencia";
 import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
-import { precargaDeEntrega, puedeCambiarMedioPago, type EntregaDelPedido } from "@/lib/cambiar-medio-pago";
+import { precargaDeEntrega, puedeCambiarMedioPago, retomaEnPasoPago, type EntregaDelPedido } from "@/lib/cambiar-medio-pago";
 
 /*
  * Entrada de la pantalla de éxito (momento único por compra: acá sí va algo de
@@ -617,6 +617,12 @@ export function CheckoutClient({
   const [buscandoPendiente, setBuscandoPendiente] = useState(true);
   /** Pedido pendiente encontrado al montar, a decidir cuando cargue el carrito. */
   const [rescate, setRescate] = useState<PedidoRescatado | null>(null);
+  /**
+   * Pedido retomado sin pedirlo (el comprador volvió al checkout tras irse sin pagar): en vez de caer
+   * en la pantalla de cobro del medio anterior, se vuelve al paso Pago para elegir de nuevo sobre el
+   * MISMO pedido (`cambiarMedio`). Mientras tanto sigue el spinner. Ver `retomaEnPasoPago`.
+   */
+  const [cambiarAlRetomar, setCambiarAlRetomar] = useState(false);
   /** El pedido a reintentar ya no se puede cobrar: se explica y se ofrece volver a comprar. */
   const [errorReintento, setErrorReintento] = useState<string | null>(null);
   /**
@@ -689,7 +695,14 @@ export function CheckoutClient({
     contenidoDistinto(items, rescate.lineas);
   function retomarRescate(pedido: PedidoRescatado) {
     setRescate(null);
-    setBuscandoPendiente(false);
+    const aPasoPago = retomaEnPasoPago({
+      explicito: Boolean(pedido.explicito),
+      retornoMercadoPago,
+      pagoEnCurso: Boolean(pedido.pagoEnCurso),
+    });
+    // Al paso Pago: el spinner sigue hasta que `cambiarMedio` precargue el pedido (sin un frame del cobro).
+    setBuscandoPendiente(!aPasoPago);
+    setCambiarAlRetomar(aPasoPago);
     setConfirmado({
       numero: pedido.numero,
       id: pedido.id,
@@ -839,8 +852,8 @@ export function CheckoutClient({
   // Franja de ahorro: sólo en las cards cuyo medio tiene una etiqueta con {ahorro} (la carga el admin).
   // Transferencia la muestra siempre (con el texto de siempre, salvo que el admin cargue el suyo).
   const ahorroDe = (o: OpcionPago) => {
-    const chip = mediosParaElegir.find((m) => m.slug === o.slug)?.chips?.find(esChipDeAhorro);
-    const texto = chip?.texto ?? (o.slug === SLUG_TRANSFERENCIA ? TEXTO_AHORRO_POR_DEFECTO : null);
+    const medio = mediosParaElegir.find((m) => m.slug === o.slug);
+    const texto = medio ? textoBannerDelMedio(medio, SLUG_TRANSFERENCIA) : null;
     const a = texto ? ahorroFrente(totalesOpciones, opcionesPago, o.clave) : null;
     if (!texto || !a) return null;
     const frente = tituloEnFrase(a.frente, mediosParaElegir.find((m) => m.slug === a.frente.slug)?.nombre ?? "");
@@ -1209,6 +1222,23 @@ export function CheckoutClient({
     }
   }
 
+  /**
+   * Rescate implícito: con el pedido ya cargado se dispara `cambiarMedio` (precarga entrega y contacto y
+   * cae en el paso Pago). Si no se puede cambiar (409: cobro en vuelo), queda la pantalla de cobro con
+   * el error, como al tocar el botón. La función del render se lee por ref para no re-disparar el efecto.
+   */
+  const cambiarMedioRef = useRef(cambiarMedio);
+  useEffect(() => {
+    cambiarMedioRef.current = cambiarMedio;
+  });
+  useEffect(() => {
+    if (!cambiarAlRetomar || !confirmado) return;
+    void cambiarMedioRef.current().finally(() => {
+      setCambiarAlRetomar(false);
+      setBuscandoPendiente(false);
+    });
+  }, [cambiarAlRetomar, confirmado]);
+
   /** Cobro aprobado: el servidor ya vació su carrito (`registrarCobroTx`); acá se limpia el local. */
   function alPagar() {
     setPagado(true);
@@ -1228,7 +1258,7 @@ export function CheckoutClient({
     setCarritoDelPedido(false);
   }
 
-  if (confirmado && confirmado.pagoEnLinea && !pagado) {
+  if (confirmado && confirmado.pagoEnLinea && !pagado && !cambiarAlRetomar) {
     return (
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-10 lg:flex-row lg:items-start">
         <section className="min-w-0 flex-1 rounded-[28px] border border-border bg-surface p-5 sm:p-8">
@@ -1496,7 +1526,7 @@ export function CheckoutClient({
   }
 
   // ------------------------------------------ buscando un pedido para retomar
-  if (ready && items.length === 0 && buscandoPendiente) {
+  if ((ready && items.length === 0 && buscandoPendiente) || cambiarAlRetomar) {
     return (
       <main className="mx-auto flex max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20">
         <Spinner label="Buscando su pedido" />

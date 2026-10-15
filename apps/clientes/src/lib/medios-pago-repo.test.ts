@@ -53,6 +53,7 @@ describe("leerMediosPago", () => {
         destacarEnCatalogo: true,
         mostrarEnFicha: false,
         audiencia: "publico",
+        banner: null,
         chips: [{ texto: "15% OFF", tono: "exito" }],
         opcionesCobro: ["credito", "debito", "cuenta_mp"],
       },

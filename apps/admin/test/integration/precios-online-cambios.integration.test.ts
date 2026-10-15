@@ -391,6 +391,21 @@ describe("revertir (solo la última entrada vigente de cada objeto)", () => {
     expect(listas[1].overrides).toMatchObject([{ marca: "x", coeficiente: "1.4000" }])
   })
 
+  it("ajuste por producto: varios productos en la misma vista previa", async () => {
+    await seedProducto(T, { alegraId: "1", costo: "100" })
+    await seedProducto(T, { alegraId: "2", costo: "200" })
+    await seedProducto(T, { alegraId: "3", costo: "100" })
+    await previaYAplicar([crear("Lista A", "1.5")])
+    const [lista] = await listarListas(T)
+    const ajuste = (alegraId: string): CambioPrecios => ({ op: "upsertOverride", listaId: lista.id, tipo: "producto", alegraId, coeficiente: "1.6" })
+    const { previa } = await previaYAplicar([ajuste("1"), ajuste("2")])
+    expect(previa.productosAfectados).toBe(2)
+    expect((await fila("1")).precioOnlineRef).toBe("160.00")
+    expect((await fila("2")).precioOnlineRef).toBe("320.00")
+    expect((await fila("3")).precioOnlineRef).toBe("150.00")
+    expect((await listarListas(T))[0].overrides.filter((o) => o.tipo === "producto")).toHaveLength(2)
+  })
+
   it("ajuste por producto: alta, edición con nombre en el historial, baja revertida y producto inexistente", async () => {
     await seedProducto(T, { alegraId: "1", costo: "100", brand: "Marca X" })
     await seedProducto(T, { alegraId: "2", costo: "100", brand: "Marca X" })

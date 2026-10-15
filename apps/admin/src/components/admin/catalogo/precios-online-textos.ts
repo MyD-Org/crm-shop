@@ -124,6 +124,7 @@ export const TEXTOS = {
   },
   previa: {
     titulo: "Vista previa del cambio",
+    volver: "Volver",
     generando: "Generando la vista previa…",
     afectados: "Productos afectados",
     suben: "Precios que suben",

@@ -18,6 +18,8 @@ interface Props {
   /** Si hay variación alta, se pide escribir este nombre (el de la lista afectada). */
   nombreParaConfirmar: string
   onAplicado: () => void
+  /** Si viene, se ofrece "Volver" para corregir el formulario de origen sin perder lo cargado. */
+  onVolver?: () => void
 }
 
 type Fase =
@@ -31,7 +33,7 @@ type Fase =
  * abrirse (el servidor la calcula y la deshace), muestra el resumen y, si alguna variación SUPERA
  * el umbral de confirmación, exige escribir el nombre de la lista antes de habilitar "Aplicar".
  */
-export function VistaPreviaDialog({ open, onClose, cambios, revertirId, titulo, nombreParaConfirmar, onAplicado }: Props) {
+export function VistaPreviaDialog({ open, onClose, cambios, revertirId, titulo, nombreParaConfirmar, onAplicado, onVolver }: Props) {
   const [fase, setFase] = useState<Fase>({ tipo: "generando" })
   const [cambiosEfectivos, setCambiosEfectivos] = useState<CambioPrecios[] | null>(cambios)
   const [nombre, setNombre] = useState("")
@@ -117,6 +119,13 @@ export function VistaPreviaDialog({ open, onClose, cambios, revertirId, titulo, 
       dismissible={false}
       footer={
         <div className="flex justify-end gap-2">
+          {onVolver && (
+            <div className="mr-auto">
+              <Button variant="ghost" onClick={onVolver} disabled={fase.tipo === "aplicando"}>
+                {TEXTOS.previa.volver}
+              </Button>
+            </div>
+          )}
           <Button variant="outline" onClick={onClose} disabled={fase.tipo === "aplicando"}>
             {TEXTOS.previa.cancelar}
           </Button>

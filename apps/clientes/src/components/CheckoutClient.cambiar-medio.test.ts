@@ -21,6 +21,15 @@ describe("CheckoutClient: cambiar medio de pago", () => {
     expect(fuente).toContain("omitirAvisoAlSalir();\n                  void cambiarMedio();");
   });
 
+  it("un pendiente rescatado sin pedirlo vuelve al paso Pago (cambiarMedio) en vez de caer en el cobro del medio anterior", () => {
+    // La decisión es pura (`retomaEnPasoPago`): reintento explícito, vuelta de MP y cobro en vuelo van al cobro.
+    expect(fuente).toContain("setCambiarAlRetomar(aPasoPago);");
+    expect(fuente).toContain("setBuscandoPendiente(!aPasoPago);");
+    // Sin un frame de la pantalla de cobro: sigue el spinner hasta que `cambiarMedio` precargue el pedido.
+    expect(fuente).toContain("confirmado && confirmado.pagoEnLinea && !pagado && !cambiarAlRetomar");
+    expect(fuente).toContain("void cambiarMedioRef.current().finally(");
+  });
+
   it("no cancela: confirma sobre el mismo pedido con POST /api/pedidos/:id/medio y vuelve siempre al paso Pago", () => {
     expect(fuente).not.toContain("/cancelar?para=cambiar-medio");
     expect(fuente).toContain("`/api/pedidos/${previo.id}/medio`");

@@ -64,3 +64,14 @@ export function precargaDeEntrega(
   const guardada = direcciones.find((d) => igual(d.direccion, e.direccion) && igual(d.ciudad, e.ciudad));
   return { opcion: "domicilio", local: null, direccionGuardada: guardada?.id ?? null, tipeada };
 }
+
+/**
+ * ¿Un pedido pendiente retomado cae en el paso Pago (para elegir el medio de nuevo sobre el MISMO
+ * pedido) en vez de en la pantalla de cobro del medio anterior? Sí cuando la tienda lo rescató sola
+ * (el comprador volvió al checkout tras irse sin pagar). Van directo al cobro: "Reintentar el pago"
+ * (`explicito`), la vuelta de Mercado Pago (`retornoMercadoPago`) y un cobro en vuelo (`pagoEnCurso`),
+ * que el servidor no deja cambiar.
+ */
+export function retomaEnPasoPago(r: { explicito: boolean; retornoMercadoPago: boolean; pagoEnCurso: boolean }): boolean {
+  return !r.explicito && !r.retornoMercadoPago && !r.pagoEnCurso;
+}

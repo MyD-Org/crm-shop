@@ -1701,6 +1701,21 @@ export function CheckoutClient({
                 )}
               </>
             )}
+            {/* Aclaraciones de la entrega, en una línea: abajo de la dirección o del local de retiro. */}
+            <div className="mt-5">
+              <Field label="Aclaraciones (opcional)">
+                <Input
+                  value={notas}
+                  onChange={(e) => setNotas(e.target.value)}
+                  maxLength={500}
+                  placeholder={
+                    entrega === "retiro"
+                      ? "Horario en que pasará a retirar, quién retira, etc."
+                      : "Horario de entrega, referencia del domicilio, etc."
+                  }
+                />
+              </Field>
+            </div>
       {errorPaso && <p className="mt-4 text-sm text-danger">{errorPaso}</p>}
     </>
   );
@@ -1957,17 +1972,6 @@ export function CheckoutClient({
                 <p className="text-sm text-muted">{AVISO_PAGO_A_COORDINAR}</p>
               </>
             )}
-            {/* Aclaraciones en una línea, dentro del paso: el botón de confirmar queda a la vista sin scroll. */}
-            <div className="mt-5">
-              <Field label="Aclaraciones (opcional)">
-                <Input
-                  value={notas}
-                  onChange={(e) => setNotas(e.target.value)}
-                  maxLength={500}
-                  placeholder="Horario de entrega, referencia del domicilio, etc."
-                />
-              </Field>
-            </div>
             <div className="mt-5">
               {errorEnvio && estado !== "no_auth" && (
                 <p className="mb-3 hidden rounded-lg bg-danger/5 p-3 text-xs text-danger lg:block">{errorEnvio}</p>

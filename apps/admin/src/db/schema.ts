@@ -1440,8 +1440,13 @@ export const pedidoFacturaCuenta = pgTable(
 // sensibilidad_ma, largo_m, montaje, angulo_grados; la 0058 sumó leds_m y potencia_w_m (20 claves); la 0059, leds_rollo (21); la 0070, diametro_mm y ancho_mm (23); la 0072, dimerizable y modulos (25); la 0079, irc, vida_util_h, factor_potencia y equivalencia_w (29).
 // Textuales: tono, zocalo, medidas_mm, color,
 // curva, montaje; el resto va en `valorNum`.
-export const catalogAtributos = pgTable(
-  "catalog_atributos",
+//
+// CORTE 0091: la tabla se renombró a `catalog_atributos_legacy` (sin GRANT a `shop_app`) y
+// `catalog_atributos` pasó a ser una VISTA sobre la proyección de la plataforma (0090), que no
+// está en este archivo. La escriben sólo los tenants en modo `off`/`dual`; en `on` los lectores
+// del admin leen la proyección (ver `lib/catalogo-atributos-repo.ts`). La PK conserva su nombre.
+export const catalogAtributosLegacy = pgTable(
+  "catalog_atributos_legacy",
   {
     tenantId: text("tenant_id").notNull().references(() => tenants.id),
     alegraId: text("alegra_id").notNull(),

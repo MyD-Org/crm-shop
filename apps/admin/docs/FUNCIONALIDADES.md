@@ -510,7 +510,9 @@ cualquier otro objeto de `public` le da 42501:
 | `client_commercial_conditions` | tabla | SELECT | 0032 |
 | `notification_log` | tabla | SELECT, UPDATE sólo `read_at` | 0032 |
 | `payment_receipts` | tabla | SELECT, INSERT, UPDATE sólo las columnas del flujo de informar pago (`status`, `processing_started_at`, `reject_reason`, `file_*`, `converted_from`, `email_*`, `submitted_at`, `updated_at`); nunca `loaded_*`, `alegra_payment_*`, `declared_*`, `amount`, `codigocliente` | 0032 |
-| `catalog_atributos` | tabla (atributos técnicos estructurados por producto) | SELECT sólo `tenant_id, alegra_id, clave, valor_num, valor_texto` (sin `fuente` ni `updated_at`) | 0049 |
+| `catalog_atributos` (hasta 0091) | tabla (atributos técnicos estructurados por producto). En 0091 se renombró a `catalog_atributos_legacy` y el nombre pasó a la vista de la fila siguiente | SELECT sólo `tenant_id, alegra_id, clave, valor_num, valor_texto` (sin `fuente` ni `updated_at`) | 0049 (revocado en 0091) |
+| `catalog_atributos` (desde 0091) | vista sobre `catalog_atributos_shop` (los atributos técnicos viven en la plataforma); mismas cinco columnas que la tabla de 0049, así el Shop no cambia ninguna consulta | SELECT `tenant_id, alegra_id, clave, valor_num, valor_texto` | 0091 |
+| `catalog_atributos_legacy` | tabla (la de 0049 renombrada en el corte: congelada para auditoría y rollback; la siguen escribiendo sólo los tenants en `off`/`dual`) | ninguno (REVOKE ALL) | 0091 |
 | `catalog_atributos_shop` | vista (proyección de los atributos técnicos de la plataforma; mismas cinco columnas que `catalog_atributos`) | SELECT `tenant_id, alegra_id, clave, valor_num, valor_texto` | 0090 |
 | `catalog_specs` | tabla (documento de la spec proyectada: etiquetas y unidades de las claves) | SELECT `tenant_id, slug, version, document` | 0090 |
 | `sucursales` | tabla | SELECT por columna: las de 0041 (`tenant_id, slug, nombre, direccion, ciudad, provincia, whatsapp, horario, acepta_retiro, acepta_envio, envio_ciudades, orden, activa, predeterminada`) más `schedule, schedule_exceptions` (0051). Siguen afuera `id`, `deposito_alegra_id`, `cuenta_alegra_id` y los timestamps | 0041, 0051 |
@@ -531,7 +533,9 @@ el de `drizzle/0037_catalogo_shop_desde_crm.sql` (las dos vistas de catálogo) y
 `drizzle/0038_grants_overlay_shop.sql` (overlay y categorías de la tienda) y el de
 `drizzle/0039_contactos_acceso_facturacion.sql` (SELECT de la vista recreada con
 `acceso_facturacion`) y el de `drizzle/0049_catalog_atributos.sql` (SELECT por columna de
-`catalog_atributos`; lo verifica `test/integration/catalog-atributos.integration.test.ts`) y el de
+`catalog_atributos`; desde el corte 0091 lo reemplaza el de `drizzle/0091_plataforma_corte_atributos.sql`,
+que concede la vista `catalog_atributos` y revoca la tabla `catalog_atributos_legacy`; lo verifica
+`test/integration/plataforma-corte.integration.test.ts`) y el de
 `drizzle/0051_sucursales_horario.sql` (SELECT por columna de `sucursales.schedule` y
 `schedule_exceptions`: el de 0041 es por columna y NO se hereda; lo verifica
 `test/integration/horarios-sucursal-0051.integration.test.ts`) y el de
@@ -904,7 +908,7 @@ RESET ROLE;
 
 ---
 
-### Datos técnicos estructurados (`catalog_atributos`, 0049)
+### Datos técnicos estructurados (`catalog_atributos`, 0049; corte a la plataforma, 0091)
 
 Potencia, temperatura de color, tono, IP, lúmenes, tensión y zócalo por producto, para los
 filtros y la tabla "Características" del Shop (catálogo asistido fase 2, subproyecto 5). Una fila
@@ -924,6 +928,18 @@ nunca pisa a otra de mayor precedencia (lo aplica el upsert de `lib/catalogo-atr
 
 Cada escritura desde el admin avisa al Shop (descarta su caché). El Shop lee las columnas
 concedidas por la 0049 y, sin la tabla, sigue con los patrones sobre el nombre de la fase 1.
+
+**Corte a la plataforma (0091).** Los atributos pasan a vivir en la plataforma
+(`tenants.plataforma_atributos`: `off` → sólo la tabla local; `dual` → la tabla y la plataforma;
+`on` → sólo la plataforma). La 0091 renombra la tabla a `catalog_atributos_legacy` (congelada,
+sin permisos para el Shop) y crea la vista `catalog_atributos` sobre la proyección
+(`catalog_atributos_shop`, 0090), con las mismas cinco columnas: el Shop no cambia. Se aplica
+a mano recién con el tenant en `dual`, el backfill corrido y la paridad en cero, y en ese mismo
+momento el tenant pasa a `on`. La vista es global (no por tenant). En `on` el panel y los scripts
+del admin leen la proyección (valores de la vista y la fuente de `catalog_proyeccion.data->'fuentes'`);
+en `off`/`dual`, la tabla local. En `on`, el guardado manual muestra el rechazo de la plataforma
+(422, con el motivo) o su caída (502) y devuelve lo guardado sin esperar al webhook. Reversa: el
+encabezado de la migración (volver el tenant a `dual` antes).
 
 ## Cuenta que factura cada pedido (multicuenta)
 

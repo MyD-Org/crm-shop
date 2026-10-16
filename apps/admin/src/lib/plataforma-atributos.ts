@@ -1,4 +1,4 @@
-import { upsertInstancia, PlataformaError, type Deps } from "@/lib/plataforma-cliente"
+import { upsertInstancia, PlataformaError, type Deps, type InstanciaPlataforma } from "@/lib/plataforma-cliente"
 import { getTenantByIdFromDb, plataformaConfigurada, type TenantConfig, type ModoPlataformaAtributos } from "@/lib/tenants"
 import { leerProducto } from "@/lib/plataforma-productos-fuente"
 import { productoParaPlataforma } from "@/lib/plataforma-productos"
@@ -47,8 +47,8 @@ export function datosDeFilas(filas: FilaAtributo[]): Record<string, Valor> {
   return out
 }
 
-// Un error de DB cae a "off": para un tenant `on` tras el corte 0091 la escritura local apunta a la vista y falla
-// fuerte (aceptado: la sync ya lo tolera y la ruta manual muestra el error).
+// Un error de DB cae a "off": para un tenant `on` tras el corte 0091 eso escribe y lee la tabla congelada
+// `catalog_atributos_legacy` (aceptado: si no se puede leer `tenants`, la escritura local casi seguro falla igual).
 /** Modo del tenant; `off` si no hay plataforma configurada o si leer el tenant falla (se loguea). */
 export async function modoAtributosDe(tenantId: string): Promise<ModoPlataformaAtributos> {
   try {
@@ -61,24 +61,34 @@ export async function modoAtributosDe(tenantId: string): Promise<ModoPlataformaA
   }
 }
 
-function clasificar(t: TenantConfig, alegraId: string, fuente: FuenteAtributo, err: unknown, corte?: Corte): "rechazado" | "error" {
+/** Resultado detallado de una escritura: la instancia escrita, o el motivo del rechazo. */
+export type ResultadoEscritura =
+  | { estado: "ok"; instancia: InstanciaPlataforma | null }
+  | { estado: "rechazado"; code: string; detalles: string[] }
+  | { estado: "error" }
+
+function clasificar(t: TenantConfig, alegraId: string, fuente: FuenteAtributo, err: unknown, corte?: Corte): ResultadoEscritura {
   const e = err instanceof PlataformaError ? err : null
   if (e?.reintentable && corte) corte.activo = true
   if (e && !e.reintentable) {
     console.warn(`[plataforma] atributos rechazados tenant=${t.id} alegraId=${alegraId} fuente=${fuente} ${e.code}: ${e.details.join("; ")}`)
-    return "rechazado"
+    return { estado: "rechazado", code: e.code, detalles: e.details }
   }
   console.warn(`[plataforma] atributos sin escribir tenant=${t.id} alegraId=${alegraId} fuente=${fuente}: ${err instanceof Error ? err.message : "error"}`)
-  return "error"
+  return { estado: "error" }
 }
 
 export async function escribirAtributosPlataforma(t: TenantConfig, alegraId: string, data: Record<string, Valor | null>, fuente: FuenteAtributo, opts: { reemplaza?: boolean; deps?: Deps; corte?: Corte } = {}): Promise<"ok" | "rechazado" | "error"> {
+  return (await escribirAtributosPlataformaDetalle(t, alegraId, data, fuente, opts)).estado
+}
+
+/** Como escribirAtributosPlataforma, pero devuelve la instancia escrita o el motivo del rechazo (el panel manual en `on`). Nunca tira. */
+export async function escribirAtributosPlataformaDetalle(t: TenantConfig, alegraId: string, data: Record<string, Valor | null>, fuente: FuenteAtributo, opts: { reemplaza?: boolean; deps?: Deps; corte?: Corte } = {}): Promise<ResultadoEscritura> {
   const deps: Deps = { ...opts.deps, timeoutMs: opts.deps?.timeoutMs ?? TIMEOUT_ESCRITURA_MS }
   const body = { data, meta: { fuente, ...(opts.reemplaza ? { reemplaza_fuente: true } : {}) } }
-  const patch = () => upsertInstancia(t, "atributos_tecnicos", alegraId, body, deps)
+  const patch = async (): Promise<ResultadoEscritura> => ({ estado: "ok", instancia: (await upsertInstancia(t, "atributos_tecnicos", alegraId, body, deps)).instance ?? null })
   try {
-    await patch()
-    return "ok"
+    return await patch()
   } catch (err) {
     // Producto recién creado por la sync: el espejo lo sube el cron, así que la plataforma todavía
     // no tiene el ancla. Se sube ese único producto y se reintenta una vez.
@@ -90,8 +100,7 @@ export async function escribirAtributosPlataforma(t: TenantConfig, alegraId: str
           return clasificar(t, alegraId, fuente, err, opts.corte)
         }
         await upsertInstancia(t, "producto", alegraId, { data: productoParaPlataforma(fila) }, deps)
-        await patch()
-        return "ok"
+        return await patch()
       } catch (err2) {
         console.warn(`[plataforma] el reintento tras subir el ancla falló tenant=${t.id} alegraId=${alegraId}`)
         return clasificar(t, alegraId, fuente, err2, opts.corte)

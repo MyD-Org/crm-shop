@@ -1,5 +1,6 @@
 /**
- * Paridad de atributos entre la tabla `catalog_atributos` y la vista `catalog_atributos_shop`.
+ * Paridad de atributos entre la tabla local (`catalog_atributos_legacy` desde el corte 0091) y la
+ * vista `catalog_atributos_shop`.
  * Imprime el conteo y hasta 10 ejemplos por categoría. Código de salida 1 si hay diferencias.
  *
  *   TENANT=<id> npm run plataforma:paridad-atributos

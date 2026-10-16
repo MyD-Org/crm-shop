@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest"
 import { NextRequest } from "next/server"
+import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
-import { catalogProducts } from "@/db/schema"
+import { catalogProducts, tenants } from "@/db/schema"
+import { upsertProyeccion } from "@/lib/plataforma-proyeccion-repo"
 import { guardarOverlay } from "@/lib/catalogo-overlay-repo"
 import { upsertAtributos } from "@/lib/catalogo-atributos-repo"
 import { MAX_LECTURAS_POR_MINUTO, reiniciarGuardaLectura } from "@/lib/catalogo-atributos-lectura-guarda"
@@ -26,6 +28,19 @@ vi.mock("@/lib/shop-media", async (orig) => ({
   ...(await orig<typeof import("@/lib/shop-media")>()),
   getShopMediaR2: () => r2.actual,
 }))
+// Plataforma simulada (sólo la usa el modo `on`): `fallo` hace tirar el PATCH; si no, responde sin instancia.
+const plataforma = vi.hoisted(() => ({ fallo: null as null | "400" | "red" }))
+vi.mock("@/lib/plataforma-cliente", async (orig) => {
+  const o = await orig<typeof import("@/lib/plataforma-cliente")>()
+  return {
+    ...o,
+    upsertInstancia: async () => {
+      if (plataforma.fallo === "400") throw new o.PlataformaError(400, "invalid_data", ["/ip/n must be <= 69"], false)
+      if (plataforma.fallo === "red") throw new o.PlataformaError(0, "red", ["fetch failed"], true)
+      return { created: false, changed: true, instance: null }
+    },
+  }
+})
 vi.mock("@/lib/catalogo-atributos-pdf", async (orig) => ({
   ...(await orig<typeof import("@/lib/catalogo-atributos-pdf")>()),
   leerFichaPdf: lector.leer,
@@ -64,6 +79,7 @@ beforeEach(async () => {
   r2.actual = fake
   lector.leer.mockReset()
   reiniciarGuardaLectura()
+  plataforma.fallo = null
 })
 afterAll(async () => {
   await truncateAll()
@@ -88,6 +104,35 @@ describe("panel manual", () => {
 
     login(operador, "operator")
     expect((await rutaAtributos.GET(req("/x"), params("100"))).status).toBe(404)
+  })
+})
+
+describe("panel manual con el tenant en modo on (corte 0091)", () => {
+  beforeEach(async () => {
+    await getDb().update(tenants).set({ plataformaUrl: "https://plataforma.example", plataformaApiKey: "ak", plataformaWebhookSecret: "s", plataformaAtributos: "on" }).where(eq(tenants.id, A))
+    await upsertProyeccion(A, "atributos_tecnicos", "100", "i100", { potencia_w: { n: 50, t: null }, fuentes: { potencia_w: "nombre" } }, new Date())
+  })
+
+  it("GET lee la proyección; PUT devuelve lo guardado sin esperar al webhook", async () => {
+    let res = await rutaAtributos.GET(req("/x"), params("100"))
+    expect((await res.json()).atributos).toMatchObject([{ clave: "potencia_w", valorNum: 50, fuente: "nombre" }])
+    res = await rutaAtributos.PUT(req("/x", { method: "PUT", body: { valores: { ip: 65 } } }), params("100"))
+    expect(res.status).toBe(200)
+    expect((await res.json()).atributos).toMatchObject([
+      { clave: "potencia_w", valorNum: 50, fuente: "nombre" },
+      { clave: "ip", valorNum: 65, fuente: "manual" },
+    ])
+  })
+
+  it("un rechazo de la plataforma → 422 con el motivo; una caída → 502 con el mensaje de reintento", async () => {
+    plataforma.fallo = "400"
+    let res = await rutaAtributos.PUT(req("/x", { method: "PUT", body: { valores: { ip: 68 } } }), params("100"))
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: "La plataforma rechazó los valores: /ip/n must be <= 69." })
+    plataforma.fallo = "red"
+    res = await rutaAtributos.PUT(req("/x", { method: "PUT", body: { valores: { ip: 65 } } }), params("100"))
+    expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ error: "No se pudo guardar en la plataforma. Inténtelo de nuevo." })
   })
 })
 

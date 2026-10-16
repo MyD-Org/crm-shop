@@ -1,5 +1,7 @@
 /**
- * Auditoría SOLO LECTURA de `public.catalog_atributos` (no escribe nada en ninguna base).
+ * Auditoría SOLO LECTURA de los atributos técnicos (no escribe nada en ninguna base). Lee los
+ * valores ACTUALES según el modo del tenant (`leerFilasAtributos`): la tabla local en `off`/`dual`,
+ * la proyección de la plataforma en `on` (corte 0091).
  *
  *   a) Filas fuera del rango plausible de su clave (`RANGOS_PLAUSIBLES`): alegra_id, nombre, valor y
  *      fuente. Sirve para encontrar rarezas (potencia 30000 W, flujo 60000 lm, tensión 2 V, IP 0).
@@ -19,7 +21,8 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { and, eq } from "drizzle-orm"
 import { getDb } from "../src/db"
-import { catalogAtributos, catalogOverlay, catalogProducts } from "../src/db/schema"
+import { catalogOverlay, catalogProducts } from "../src/db/schema"
+import { leerFilasAtributos } from "../src/lib/catalogo-atributos-repo"
 import {
   cablesSinSeccion,
   contarFueraDeRango,
@@ -73,11 +76,11 @@ async function main() {
     universo === "todos" ? true : universo === "activos" ? p.activo : p.publicado
   const porId = new Map(productos.map((p) => [p.alegraId, p]))
 
-  const filasDb = await db.select().from(catalogAtributos).where(eq(catalogAtributos.tenantId, tenant))
+  const filasDb = await leerFilasAtributos(tenant)
   const filas: FilaAuditada[] = filasDb.map((f) => ({
     alegraId: f.alegraId,
     clave: f.clave,
-    valorNum: f.valorNum != null ? Number(f.valorNum) : null,
+    valorNum: f.valorNum,
     valorTexto: f.valorTexto,
     fuente: f.fuente,
     nombre: porId.get(f.alegraId)?.name ?? "(producto fuera del espejo)",

@@ -638,6 +638,13 @@
       "when": 1794000100000,
       "tag": "0090_plataforma_proyeccion",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1794000200000,
+      "tag": "0091_plataforma_corte_atributos",
+      "breakpoints": true
     }
   ]
 }

@@ -1,20 +1,20 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { getDb } from "@/db"
-import { catalogAtributos } from "@/db/schema"
+import { catalogAtributosLegacy } from "@/db/schema"
 import { truncateAll, seedTenant } from "./helpers"
 import { upsertProyeccion } from "@/lib/plataforma-proyeccion-repo"
 import { compararParidad } from "@/lib/plataforma-backfill"
 
 const T = "central-led"
 
-describe("paridad tabla ↔ vista", () => {
+describe("paridad tabla legacy ↔ vista", () => {
   beforeEach(async () => {
     await truncateAll()
     await seedTenant(T)
   })
 
   it("sin diferencias cuando la proyección refleja la tabla; detecta lo que falta y lo distinto", async () => {
-    await getDb().insert(catalogAtributos).values([
+    await getDb().insert(catalogAtributosLegacy).values([
       { tenantId: T, alegraId: "42", clave: "potencia_w", valorNum: "20", valorTexto: null, fuente: "pdf" },
       { tenantId: T, alegraId: "42", clave: "tension_v", valorNum: "220", valorTexto: "85-265", fuente: "nombre" },
     ])
@@ -26,7 +26,7 @@ describe("paridad tabla ↔ vista", () => {
   })
 
   it("compara valores numéricos, no texto: numeric '20.50' en la tabla y 20.5 en la proyección no son distintos", async () => {
-    await getDb().insert(catalogAtributos).values({ tenantId: T, alegraId: "42", clave: "potencia_w", valorNum: "20.50", valorTexto: null, fuente: "pdf" })
+    await getDb().insert(catalogAtributosLegacy).values({ tenantId: T, alegraId: "42", clave: "potencia_w", valorNum: "20.50", valorTexto: null, fuente: "pdf" })
     await upsertProyeccion(T, "atributos_tecnicos", "42", "i", { potencia_w: { n: 20.5, t: null }, fuentes: { potencia_w: "pdf" } }, new Date())
     expect(await compararParidad(T)).toEqual({ soloTabla: [], soloVista: [], distintos: [] })
   })

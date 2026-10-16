@@ -16,7 +16,8 @@ import {
 import { api, ErrorApi } from "./tipos"
 
 /**
- * Datos técnicos estructurados del producto (`catalog_atributos`): lo que salió del nombre, de la
+ * Datos técnicos estructurados del producto (la tabla local, o la proyección de la plataforma si el
+ * tenant está en modo `on`; ver `lib/catalogo-atributos-repo.ts`): lo que salió del nombre, de la
  * ficha PDF o de una corrección manual. La tienda los usa para filtrar (potencia, tono, zócalo…) y
  * para la tabla "Características".
  *

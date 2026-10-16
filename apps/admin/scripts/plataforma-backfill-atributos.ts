@@ -1,5 +1,6 @@
 /**
- * Carga inicial de `catalog_atributos` en la plataforma (rollout, paso de backfill). Una pasada por
+ * Carga inicial de la tabla local de atributos (`catalog_atributos_legacy` desde el corte 0091) en
+ * la plataforma (rollout, paso de backfill). Una pasada por
  * (producto, fuente) en orden nombre → pdf → manual, sequential, para que la precedencia de la
  * plataforma deje `fuentes` igual que la tabla. La pasada `nombre` va con reemplaza_fuente (y cubre
  * a todo producto con filas, aunque sin nombre: data {}) para que las claves que sobran en la
@@ -12,7 +13,7 @@
  */
 import { eq } from "drizzle-orm"
 import { getDb } from "../src/db"
-import { catalogAtributos } from "../src/db/schema"
+import { catalogAtributosLegacy } from "../src/db/schema"
 import { getTenantByIdFromDb, plataformaConfigurada } from "../src/lib/tenants"
 import { escribirAtributosPlataforma } from "../src/lib/plataforma-atributos"
 import { pasadasPorFuente } from "../src/lib/plataforma-backfill"
@@ -23,7 +24,7 @@ async function main() {
   const t = await getTenantByIdFromDb(tenantId)
   if (!t || !plataformaConfigurada(t)) throw new Error(`tenant ${tenantId} sin plataforma configurada`)
 
-  const propias = await getDb().select().from(catalogAtributos).where(eq(catalogAtributos.tenantId, tenantId))
+  const propias = await getDb().select().from(catalogAtributosLegacy).where(eq(catalogAtributosLegacy.tenantId, tenantId))
   const pasadas = pasadasPorFuente(propias.map((f) => ({ alegraId: f.alegraId, clave: f.clave, valorNum: f.valorNum, valorTexto: f.valorTexto, fuente: f.fuente })))
 
   const conteo = { ok: 0, rechazados: 0, errores: 0 }

@@ -17,6 +17,10 @@ const CONFIG: TenantConfig = {
   aiApiKey: "",
   aiAgentId: "",
   aiTenantId: "",
+  plataformaUrl: "",
+  plataformaApiKey: "",
+  plataformaWebhookSecret: "",
+  plataformaAtributos: "off",
 }
 
 afterEach(() => vi.unstubAllGlobals())

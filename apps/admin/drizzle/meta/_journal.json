@@ -624,6 +624,20 @@
       "when": 1793370000000,
       "tag": "0088_ajuste_por_producto",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1794000000000,
+      "tag": "0089_plataforma_tenants",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1794000100000,
+      "tag": "0090_plataforma_proyeccion",
+      "breakpoints": true
     }
   ]
 }

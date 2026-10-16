@@ -1,4 +1,4 @@
-import type { AtributosEstructurados } from "@/lib/catalogo-caracteristicas";
+import type { AtributosEstructurados, ValorEstructurado } from "@/lib/catalogo-caracteristicas";
 import type { CuotasProducto } from "@/lib/cuotas-sin-interes";
 import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import type { ProductStock } from "@myd-org/ui";
@@ -126,6 +126,11 @@ export interface Product {
    * consulta los pidió. Los usan los filtros del chat y la card `spec`.
    */
   atributosEstructurados?: AtributosEstructurados;
+  /**
+   * Claves del jsonb de atributos que el Shop no conoce (de la spec de la plataforma). La ficha las
+   * dibuja con la etiqueta y la unidad de la spec proyectada (`catalogo-specs.ts`).
+   */
+  atributosExtras?: Record<string, ValorEstructurado>;
   /** Medio destacado en el catálogo ("$X con <Medio>" en cards). undefined = no corresponde. */
   precioMedio?: PrecioMedio;
   /** Medios de la ficha, en orden. Vacío/undefined = ninguno califica. */

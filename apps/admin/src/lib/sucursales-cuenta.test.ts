@@ -29,6 +29,10 @@ const BASE: TenantConfig = {
   aiApiKey: "",
   aiAgentId: "",
   aiTenantId: "",
+  plataformaUrl: "",
+  plataformaApiKey: "",
+  plataformaWebhookSecret: "",
+  plataformaAtributos: "off",
 }
 
 const ENV_DEV = {

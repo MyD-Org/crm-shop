@@ -598,3 +598,16 @@ export const crmAtributos = publico.table("catalog_atributos", {
   valorNum: numeric("valor_num"),
   valorTexto: text("valor_texto"),
 });
+
+/**
+ * `public.catalog_specs` (CRM, migración 0090): copia de las specs del catálogo de la plataforma que
+ * el CRM proyecta. El Shop lee `document->'fields'` (etiqueta, unidad, orden) para dibujar claves
+ * de atributos que no conoce. SELECT por columna: tenant_id, slug, version, document. Puede no
+ * existir (migración sin aplicar): `catalogo-specs.ts` lo tolera.
+ */
+export const crmCatalogSpecs = publico.table("catalog_specs", {
+  tenantId: text("tenant_id").notNull(),
+  slug: text("slug").notNull(),
+  version: integer("version").notNull(),
+  document: jsonb("document").$type<Record<string, unknown>>().notNull(),
+});

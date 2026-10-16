@@ -510,7 +510,9 @@ cualquier otro objeto de `public` le da 42501:
 | `client_commercial_conditions` | tabla | SELECT | 0032 |
 | `notification_log` | tabla | SELECT, UPDATE sólo `read_at` | 0032 |
 | `payment_receipts` | tabla | SELECT, INSERT, UPDATE sólo las columnas del flujo de informar pago (`status`, `processing_started_at`, `reject_reason`, `file_*`, `converted_from`, `email_*`, `submitted_at`, `updated_at`); nunca `loaded_*`, `alegra_payment_*`, `declared_*`, `amount`, `codigocliente` | 0032 |
-| `catalog_atributos` | tabla (atributos técnicos estructurados por producto) | SELECT sólo `tenant_id, alegra_id, clave, valor_num, valor_texto` (sin `fuente` ni `updated_at`) | 0048 |
+| `catalog_atributos` | tabla (atributos técnicos estructurados por producto) | SELECT sólo `tenant_id, alegra_id, clave, valor_num, valor_texto` (sin `fuente` ni `updated_at`) | 0049 |
+| `catalog_atributos_shop` | vista (proyección de los atributos técnicos de la plataforma; mismas cinco columnas que `catalog_atributos`) | SELECT `tenant_id, alegra_id, clave, valor_num, valor_texto` | 0090 |
+| `catalog_specs` | tabla (documento de la spec proyectada: etiquetas y unidades de las claves) | SELECT `tenant_id, slug, version, document` | 0090 |
 | `sucursales` | tabla | SELECT por columna: las de 0041 (`tenant_id, slug, nombre, direccion, ciudad, provincia, whatsapp, horario, acepta_retiro, acepta_envio, envio_ciudades, orden, activa, predeterminada`) más `schedule, schedule_exceptions` (0051). Siguen afuera `id`, `deposito_alegra_id`, `cuenta_alegra_id` y los timestamps | 0041, 0051 |
 | `cuentas_bancarias_shop` | tabla (cuentas a las que el Shop pide transferir) | SELECT por columna: `id, tenant_id, alias, cbu, banco, titular, cuit, todas_las_sucursales, sucursal_slugs, monto_min, monto_max, activa, predeterminada, orden`. Sin `created_at` ni `updated_at`; sin escritura | 0055 |
 
@@ -902,7 +904,7 @@ RESET ROLE;
 
 ---
 
-### Datos técnicos estructurados (`catalog_atributos`, 0048)
+### Datos técnicos estructurados (`catalog_atributos`, 0049)
 
 Potencia, temperatura de color, tono, IP, lúmenes, tensión y zócalo por producto, para los
 filtros y la tabla "Características" del Shop (catálogo asistido fase 2, subproyecto 5). Una fila
@@ -921,7 +923,7 @@ nunca pisa a otra de mayor precedencia (lo aplica el upsert de `lib/catalogo-atr
 - **Manual**: en el mismo panel, los campos cambiados quedan `manual`; un campo vacío se quita.
 
 Cada escritura desde el admin avisa al Shop (descarta su caché). El Shop lee las columnas
-concedidas por la 0048 y, sin la tabla, sigue con los patrones sobre el nombre de la fase 1.
+concedidas por la 0049 y, sin la tabla, sigue con los patrones sobre el nombre de la fase 1.
 
 ## Cuenta que factura cada pedido (multicuenta)
 

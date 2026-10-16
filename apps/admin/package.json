@@ -22,7 +22,10 @@
     "catalogo:atributos-auditoria": "tsx scripts/atributos-auditoria.ts",
     "catalogo:seccion-cables-backfill": "tsx scripts/backfill-seccion-cables.ts",
     "catalogo:atributo-nombre-backfill": "tsx scripts/backfill-seccion-cables.ts",
-    "catalogo:leer-fichas": "tsx --env-file-if-exists=.env.local scripts/leer-fichas-catalogo.ts"
+    "catalogo:leer-fichas": "tsx --env-file-if-exists=.env.local scripts/leer-fichas-catalogo.ts",
+    "plataforma:backfill-atributos": "tsx --env-file-if-exists=.env.local scripts/plataforma-backfill-atributos.ts",
+    "plataforma:sincronizar-specs": "tsx --env-file-if-exists=.env.local scripts/plataforma-sincronizar-specs.ts",
+    "plataforma:paridad-atributos": "tsx --env-file-if-exists=.env.local scripts/plataforma-paridad-atributos.ts"
   },
   "dependencies": {
     "@flags-sdk/vercel": "^1.5.0",

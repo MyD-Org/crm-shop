@@ -26,6 +26,10 @@ const tenant: TenantConfig = {
   aiApiKey: "",
   aiAgentId: "",
   aiTenantId: "",
+  plataformaUrl: "",
+  plataformaApiKey: "",
+  plataformaWebhookSecret: "",
+  plataformaAtributos: "off",
 }
 
 beforeEach(() => {

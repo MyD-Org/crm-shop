@@ -1719,3 +1719,37 @@ export const preciosOnlineRetenciones = pgTable(
     index("precios_online_retenciones_alegra_idx").on(t.tenantId, t.alegraId, t.estado),
   ],
 )
+
+// Proyección de la plataforma (0090). SOLO las escribe el receptor de eventos (ver la migración).
+export const catalogProyeccion = pgTable("catalog_proyeccion", {
+  tenantId: text("tenant_id").notNull().references(() => tenants.id),
+  spec: text("spec").notNull(),
+  externalKey: text("external_key").notNull(),
+  instanceId: text("instance_id").notNull(),
+  data: jsonb("data").$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  recibidoAt: timestamp("recibido_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ name: "catalog_proyeccion_pk", columns: [t.tenantId, t.spec, t.externalKey] })])
+
+export const catalogSpecs = pgTable("catalog_specs", {
+  tenantId: text("tenant_id").notNull().references(() => tenants.id),
+  slug: text("slug").notNull(),
+  version: integer("version").notNull(),
+  document: jsonb("document").$type<Record<string, unknown>>().notNull(),
+  recibidoAt: timestamp("recibido_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ name: "catalog_specs_pk", columns: [t.tenantId, t.slug] })])
+
+export const plataformaEntregas = pgTable("plataforma_entregas", {
+  tenantId: text("tenant_id").notNull().references(() => tenants.id),
+  deliveryId: text("delivery_id").notNull(),
+  eventId: text("event_id").notNull(),
+  action: text("action").notNull(),
+  recibidoAt: timestamp("recibido_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ name: "plataforma_entregas_pk", columns: [t.tenantId, t.deliveryId] })])
+
+export const plataformaSyncEstado = pgTable("plataforma_sync_estado", {
+  tenantId: text("tenant_id").primaryKey().references(() => tenants.id),
+  productosCursor: timestamp("productos_cursor", { withTimezone: true }).notNull().default(sql`'epoch'`),
+  productosCursorClave: text("productos_cursor_clave").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})

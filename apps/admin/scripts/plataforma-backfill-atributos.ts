@@ -1,7 +1,9 @@
 /**
  * Carga inicial de `catalog_atributos` en la plataforma (rollout, paso de backfill). Una pasada por
  * (producto, fuente) en orden nombre → pdf → manual, sequential, para que la precedencia de la
- * plataforma deje `fuentes` igual que la tabla. Sólo agrega (nunca reemplaza_fuente).
+ * plataforma deje `fuentes` igual que la tabla. La pasada `nombre` va con reemplaza_fuente (y cubre
+ * a todo producto con filas, aunque sin nombre: data {}) para que las claves que sobran en la
+ * plataforma converjan; pdf y manual sólo agregan.
  * Requiere el tenant con la plataforma configurada y los productos ya espejados.
  *
  *   TENANT=<id> npm run plataforma:backfill-atributos
@@ -26,7 +28,7 @@ async function main() {
 
   const conteo = { ok: 0, rechazados: 0, errores: 0 }
   for (const p of pasadas) {
-    const r = await escribirAtributosPlataforma(t, p.alegraId, p.data, p.fuente)
+    const r = await escribirAtributosPlataforma(t, p.alegraId, p.data, p.fuente, { reemplaza: p.reemplaza })
     if (r === "ok") conteo.ok++
     else if (r === "rechazado") conteo.rechazados++
     else conteo.errores++

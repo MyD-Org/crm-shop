@@ -29,6 +29,8 @@ export interface BodyUpsert {
 
 export interface Deps {
   fetch?: typeof fetch
+  /** Timeout por llamada; por defecto TIMEOUT_MS. Los escritores de atributos usan uno más corto. */
+  timeoutMs?: number
 }
 
 const base = (t: TenantConfig) => t.plataformaUrl.replace(/\/$/, "")
@@ -44,7 +46,7 @@ async function llamar(t: TenantConfig, path: string, init: RequestInit, deps: De
         "content-type": "application/json",
         ...(init.headers as Record<string, string> | undefined),
       },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(deps.timeoutMs ?? TIMEOUT_MS),
       cache: "no-store",
     })
   } catch (err) {

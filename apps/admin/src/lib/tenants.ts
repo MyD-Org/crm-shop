@@ -290,19 +290,26 @@ export async function isKnownTenantId(id: string): Promise<boolean> {
 }
 
 /**
+ * Config del tenant desde la DB SIN fallback: tira si la DB falla y devuelve null sólo si la fila
+ * no existe. Para quien necesita distinguir "no hay tenant" de "no pude leerlo" (el receptor de
+ * eventos de la plataforma responde 503 en el segundo caso para que la plataforma reintente).
+ */
+export async function leerTenantDeDb(id: string): Promise<TenantConfig | null> {
+  const { getDb } = await import("@/db")
+  const { tenants: tenantsTable } = await import("@/db/schema")
+  const { eq } = await import("drizzle-orm")
+
+  const [row] = await getDb().select().from(tenantsTable).where(eq(tenantsTable.id, id))
+  return row ? tenantConfigFromRow(row) : null
+}
+
+/**
  * Config del tenant desde la DB, con fallback transitorio al registro de env.
  * El fallback se elimina cuando la DB esté estabilizada en todos los entornos.
  */
 export async function getTenantByIdFromDb(id: string): Promise<TenantConfig | null> {
   try {
-    const { getDb } = await import("@/db")
-    const { tenants: tenantsTable } = await import("@/db/schema")
-    const { eq } = await import("drizzle-orm")
-
-    const [row] = await getDb().select().from(tenantsTable).where(eq(tenantsTable.id, id))
-    if (!row) return getTenantById(id)
-
-    return tenantConfigFromRow(row)
+    return (await leerTenantDeDb(id)) ?? getTenantById(id)
   } catch (err) {
     console.error("getTenantByIdFromDb: DB no disponible, fallback a env:", err)
     return getTenantById(id)

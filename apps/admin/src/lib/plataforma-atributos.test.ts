@@ -8,6 +8,7 @@ const estado = vi.hoisted(() => ({
   fila: null as unknown,
   enVuelo: 0,
   maxEnVuelo: 0,
+  deps: [] as unknown[],
 }))
 vi.mock("@/lib/tenants", async (orig) => ({
   ...(await orig<typeof import("@/lib/tenants")>()),
@@ -19,8 +20,9 @@ vi.mock("@/lib/plataforma-cliente", async (orig) => {
   const o = await orig<typeof import("@/lib/plataforma-cliente")>()
   return {
     ...o,
-    upsertInstancia: async (_t: unknown, spec: string, clave: string, body: unknown) => {
+    upsertInstancia: async (_t: unknown, spec: string, clave: string, body: unknown, deps?: unknown) => {
       estado.llamadas.push({ spec, clave, body })
+      estado.deps.push(deps)
       estado.enVuelo++
       estado.maxEnVuelo = Math.max(estado.maxEnVuelo, estado.enVuelo)
       await new Promise((r) => setTimeout(r, 2))
@@ -32,12 +34,12 @@ vi.mock("@/lib/plataforma-cliente", async (orig) => {
   }
 })
 
-import { datosDeFilas, escribirAtributosPlataforma, escribirFilasPlataforma, escribirProductosPlataforma, modoAtributosDe } from "./plataforma-atributos"
+import { TIMEOUT_ESCRITURA_MS, datosDeFilas, escribirAtributosPlataforma, escribirFilasPlataforma, escribirProductosPlataforma, modoAtributosDe } from "./plataforma-atributos"
 import type { TenantConfig } from "./tenants"
 
 const t = { id: "central-led", plataformaUrl: "https://plataforma.example", plataformaApiKey: "ak", plataformaWebhookSecret: "s", plataformaAtributos: "dual" } as TenantConfig
 
-beforeEach(() => { estado.llamadas = []; estado.fallos = []; estado.fila = null; estado.enVuelo = 0; estado.maxEnVuelo = 0 })
+beforeEach(() => { estado.llamadas = []; estado.fallos = []; estado.fila = null; estado.enVuelo = 0; estado.maxEnVuelo = 0; estado.deps = [] })
 
 describe("datosDeFilas", () => {
   it("arma {clave: {n, t}} a partir de las filas del CRM", () => {
@@ -104,5 +106,42 @@ describe("escribirFilasPlataforma", () => {
     const r = await escribirProductosPlataforma(t, items, "nombre", { reemplaza: true })
     expect(r.ok).toBe(2)
     expect(estado.llamadas).toHaveLength(3)
+  })
+  it("tras el primer 503 no se lanzan más escrituras: los omitidos cuentan como errores", async () => {
+    estado.fallos = [{ status: 503, code: "unavailable" }]
+    const filas = Array.from({ length: 20 }, (_, i) => ({ alegraId: String(i), clave: "ip", valorNum: 65, valorTexto: null })) as never
+    const r = await escribirFilasPlataforma(t, filas, "nombre")
+    expect(estado.llamadas.length).toBeLessThanOrEqual(8)
+    expect(r.ok + r.rechazados + r.errores).toBe(20)
+    expect(r.errores).toBeGreaterThanOrEqual(13)
+  })
+  it("escribirProductosPlataforma: mismo corte tras un 503 y devuelve errores", async () => {
+    estado.fallos = [{ status: 503, code: "unavailable" }]
+    const items = Array.from({ length: 20 }, (_, i) => ({ alegraId: String(i), data: { ip: { n: 65, t: null } } }))
+    const r = await escribirProductosPlataforma(t, items, "nombre")
+    expect(estado.llamadas.length).toBeLessThanOrEqual(8)
+    expect(r.ok + r.errores).toBe(20)
+    expect(r.errores).toBeGreaterThanOrEqual(13)
+  })
+  it("un 400 (no reintentable) no corta: se escriben todos", async () => {
+    estado.fallos = [{ status: 400, code: "invalid_data" }]
+    const filas = Array.from({ length: 20 }, (_, i) => ({ alegraId: String(i), clave: "ip", valorNum: 65, valorTexto: null })) as never
+    const r = await escribirFilasPlataforma(t, filas, "nombre")
+    expect(estado.llamadas).toHaveLength(20)
+    expect(r.rechazados).toBe(1)
+  })
+})
+
+describe("timeout de escritura", () => {
+  it("los escritores pasan timeoutMs=5000 (también el ancla y el reintento) y respetan uno explícito", async () => {
+    expect(TIMEOUT_ESCRITURA_MS).toBe(5_000)
+    estado.fallos = [{ status: 404, code: "anchor_not_found" }]
+    estado.fila = { alegraId: "42" }
+    await escribirAtributosPlataforma(t, "42", { ip: { n: 1, t: null } }, "nombre")
+    expect(estado.deps).toHaveLength(3)
+    for (const d of estado.deps) expect((d as { timeoutMs: number }).timeoutMs).toBe(5_000)
+    estado.deps = []
+    await escribirAtributosPlataforma(t, "42", { ip: { n: 1, t: null } }, "nombre", { deps: { timeoutMs: 1234 } })
+    expect((estado.deps[0] as { timeoutMs: number }).timeoutMs).toBe(1234)
   })
 })

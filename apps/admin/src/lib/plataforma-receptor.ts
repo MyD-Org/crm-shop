@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
+import { SPECS_PROYECTADAS } from "@/lib/plataforma-specs"
 import { registrarEntrega, olvidarEntrega, upsertProyeccion, upsertSpecProyectada } from "@/lib/plataforma-proyeccion-repo"
 
 // Receptor de eventos de la plataforma (contrato platform-apps/v1, "Recibir eventos"). Verifica la
@@ -18,7 +19,7 @@ export function firmaValida(secret: string, bodyCrudo: string, header: string | 
 }
 
 /** Las specs cuya proyección el CRM guarda. Otras acciones se registran como entrega y se ignoran. */
-const SPECS_PROYECTADAS = new Set(["atributos_tecnicos"])
+const PROYECTADAS = new Set<string>(SPECS_PROYECTADAS)
 
 interface InstanciaPayload { id: string; spec: string; spec_version: number; external_key: string; data: Record<string, unknown>; anchors: Record<string, string>; updated_at: string }
 
@@ -62,7 +63,7 @@ async function aplicar(tenantId: string, ev: EventDocument): Promise<"procesado"
     const rs = await upsertSpecProyectada(tenantId, p.slug, p.spec.version, p.spec)
     return rs === "escrita" ? "procesado" : "viejo"
   }
-  if (!SPECS_PROYECTADAS.has(slug) || (verbo !== "create" && verbo !== "update")) return "ignorado"
+  if (!PROYECTADAS.has(slug) || (verbo !== "create" && verbo !== "update")) return "ignorado"
   const inst = (ev.payload as { instance?: InstanciaPayload })?.instance
   if (!inst?.external_key || typeof inst.id !== "string" || !inst.id || !inst.updated_at) return "ignorado"
   const actualizado = new Date(inst.updated_at)

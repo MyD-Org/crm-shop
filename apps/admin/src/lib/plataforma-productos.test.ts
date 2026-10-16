@@ -5,6 +5,7 @@ const estado = vi.hoisted(() => ({
   filas: [] as unknown[],
   upserts: [] as unknown[],
   falla: null as null | "red",
+  estadoCfg: 404,
 }))
 vi.mock("@/lib/plataforma-proyeccion-repo", () => ({
   leerCursorProductos: async () => estado.cursor,
@@ -16,6 +17,8 @@ vi.mock("@/lib/plataforma-cliente", async (orig) => ({
     estado.upserts.push({ spec, clave, body })
     const { PlataformaError } = await orig<typeof import("@/lib/plataforma-cliente")>()
     if (clave === "malo") throw new PlataformaError(400, "invalid_data", ["/name must be string"])
+    if (clave === "cfg") throw new PlataformaError(estado.estadoCfg, "spec_not_found")
+    if (clave === "inv") throw new PlataformaError(422, "invalid_data")
     if (clave === "red" && estado.falla === "red") throw new PlataformaError(503, "unavailable", [], true)
     return { created: true, changed: true }
   },
@@ -56,4 +59,23 @@ describe("empujarProductos", () => {
     expect(estado.upserts.map((u) => (u as { clave: string }).clave)).toEqual(["42", "red"])
     estado.falla = null
   })
+
+  it("un 422 es rechazo por producto: no corta y el cursor avanza", async () => {
+    estado.cursor = { at: new Date(0), clave: "" }; estado.upserts = []
+    estado.filas = [fila("inv", "2026-10-15T00:00:01Z"), fila("43", "2026-10-15T00:00:02Z")]
+    const r = await empujarProductos(t)
+    expect(r).toMatchObject({ enviados: 1, fallidos: 1, cortado: false })
+    expect(r.cursor.clave).toBe("43")
+  })
+
+  for (const status of [401, 403, 404, 409]) {
+    it(`un ${status} no reintentable es error de configuración: corta y el cursor no pasa de esa fila`, async () => {
+      estado.cursor = { at: new Date(0), clave: "" }; estado.upserts = []; estado.estadoCfg = status
+      estado.filas = [fila("42", "2026-10-15T00:00:01Z"), fila("cfg", "2026-10-15T00:00:02Z"), fila("43", "2026-10-15T00:00:03Z")]
+      const r = await empujarProductos(t)
+      expect(r).toMatchObject({ enviados: 1, fallidos: 0, cortado: true })
+      expect(r.cursor).toEqual({ at: new Date("2026-10-15T00:00:01.000Z"), clave: "42" })
+      expect(estado.upserts.map((u) => (u as { clave: string }).clave)).toEqual(["42", "cfg"])
+    })
+  }
 })

@@ -2,7 +2,9 @@ import { and, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { catalogProyeccion, catalogSpecs, plataformaEntregas, plataformaSyncEstado } from "@/db/schema"
 
-// Único escritor de las tablas de proyección (0090). Lo llama el receptor de eventos; nadie más.
+// Único módulo que escribe las tablas de proyección (0090). Lo llama el receptor de eventos y, para
+// `catalog_specs`, también la sincronización inicial (scripts/plataforma-sincronizar-specs.ts, vía
+// lib/plataforma-specs.ts): dos escritores equivalentes de esa tabla, ambos por upsertSpecProyectada.
 
 /** Cursor compuesto de productos: synced_at es único por lote, el alegra_id desempata. */
 export interface CursorProductos { at: Date; clave: string }

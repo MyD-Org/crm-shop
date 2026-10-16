@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from "vitest"
 import { createHmac } from "node:crypto"
 
-const estado = vi.hoisted(() => ({ secret: "ab".repeat(32), procesar: vi.fn(async () => "procesado" as const), aviso: vi.fn(async () => ({ propagado: true })) }))
+const estado = vi.hoisted(() => ({ secret: "ab".repeat(32), procesar: vi.fn(async () => "procesado" as const), aviso: vi.fn(async () => ({ propagado: true })), modo: "on" as "off" | "dual" | "on", dbFalla: false }))
 vi.mock("next/server", async (orig) => ({ ...(await orig<typeof import("next/server")>()), after: (fn: () => unknown) => { void fn() } }))
 vi.mock("@/lib/tenant-context", () => ({ resolveRequestTenantId: async () => "central-led" }))
-vi.mock("@/lib/tenants", () => ({ getTenantByIdFromDb: async () => ({ id: "central-led", plataformaWebhookSecret: estado.secret }) }))
+vi.mock("@/lib/tenants", () => ({
+  leerTenantDeDb: async () => { if (estado.dbFalla) throw new Error("db caida"); return { id: "central-led", plataformaWebhookSecret: estado.secret, plataformaAtributos: estado.modo } },
+  getTenantById: () => null,
+}))
 vi.mock("@/lib/plataforma-receptor", async (orig) => ({ ...(await orig<typeof import("@/lib/plataforma-receptor")>()), procesarEvento: estado.procesar }))
 vi.mock("@/lib/aviso-shop", () => ({ avisarShop: estado.aviso }))
 
@@ -26,6 +29,28 @@ describe("POST /api/platform/events", () => {
     expect(r.status).toBe(200)
     expect(await r.json()).toEqual({ resultado: "repetido" })
     expect(estado.aviso).not.toHaveBeenCalled()
+  })
+  it("error de DB al leer el tenant → 503 (la plataforma reintenta), no 401", async () => {
+    estado.procesar.mockClear()
+    estado.dbFalla = true
+    try {
+      const r = await POST(pedir(body, firmar(body)))
+      expect(r.status).toBe(503)
+      expect(estado.procesar).not.toHaveBeenCalled()
+    } finally { estado.dbFalla = false }
+  })
+  it("avisa al Shop sólo con plataformaAtributos=on (en dual/off no)", async () => {
+    for (const modo of ["dual", "off"] as const) {
+      estado.aviso.mockClear(); estado.modo = modo
+      try {
+        const r = await POST(pedir(body, firmar(body), `d-${modo}`))
+        expect(r.status).toBe(200)
+        expect(estado.aviso).not.toHaveBeenCalled()
+      } finally { estado.modo = "on" }
+    }
+    estado.aviso.mockClear()
+    await POST(pedir(body, firmar(body), "d-on"))
+    expect(estado.aviso).toHaveBeenCalledWith("central-led")
   })
   it("tenant con secret vacío → 401", async () => {
     estado.secret = ""

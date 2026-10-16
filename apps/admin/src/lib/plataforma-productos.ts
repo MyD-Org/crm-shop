@@ -5,10 +5,11 @@ import type { TenantConfig } from "./tenants"
 
 // Espejo `producto` en la plataforma (spec §2 "El espejo"): la clave de origen es alegra_id y el
 // cursor es (synced_at, alegra_id): la sync estampa un único synced_at por lote, así que el id
-// desempata. Backfill y stream son el mismo camino: con el cursor en epoch se empuja todo. Un 4xx
-// de la plataforma (schema) se loguea y no frena el lote: el producto se vuelve a intentar cuando
-// la sync lo toque de nuevo. Un error de red/5xx sí frena el lote: el cursor queda en la última
-// fila procesada y la próxima corrida retoma desde ahí.
+// desempata. Backfill y stream son el mismo camino: con el cursor en epoch se empuja todo. Sólo un
+// rechazo por producto (400 invalid_data o 422) se loguea y no frena el lote: el producto se vuelve
+// a intentar cuando la sync lo toque de nuevo. Cualquier otro error (red/5xx, y también 401, 403,
+// 404 spec_not_found, 409 mirror_write_forbidden: configuración rota) corta el lote: el cursor queda
+// en la última fila procesada, la ruta informa ok:false y la próxima corrida retoma desde ahí.
 export const LOTE_PRODUCTOS = 500
 
 export function productoParaPlataforma(f: FilaProducto) {
@@ -22,6 +23,11 @@ export function productoParaPlataforma(f: FilaProducto) {
   }
 }
 
+/** 400 invalid_data / 422: el dato de ESE producto no valida; el resto de los errores no son culpa del producto. */
+function esRechazoDeProducto(err: unknown): err is PlataformaError {
+  return err instanceof PlataformaError && ((err.status === 400 && err.code === "invalid_data") || err.status === 422)
+}
+
 export async function empujarProductos(t: TenantConfig, opts: { lote?: number; deps?: Deps } = {}): Promise<{ enviados: number; fallidos: number; cursor: CursorProductos; cortado: boolean }> {
   const inicial = await leerCursorProductos(t.id)
   let cursor = inicial
@@ -32,7 +38,7 @@ export async function empujarProductos(t: TenantConfig, opts: { lote?: number; d
       await upsertInstancia(t, "producto", f.alegraId, { data: productoParaPlataforma(f) }, opts.deps ?? {})
       enviados++
     } catch (err) {
-      if (err instanceof PlataformaError && !err.reintentable) {
+      if (esRechazoDeProducto(err)) {
         fallidos++
         console.warn(`[plataforma] producto rechazado tenant=${t.id} alegraId=${f.alegraId} ${err.code}: ${err.details.join("; ")}`)
       } else {

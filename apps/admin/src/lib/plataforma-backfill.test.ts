@@ -10,10 +10,10 @@ describe("pasadasPorFuente", () => {
       { alegraId: "43", clave: "ip", valorNum: 20, valorTexto: null, fuente: "nombre" },
     ]
     expect(pasadasPorFuente(filas)).toEqual([
-      { fuente: "nombre", alegraId: "42", data: { tono: { n: null, t: "calido" } } },
-      { fuente: "nombre", alegraId: "43", data: { ip: { n: 20, t: null } } },
-      { fuente: "pdf", alegraId: "42", data: { ip: { n: 65, t: null } } },
-      { fuente: "manual", alegraId: "42", data: { potencia_w: { n: 20, t: null } } },
+      { fuente: "nombre", alegraId: "42", data: { tono: { n: null, t: "calido" } }, reemplaza: true },
+      { fuente: "nombre", alegraId: "43", data: { ip: { n: 20, t: null } }, reemplaza: true },
+      { fuente: "pdf", alegraId: "42", data: { ip: { n: 65, t: null } }, reemplaza: false },
+      { fuente: "manual", alegraId: "42", data: { potencia_w: { n: 20, t: null } }, reemplaza: false },
     ])
   })
 
@@ -23,7 +23,20 @@ describe("pasadasPorFuente", () => {
       { alegraId: "7", clave: "tension_v", valorNum: "220", valorTexto: "85-265", fuente: "nombre" },
     ])
     expect(pasadas).toEqual([
-      { fuente: "nombre", alegraId: "7", data: { potencia_w: { n: 20.5, t: null }, tension_v: { n: 220, t: "85-265" } } },
+      { fuente: "nombre", alegraId: "7", data: { potencia_w: { n: 20.5, t: null }, tension_v: { n: 220, t: "85-265" } }, reemplaza: true },
+    ])
+  })
+
+  it("un producto sin filas de nombre igual entra en la pasada nombre con data {} (para converger); pdf/manual no reemplazan", () => {
+    const pasadas = pasadasPorFuente([
+      { alegraId: "8", clave: "ip", valorNum: 65, valorTexto: null, fuente: "pdf" },
+      { alegraId: "9", clave: "potencia_w", valorNum: 5, valorTexto: null, fuente: "manual" },
+    ])
+    expect(pasadas).toEqual([
+      { fuente: "nombre", alegraId: "8", data: {}, reemplaza: true },
+      { fuente: "nombre", alegraId: "9", data: {}, reemplaza: true },
+      { fuente: "pdf", alegraId: "8", data: { ip: { n: 65, t: null } }, reemplaza: false },
+      { fuente: "manual", alegraId: "9", data: { potencia_w: { n: 5, t: null } }, reemplaza: false },
     ])
   })
 

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm"
 import { describe, it, expect, beforeEach } from "vitest"
 import { getDb } from "@/db"
 import { catalogProducts } from "@/db/schema"
@@ -33,6 +34,23 @@ describe("fuente de productos para la plataforma", () => {
   it("con lote=2 se pagina sin perder ni repetir filas empatadas", async () => {
     expect(ids(await leerProductosDesde(T, { at: new Date(0), clave: "" }, 2))).toEqual(["1", "2"])
     expect(ids(await leerProductosDesde(T, { at: t2, clave: "2" }, 2))).toEqual(["3", "4"])
+  })
+
+  it("una fila con microsegundos no se repite: el cursor (en ms) que sale de ella la deja atrás", async () => {
+    await getDb().execute(sql`insert into catalog_products (tenant_id, alegra_id, name, synced_at) values (${T}, '6', 'F', '2026-10-15T00:00:02.000500Z')`)
+    const todas = await leerProductosDesde(T, { at: new Date(0), clave: "" }, 500)
+    expect(ids(todas)).toEqual(["1", "2", "3", "4", "6", "5"]) // "6" (02.0005) cae en el empate de t2 por ms y ordena por id
+    const f6 = todas.find((x) => x.alegraId === "6")!
+    expect(ids(await leerProductosDesde(T, { at: f6.syncedAt, clave: "6" }, 500))).toEqual(["5"])
+    // paginando de a 1 se recorre todo una sola vez
+    const vistos: string[] = []
+    let cursor = { at: new Date(0), clave: "" }
+    for (let i = 0; i < 10; i++) {
+      const [f] = await leerProductosDesde(T, cursor, 1)
+      if (!f) break
+      vistos.push(f.alegraId); cursor = { at: f.syncedAt, clave: f.alegraId }
+    }
+    expect(vistos).toEqual(["1", "2", "3", "4", "6", "5"])
   })
 
   it("no mezcla productos de otros tenants", async () => {

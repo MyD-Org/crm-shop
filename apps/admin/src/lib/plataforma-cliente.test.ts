@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest"
-import { upsertInstancia, leerSpec, PlataformaError } from "./plataforma-cliente"
+import { describe, it, expect, vi } from "vitest"
+import { upsertInstancia, leerSpec, PlataformaError, TIMEOUT_MS } from "./plataforma-cliente"
 import type { TenantConfig } from "./tenants"
 
 const t = { plataformaUrl: "https://plataforma.example/", plataformaApiKey: "ak_123" } as TenantConfig
@@ -68,5 +68,16 @@ describe("plataforma-cliente", () => {
         fetch: fetchDe(200, { spec: { slug: "atributos_tecnicos", version: 1 } }),
       }),
     ).toEqual({ slug: "atributos_tecnicos", version: 1 })
+  })
+
+  it("deps.timeoutMs llega a AbortSignal.timeout; sin él se usa TIMEOUT_MS", async () => {
+    const espia = vi.spyOn(AbortSignal, "timeout")
+    try {
+      const f = fetchDe(200, { created: false, changed: false })
+      await upsertInstancia(t, "producto", "1", { data: {} }, { fetch: f, timeoutMs: 5_000 })
+      expect(espia).toHaveBeenLastCalledWith(5_000)
+      await upsertInstancia(t, "producto", "1", { data: {} }, { fetch: f })
+      expect(espia).toHaveBeenLastCalledWith(TIMEOUT_MS)
+    } finally { espia.mockRestore() }
   })
 })

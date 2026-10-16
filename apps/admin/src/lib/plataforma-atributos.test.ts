@@ -32,7 +32,7 @@ vi.mock("@/lib/plataforma-cliente", async (orig) => {
   }
 })
 
-import { datosDeFilas, escribirAtributosPlataforma, escribirFilasPlataforma, modoAtributosDe } from "./plataforma-atributos"
+import { datosDeFilas, escribirAtributosPlataforma, escribirFilasPlataforma, escribirProductosPlataforma, modoAtributosDe } from "./plataforma-atributos"
 import type { TenantConfig } from "./tenants"
 
 const t = { id: "central-led", plataformaUrl: "https://plataforma.example", plataformaApiKey: "ak", plataformaWebhookSecret: "s", plataformaAtributos: "dual" } as TenantConfig
@@ -88,5 +88,21 @@ describe("escribirFilasPlataforma", () => {
     expect(r).toEqual({ ok: 30, rechazados: 0, errores: 0, filasOk: 30 })
     expect(estado.maxEnVuelo).toBeGreaterThan(1)
     expect(estado.maxEnVuelo).toBeLessThanOrEqual(8)
+  })
+  it("un 400 en el producto del medio se cuenta como rechazado y los otros dos siguen", async () => {
+    estado.fallos = [null, { status: 400, code: "invalid_data" }, null]
+    const filas = ["1", "2", "3"].map((alegraId) => ({ alegraId, clave: "ip", valorNum: 65, valorTexto: null })) as never
+    // 1 sola en vuelo por orden de arranque: los fallos se consumen en orden de llamada
+    const r = await escribirFilasPlataforma(t, filas, "nombre")
+    expect(r.rechazados).toBe(1)
+    expect(r.ok).toBe(2)
+    expect(estado.llamadas).toHaveLength(3)
+  })
+  it("escribirProductosPlataforma: un 400 no corta a los demás", async () => {
+    estado.fallos = [null, { status: 400, code: "invalid_data" }, null]
+    const items = ["1", "2", "3"].map((alegraId) => ({ alegraId, data: { ip: { n: 65, t: null } } }))
+    const r = await escribirProductosPlataforma(t, items, "nombre", { reemplaza: true })
+    expect(r.ok).toBe(2)
+    expect(estado.llamadas).toHaveLength(3)
   })
 })

@@ -5,10 +5,14 @@ import { tenants, catalogAtributos } from "@/db/schema"
 import { truncateAll, seedTenant } from "./helpers"
 
 const llamadas = vi.hoisted(() => [] as { spec: string; clave: string; body: unknown }[])
+const falla = vi.hoisted(() => ({ claves: {} as Record<string, "400" | "plano"> }))
 vi.mock("@/lib/plataforma-cliente", async (orig) => ({
   ...(await orig<typeof import("@/lib/plataforma-cliente")>()),
   upsertInstancia: async (_t: unknown, spec: string, clave: string, body: unknown) => {
     llamadas.push({ spec, clave, body })
+    const f = falla.claves[clave]
+    if (f === "400") { const { PlataformaError } = await import("@/lib/plataforma-cliente"); throw new PlataformaError(400, "invalid_data", ["x"], false) }
+    if (f === "plano") throw new Error("boom")
     return { created: true, changed: true }
   },
 }))
@@ -24,7 +28,7 @@ const locales = () => getDb().select().from(catalogAtributos).where(and(eq(catal
 
 describe("escritores de atributos según el modo", () => {
   beforeEach(async () => {
-    await truncateAll(); await seedTenant(T); llamadas.length = 0
+    await truncateAll(); await seedTenant(T); llamadas.length = 0; falla.claves = {}
   })
 
   it("dual: escribe catalog_atributos como siempre Y manda el mismo producto con reemplaza_fuente", async () => {
@@ -59,5 +63,26 @@ describe("escritores de atributos según el modo", () => {
     await guardarAtributosManual(T, "42", [{ clave: "ip", valorNum: 65, valorTexto: null }], ["potencia_w"])
     expect(llamadas[0].body).toEqual({ data: { ip: { n: 65, t: null }, potencia_w: null }, meta: { fuente: "manual" } })
     expect(await locales()).toHaveLength(0)
+  })
+
+  it("dual: un 400 y un error plano en dos productos no tumban la sync; las filas locales de todos quedan", async () => {
+    await setModo("dual")
+    falla.claves = { "1": "400", "2": "plano" }
+    const prods = [
+      { alegraId: "1", name: "Lámpara LED 10W", description: null },
+      { alegraId: "2", name: "Lámpara LED 20W", description: null },
+      { alegraId: "3", name: "Lámpara LED 30W", description: null },
+    ]
+    await expect(reemplazarAtributosDeNombre(T, prods)).resolves.toBeDefined()
+    const filas = await getDb().select().from(catalogAtributos).where(eq(catalogAtributos.tenantId, T))
+    expect([...new Set(filas.map((f) => f.alegraId))].sort()).toEqual(["1", "2", "3"])
+    expect(llamadas).toHaveLength(3)
+  })
+
+  it("dual: un producto sin atributos en el nombre viaja con data {} y reemplaza_fuente", async () => {
+    await setModo("dual")
+    await reemplazarAtributosDeNombre(T, [{ alegraId: "99", name: "Producto sin datos", description: null }])
+    expect(llamadas).toHaveLength(1)
+    expect(llamadas[0].body).toEqual({ data: {}, meta: { fuente: "nombre", reemplaza_fuente: true } })
   })
 })

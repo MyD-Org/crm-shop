@@ -309,7 +309,7 @@ export async function guardarAtributosManual(
       if (t) {
         // Lo quitado viaja como null: manual es la precedencia máxima, así que borra de cualquier fuente.
         const data: Record<string, Valor | null> = {}
-        for (const v of valores) data[v.clave] = { n: v.valorNum, t: v.valorTexto }
+        for (const v of valores) if (v.valorNum != null || v.valorTexto != null) data[v.clave] = { n: v.valorNum, t: v.valorTexto }
         for (const c of quitar) data[c] = null
         if (Object.keys(data).length) await escribirProductosPlataforma(t, [{ alegraId, data }], "manual")
       }

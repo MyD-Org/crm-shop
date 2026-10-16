@@ -34,6 +34,8 @@ export function datosDeFilas(filas: FilaAtributo[]): Record<string, Valor> {
   return out
 }
 
+// Un error de DB cae a "off": para un tenant `on` tras el corte 0091 la escritura local apunta a la vista y falla
+// fuerte (aceptado: la sync ya lo tolera y la ruta manual muestra el error).
 /** Modo del tenant; `off` si no hay plataforma configurada o si leer el tenant falla (se loguea). */
 export async function modoAtributosDe(tenantId: string): Promise<ModoPlataformaAtributos> {
   try {

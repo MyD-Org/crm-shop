@@ -10,7 +10,8 @@
  *     --categoria "Lámparas" [--categoria "Embutidos"]... [--sin-clave angulo_grados] [--limite N]
  *
  * `--categoria` toma el nombre de una categoría del Shop: incluye sus subcategorías. `--sin-clave` deja sólo los
- * productos que todavía no tienen esa clave en `catalog_atributos` (de cualquier fuente).
+ * productos que todavía no tienen esa clave en los atributos actuales (de cualquier fuente; en
+ * modo `on`, la proyección de la plataforma).
  *
  * Lee con el cliente R2 si hay credenciales; si no, por la URL pública del bucket de medios (la misma con la que
  * el Shop sirve la ficha: `R2_SHOP_MEDIA_PUBLIC_URL`). La URL nunca se imprime.
@@ -22,6 +23,8 @@ import { basename, join } from "node:path"
 import { sql } from "drizzle-orm"
 import { getDb } from "../src/db"
 import { CLAVES_ATRIBUTO, type ClaveAtributo } from "../src/lib/catalogo-atributos-extraccion"
+import { origenAtributosSql } from "../src/lib/catalogo-atributos-repo"
+import { modoAtributosDe } from "../src/lib/plataforma-atributos"
 import type { IndiceLocal } from "../src/lib/catalogo-atributos-lectura-local"
 import { getShopMediaR2, urlPublicaFoto } from "../src/lib/shop-media"
 
@@ -58,6 +61,7 @@ interface Fila {
 
 async function main() {
   const a = leerArgs(process.argv.slice(2))
+  const origen = origenAtributosSql(await modoAtributosDe(a.tenant))
   const filas = (await getDb().execute(sql`
     WITH RECURSIVE cats AS (
       SELECT id FROM shop_categories WHERE tenant_id = ${a.tenant} AND nombre IN ${a.categorias}
@@ -69,7 +73,7 @@ async function main() {
     FROM catalog_overlay o
     JOIN catalog_products p ON p.tenant_id = o.tenant_id AND p.alegra_id = o.alegra_id
     WHERE o.tenant_id = ${a.tenant} AND o.ficha_tecnica IS NOT NULL AND o.categoria_id IN (SELECT id FROM cats)
-      ${a.sinClave ? sql`AND NOT EXISTS (SELECT 1 FROM catalog_atributos x WHERE x.tenant_id = o.tenant_id AND x.alegra_id = o.alegra_id AND x.clave = ${a.sinClave})` : sql``}
+      ${a.sinClave ? sql`AND NOT EXISTS (SELECT 1 FROM ${origen} x WHERE x.tenant_id = o.tenant_id AND x.alegra_id = o.alegra_id AND x.clave = ${a.sinClave})` : sql``}
     ORDER BY o.ficha_tecnica->>'key', o.alegra_id
   `)) as unknown as Fila[]
 

@@ -1,5 +1,5 @@
 /**
- * Lote de lectura de fichas técnicas (PDF) con Claude Haiku → `catalog_atributos` (fuente 'pdf').
+ * Lote de lectura de fichas técnicas (PDF) con Claude Haiku → atributos técnicos (fuente 'pdf').
  *
  * POR DEFECTO ES DRY-RUN Y NO HACE NADA MÁS QUE ESTIMAR: cuenta los productos del tenant con
  * ficha cargada (y, con --pendientes, los que todavía no tienen ningún dato leído del PDF) y
@@ -16,7 +16,8 @@
 import { sql } from "drizzle-orm"
 import { getDb } from "../src/db"
 import { avisarShop } from "../src/lib/aviso-shop"
-import { upsertAtributos } from "../src/lib/catalogo-atributos-repo"
+import { origenAtributosSql, upsertAtributos } from "../src/lib/catalogo-atributos-repo"
+import { modoAtributosDe } from "../src/lib/plataforma-atributos"
 import { estimarCostoLote, leerFichaPdf, MODELO_FICHA, PRECIO_HAIKU_POR_MTOK, TOKENS_POR_PAGINA } from "../src/lib/catalogo-atributos-pdf"
 import { getShopMediaR2 } from "../src/lib/shop-media"
 
@@ -44,13 +45,15 @@ async function main() {
   const limite = valor(argv, "--limite") ? Number(valor(argv, "--limite")) : undefined
   if (!Number.isFinite(paginas) || paginas <= 0) throw new Error("--paginas-promedio inválido")
 
+  // `--pendientes` mira los atributos ACTUALES (tabla local u, en `on`, la proyección; corte 0091).
+  const origen = origenAtributosSql(await modoAtributosDe(tenant))
   const filas = (await getDb().execute(sql`
     SELECT o.alegra_id, coalesce(nullif(o.nombre, ''), nullif(p.description, ''), p.name) AS nombre,
            o.ficha_tecnica->>'key' AS key, (o.ficha_tecnica->>'bytes')::int AS bytes
     FROM catalog_overlay o
     JOIN catalog_products p ON p.tenant_id = o.tenant_id AND p.alegra_id = o.alegra_id
     WHERE o.tenant_id = ${tenant} AND o.ficha_tecnica IS NOT NULL
-      ${pendientes ? sql`AND NOT EXISTS (SELECT 1 FROM catalog_atributos a WHERE a.tenant_id = o.tenant_id AND a.alegra_id = o.alegra_id AND a.fuente = 'pdf')` : sql``}
+      ${pendientes ? sql`AND NOT EXISTS (SELECT 1 FROM ${origen} a WHERE a.tenant_id = o.tenant_id AND a.alegra_id = o.alegra_id AND a.fuente = 'pdf')` : sql``}
     ORDER BY o.alegra_id
   `)) as unknown as Fila[]
 

@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm"
-import { getDb } from "@/db"
+import { getDb, type Db } from "@/db"
 import { catalogProyeccion, catalogSpecs, plataformaEntregas, plataformaSyncEstado } from "@/db/schema"
 
 // Único módulo que escribe las tablas de proyección (0090). Lo llama el receptor de eventos y, para
@@ -9,20 +9,29 @@ import { catalogProyeccion, catalogSpecs, plataformaEntregas, plataformaSyncEsta
 /** Cursor compuesto de productos: synced_at es único por lote, el alegra_id desempata. */
 export interface CursorProductos { at: Date; clave: string }
 
-/** true si la entrega es nueva; false si ya se procesó (idempotencia por X-Platform-Delivery). */
-export async function registrarEntrega(tenantId: string, deliveryId: string, eventId: string, action: string): Promise<boolean> {
-  const res = await getDb().insert(plataformaEntregas).values({ tenantId, deliveryId, eventId, action }).onConflictDoNothing().returning({ id: plataformaEntregas.deliveryId })
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0]
+/** La base o una transacción abierta: el receptor registra la entrega y escribe en UNA transacción. */
+export type Ejecutor = Db | Tx
+
+/** Corre `fn` en una transacción: si tira, se deshace todo (la entrega registrada incluida). */
+export function enTransaccion<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return getDb().transaction(fn)
+}
+
+/**
+ * true si la entrega es nueva; false si ya se procesó (idempotencia por X-Platform-Delivery).
+ * Dentro de la transacción del receptor: si la escritura que sigue falla, el registro se deshace con
+ * ella y el reintento de la plataforma (mismo delivery id) se procesa. Dos entregas iguales en
+ * paralelo: la segunda espera el commit de la primera en el ON CONFLICT y sale "repetida".
+ */
+export async function registrarEntrega(tenantId: string, deliveryId: string, eventId: string, action: string, db: Ejecutor = getDb()): Promise<boolean> {
+  const res = await db.insert(plataformaEntregas).values({ tenantId, deliveryId, eventId, action }).onConflictDoNothing().returning({ id: plataformaEntregas.deliveryId })
   return res.length > 0
 }
 
-/** Deshace registrarEntrega cuando la escritura falló, para que el reintento de la plataforma no se tome por repetido. */
-export async function olvidarEntrega(tenantId: string, deliveryId: string): Promise<void> {
-  await getDb().delete(plataformaEntregas).where(and(eq(plataformaEntregas.tenantId, tenantId), eq(plataformaEntregas.deliveryId, deliveryId)))
-}
-
 /** Merge "gana updated_at mayor": una entrega vieja (reintento, reenvío, desorden) no pisa una más nueva. */
-export async function upsertProyeccion(tenantId: string, spec: string, externalKey: string, instanceId: string, data: Record<string, unknown>, updatedAt: Date): Promise<"escrita" | "vieja"> {
-  const res = await getDb().insert(catalogProyeccion)
+export async function upsertProyeccion(tenantId: string, spec: string, externalKey: string, instanceId: string, data: Record<string, unknown>, updatedAt: Date, db: Ejecutor = getDb()): Promise<"escrita" | "vieja"> {
+  const res = await db.insert(catalogProyeccion)
     .values({ tenantId, spec, externalKey, instanceId, data, updatedAt })
     .onConflictDoUpdate({
       target: [catalogProyeccion.tenantId, catalogProyeccion.spec, catalogProyeccion.externalKey],
@@ -33,10 +42,10 @@ export async function upsertProyeccion(tenantId: string, spec: string, externalK
   return res.length ? "escrita" : "vieja"
 }
 
-export async function upsertSpecProyectada(tenantId: string, slug: string, version: number, document: Record<string, unknown>): Promise<"escrita" | "vieja"> {
+export async function upsertSpecProyectada(tenantId: string, slug: string, version: number, document: Record<string, unknown>, db: Ejecutor = getDb()): Promise<"escrita" | "vieja"> {
   // Una versión menor nunca reemplaza a una mayor (la firma no cubre X-Platform-Delivery: un reenvío
   // de un documento viejo con otro delivery id no debe pisar el nuevo). Igual versión se reescribe.
-  const res = await getDb().insert(catalogSpecs).values({ tenantId, slug, version, document })
+  const res = await db.insert(catalogSpecs).values({ tenantId, slug, version, document })
     .onConflictDoUpdate({
       target: [catalogSpecs.tenantId, catalogSpecs.slug],
       set: { version: sql`excluded.version`, document: sql`excluded.document`, recibidoAt: sql`now()` },

@@ -23,7 +23,7 @@ describe("plataforma-cliente", () => {
         }),
       },
     )
-    expect(r).toEqual({ created: true, changed: true })
+    expect(r).toEqual({ created: true, changed: true, instance: null })
     expect(visto!.url).toBe(
       "https://plataforma.example/platform/catalog/instances/atributos_tecnicos/by-key/A%2F42?upsert=true",
     )
@@ -33,6 +33,12 @@ describe("plataforma-cliente", () => {
       data: { ip: { n: 65, t: null } },
       meta: { fuente: "pdf" },
     })
+  })
+
+  it("devuelve la instancia escrita (data con fuentes y updatedAt) cuando la respuesta la trae", async () => {
+    const instance = { id: "u", externalKey: "42", data: { ip: { n: 65, t: null }, fuentes: { ip: "manual" } }, updatedAt: "2026-10-15T12:00:00.000Z" }
+    const r = await upsertInstancia(t, "atributos_tecnicos", "42", { data: {}, meta: { fuente: "manual" } }, { fetch: fetchDe(200, { instance, created: false, changed: true }) })
+    expect(r).toEqual({ created: false, changed: true, instance: { data: instance.data, updatedAt: instance.updatedAt } })
   })
 
   it("400 invalid_data → PlataformaError no reintentable con details", async () => {

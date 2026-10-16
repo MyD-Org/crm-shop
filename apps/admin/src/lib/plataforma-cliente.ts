@@ -61,20 +61,36 @@ async function llamar(t: TenantConfig, path: string, init: RequestInit, deps: De
   return cuerpo
 }
 
-/** Upsert por clave de una instancia de un spec. `created`/`changed` vienen de la plataforma. */
+/** Instancia tal como la devuelve la plataforma (filas en camelCase; `data` con las claves de la spec). */
+export interface InstanciaPlataforma {
+  data: Record<string, unknown>
+  updatedAt?: string
+}
+
+const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
+
+/**
+ * Upsert por clave de una instancia de un spec. `created`/`changed` vienen de la plataforma;
+ * `instance` es la instancia ya escrita (null si la respuesta no la trae con un `data` objeto).
+ */
 export async function upsertInstancia(
   t: TenantConfig,
   spec: string,
   clave: string,
   body: BodyUpsert,
   deps: Deps = {},
-): Promise<{ created: boolean; changed: boolean }> {
+): Promise<{ created: boolean; changed: boolean; instance: InstanciaPlataforma | null }> {
   const path = `/platform/catalog/instances/${encodeURIComponent(spec)}/by-key/${encodeURIComponent(clave)}?upsert=true`
   const r = (await llamar(t, path, { method: "PATCH", body: JSON.stringify(body) }, deps)) as {
     created: boolean
     changed: boolean
+    instance?: unknown
   }
-  return { created: Boolean(r.created), changed: Boolean(r.changed) }
+  const i = r.instance
+  const instance = esObjeto(i) && esObjeto(i.data)
+    ? { data: i.data, ...(typeof i.updatedAt === "string" ? { updatedAt: i.updatedAt } : {}) }
+    : null
+  return { created: Boolean(r.created), changed: Boolean(r.changed), instance }
 }
 
 /** Documento de un spec del catálogo. */

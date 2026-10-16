@@ -1,6 +1,6 @@
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { avisarShop, conflictoResponse, NO_STORE } from "@/lib/catalogo-admin"
-import { leerAtributos, upsertAtributos } from "@/lib/catalogo-atributos-repo"
+import { ErrorGuardadoAtributos, guardarAtributosDeFicha } from "@/lib/catalogo-atributos-repo"
 import { ErrorLecturaFicha, leerFichaPdf, MODELO_FICHA } from "@/lib/catalogo-atributos-pdf"
 import { detalleProducto } from "@/lib/catalogo-overlay-repo"
 import { R2TooLargeError } from "@/lib/r2"
@@ -13,6 +13,10 @@ import { tomarLectura } from "@/lib/catalogo-atributos-lectura-guarda"
 // público de medios), lo manda a Claude Haiku con un esquema cerrado de salida y guarda lo leído
 // con `fuente = 'pdf'`. La precedencia la aplica el upsert: un valor `manual` NO se pisa (se
 // informa como `protegidos`). A pedido y de a un producto; el lote masivo es un script aparte.
+//
+// Con el tenant en modo `on` (corte 0091) lo leído va sólo a la plataforma: un rechazo responde 422
+// con el motivo y una caída 502/503 (los mismos mensajes que el panel manual), y la respuesta se arma
+// con la instancia que devuelve la plataforma, no con la proyección que espera el webhook.
 //
 // admin+ (operator → 404). Tenant = el del guard. El PDF nunca pasa por el navegador.
 // Cada lectura es una llamada paga: una sola en curso por producto y un tope por tenant por minuto
@@ -84,18 +88,26 @@ async function leerYGuardar(
     throw err
   }
 
-  const escritas = await upsertAtributos(
-    tenantId,
-    lectura.atributos.map((a) => ({ alegraId, ...a })),
-    "pdf",
-  )
+  // En modo `on` la plataforma es la única escritura: su rechazo o caída llega como error (no como
+  // "sin cambios"); lo leído queda en el log para no perder del todo la lectura paga.
+  let guardado
+  try {
+    guardado = await guardarAtributosDeFicha(tenantId, alegraId, lectura.atributos)
+  } catch (err) {
+    if (!(err instanceof ErrorGuardadoAtributos)) throw err
+    console.warn(
+      `[leer-ficha] tenant=${tenantId} producto=${alegraId} no se guardó lo leído: ${err.message} ` +
+        `leidos=${JSON.stringify(lectura.atributos)} tokens=${lectura.uso.entrada}/${lectura.uso.salida}`,
+    )
+    return errorResponse(err.paraUsuario, err.estado)
+  }
+  const { atributos, escritas } = guardado
   if (escritas > 0) await avisarShop(tenantId)
   console.info(
     `[leer-ficha] tenant=${tenantId} producto=${alegraId} modelo=${MODELO_FICHA} leidos=${lectura.atributos.length} ` +
       `escritos=${escritas} tokens=${lectura.uso.entrada}/${lectura.uso.salida}`,
   )
 
-  const atributos = await leerAtributos(tenantId, alegraId)
   return Response.json(
     {
       atributos,

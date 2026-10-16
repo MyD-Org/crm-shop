@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest"
 import { NextRequest } from "next/server"
+import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
-import { catalogProducts } from "@/db/schema"
+import { catalogProducts, tenants } from "@/db/schema"
+import { upsertProyeccion } from "@/lib/plataforma-proyeccion-repo"
 import { guardarOverlay } from "@/lib/catalogo-overlay-repo"
 import { upsertAtributos } from "@/lib/catalogo-atributos-repo"
 import { MAX_LECTURAS_POR_MINUTO, reiniciarGuardaLectura } from "@/lib/catalogo-atributos-lectura-guarda"
@@ -26,6 +28,25 @@ vi.mock("@/lib/shop-media", async (orig) => ({
   ...(await orig<typeof import("@/lib/shop-media")>()),
   getShopMediaR2: () => r2.actual,
 }))
+// Plataforma simulada (sólo la usa el modo `on`): `fallo` hace tirar el PATCH; si no, responde con
+// `instancia` (null = la respuesta no la trae). `bodies` guarda lo enviado.
+const plataforma = vi.hoisted(() => ({
+  fallo: null as null | "400" | "red",
+  instancia: null as null | { data: Record<string, unknown>; updatedAt?: string },
+  bodies: [] as unknown[],
+}))
+vi.mock("@/lib/plataforma-cliente", async (orig) => {
+  const o = await orig<typeof import("@/lib/plataforma-cliente")>()
+  return {
+    ...o,
+    upsertInstancia: async (_t: unknown, _spec: string, _clave: string, body: unknown) => {
+      plataforma.bodies.push(body)
+      if (plataforma.fallo === "400") throw new o.PlataformaError(400, "invalid_data", ["/ip/n must be <= 69"], false)
+      if (plataforma.fallo === "red") throw new o.PlataformaError(0, "red", ["fetch failed"], true)
+      return { created: false, changed: true, instance: plataforma.instancia }
+    },
+  }
+})
 vi.mock("@/lib/catalogo-atributos-pdf", async (orig) => ({
   ...(await orig<typeof import("@/lib/catalogo-atributos-pdf")>()),
   leerFichaPdf: lector.leer,
@@ -64,6 +85,9 @@ beforeEach(async () => {
   r2.actual = fake
   lector.leer.mockReset()
   reiniciarGuardaLectura()
+  plataforma.fallo = null
+  plataforma.instancia = null
+  plataforma.bodies = []
 })
 afterAll(async () => {
   await truncateAll()
@@ -88,6 +112,102 @@ describe("panel manual", () => {
 
     login(operador, "operator")
     expect((await rutaAtributos.GET(req("/x"), params("100"))).status).toBe(404)
+  })
+})
+
+describe("panel manual con el tenant en modo on (corte 0091)", () => {
+  beforeEach(async () => {
+    await getDb().update(tenants).set({ plataformaUrl: "https://plataforma.example", plataformaApiKey: "ak", plataformaWebhookSecret: "s", plataformaAtributos: "on" }).where(eq(tenants.id, A))
+    await upsertProyeccion(A, "atributos_tecnicos", "100", "i100", { potencia_w: { n: 50, t: null }, fuentes: { potencia_w: "nombre" } }, new Date())
+  })
+
+  it("GET lee la proyección; PUT devuelve lo guardado sin esperar al webhook", async () => {
+    let res = await rutaAtributos.GET(req("/x"), params("100"))
+    expect((await res.json()).atributos).toMatchObject([{ clave: "potencia_w", valorNum: 50, fuente: "nombre" }])
+    res = await rutaAtributos.PUT(req("/x", { method: "PUT", body: { valores: { ip: 65 } } }), params("100"))
+    expect(res.status).toBe(200)
+    expect((await res.json()).atributos).toMatchObject([
+      { clave: "potencia_w", valorNum: 50, fuente: "nombre" },
+      { clave: "ip", valorNum: 65, fuente: "manual" },
+    ])
+  })
+
+  it("un rechazo de la plataforma → 422 con el motivo; una caída → 502 con el mensaje de reintento", async () => {
+    plataforma.fallo = "400"
+    let res = await rutaAtributos.PUT(req("/x", { method: "PUT", body: { valores: { ip: 68 } } }), params("100"))
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: "La plataforma rechazó los valores: un valor está fuera de rango (ip)." })
+    plataforma.fallo = "red"
+    res = await rutaAtributos.PUT(req("/x", { method: "PUT", body: { valores: { ip: 65 } } }), params("100"))
+    expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ error: "No se pudo guardar en la plataforma. Inténtelo de nuevo." })
+  })
+})
+
+describe("leer ficha técnica con el tenant en modo on (corte 0091)", () => {
+  beforeEach(async () => {
+    await getDb().update(tenants).set({ plataformaUrl: "https://plataforma.example", plataformaApiKey: "ak", plataformaWebhookSecret: "s", plataformaAtributos: "on" }).where(eq(tenants.id, A))
+    // Proyección previa: ip manual (protegida), potencia_w de nombre, tono ya leído de la ficha.
+    await upsertProyeccion(A, "atributos_tecnicos", "100", "i100", {
+      ip: { n: 66, t: null }, potencia_w: { n: 50, t: null }, tono: { n: null, t: "calido" },
+      fuentes: { ip: "manual", potencia_w: "nombre", tono: "pdf" },
+    }, new Date("2026-10-15T12:00:00Z"))
+    await guardarOverlay(A, "100", { fichaTecnica: { key: KEY, nombre: "ficha.pdf", bytes: 4 } }, admin)
+    fake.objects.set(KEY, { body: new Uint8Array([0x25, 0x50, 0x44, 0x46]), contentType: "application/pdf" })
+    lector.leer.mockResolvedValue({
+      atributos: [
+        { clave: "potencia_w", valorNum: 48, valorTexto: null },
+        { clave: "ip", valorNum: 65, valorTexto: null },
+        { clave: "tono", valorNum: null, valorTexto: "calido" },
+      ],
+      uso: { entrada: 3000, salida: 100 },
+    })
+  })
+
+  it("éxito: manda fuente pdf; la respuesta sale de la instancia y sinCambios cuenta lo protegido y lo que ya estaba igual", async () => {
+    plataforma.instancia = {
+      data: {
+        ip: { n: 66, t: null }, potencia_w: { n: 48, t: null }, tono: { n: null, t: "calido" },
+        fuentes: { ip: "manual", potencia_w: "pdf", tono: "pdf" },
+      },
+      updatedAt: "2026-10-15T13:00:00.000Z",
+    }
+    const res = await rutaLeer.POST(req("/x", { method: "POST" }), params("100"))
+    expect(res.status).toBe(200)
+    expect(plataforma.bodies).toEqual([{
+      data: { potencia_w: { n: 48, t: null }, ip: { n: 65, t: null }, tono: { n: null, t: "calido" } },
+      meta: { fuente: "pdf" },
+    }])
+    const body = await res.json()
+    expect(body.leidos).toBe(3)
+    expect(body.sinCambios).toBe(2) // ip (manual le gana) y tono (ya estaba igual de la ficha)
+    expect(body.atributos).toMatchObject([
+      { clave: "potencia_w", valorNum: 48, fuente: "pdf", updatedAt: "2026-10-15T13:00:00.000Z" },
+      { clave: "tono", valorTexto: "calido", fuente: "pdf" },
+      { clave: "ip", valorNum: 66, fuente: "manual" },
+    ])
+  })
+
+  it("éxito sin instancia en la respuesta: lo leído sobre la proyección, sin pisar lo manual", async () => {
+    const body = await (await rutaLeer.POST(req("/x", { method: "POST" }), params("100"))).json()
+    expect(body.sinCambios).toBe(2)
+    expect(body.atributos).toMatchObject([
+      { clave: "potencia_w", valorNum: 48, fuente: "pdf" },
+      { clave: "tono", valorTexto: "calido", fuente: "pdf" },
+      { clave: "ip", valorNum: 66, fuente: "manual" },
+    ])
+  })
+
+  it("un rechazo de la plataforma → 422 con el motivo legible; una caída → 502 (nada de 'sin cambios')", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {})
+    plataforma.fallo = "400"
+    let res = await rutaLeer.POST(req("/x", { method: "POST" }), params("100"))
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: "La plataforma rechazó los valores: un valor está fuera de rango (ip)." })
+    plataforma.fallo = "red"
+    res = await rutaLeer.POST(req("/x", { method: "POST" }), params("100"))
+    expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ error: "No se pudo guardar en la plataforma. Inténtelo de nuevo." })
   })
 })
 

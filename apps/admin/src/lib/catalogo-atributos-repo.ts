@@ -7,6 +7,14 @@ import {
   type AtributoExtraido,
   type ClaveAtributo,
 } from "./catalogo-atributos-extraccion"
+import {
+  modoAtributosDe,
+  escribirFilasPlataforma,
+  escribirProductosPlataforma,
+  datosDeFilas,
+  type Valor,
+} from "@/lib/plataforma-atributos"
+import { getTenantByIdFromDb, type TenantConfig } from "@/lib/tenants"
 
 // Escritura y lectura de `public.catalog_atributos` (migración 0049).
 //
@@ -18,6 +26,11 @@ import {
 //
 // Filas `nombre` que dejaron de salir del nombre (renombraron el producto en Alegra): se BORRAN en
 // `reemplazarAtributosDeNombre`. Nunca se borra una fila `pdf` o `manual` desde la sync.
+//
+// MODOS (tenants.plataforma_atributos): `off` escribe sólo acá; `dual` escribe acá y espeja en la
+// plataforma; `on` escribe sólo en la plataforma. En `on` la tabla `catalog_atributos` es una vista
+// (0091) y escribirla fallaría, por eso `on` saltea lo local. La escritura a la plataforma va
+// DESPUÉS de la local y nunca tira: un fallo se loguea y no tumba ni la local ni la sync.
 
 export type FuenteAtributo = "nombre" | "pdf" | "manual"
 
@@ -45,15 +58,48 @@ export interface FilaAtributo extends AtributoExtraido {
   alegraId: string
 }
 
-/**
- * Upsert con precedencia. Devuelve cuántas filas quedaron escritas (insertadas o actualizadas);
- * las que una fuente de mayor precedencia protegía no cuentan.
- */
-export async function upsertAtributos(tenantId: string, filas: FilaAtributo[], fuente: FuenteAtributo): Promise<number> {
-  // Una sola fila por (producto, clave) por INSERT: Postgres no deja tocar dos veces la misma.
-  const unicas = [...new Map(filas.map((f) => [`${f.alegraId}|${f.clave}`, f])).values()].filter(
+/** Tenant para escribir en la plataforma, o null (y se loguea) si no se pudo leer. Nunca tira. */
+async function tenantPlataforma(tenantId: string): Promise<TenantConfig | null> {
+  try {
+    return await getTenantByIdFromDb(tenantId)
+  } catch (err) {
+    console.warn(`[plataforma] no se pudo leer el tenant=${tenantId}: ${err instanceof Error ? err.message : "error"}`)
+    return null
+  }
+}
+
+/** Una sola fila por (producto, clave) por INSERT: Postgres no deja tocar dos veces la misma. */
+function filasUnicas(filas: FilaAtributo[]): FilaAtributo[] {
+  return [...new Map(filas.map((f) => [`${f.alegraId}|${f.clave}`, f])).values()].filter(
     (f) => f.valorNum != null || f.valorTexto != null,
   )
+}
+
+/**
+ * Upsert con precedencia. Devuelve cuántas filas quedaron escritas (insertadas o actualizadas);
+ * las que una fuente de mayor precedencia protegía no cuentan. En `on` devuelve las filas que la
+ * plataforma aceptó.
+ */
+export async function upsertAtributos(tenantId: string, filas: FilaAtributo[], fuente: FuenteAtributo): Promise<number> {
+  const modo = await modoAtributosDe(tenantId)
+  let escritas = 0
+  if (modo !== "on") escritas = await upsertLocal(tenantId, filas, fuente)
+  if (modo !== "off") {
+    try {
+      const t = await tenantPlataforma(tenantId)
+      if (t) {
+        const r = await escribirFilasPlataforma(t, filasUnicas(filas), fuente)
+        if (modo === "on") escritas = r.filasOk
+      }
+    } catch (err) {
+      console.warn(`[plataforma] atributos tenant=${tenantId}: ${err instanceof Error ? err.message : "error"}`)
+    }
+  }
+  return escritas
+}
+
+async function upsertLocal(tenantId: string, filas: FilaAtributo[], fuente: FuenteAtributo): Promise<number> {
+  const unicas = filasUnicas(filas)
   let escritas = 0
   for (let i = 0; i < unicas.length; i += LOTE) {
     const res = await getDb()
@@ -114,31 +160,47 @@ export async function reemplazarAtributosDeNombre(
   productos: readonly ProductoParaExtraer[],
 ): Promise<{ escritas: number; borradas: number }> {
   const unicos = [...new Map(productos.map((p) => [p.alegraId, p])).values()]
+  const modo = await modoAtributosDe(tenantId)
+  const t = modo !== "off" ? await tenantPlataforma(tenantId) : null
   let escritas = 0
   let borradas = 0
   for (let i = 0; i < unicos.length; i += LOTE) {
     const lote = unicos.slice(i, i + LOTE)
     const filas = filasDeNombre(lote)
-    escritas += await upsertAtributos(tenantId, filas, "nombre")
-    const conservar = filas.map((f) => `${f.alegraId}|${f.clave}`)
-    const ids = lote.map((p) => p.alegraId)
-    const res = await getDb()
-      .delete(catalogAtributos)
-      .where(
-        and(
-          eq(catalogAtributos.tenantId, tenantId),
-          eq(catalogAtributos.fuente, "nombre"),
-          inArray(catalogAtributos.alegraId, ids),
-          conservar.length
-            ? sql`(${catalogAtributos.alegraId} || '|' || ${catalogAtributos.clave}) NOT IN (${sql.join(
-                conservar.map((c) => sql`${c}`),
-                sql`, `,
-              )})`
-            : undefined,
-        ),
-      )
-      .returning({ clave: catalogAtributos.clave })
-    borradas += res.length
+    if (modo !== "on") {
+      escritas += await upsertLocal(tenantId, filas, "nombre")
+      const conservar = filas.map((f) => `${f.alegraId}|${f.clave}`)
+      const ids = lote.map((p) => p.alegraId)
+      const res = await getDb()
+        .delete(catalogAtributos)
+        .where(
+          and(
+            eq(catalogAtributos.tenantId, tenantId),
+            eq(catalogAtributos.fuente, "nombre"),
+            inArray(catalogAtributos.alegraId, ids),
+            conservar.length
+              ? sql`(${catalogAtributos.alegraId} || '|' || ${catalogAtributos.clave}) NOT IN (${sql.join(
+                  conservar.map((c) => sql`${c}`),
+                  sql`, `,
+                )})`
+              : undefined,
+          ),
+        )
+        .returning({ clave: catalogAtributos.clave })
+      borradas += res.length
+    }
+    if (t) {
+      try {
+        // Un producto sin filas de nombre igual viaja con data {} para que la plataforma borre sus claves viejas.
+        const porId = new Map<string, FilaAtributo[]>()
+        for (const f of filas) porId.set(f.alegraId, [...(porId.get(f.alegraId) ?? []), f])
+        const items = lote.map((p) => ({ alegraId: p.alegraId, data: datosDeFilas(porId.get(p.alegraId) ?? []) }))
+        const r = await escribirProductosPlataforma(t, items, "nombre", { reemplaza: true })
+        if (modo === "on") escritas += r.filasOk
+      } catch (err) {
+        console.warn(`[plataforma] atributos de nombre tenant=${tenantId}: ${err instanceof Error ? err.message : "error"}`)
+      }
+    }
   }
   return { escritas, borradas }
 }
@@ -200,44 +262,61 @@ export async function guardarAtributosManual(
   valores: AtributoExtraido[],
   quitar: ClaveAtributo[],
 ): Promise<void> {
-  await getDb().transaction(async (tx) => {
-    if (quitar.length) {
-      await tx
-        .delete(catalogAtributos)
-        .where(
-          and(
-            eq(catalogAtributos.tenantId, tenantId),
-            eq(catalogAtributos.alegraId, alegraId),
-            inArray(catalogAtributos.clave, quitar),
-          ),
-        )
+  const modo = await modoAtributosDe(tenantId)
+  if (modo !== "on") {
+    await getDb().transaction(async (tx) => {
+      if (quitar.length) {
+        await tx
+          .delete(catalogAtributos)
+          .where(
+            and(
+              eq(catalogAtributos.tenantId, tenantId),
+              eq(catalogAtributos.alegraId, alegraId),
+              inArray(catalogAtributos.clave, quitar),
+            ),
+          )
+      }
+      if (valores.length) {
+        await tx
+          .insert(catalogAtributos)
+          .values(
+            valores.map((v) => ({
+              tenantId,
+              alegraId,
+              clave: v.clave,
+              valorNum: v.valorNum != null ? String(v.valorNum) : null,
+              valorTexto: v.valorTexto,
+              fuente: "manual",
+              updatedAt: sql`now()`,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: [catalogAtributos.tenantId, catalogAtributos.alegraId, catalogAtributos.clave],
+            set: {
+              valorNum: sql`excluded.valor_num`,
+              valorTexto: sql`excluded.valor_texto`,
+              fuente: sql`excluded.fuente`,
+              updatedAt: sql`now()`,
+            },
+            setWhere: SET_WHERE,
+          })
+      }
+    })
+  }
+  if (modo !== "off") {
+    try {
+      const t = await tenantPlataforma(tenantId)
+      if (t) {
+        // Lo quitado viaja como null: manual es la precedencia máxima, así que borra de cualquier fuente.
+        const data: Record<string, Valor | null> = {}
+        for (const v of valores) data[v.clave] = { n: v.valorNum, t: v.valorTexto }
+        for (const c of quitar) data[c] = null
+        if (Object.keys(data).length) await escribirProductosPlataforma(t, [{ alegraId, data }], "manual")
+      }
+    } catch (err) {
+      console.warn(`[plataforma] atributos manuales tenant=${tenantId} alegraId=${alegraId}: ${err instanceof Error ? err.message : "error"}`)
     }
-    if (valores.length) {
-      await tx
-        .insert(catalogAtributos)
-        .values(
-          valores.map((v) => ({
-            tenantId,
-            alegraId,
-            clave: v.clave,
-            valorNum: v.valorNum != null ? String(v.valorNum) : null,
-            valorTexto: v.valorTexto,
-            fuente: "manual",
-            updatedAt: sql`now()`,
-          })),
-        )
-        .onConflictDoUpdate({
-          target: [catalogAtributos.tenantId, catalogAtributos.alegraId, catalogAtributos.clave],
-          set: {
-            valorNum: sql`excluded.valor_num`,
-            valorTexto: sql`excluded.valor_texto`,
-            fuente: sql`excluded.fuente`,
-            updatedAt: sql`now()`,
-          },
-          setWhere: SET_WHERE,
-        })
-    }
-  })
+  }
 }
 
 /**

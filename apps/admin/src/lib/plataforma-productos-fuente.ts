@@ -23,3 +23,15 @@ export async function leerProductosDesde(tenantId: string, cursor: CursorProduct
     ))
     .orderBy(asc(catalogProducts.syncedAt), asc(catalogProducts.alegraId)).limit(lote)
 }
+
+/** Un producto del tenant (mismas columnas que `leerProductosDesde`), o null si no existe. */
+export async function leerProducto(tenantId: string, alegraId: string): Promise<FilaProducto | null> {
+  const [fila] = await getDb().select({
+    alegraId: catalogProducts.alegraId, name: catalogProducts.name, code: catalogProducts.code, description: catalogProducts.description,
+    brand: catalogProducts.brand, categoryAlegraId: catalogProducts.categoryAlegraId, status: catalogProducts.status, alegraStatus: catalogProducts.alegraStatus,
+    stock: catalogProducts.stock, images: catalogProducts.images, syncedAt: catalogProducts.syncedAt,
+  }).from(catalogProducts)
+    .where(and(eq(catalogProducts.tenantId, tenantId), eq(catalogProducts.alegraId, alegraId)))
+    .limit(1)
+  return fila ?? null
+}

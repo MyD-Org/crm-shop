@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { createHmac } from "node:crypto"
 
+// La transacción la abre el repo: acá se simula pasando un tx de mentira para ver que llega a cada escritura.
+const TX = vi.hoisted(() => ({ tx: true }))
 const repo = vi.hoisted(() => ({
+  enTransaccion: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(TX)),
   registrarEntrega: vi.fn(async () => true),
-  olvidarEntrega: vi.fn(async () => undefined),
   upsertProyeccion: vi.fn(async (): Promise<"escrita" | "vieja"> => "escrita"),
   upsertSpecProyectada: vi.fn(async (): Promise<"escrita" | "vieja"> => "escrita"),
 }))
@@ -27,12 +29,14 @@ describe("firmaValida", () => {
 })
 
 describe("procesarEvento", () => {
-  beforeEach(() => { repo.registrarEntrega.mockClear(); repo.olvidarEntrega.mockClear(); repo.upsertProyeccion.mockClear(); repo.upsertSpecProyectada.mockClear() })
+  beforeEach(() => { repo.enTransaccion.mockClear(); repo.registrarEntrega.mockClear(); repo.upsertProyeccion.mockClear(); repo.upsertSpecProyectada.mockClear() })
 
   it("atributos_tecnicos:update → upsert de la proyección con updated_at del payload", async () => {
     const r = await procesarEvento("central-led", "d1", evento("atributos_tecnicos:update", { instance: { id: "i1", spec: "atributos_tecnicos", spec_version: 1, external_key: "42", data: { ip: { n: 65, t: null }, fuentes: { ip: "pdf" } }, anchors: {}, updated_at: "2026-10-15T12:00:00.000Z" } }))
     expect(r).toBe("procesado")
-    expect(repo.upsertProyeccion).toHaveBeenCalledWith("central-led", "atributos_tecnicos", "42", "i1", { ip: { n: 65, t: null }, fuentes: { ip: "pdf" } }, new Date("2026-10-15T12:00:00.000Z"))
+    expect(repo.upsertProyeccion).toHaveBeenCalledWith("central-led", "atributos_tecnicos", "42", "i1", { ip: { n: 65, t: null }, fuentes: { ip: "pdf" } }, new Date("2026-10-15T12:00:00.000Z"), TX)
+    expect(repo.registrarEntrega).toHaveBeenCalledWith("central-led", "d1", "e1", "atributos_tecnicos:update", TX)
+    expect(repo.enTransaccion).toHaveBeenCalledTimes(1)
   })
   it("una entrega repetida no escribe", async () => {
     repo.registrarEntrega.mockResolvedValueOnce(false)
@@ -45,23 +49,17 @@ describe("procesarEvento", () => {
   })
   it("spec:update → upsert de la spec; otra acción → ignorado", async () => {
     expect(await procesarEvento("central-led", "d3", evento("spec:update", { slug: "atributos_tecnicos", spec: { slug: "atributos_tecnicos", version: 2, fields: {} } }))).toBe("procesado")
-    expect(repo.upsertSpecProyectada).toHaveBeenCalledWith("central-led", "atributos_tecnicos", 2, { slug: "atributos_tecnicos", version: 2, fields: {} })
+    expect(repo.upsertSpecProyectada).toHaveBeenCalledWith("central-led", "atributos_tecnicos", 2, { slug: "atributos_tecnicos", version: 2, fields: {} }, TX)
     expect(await procesarEvento("central-led", "d4", evento("producto:create", { instance: {} }))).toBe("ignorado")
   })
 
-  it("si la escritura falla, olvida la entrega y relanza (el reintento no queda como repetido)", async () => {
+  it("si la escritura falla, el error sale de la transacción (que deshace el registro de la entrega)", async () => {
     repo.upsertProyeccion.mockRejectedValueOnce(new Error("db"))
     await expect(procesarEvento("central-led", "d11", evento("atributos_tecnicos:update", inst({})))).rejects.toThrow("db")
-    expect(repo.olvidarEntrega).toHaveBeenCalledWith("central-led", "d11")
     repo.upsertSpecProyectada.mockRejectedValueOnce(new Error("db2"))
     await expect(procesarEvento("central-led", "d12", evento("spec:update", { slug: "atributos_tecnicos", spec: { version: 2 } }))).rejects.toThrow("db2")
-    expect(repo.olvidarEntrega).toHaveBeenCalledWith("central-led", "d12")
-  })
-  it("si olvidarEntrega también falla, relanza el error original", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {})
-    repo.upsertProyeccion.mockRejectedValueOnce(new Error("original"))
-    repo.olvidarEntrega.mockRejectedValueOnce(new Error("otro"))
-    await expect(procesarEvento("central-led", "d13", evento("atributos_tecnicos:update", inst({})))).rejects.toThrow("original")
+    expect(repo.registrarEntrega).toHaveBeenCalledTimes(2)
+    for (const c of repo.registrarEntrega.mock.calls as unknown[][]) expect(c[4]).toBe(TX)
   })
   it("spec:update con versión vieja → viejo; slug del spec distinto del payload → ignorado", async () => {
     repo.upsertSpecProyectada.mockResolvedValueOnce("vieja")

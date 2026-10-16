@@ -1,10 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { SPECS_PROYECTADAS } from "@/lib/plataforma-specs"
-import { registrarEntrega, olvidarEntrega, upsertProyeccion, upsertSpecProyectada } from "@/lib/plataforma-proyeccion-repo"
+import { enTransaccion, registrarEntrega, upsertProyeccion, upsertSpecProyectada, type Ejecutor } from "@/lib/plataforma-proyeccion-repo"
 
 // Receptor de eventos de la plataforma (contrato platform-apps/v1, "Recibir eventos"). Verifica la
 // firma sobre el body crudo, es idempotente por X-Platform-Delivery y resuelve el desorden con
-// "gana payload.instance.updated_at mayor" (nunca occurred_at).
+// "gana payload.instance.updated_at mayor" (nunca occurred_at). Registrar la entrega y escribir la
+// proyección van en UNA transacción: si la escritura falla (o el proceso muere en el medio) no
+// queda la entrega registrada sin su efecto, y el reintento de la plataforma se procesa.
 
 export interface EventDocument {
   id: string; account_id: string; source: string; action: string; resource: string;
@@ -43,24 +45,19 @@ function claveInvalida(data: unknown): string | null {
 }
 
 export async function procesarEvento(tenantId: string, deliveryId: string, ev: EventDocument): Promise<"procesado" | "repetido" | "ignorado" | "viejo"> {
-  if (!(await registrarEntrega(tenantId, deliveryId, ev.id, ev.action))) return "repetido"
-  try {
-    return await aplicar(tenantId, ev)
-  } catch (e) {
-    // La entrega ya quedó registrada: si no la olvidamos, el reintento de la plataforma
-    // (mismo X-Platform-Delivery) se respondería "repetido" y el evento se perdería.
-    try { await olvidarEntrega(tenantId, deliveryId) } catch (e2) { console.error(`[plataforma] no se pudo olvidar la entrega tenant=${tenantId}`, e2) }
-    throw e
-  }
+  return enTransaccion(async (tx) => {
+    if (!(await registrarEntrega(tenantId, deliveryId, ev.id, ev.action, tx))) return "repetido"
+    return aplicar(tenantId, ev, tx)
+  })
 }
 
-async function aplicar(tenantId: string, ev: EventDocument): Promise<"procesado" | "ignorado" | "viejo"> {
+async function aplicar(tenantId: string, ev: EventDocument, tx: Ejecutor): Promise<"procesado" | "ignorado" | "viejo"> {
   const [slug, verbo] = ev.action.split(":")
   if (slug === "spec" && verbo === "update") {
     const p = ev.payload as { slug?: string; spec?: { slug?: string; version?: number } & Record<string, unknown> }
     if (!p?.slug || !p.spec || typeof p.spec.version !== "number") return "ignorado"
     if (p.spec.slug !== undefined && p.spec.slug !== p.slug) return "ignorado"
-    const rs = await upsertSpecProyectada(tenantId, p.slug, p.spec.version, p.spec)
+    const rs = await upsertSpecProyectada(tenantId, p.slug, p.spec.version, p.spec, tx)
     return rs === "escrita" ? "procesado" : "viejo"
   }
   if (!PROYECTADAS.has(slug) || (verbo !== "create" && verbo !== "update")) return "ignorado"
@@ -72,6 +69,6 @@ async function aplicar(tenantId: string, ev: EventDocument): Promise<"procesado"
     console.warn(`[plataforma] evento ignorado por forma inválida tenant=${tenantId} external_key=${inst.external_key} clave=${mala ?? "(updated_at)"}`)
     return "ignorado"
   }
-  const r = await upsertProyeccion(tenantId, slug, inst.external_key, inst.id, inst.data, actualizado)
+  const r = await upsertProyeccion(tenantId, slug, inst.external_key, inst.id, inst.data, actualizado, tx)
   return r === "escrita" ? "procesado" : "viejo"
 }

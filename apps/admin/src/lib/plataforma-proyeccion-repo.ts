@@ -13,6 +13,11 @@ export async function registrarEntrega(tenantId: string, deliveryId: string, eve
   return res.length > 0
 }
 
+/** Deshace registrarEntrega cuando la escritura falló, para que el reintento de la plataforma no se tome por repetido. */
+export async function olvidarEntrega(tenantId: string, deliveryId: string): Promise<void> {
+  await getDb().delete(plataformaEntregas).where(and(eq(plataformaEntregas.tenantId, tenantId), eq(plataformaEntregas.deliveryId, deliveryId)))
+}
+
 /** Merge "gana updated_at mayor": una entrega vieja (reintento, reenvío, desorden) no pisa una más nueva. */
 export async function upsertProyeccion(tenantId: string, spec: string, externalKey: string, instanceId: string, data: Record<string, unknown>, updatedAt: Date): Promise<"escrita" | "vieja"> {
   const res = await getDb().insert(catalogProyeccion)
@@ -26,9 +31,17 @@ export async function upsertProyeccion(tenantId: string, spec: string, externalK
   return res.length ? "escrita" : "vieja"
 }
 
-export async function upsertSpecProyectada(tenantId: string, slug: string, version: number, document: Record<string, unknown>): Promise<void> {
-  await getDb().insert(catalogSpecs).values({ tenantId, slug, version, document })
-    .onConflictDoUpdate({ target: [catalogSpecs.tenantId, catalogSpecs.slug], set: { version: sql`excluded.version`, document: sql`excluded.document`, recibidoAt: sql`now()` } })
+export async function upsertSpecProyectada(tenantId: string, slug: string, version: number, document: Record<string, unknown>): Promise<"escrita" | "vieja"> {
+  // Una versión menor nunca reemplaza a una mayor (la firma no cubre X-Platform-Delivery: un reenvío
+  // de un documento viejo con otro delivery id no debe pisar el nuevo). Igual versión se reescribe.
+  const res = await getDb().insert(catalogSpecs).values({ tenantId, slug, version, document })
+    .onConflictDoUpdate({
+      target: [catalogSpecs.tenantId, catalogSpecs.slug],
+      set: { version: sql`excluded.version`, document: sql`excluded.document`, recibidoAt: sql`now()` },
+      setWhere: sql`excluded.version >= "catalog_specs"."version"`,
+    })
+    .returning({ slug: catalogSpecs.slug })
+  return res.length > 0 ? "escrita" : "vieja"
 }
 
 export async function leerCursorProductos(tenantId: string): Promise<CursorProductos> {

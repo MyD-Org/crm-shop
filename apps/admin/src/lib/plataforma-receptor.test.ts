@@ -3,8 +3,9 @@ import { createHmac } from "node:crypto"
 
 const repo = vi.hoisted(() => ({
   registrarEntrega: vi.fn(async () => true),
+  olvidarEntrega: vi.fn(async () => undefined),
   upsertProyeccion: vi.fn(async (): Promise<"escrita" | "vieja"> => "escrita"),
-  upsertSpecProyectada: vi.fn(async () => undefined),
+  upsertSpecProyectada: vi.fn(async (): Promise<"escrita" | "vieja"> => "escrita"),
 }))
 vi.mock("@/lib/plataforma-proyeccion-repo", () => repo)
 
@@ -26,7 +27,7 @@ describe("firmaValida", () => {
 })
 
 describe("procesarEvento", () => {
-  beforeEach(() => { repo.registrarEntrega.mockClear(); repo.upsertProyeccion.mockClear(); repo.upsertSpecProyectada.mockClear() })
+  beforeEach(() => { repo.registrarEntrega.mockClear(); repo.olvidarEntrega.mockClear(); repo.upsertProyeccion.mockClear(); repo.upsertSpecProyectada.mockClear() })
 
   it("atributos_tecnicos:update → upsert de la proyección con updated_at del payload", async () => {
     const r = await procesarEvento("central-led", "d1", evento("atributos_tecnicos:update", { instance: { id: "i1", spec: "atributos_tecnicos", spec_version: 1, external_key: "42", data: { ip: { n: 65, t: null }, fuentes: { ip: "pdf" } }, anchors: {}, updated_at: "2026-10-15T12:00:00.000Z" } }))
@@ -46,6 +47,33 @@ describe("procesarEvento", () => {
     expect(await procesarEvento("central-led", "d3", evento("spec:update", { slug: "atributos_tecnicos", spec: { slug: "atributos_tecnicos", version: 2, fields: {} } }))).toBe("procesado")
     expect(repo.upsertSpecProyectada).toHaveBeenCalledWith("central-led", "atributos_tecnicos", 2, { slug: "atributos_tecnicos", version: 2, fields: {} })
     expect(await procesarEvento("central-led", "d4", evento("producto:create", { instance: {} }))).toBe("ignorado")
+  })
+
+  it("si la escritura falla, olvida la entrega y relanza (el reintento no queda como repetido)", async () => {
+    repo.upsertProyeccion.mockRejectedValueOnce(new Error("db"))
+    await expect(procesarEvento("central-led", "d11", evento("atributos_tecnicos:update", inst({})))).rejects.toThrow("db")
+    expect(repo.olvidarEntrega).toHaveBeenCalledWith("central-led", "d11")
+    repo.upsertSpecProyectada.mockRejectedValueOnce(new Error("db2"))
+    await expect(procesarEvento("central-led", "d12", evento("spec:update", { slug: "atributos_tecnicos", spec: { version: 2 } }))).rejects.toThrow("db2")
+    expect(repo.olvidarEntrega).toHaveBeenCalledWith("central-led", "d12")
+  })
+  it("si olvidarEntrega también falla, relanza el error original", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    repo.upsertProyeccion.mockRejectedValueOnce(new Error("original"))
+    repo.olvidarEntrega.mockRejectedValueOnce(new Error("otro"))
+    await expect(procesarEvento("central-led", "d13", evento("atributos_tecnicos:update", inst({})))).rejects.toThrow("original")
+  })
+  it("spec:update con versión vieja → viejo; slug del spec distinto del payload → ignorado", async () => {
+    repo.upsertSpecProyectada.mockResolvedValueOnce("vieja")
+    expect(await procesarEvento("central-led", "d15", evento("spec:update", { slug: "atributos_tecnicos", spec: { slug: "atributos_tecnicos", version: 1 } }))).toBe("viejo")
+    repo.upsertSpecProyectada.mockClear()
+    expect(await procesarEvento("central-led", "d16", evento("spec:update", { slug: "atributos_tecnicos", spec: { slug: "otra", version: 3 } }))).toBe("ignorado")
+    expect(repo.upsertSpecProyectada).not.toHaveBeenCalled()
+  })
+  it("instance.id ausente o no string → ignorado", async () => {
+    const sinId = { instance: { ...inst({}).instance, id: undefined } }
+    expect(await procesarEvento("central-led", "d14", evento("atributos_tecnicos:update", sinId))).toBe("ignorado")
+    expect(repo.upsertProyeccion).not.toHaveBeenCalled()
   })
 
   describe("validación de forma (la vista jsonb_each/numeric no tolera filas malformadas)", () => {

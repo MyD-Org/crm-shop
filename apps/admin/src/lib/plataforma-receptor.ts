@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
-import { registrarEntrega, upsertProyeccion, upsertSpecProyectada } from "@/lib/plataforma-proyeccion-repo"
+import { registrarEntrega, olvidarEntrega, upsertProyeccion, upsertSpecProyectada } from "@/lib/plataforma-proyeccion-repo"
 
 // Receptor de eventos de la plataforma (contrato platform-apps/v1, "Recibir eventos"). Verifica la
 // firma sobre el body crudo, es idempotente por X-Platform-Delivery y resuelve el desorden con
@@ -43,16 +43,28 @@ function claveInvalida(data: unknown): string | null {
 
 export async function procesarEvento(tenantId: string, deliveryId: string, ev: EventDocument): Promise<"procesado" | "repetido" | "ignorado" | "viejo"> {
   if (!(await registrarEntrega(tenantId, deliveryId, ev.id, ev.action))) return "repetido"
+  try {
+    return await aplicar(tenantId, ev)
+  } catch (e) {
+    // La entrega ya quedó registrada: si no la olvidamos, el reintento de la plataforma
+    // (mismo X-Platform-Delivery) se respondería "repetido" y el evento se perdería.
+    try { await olvidarEntrega(tenantId, deliveryId) } catch (e2) { console.error(`[plataforma] no se pudo olvidar la entrega tenant=${tenantId}`, e2) }
+    throw e
+  }
+}
+
+async function aplicar(tenantId: string, ev: EventDocument): Promise<"procesado" | "ignorado" | "viejo"> {
   const [slug, verbo] = ev.action.split(":")
   if (slug === "spec" && verbo === "update") {
-    const p = ev.payload as { slug?: string; spec?: { version?: number } & Record<string, unknown> }
+    const p = ev.payload as { slug?: string; spec?: { slug?: string; version?: number } & Record<string, unknown> }
     if (!p?.slug || !p.spec || typeof p.spec.version !== "number") return "ignorado"
-    await upsertSpecProyectada(tenantId, p.slug, p.spec.version, p.spec)
-    return "procesado"
+    if (p.spec.slug !== undefined && p.spec.slug !== p.slug) return "ignorado"
+    const rs = await upsertSpecProyectada(tenantId, p.slug, p.spec.version, p.spec)
+    return rs === "escrita" ? "procesado" : "viejo"
   }
   if (!SPECS_PROYECTADAS.has(slug) || (verbo !== "create" && verbo !== "update")) return "ignorado"
   const inst = (ev.payload as { instance?: InstanciaPayload })?.instance
-  if (!inst?.external_key || !inst.updated_at) return "ignorado"
+  if (!inst?.external_key || typeof inst.id !== "string" || !inst.id || !inst.updated_at) return "ignorado"
   const actualizado = new Date(inst.updated_at)
   const mala = claveInvalida(inst.data)
   if (mala !== null || Number.isNaN(actualizado.getTime())) {

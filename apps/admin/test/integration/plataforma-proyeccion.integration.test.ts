@@ -5,7 +5,7 @@ import postgres from "postgres"
 import { TEST_DATABASE_URL } from "./db-url"
 import { getDb } from "@/db"
 import { truncateAll, seedTenant } from "./helpers"
-import { registrarEntrega, upsertProyeccion, upsertSpecProyectada, leerCursorProductos, guardarCursorProductos } from "@/lib/plataforma-proyeccion-repo"
+import { registrarEntrega, olvidarEntrega, upsertProyeccion, upsertSpecProyectada, leerCursorProductos, guardarCursorProductos } from "@/lib/plataforma-proyeccion-repo"
 
 const T = "central-led"
 const atributos = (potencia: number) => ({ potencia_w: { n: potencia, t: null }, tension_v: { n: 220, t: "85-265" }, fuentes: { potencia_w: "pdf", tension_v: "nombre" } })
@@ -16,6 +16,12 @@ describe("proyección de la plataforma (0090)", () => {
   it("registrarEntrega es idempotente por delivery id", async () => {
     expect(await registrarEntrega(T, "d1", "e1", "atributos_tecnicos:create")).toBe(true)
     expect(await registrarEntrega(T, "d1", "e1", "atributos_tecnicos:create")).toBe(false)
+  })
+
+  it("olvidarEntrega permite re-registrar la misma entrega", async () => {
+    expect(await registrarEntrega(T, "d9", "e9", "atributos_tecnicos:create")).toBe(true)
+    await olvidarEntrega(T, "d9")
+    expect(await registrarEntrega(T, "d9", "e9", "atributos_tecnicos:create")).toBe(true)
   })
 
   it("upsertProyeccion: gana updated_at mayor; una entrega vieja no pisa", async () => {
@@ -36,8 +42,10 @@ describe("proyección de la plataforma (0090)", () => {
   })
 
   it("specs y cursor", async () => {
-    await upsertSpecProyectada(T, "atributos_tecnicos", 1, { slug: "atributos_tecnicos", version: 1, fields: {} })
-    await upsertSpecProyectada(T, "atributos_tecnicos", 2, { slug: "atributos_tecnicos", version: 2, fields: {} })
+    expect(await upsertSpecProyectada(T, "atributos_tecnicos", 1, { slug: "atributos_tecnicos", version: 1, fields: {} })).toBe("escrita")
+    expect(await upsertSpecProyectada(T, "atributos_tecnicos", 2, { slug: "atributos_tecnicos", version: 2, fields: {} })).toBe("escrita")
+    expect(await upsertSpecProyectada(T, "atributos_tecnicos", 1, { slug: "atributos_tecnicos", version: 1, fields: {} })).toBe("vieja")
+    expect(await upsertSpecProyectada(T, "atributos_tecnicos", 2, { slug: "atributos_tecnicos", version: 2, fields: {} })).toBe("escrita")
     const [s] = await getDb().execute(sql`select version from catalog_specs where tenant_id = ${T} and slug = 'atributos_tecnicos'`)
     expect(s.version).toBe(2)
     expect(await leerCursorProductos(T)).toEqual({ at: new Date(0), clave: "" })

@@ -1,5 +1,17 @@
 import type { tenants as tenantsTable } from "@/db/schema"
 
+/** Modo de escritura de atributos técnicos hacia la plataforma (0089). */
+export type ModoPlataformaAtributos = "off" | "dual" | "on"
+
+const MODOS_PLATAFORMA_ATRIBUTOS: readonly ModoPlataformaAtributos[] = ["off", "dual", "on"]
+
+/** Valor crudo → modo válido. Cualquier cosa desconocida cae en "off" (lo que no hace nada). */
+export function modoPlataformaAtributos(valor: unknown): ModoPlataformaAtributos {
+  return typeof valor === "string" && (MODOS_PLATAFORMA_ATRIBUTOS as readonly string[]).includes(valor)
+    ? (valor as ModoPlataformaAtributos)
+    : "off"
+}
+
 export interface TenantConfig {
   id: string
   name: string
@@ -16,6 +28,11 @@ export interface TenantConfig {
   aiApiKey: string
   aiAgentId: string
   aiTenantId: string // UUID del tenant en la ai-api (para auth de staff/inbox)
+  // Plataforma (0089): catálogo externo. Vacíos = no configurada (ver plataformaConfigurada).
+  plataformaUrl: string
+  plataformaApiKey: string
+  plataformaWebhookSecret: string
+  plataformaAtributos: ModoPlataformaAtributos
   // Shop del tenant (0084). Opcionales: el fallback por env no los tiene ('' / ausente = sin Shop
   // propio, rige el par histórico de envs). Resolución en src/lib/shop-destino.ts.
   shopUrl?: string
@@ -41,7 +58,16 @@ export function tenantConfigFromRow(row: typeof tenantsTable.$inferSelect): Tena
     aiTenantId: row.aiTenantId,
     shopUrl: row.shopUrl,
     shopInternalUrl: row.shopInternalUrl,
+    plataformaUrl: row.plataformaUrl,
+    plataformaApiKey: row.plataformaApiKey,
+    plataformaWebhookSecret: row.plataformaWebhookSecret,
+    plataformaAtributos: modoPlataformaAtributos(row.plataformaAtributos),
   }
+}
+
+/** La plataforma está configurada para el tenant: url, API key y webhook secret presentes. */
+export function plataformaConfigurada(t: TenantConfig): boolean {
+  return Boolean(t.plataformaUrl && t.plataformaApiKey && t.plataformaWebhookSecret)
 }
 
 /**
@@ -65,6 +91,10 @@ export const EMPTY_TENANT: TenantConfig = {
   aiApiKey: "",
   aiAgentId: "",
   aiTenantId: "",
+  plataformaUrl: "",
+  plataformaApiKey: "",
+  plataformaWebhookSecret: "",
+  plataformaAtributos: "off",
 }
 
 function buildTenantConfig(id: string): TenantConfig | null {
@@ -92,6 +122,10 @@ function buildTenantConfig(id: string): TenantConfig | null {
     aiApiKey: process.env[`${prefix}_AI_API_KEY`] ?? "",
     aiAgentId: process.env[`${prefix}_AI_AGENT_ID`] ?? "",
     aiTenantId: process.env[`${prefix}_AI_TENANT_ID`] ?? "",
+    plataformaUrl: process.env[`${prefix}_PLATAFORMA_URL`] ?? "",
+    plataformaApiKey: process.env[`${prefix}_PLATAFORMA_API_KEY`] ?? "",
+    plataformaWebhookSecret: process.env[`${prefix}_PLATAFORMA_WEBHOOK_SECRET`] ?? "",
+    plataformaAtributos: modoPlataformaAtributos(process.env[`${prefix}_PLATAFORMA_ATRIBUTOS`]),
   }
 }
 

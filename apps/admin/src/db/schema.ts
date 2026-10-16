@@ -63,6 +63,12 @@ export const tenants = pgTable("tenants", {
   aiAgentId: text("ai_agent_id").notNull().default(""),
   // UUID del tenant en la ai-api (para auth de inbox/staff)
   aiTenantId: text("ai_tenant_id").notNull().default(""),
+  // Plataforma (Plan B): credenciales y modo de escritura de atributos. El CHECK del modo vive
+  // sólo en el SQL (0089). Sin grant a shop_app.
+  plataformaUrl: text("plataforma_url").notNull().default(""),
+  plataformaApiKey: text("plataforma_api_key").notNull().default(""),
+  plataformaWebhookSecret: text("plataforma_webhook_secret").notNull().default(""),
+  plataformaAtributos: text("plataforma_atributos").notNull().default("off"), // 'off' | 'dual' | 'on'
   // Horario de atención canónico: franjas por día en formato { monday: [{open,close}, ...],
   // ..., sunday: [] }. Un día sin franjas = cerrado. Lo consulta el ai-api
   // (GET /api/internal/business-hours) para saber si está abierto y a qué hora. Ver src/lib/schedule.ts.

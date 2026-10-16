@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { sql } from "drizzle-orm"
 import postgres from "postgres"
 import { getDb } from "@/db"
@@ -15,7 +16,7 @@ import { upsertProyeccion } from "@/lib/plataforma-proyeccion-repo"
  */
 
 const T = "central-led"
-const MIGRACION = readFileSync("drizzle/0091_plataforma_corte_atributos.sql", "utf8").split("--> statement-breakpoint")
+const MIGRACION = readFileSync(fileURLToPath(new URL("../../drizzle/0091_plataforma_corte_atributos.sql", import.meta.url)), "utf8").split("--> statement-breakpoint")
 const bloque = (re: RegExp) => {
   const b = MIGRACION.find((s) => re.test(s))
   if (!b) throw new Error(`0091: no encontré el bloque ${re}`)

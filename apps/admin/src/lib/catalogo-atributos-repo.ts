@@ -16,6 +16,7 @@ import {
   type Valor,
 } from "@/lib/plataforma-atributos"
 import type { InstanciaPlataforma } from "@/lib/plataforma-cliente"
+import { mensajeRechazoPlataforma } from "@/lib/plataforma-rechazo"
 import { getTenantByIdFromDb, type ModoPlataformaAtributos, type TenantConfig } from "@/lib/tenants"
 
 // Escritura y lectura de los atributos técnicos (migración 0049; corte 0091). La tabla local es
@@ -342,6 +343,75 @@ function atributosDeInstancia(inst: InstanciaPlataforma): AtributoGuardado[] {
 }
 
 /**
+ * Escritura de un producto en la plataforma cuando es la ÚNICA escritura (modo `on`, panel manual y
+ * lectura de ficha): un rechazo tira 422 con el motivo legible, una caída 502 y un tenant ilegible
+ * 503, todos `ErrorGuardadoAtributos`. Devuelve la instancia escrita si la respuesta la trae.
+ */
+async function escribirEnPlataforma(
+  tenantId: string,
+  alegraId: string,
+  data: Record<string, Valor | null>,
+  fuente: FuenteAtributo,
+): Promise<InstanciaPlataforma | null> {
+  const t = await tenantPlataforma(tenantId)
+  if (!t) throw new ErrorGuardadoAtributos(`tenant=${tenantId} ilegible`, NO_SE_PUDO_GUARDAR, 503)
+  const r = await escribirAtributosPlataformaDetalle(t, alegraId, data, fuente)
+  if (r.estado === "rechazado") {
+    throw new ErrorGuardadoAtributos(`plataforma rechazó ${r.code}: ${r.detalles.join("; ")}`, mensajeRechazoPlataforma(r.code, r.detalles), 422)
+  }
+  if (r.estado === "error") throw new ErrorGuardadoAtributos("plataforma no disponible", NO_SE_PUDO_GUARDAR, 502)
+  return r.instancia
+}
+
+const mismoValor = (a: { valorNum: number | null; valorTexto: string | null }, b: { valorNum: number | null; valorTexto: string | null }) =>
+  a.valorNum === b.valorNum && a.valorTexto === b.valorTexto
+
+/**
+ * Lo leído de la ficha PDF de UN producto queda con fuente `pdf` (no pisa lo `manual`). Devuelve los
+ * atributos del producto tras guardar y cuántos de los leídos se escribieron.
+ *
+ * `off`/`dual`: como siempre (`upsertAtributos` y se relee la tabla local; un fallo de la
+ * plataforma en `dual` no tira). `on`: la plataforma es la única escritura, así que un rechazo
+ * (400 invalid_data rechaza TODO el producto) o una caída tiran `ErrorGuardadoAtributos` en vez de
+ * pasar por "sin cambios" y perder la lectura paga. En el éxito los atributos salen de la instancia
+ * devuelta (no de la proyección, que va detrás del webhook); un leído NO cuenta como escrito si la
+ * instancia lo guarda con una fuente que le gana a `pdf`, o si la proyección ya lo tenía igual con
+ * fuente `pdf` (la plataforma no informa cambios por clave).
+ */
+export async function guardarAtributosDeFicha(
+  tenantId: string,
+  alegraId: string,
+  leidos: AtributoExtraido[],
+): Promise<{ atributos: AtributoGuardado[]; escritas: number }> {
+  const modo = await modoAtributosDe(tenantId)
+  if (modo !== "on") {
+    const escritas = await upsertAtributos(tenantId, leidos.map((a) => ({ alegraId, ...a })), "pdf")
+    return { atributos: await leerAtributos(tenantId, alegraId), escritas }
+  }
+  const unicos = filasUnicas(leidos.map((a) => ({ alegraId, ...a })))
+  const antes = await leerAtributos(tenantId, alegraId)
+  if (!unicos.length) return { atributos: antes, escritas: 0 }
+  const instancia = await escribirEnPlataforma(tenantId, alegraId, datosDeFilas(unicos), "pdf")
+  const ahora = new Date().toISOString()
+  const despues = instancia
+    ? atributosDeInstancia(instancia)
+    : // Sin instancia en la respuesta: lo leído sobre la proyección, salvo donde manda una fuente mayor.
+      ordenarPorClave([
+        ...antes.filter((a) => !unicos.some((u) => u.clave === a.clave && puedePisar("pdf", a.fuente))),
+        ...unicos
+          .filter((u) => !antes.some((a) => a.clave === u.clave && !puedePisar("pdf", a.fuente)))
+          .map((u) => ({ clave: u.clave, valorNum: u.valorNum, valorTexto: u.valorTexto, fuente: "pdf" as const, updatedAt: ahora })),
+      ])
+  const escritas = unicos.filter((u) => {
+    const guardado = despues.find((a) => a.clave === u.clave)
+    if (!guardado || guardado.fuente !== "pdf" || !mismoValor(guardado, u)) return false
+    const previo = antes.find((a) => a.clave === u.clave)
+    return !(previo && previo.fuente === "pdf" && mismoValor(previo, u))
+  }).length
+  return { atributos: despues, escritas }
+}
+
+/**
  * Panel manual: los valores dados quedan `manual` (le ganan a todo) y las claves de `quitar` se
  * borran (de cualquier fuente: "este dato está mal"). Una clave quitada puede volver con la próxima
  * sync si el nombre la dice; para fijar otro valor, se carga a mano.
@@ -366,15 +436,8 @@ export async function guardarAtributosManual(
 
   if (modo === "on") {
     if (!Object.keys(data).length) return leerAtributos(tenantId, alegraId)
-    const t = await tenantPlataforma(tenantId)
-    if (!t) throw new ErrorGuardadoAtributos(`tenant=${tenantId} ilegible`, NO_SE_PUDO_GUARDAR, 503)
-    const r = await escribirAtributosPlataformaDetalle(t, alegraId, data, "manual")
-    if (r.estado === "rechazado") {
-      const motivo = r.detalles.length ? r.detalles.join("; ") : r.code
-      throw new ErrorGuardadoAtributos(`plataforma rechazó ${r.code}`, `La plataforma rechazó los valores: ${motivo}.`, 422)
-    }
-    if (r.estado === "error") throw new ErrorGuardadoAtributos("plataforma no disponible", NO_SE_PUDO_GUARDAR, 502)
-    if (r.instancia) return atributosDeInstancia(r.instancia)
+    const instancia = await escribirEnPlataforma(tenantId, alegraId, data, "manual")
+    if (instancia) return atributosDeInstancia(instancia)
     const ahora = new Date().toISOString()
     const resto = (await leerAtributos(tenantId, alegraId)).filter((a) => !(a.clave in data))
     const enviados = valores

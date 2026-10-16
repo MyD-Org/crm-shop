@@ -164,7 +164,7 @@ describe("guardarAtributosManual en modo on", () => {
     falla.claves = { "42": "400" }
     const err = await guardarAtributosManual(T, "42", [{ clave: "potencia_w", valorNum: 999999, valorTexto: null }], []).catch((e) => e)
     expect(err).toBeInstanceOf(ErrorGuardadoAtributos)
-    expect(err).toMatchObject({ estado: 422, paraUsuario: "La plataforma rechazó los valores: /potencia_w/n must be <= 100000." })
+    expect(err).toMatchObject({ estado: 422, paraUsuario: "La plataforma rechazó los valores: un valor está fuera de rango (potencia_w)." })
   })
 
   it("una caída (red o error plano) tira ErrorGuardadoAtributos 502 con el mensaje de reintento", async () => {

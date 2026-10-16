@@ -243,6 +243,12 @@
     "valor_num": "numeric",
     "valor_texto": "text"
   },
+  "public.catalog_specs": {
+    "tenant_id": "text",
+    "slug": "text",
+    "version": "integer",
+    "document": "jsonb"
+  },
   "public.cuentas_bancarias_shop": {
     "id": "uuid",
     "tenant_id": "text",

@@ -15,6 +15,8 @@ import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto
 import { dispCatalogo, dispDelVisitante } from "@/lib/zona-servidor";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
+import { fieldsDeSpec } from "@/lib/catalogo-specs";
+import { filasExtras } from "@/lib/catalogo-caracteristicas";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { estadoEnvio } from "@/lib/disponibilidad-textos";
 import { EnvioProductoUbicacion } from "@/components/producto/EnvioProductoUbicacion";
@@ -53,13 +55,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProductoPage({ params }: Props) {
   const id = idDeRuta((await params).id);
-  const [producto, reglas, { soloVisibles, variantes, mediosPrecio }, disp, dispEntrega, tarjetas] = await Promise.all([
+  const [producto, reglas, { soloVisibles, variantes, mediosPrecio }, disp, dispEntrega, tarjetas, fieldsSpec] = await Promise.all([
     productoDe(id),
     reglasVentaCacheadas(),
     flagsPublicos(),
     dispCatalogo(),
     dispDelVisitante(),
     getTarjetasMercadoPago(),
+    // Etiquetas y unidades de la spec de la plataforma, para las claves que el Shop no conoce. Se
+    // lee acá, por request y fuera de la lectura cacheada del producto; tolera tabla ausente (null).
+    fieldsDeSpec("atributos_tecnicos"),
   ]);
   // Local de retiro elegido en "Enviar a" (si la lectura falla, sin local elegido).
   const eleccion = (await ubicacionDelVisitante().catch(() => null))?.eleccion;
@@ -92,6 +97,11 @@ export default async function ProductoPage({ params }: Props) {
       />
     </Suspense>
   );
+  // Filas de claves nuevas (sólo las declaradas en la spec) a continuación de las conocidas.
+  const extras = filasExtras(producto.atributosExtras ?? {}, fieldsSpec);
+  const productoVista = extras.length
+    ? { ...producto, especificaciones: [...(producto.especificaciones ?? []), ...extras] }
+    : producto;
   // Migas: la categoría del admin con sus padres. Sin ella, la de Alegra.
   const rutaCategorias = producto.categoriaPropiaId ? await rutaCategoriaPublica(producto.categoriaPropiaId) : [];
 
@@ -105,7 +115,7 @@ export default async function ProductoPage({ params }: Props) {
         }}
       />
       <ProductoClient
-        producto={producto}
+        producto={productoVista}
         configEnvio={configEnvio}
         localElegido={localElegido}
         envioElegido={envioElegido}

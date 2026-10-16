@@ -91,7 +91,7 @@ import {
   type ContextoAtributos,
 } from "./catalogo-atributos-sql";
 import type { CriterioEstructurado } from "./catalogo-atributos";
-import { caracteristicasDe, leerAtributosEstructurados, type ClaveEstructurada } from "./catalogo-caracteristicas";
+import { caracteristicasDe, leerAtributosEstructurados, leerAtributosExtras, type ClaveEstructurada } from "./catalogo-caracteristicas";
 import {
   columnasCumpleSql,
   condicionesPorClave,
@@ -196,6 +196,7 @@ export function mapFilaToProduct(
   const price = precioDeLista(precios, idPriceList);
   const atributosEstructurados = leerAtributosEstructurados(fila.atributos);
   const especificaciones = caracteristicasDe(atributosEstructurados);
+  const atributosExtras = leerAtributosExtras(fila.atributos);
   return {
     id: fila.alegraId,
     // La marca sale del customField de Alegra; si no está cargado, cae al
@@ -220,6 +221,7 @@ export function mapFilaToProduct(
     images: fotosPermitidas(urlsDeFotos(fila.overlayFotos, baseMedios), hostsMedios),
     fichaTecnicaUrl: urlDeFicha(fila.overlayFichaTecnica, baseMedios),
     ...(atributosEstructurados ? { atributosEstructurados } : {}),
+    ...(Object.keys(atributosExtras).length ? { atributosExtras } : {}),
     ...(especificaciones.length ? { especificaciones } : {}),
     ...(fila.grupoId && fila.etiqueta?.trim() ? { opcion: fila.etiqueta.trim() } : {}),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.

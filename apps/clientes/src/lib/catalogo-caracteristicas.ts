@@ -124,6 +124,36 @@ export function leerAtributosEstructurados(crudo: unknown): AtributosEstructurad
   return Object.keys(out).length ? out : undefined;
 }
 
+/** Claves del jsonb que el Shop NO conoce (vienen de la spec de la plataforma), con la misma validación de {n, t}. */
+export function leerAtributosExtras(crudo: unknown): Record<string, ValorEstructurado> {
+  const out: Record<string, ValorEstructurado> = {};
+  if (!crudo || typeof crudo !== "object" || Array.isArray(crudo)) return out;
+  for (const [clave, v] of Object.entries(crudo as Record<string, unknown>)) {
+    if (esClave(clave) || clave === "fuentes" || !v || typeof v !== "object") continue;
+    const { n, t } = v as { n?: unknown; t?: unknown };
+    const num = typeof n === "number" ? n : typeof n === "string" && n.trim() !== "" ? Number(n) : null;
+    const valor: ValorEstructurado = { n: num != null && Number.isFinite(num) ? num : null, t: typeof t === "string" && t.trim() !== "" ? t.trim() : null };
+    if (valor.n != null || valor.t != null) out[clave] = valor;
+  }
+  return out;
+}
+
+/** Filas de la ficha para las claves extra: sólo las declaradas en `fields` de la spec, en su orden. */
+export function filasExtras(
+  extras: Record<string, ValorEstructurado>,
+  fields: Record<string, { etiqueta?: string; unidad?: string | null; orden?: number }> | null,
+): { etiqueta: string; valor: string }[] {
+  if (!fields) return [];
+  return Object.entries(extras)
+    .filter(([clave]) => fields[clave]?.etiqueta)
+    .sort(([a], [b]) => (fields[a]?.orden ?? 0) - (fields[b]?.orden ?? 0))
+    .flatMap(([clave, v]) => {
+      const f = fields[clave]!;
+      const valor = v.n != null ? `${num2(v.n)}${f.unidad ? ` ${f.unidad}` : ""}` : v.t;
+      return valor ? [{ etiqueta: f.etiqueta!, valor }] : [];
+    });
+}
+
 export const ETIQUETA: Record<ClaveEstructurada, string> = {
   potencia_w: "Potencia",
   temperatura_k: "Temperatura de color",

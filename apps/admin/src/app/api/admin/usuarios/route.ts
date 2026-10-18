@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, adminPasswordTokens, tenants } from "@/db/schema"
 import { generateToken } from "@/lib/admin-crypto"
+import { adminLinkBase } from "@/lib/admin-links"
 import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { assignableRoles, canManageUsers, type AdminRole } from "@/lib/roles"
 import { sendEmail } from "@/lib/email"
@@ -109,10 +110,8 @@ export async function POST(req: NextRequest) {
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 días para aceptar invitación
   await db.insert(adminPasswordTokens).values({ userId: user.id, tokenHash, type: "invite", expiresAt })
 
-  // Base URL: preferimos derivarla del request (funciona en prod/preview/local sin
-  // configurar nada); NEXT_PUBLIC_BASE_URL queda como override opcional.
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? req.nextUrl.origin
-  const inviteUrl = `${baseUrl}/admin/reset-password/${token}`
+  // El link va al host del tenant: ver adminLinkBase.
+  const inviteUrl = `${adminLinkBase(req)}/admin/reset-password/${token}`
 
   const { sent: emailSent, errorMsg: emailError } = await trySendInviteEmail({ tenant, user, role: body.role, inviteUrl })
 

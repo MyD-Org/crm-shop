@@ -6,6 +6,14 @@ import { UserPlus, Mail, Shield, Clock, Pencil, Check, X, Link, RefreshCw, Trash
 import { Button, Input, Field, Select, Badge, Alert, Avatar, Dialog, useToast } from "@myd-org/ui"
 import { assignableRoles, canActOnRole } from "@/lib/roles"
 import { useUnsavedGuard } from "@/lib/unsaved-guard"
+import {
+  avisoCanales,
+  badgeCanales,
+  canalesFormDesde,
+  canalesPayload,
+  canalesSinGuardar,
+  type CanalesForm,
+} from "@/lib/canales-form"
 
 function roleLabel(role: string): string {
   if (role === "superadmin") return "Superadmin"
@@ -24,6 +32,8 @@ interface AdminUser {
   name: string
   role: string
   departments: string[]
+  /** Canales del inbox permitidos: null = todos, [] = ninguno. Solo restringe a operadores. */
+  canales_permitidos: string[] | null
   hasPassword: boolean
   createdAt: Date | string
   inviteExpiresAt: Date | string | null
@@ -49,7 +59,14 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
   // URLs de invitación conocidas en esta sesión (userId → url)
   const [pendingUrls, setPendingUrls] = useState<Record<string, string>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<{ name: string; role: string; departments: string[] }>({ name: "", role: "", departments: [] })
+  const [editForm, setEditForm] = useState<{ name: string; role: string; departments: string[]; canales: CanalesForm }>({
+    name: "",
+    role: "",
+    departments: [],
+    canales: canalesFormDesde(null),
+  })
+  // Canales que se pueden otorgar (se cargan al editar a un operador).
+  const [canalOptions, setCanalOptions] = useState<{ key: string; label: string }[] | null>(null)
   const [editError, setEditError] = useState("")
   const [editSaving, setEditSaving] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -66,6 +83,15 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
       .catch(() => setDepartments([]))
   }, [])
 
+  const editingRole = editingId ? editForm.role : ""
+  useEffect(() => {
+    if (editingRole !== "operator" || canalOptions !== null) return
+    fetch("/api/admin/usuarios/canales")
+      .then((r) => (r.ok ? r.json() : { canales: [] }))
+      .then((data: { canales?: { key: string; label: string }[] }) => setCanalOptions(data.canales ?? []))
+      .catch(() => setCanalOptions([]))
+  }, [editingRole, canalOptions])
+
   const departmentLabel = (key: string) =>
     departments.find((d) => d.key === key)?.label ?? key
 
@@ -79,6 +105,7 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
     if (!editingUser) return false
     if (editForm.name !== editingUser.name) return true
     if (editForm.role !== editingUser.role) return true
+    if (editForm.role === "operator" && canalesSinGuardar(editingUser.canales_permitidos, editForm.canales)) return true
     const origDepts = editingUser.departments ?? []
     if (editForm.departments.length !== origDepts.length) return true
     const orig = new Set(origDepts)
@@ -100,7 +127,12 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
 
   function startEdit(user: AdminUser) {
     setEditingId(user.id)
-    setEditForm({ name: user.name, role: user.role, departments: user.departments ?? [] })
+    setEditForm({
+      name: user.name,
+      role: user.role,
+      departments: user.departments ?? [],
+      canales: canalesFormDesde(user.canales_permitidos),
+    })
     setEditError("")
   }
 
@@ -113,14 +145,27 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
     setEditError("")
     setEditSaving(true)
     try {
+      const original = users.find((u) => u.id === userId)
+      // Los canales solo se envían al gestionar a OTRO usuario que queda como operador y solo si
+      // cambiaron (el servidor rechaza el campo sobre uno mismo, y limpia la lista si el rol deja
+      // de ser operador).
+      const mandaCanales =
+        userId !== currentUserId &&
+        editForm.role === "operator" &&
+        canalesSinGuardar(original?.canales_permitidos, editForm.canales)
       const res = await fetch(`/api/admin/usuarios/${userId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({
+          name: editForm.name,
+          role: editForm.role,
+          departments: editForm.departments,
+          ...(mandaCanales ? { canales_permitidos: canalesPayload(editForm.canales) } : {}),
+        }),
       })
       const body = await res.json()
       if (res.ok) {
-        setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, name: body.name, role: body.role, departments: body.departments ?? [] } : u))
+        setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, name: body.name, role: body.role, departments: body.departments ?? [], canales_permitidos: body.canales_permitidos ?? null } : u))
         setEditingId(null)
       } else {
         setEditError(body.error ?? "Error al guardar")
@@ -305,10 +350,10 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
       )}
 
 <div className="rounded-[var(--radius)] overflow-x-auto" style={{ border: "1px solid var(--border)" }}>
-        <table className="w-full min-w-[720px] text-sm" style={{ background: "var(--card)" }}>
+        <table className="w-full min-w-[860px] text-sm" style={{ background: "var(--card)" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Usuario", "Departamento", "Rol", "Estado", "Alta", ""].map((h, i) => (
+              {["Usuario", "Departamento", "Canales", "Rol", "Estado", "Alta", ""].map((h, i) => (
                 <th key={i} className="text-left px-4 py-3 text-xs font-semibold" style={{ color: "var(--ink-soft)" }}>
                   {h}
                 </th>
@@ -371,6 +416,23 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
                           </span>
                         ))}
                       </div>
+                    ) : (
+                      <span className="text-sm" style={{ color: "var(--ink-faint)" }}>—</span>
+                    )}
+                  </td>
+
+                  {/* Canales del inbox (solo operadores: admin y superadmin ven todos) */}
+                  <td className="px-4 py-3">
+                    {isEditing && canManageTarget && editForm.role === "operator" ? (
+                      <CanalesPicker
+                        options={canalOptions}
+                        value={editForm.canales}
+                        onChange={(v) => setEditForm((p) => ({ ...p, canales: v }))}
+                      />
+                    ) : user.role === "operator" ? (
+                      <Badge tone={user.canales_permitidos == null ? "neutral" : "info"} className="w-fit">
+                        {badgeCanales(user.canales_permitidos)}
+                      </Badge>
                     ) : (
                       <span className="text-sm" style={{ color: "var(--ink-faint)" }}>—</span>
                     )}
@@ -466,6 +528,55 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+// "Canales con acceso" de un operador: todos, o solo los tildados (también ninguno, con aviso).
+function CanalesPicker({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: string; label: string }[] | null
+  value: CanalesForm
+  onChange: (v: CanalesForm) => void
+}) {
+  const aviso = avisoCanales(value)
+  const toggle = (key: string) =>
+    onChange({
+      ...value,
+      seleccion: value.seleccion.includes(key) ? value.seleccion.filter((k) => k !== key) : [...value.seleccion, key],
+    })
+  return (
+    <div className="flex flex-col gap-2 w-56">
+      <Select
+        value={value.modo}
+        onValueChange={(v) => onChange({ ...value, modo: v === "seleccion" ? "seleccion" : "todos" })}
+        options={[
+          { value: "todos", label: "Todos los canales" },
+          { value: "seleccion", label: "Solo los seleccionados" },
+        ]}
+      />
+      {value.modo === "seleccion" && (
+        <>
+          {options === null ? (
+            <span className="text-xs" style={{ color: "var(--ink-faint)" }}>Cargando canales...</span>
+          ) : options.length === 0 ? (
+            <span className="text-xs" style={{ color: "var(--ink-faint)" }}>No hay canales disponibles</span>
+          ) : (
+            <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+              {options.map((o) => (
+                <label key={o.key} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: "var(--ink)" }}>
+                  <input type="checkbox" checked={value.seleccion.includes(o.key)} onChange={() => toggle(o.key)} />
+                  <span className="truncate">{o.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {aviso && <span className="text-xs text-danger">{aviso}</span>}
+        </>
+      )}
     </div>
   )
 }

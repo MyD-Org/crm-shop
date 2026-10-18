@@ -5,6 +5,8 @@ import { tenants } from "@/db/schema"
 import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { getContact } from "@/lib/inbox-api"
 import { enrichContact } from "@/lib/inbox-contacts"
+import { canalKey } from "@/lib/inbox-canales"
+import { puedeVerCanal } from "@/lib/canal-acceso"
 
 export async function GET(req: Request, { params }: { params: Promise<{ endUserId: string }> }) {
   const guard = await requireOperatorPlus(req)
@@ -21,6 +23,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ endUserI
   try {
     contact = await getContact(tenant.aiApiUrl, tenant.aiTenantId, endUserId, new URL(req.url).searchParams.get("cuenta"))
   } catch {
+    return NextResponse.json({ error: "contact_not_found" }, { status: 404 })
+  }
+
+  // Se valida el canal del contacto que DEVOLVIÓ ai-api, no el ?cuenta= del pedido (que el
+  // cliente controla). Sin acceso: el mismo 404 que un contacto inexistente (sin oráculo).
+  if (!puedeVerCanal(guard.user, canalKey(contact))) {
     return NextResponse.json({ error: "contact_not_found" }, { status: 404 })
   }
 

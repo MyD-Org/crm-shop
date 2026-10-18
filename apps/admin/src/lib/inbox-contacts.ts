@@ -1,6 +1,8 @@
 import { listContacts, listConversations, type InboxContact, type InboxConversation } from "./inbox-api"
 import { getAssignments, type Assignment } from "./assignment"
 import { operatorNamesByIds } from "./operator-names"
+import { canalKey } from "./inbox-canales"
+import { filtrarPorCanal, type ActorCanales } from "./canal-acceso"
 
 
 // Lista de contactos del inbox ENRIQUECIDA con la fuente de verdad del CRM:
@@ -14,6 +16,9 @@ export async function listEnrichedContacts(
   scope: "active" | "all" = "active",
   convs?: InboxConversation[] | null,
   knownAssignments?: Assignment[],
+  // Quien consulta. Si está restringido por canal (lib/canal-acceso.ts) solo ve los contactos de
+  // sus canales; sin actor, o irrestricto, el resultado es idéntico al de siempre.
+  actor?: ActorCanales,
 ): Promise<InboxContact[]> {
   const [contacts, conversations, assignments] = await Promise.all([
     listContacts(tenant.aiApiUrl, tenant.aiTenantId, scope),
@@ -21,10 +26,11 @@ export async function listEnrichedContacts(
     knownAssignments ?? getAssignments(tenant.id),
   ])
 
+  const visibles = actor ? filtrarPorCanal(actor, contacts, canalKey) : contacts
   const operatorByConv = new Map(assignments.map((a) => [a.conversationId, a.operatorId]))
   const deptByConv = new Map(conversations.map((c) => [c.id, c.assigned_department]))
 
-  const withOwner = contacts.map((c) => ({
+  const withOwner = visibles.map((c) => ({
     ...c,
     assigned_operator_id: c.current_conversation_id ? operatorByConv.get(c.current_conversation_id) ?? null : null,
     assigned_department: c.current_conversation_id ? deptByConv.get(c.current_conversation_id) ?? null : null,

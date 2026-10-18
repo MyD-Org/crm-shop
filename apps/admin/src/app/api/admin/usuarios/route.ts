@@ -52,6 +52,7 @@ export async function GET(req: NextRequest) {
       name: adminUsers.name,
       role: adminUsers.role,
       departments: adminUsers.departments,
+      canales_permitidos: adminUsers.canalesPermitidos,
       createdAt: adminUsers.createdAt,
       hasPassword: adminUsers.passwordHash,
       inviteExpiresAt: adminPasswordTokens.expiresAt,

@@ -1,9 +1,11 @@
 import { requireAdminPlus, requireOperatorPlus } from "@/lib/admin-route-guard"
 import { guardarNombres, listarNombres } from "@/lib/inbox-canales-repo"
 import { parseNombresBody } from "@/lib/inbox-canales"
+import { filtrarNombres } from "@/lib/canal-acceso"
 
 // GET /api/admin/inbox/canales — nombres que el admin le puso a cada canal del inbox
-//   (cualquier operador: las solapas los muestran).
+//   (cualquier operador: las solapas los muestran; un operador restringido solo recibe los de
+//   sus canales, así no se entera de que existen otros).
 // PUT /api/admin/inbox/canales — guarda los nombres ({nombres: {clave: nombre}}, vacío = quitar).
 //   Solo admin y superadmin. El tenant sale del guard, nunca del body.
 
@@ -12,7 +14,7 @@ const NO_STORE = { "Cache-Control": "private, no-store" }
 export async function GET(req: Request) {
   const guard = await requireOperatorPlus(req)
   if (!guard.ok) return guard.response
-  return Response.json({ nombres: await listarNombres(guard.tenantId) }, { headers: NO_STORE })
+  return Response.json({ nombres: filtrarNombres(guard.user, await listarNombres(guard.tenantId)) }, { headers: NO_STORE })
 }
 
 export async function PUT(req: Request) {

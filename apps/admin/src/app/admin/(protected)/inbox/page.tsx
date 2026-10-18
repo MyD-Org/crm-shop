@@ -8,6 +8,7 @@ import { getBotStatus, type InboxContact } from "@/lib/inbox-api"
 import { assignPendingConversations } from "@/lib/assignment"
 import { listEnrichedContacts } from "@/lib/inbox-contacts"
 import { listarNombres } from "@/lib/inbox-canales-repo"
+import { filtrarNombres, type ActorCanales } from "@/lib/canal-acceso"
 import { roleRank } from "@/lib/roles"
 import { casillasAccesibles } from "@/lib/correo-acceso"
 import { correoHabilitado } from "@/lib/correo-flag"
@@ -25,7 +26,18 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   let contacts: InboxContact[] = []
   let botEnabled = true
   let configError = ""
-  const canalNombres = await listarNombres(session.tenantId).catch(() => ({}) as Record<string, string>)
+  // Política de canales con la fila FRESCA del usuario (no la cookie). Si no se puede resolver
+  // se asume restringido sin canales (fail-closed): el layout protegido ya cubre el caso sin sesión.
+  const guardedUser = await getGuardedAdminSession().catch(() => null)
+  const actor: ActorCanales =
+    guardedUser?.ok === true
+      ? guardedUser.user
+      : { id: session.userId, role: "operator", canalesPermitidos: [] }
+  // Los nombres de canal también delatan canales ajenos: se filtran ANTES de armar las solapas.
+  const canalNombres = filtrarNombres(
+    actor,
+    await listarNombres(session.tenantId).catch(() => ({}) as Record<string, string>),
+  )
 
   // Casillas de correo como solapas de Mensajes. Con el flag `correo` apagado (o ante un error)
   // la pantalla queda idéntica a la de siempre. El rol sale de la fila fresca de admin_users.
@@ -33,9 +45,8 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   let casillas: { id: string; nombre: string; email: string; noLeidos: number }[] = []
   if (correoOn) {
     try {
-      const guard = await getGuardedAdminSession()
-      if (guard.ok) {
-        const accesibles = await casillasAccesibles(session.tenantId, { id: guard.user.id, role: guard.user.role })
+      if (guardedUser?.ok) {
+        const accesibles = await casillasAccesibles(session.tenantId, { id: guardedUser.user.id, role: guardedUser.user.role })
         const conteo = await contarNoLeidosPorCasilla(accesibles.map((c) => c.id))
         casillas = accesibles.map((c) => ({ id: c.id, nombre: c.nombre, email: c.email, noLeidos: conteo[c.id] ?? 0 }))
       }
@@ -56,7 +67,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
       // El estado del bot no depende de la reconciliación: va en paralelo, no en cascada.
       const botStatusPromise = getBotStatus(tenant.aiApiUrl, tenant.aiTenantId)
       const { convs, assignments } = await assignPendingConversations(tenantRef)
-      contacts = await listEnrichedContacts(tenantRef, "active", convs, assignments)
+      contacts = await listEnrichedContacts(tenantRef, "active", convs, assignments, actor)
       botEnabled = await botStatusPromise
     } catch {
       configError = "No se pudo conectar con la API. Verifique la configuración."

@@ -32,6 +32,9 @@ export interface InboxConversation {
   within_window: boolean
   created_at: string
   awaiting_reply: boolean
+  // Cuenta/canal de entrada. Aditivos de ai-api (rebanada S2): un ai-api viejo no los manda, y
+  // entonces la política de acceso por canal deniega a los usuarios restringidos (fail-closed).
+  channel_account_id?: string | null
 }
 
 // Adjunto de un mensaje de canal (audio, imagen, documento que mandó el cliente por

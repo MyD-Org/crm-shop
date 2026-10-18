@@ -34,6 +34,8 @@ export interface AdminGuardUser {
   name: string
   email: string
   role: string
+  /** Canales del inbox permitidos (null = todos). Solo restringe a los operadores. */
+  canalesPermitidos: string[] | null
 }
 
 export type AdminGuardResult =

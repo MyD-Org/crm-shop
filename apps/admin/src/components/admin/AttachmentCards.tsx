@@ -52,7 +52,8 @@ export function ContactCard({ contact, channelAccountId }: { contact: SharedCont
     setBuscando(true)
     setSinConversacion(false)
     try {
-      const res = await fetch("/api/admin/inbox/contacts?scope=all")
+      // Por número (q): la lista sin filtro trae solo los últimos 100 contactos.
+      const res = await fetch(`/api/admin/inbox/contacts?q=${encodeURIComponent(numero)}`)
       const contacts = res.ok ? ((await res.json()) as InboxContact[]) : []
       const encontrada = buscarConversacion(contacts, numero, channelAccountId)
       if (encontrada) router.push(contactThreadHref(encontrada))

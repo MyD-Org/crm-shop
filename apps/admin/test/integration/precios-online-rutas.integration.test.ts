@@ -279,6 +279,9 @@ describe("grilla de precios online", { timeout: 60_000 }, () => {
       SELECT ${A}, 'g' || i, 'REF-' || i, 'Producto ' || lpad(i::text, 5, '0'), 'active', (10 + i % 500), (10 + i % 500)
       FROM generate_series(1, 10000) i
     `)
+    // Sin estadísticas frescas el planner trata la tabla recién llenada como vacía y elige un
+    // plan cuadrático: en el runner del CI el UPDATE masivo pasaba de 0,4 s a más de 60 s.
+    await getDb().execute(sql`ANALYZE`)
     // Medición del UPDATE masivo (10.000 productos x 1 lista): referencia para el ensayo U3.
     const t0 = Date.now()
     await getDb().execute(sql`SELECT * FROM aplicar_precios_online(${A}, NULL::text[], 'config')`)

@@ -37,9 +37,9 @@ describe("buildCanalTabs", () => {
 
   it("una solapa por canal, con teléfono o nombre del canal y conteo de pendientes", () => {
     expect(buildCanalTabs(contacts, {})).toEqual([
-      { key: "a", label: "+54 9 11 0000-0000", pending: 2 },
-      { key: "b", label: "+54 9 11 0000-0001", pending: 0 },
-      { key: "canal:instagram", label: "Instagram", pending: 0 },
+      { key: "a", label: "+54 9 11 0000-0000", pending: 2, phone: "+54 9 11 0000-0000" },
+      { key: "b", label: "+54 9 11 0000-0001", pending: 0, phone: "+54 9 11 0000-0001" },
+      { key: "canal:instagram", label: "Instagram", pending: 0, phone: null },
     ])
   })
 
@@ -51,8 +51,8 @@ describe("buildCanalTabs", () => {
   it("un canal nombrado sigue como solapa aunque no tenga conversaciones", () => {
     const tabs = buildCanalTabs([c({ channel_account_id: "b" })], { a: "Sucursal Centro", vacio: " " })
     expect(tabs).toEqual([
-      { key: "a", label: "Sucursal Centro", pending: 0 },
-      { key: "b", label: "WhatsApp", pending: 0 },
+      { key: "a", label: "Sucursal Centro", pending: 0, phone: null },
+      { key: "b", label: "WhatsApp", pending: 0, phone: null },
     ])
   })
 
@@ -63,7 +63,7 @@ describe("buildCanalTabs", () => {
 
   it("un canal deshabilitado con conversaciones actuales sigue visible", () => {
     const tabs = buildCanalTabs([c({ channel_account_id: "a" })], { a: "Sucursal Centro" }, [])
-    expect(tabs).toEqual([{ key: "a", label: "Sucursal Centro", pending: 0 }])
+    expect(tabs.map(({ key, label, pending }) => ({ key, label, pending }))).toEqual([{ key: "a", label: "Sucursal Centro", pending: 0 }])
   })
 
   it("un canal nombrado y habilitado sigue fijo sin conversaciones", () => {
@@ -73,6 +73,11 @@ describe("buildCanalTabs", () => {
 
   it("sin la lista de habilitados (ai-api no respondió) se conservan todos los nombrados", () => {
     expect(buildCanalTabs([], { a: "Sucursal Centro" }, null).map((t) => t.key)).toEqual(["a"])
+  })
+
+  it("el teléfono de la solapa sale de los números de ai-api aunque el canal no tenga conversaciones", () => {
+    const tabs = buildCanalTabs([], { a: "Administración 1" }, ["a"], { a: "+54 9 11 0000-0002" })
+    expect(tabs).toEqual([{ key: "a", label: "Administración 1", pending: 0, phone: "+54 9 11 0000-0002" }])
   })
 
   it("un solo canal da una sola solapa (la UI oculta la fila)", () => {

@@ -15,6 +15,8 @@ export interface CanalTab {
   label: string
   /** Contactos del canal que esperan respuesta. */
   pending: number
+  /** Número del negocio (para el tooltip de la solapa), si se conoce. */
+  phone: string | null
 }
 
 /** Clave estable del canal: la cuenta si existe; si no, el canal (p. ej. "canal:instagram"). */
@@ -53,6 +55,7 @@ export function buildCanalTabs(
   contacts: CanalContacto[],
   nombres: Record<string, string>,
   habilitados: string[] | null = null,
+  telefonos: Record<string, string> = {},
 ): CanalTab[] {
   const activos = habilitados && new Set(habilitados)
   const tabs = new Map<string, CanalTab & { phone: string | null; channel: string }>()
@@ -73,6 +76,7 @@ export function buildCanalTabs(
     key: t.key,
     pending: t.pending,
     label: canalLabel(t.key, nombres, { business_phone: t.phone, channel: t.channel }),
+    phone: telefonos[t.key]?.trim() || t.phone?.trim() || null,
   }))
 }
 

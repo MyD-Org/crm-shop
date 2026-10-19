@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { MessageSquare, Clock, Bot, User, MessageCircleWarning, AlertTriangle } from "lucide-react"
-import { Tabs, Badge, Checkbox, EmptyState } from "@myd-org/ui"
+import { Tabs, Badge, Checkbox, EmptyState, Tooltip } from "@myd-org/ui"
 import { contactRowKey, contactThreadHref, type InboxContact } from "@/lib/inbox-api"
 import { previewText } from "@/lib/message-text"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
@@ -35,6 +35,8 @@ interface Props {
   initialCanalNombres: Record<string, string>
   /** Ids de los números activos en ai-api; null si no se pudo consultar. */
   canalesHabilitados?: string[] | null
+  /** Número de cada canal (clave → teléfono), para el tooltip de la solapa. */
+  telefonosCanal?: Record<string, string>
   /** Admin o superadmin: puede editar los nombres de los canales. */
   canEditCanales: boolean
   /** Casillas de correo accesibles para el usuario (vacío con el flag `correo` apagado). */
@@ -53,6 +55,7 @@ export function InboxList({
   initialCanalNombres,
   canEditCanales,
   canalesHabilitados = null,
+  telefonosCanal,
   casillas = [],
   correoHabilitado = false,
   initialCasillaId = null,
@@ -172,7 +175,7 @@ export function InboxList({
 
   const mine = contacts.filter((c) => c.assigned_operator_id === currentUserId)
   const pendingCount = contacts.filter((c) => c.awaiting_reply).length
-  const canalTabs = buildCanalTabs(contacts, canalNombres, canalesHabilitados)
+  const canalTabs = buildCanalTabs(contacts, canalNombres, canalesHabilitados, telefonosCanal)
   const casillaTabs = buildCasillaTabs(casillas, noLeidos)
   const seleccion = resolveSelectedConCasillas(canalSel, canalTabs, casillaTabs)
   const casillaActiva = casillaIdDeTab(seleccion)
@@ -212,9 +215,8 @@ export function InboxList({
               }}
               items={[
                 { value: CANAL_TODAS, label: "Todos" },
-                ...canalTabs.map((t) => ({
-                  value: t.key,
-                  label: (
+                ...canalTabs.map((t) => {
+                  const contenido = (
                     <span className="flex items-center gap-1.5">
                       {t.label}
                       {t.pending > 0 && (
@@ -223,8 +225,13 @@ export function InboxList({
                         </Badge>
                       )}
                     </span>
-                  ),
-                })),
+                  )
+                  // Al pasar el mouse, el número del canal (si la solapa no lo muestra ya).
+                  return {
+                    value: t.key,
+                    label: t.phone && t.phone !== t.label ? <Tooltip content={t.phone}>{contenido}</Tooltip> : contenido,
+                  }
+                }),
                 ...casillaTabs.map((t) => ({
                   value: t.key,
                   label: (

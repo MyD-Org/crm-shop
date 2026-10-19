@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { FileText, Download, ExternalLink, FileQuestion, X } from "lucide-react"
-import type { MessageAttachment } from "@/lib/inbox-api"
-export { stripAttachmentMarker } from "@/lib/message-text"
+import type { FileMessageAttachment, MessageAttachment } from "@/lib/inbox-api"
+import { ContactCard, LocationCard } from "./AttachmentCards"
+export { bubbleText, stripAttachmentMarker } from "@/lib/message-text"
 
 // ai-api firma una URL nueva en CADA request, y el thread poolea cada 5s. Si esa URL entra
 // derecho como `src`, React se lo cambia al elemento en cada poll y el navegador reinicia
@@ -118,7 +119,7 @@ function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
   )
 }
 
-function ImageAttachment({ att }: { att: MessageAttachment }) {
+function ImageAttachment({ att }: { att: FileMessageAttachment }) {
   const [broken, setBroken] = useState(false)
   const [zoomed, setZoomed] = useState(false)
   const src = useStableUrl(att.url)
@@ -142,7 +143,7 @@ function ImageAttachment({ att }: { att: MessageAttachment }) {
   )
 }
 
-function AudioAttachment({ att }: { att: MessageAttachment }) {
+function AudioAttachment({ att }: { att: FileMessageAttachment }) {
   const [broken, setBroken] = useState(false)
   const src = useStableUrl(att.url)
   if (!src) return <Unavailable label="Audio no disponible" />
@@ -162,7 +163,7 @@ function AudioAttachment({ att }: { att: MessageAttachment }) {
   )
 }
 
-function VideoAttachment({ att }: { att: MessageAttachment }) {
+function VideoAttachment({ att }: { att: FileMessageAttachment }) {
   const [broken, setBroken] = useState(false)
   const src = useStableUrl(att.url)
   if (!src) return <Unavailable label="Video no disponible" />
@@ -179,7 +180,7 @@ function VideoAttachment({ att }: { att: MessageAttachment }) {
   )
 }
 
-function FileAttachment({ att }: { att: MessageAttachment }) {
+function FileAttachment({ att }: { att: FileMessageAttachment }) {
   if (!att.url) return <Unavailable label="Archivo no disponible" />
   return (
     <a
@@ -197,11 +198,24 @@ function FileAttachment({ att }: { att: MessageAttachment }) {
   )
 }
 
-export function MessageAttachments({ attachments }: { attachments?: MessageAttachment[] }) {
+export function MessageAttachments({ attachments, channelAccountId }: {
+  attachments?: MessageAttachment[]
+  /** Canal del hilo: la tarjeta de contacto prefiere abrir la conversación por el mismo número. */
+  channelAccountId?: string | null
+}) {
   if (!attachments?.length) return null
   return (
     <div className="flex flex-col gap-1.5 mb-1.5">
       {attachments.map((att) => {
+        // Sin archivo: el adjunto ya trae los datos. Una tarjeta por contacto compartido.
+        if ("contacts" in att) {
+          return att.contacts.map((c, i) => (
+            <ContactCard key={`${att.id}-${i}`} contact={c} channelAccountId={channelAccountId} />
+          ))
+        }
+        if ("location" in att) return <LocationCard key={att.id} location={att.location} />
+        // Un adjunto que este CRM no conoce (ai-api más nuevo) no puede romper el hilo.
+        if (typeof att.mime !== "string") return null
         // Por mime y no por kind: el kind viene del type de WhatsApp, pero un 'document'
         // puede ser perfectamente una foto que el cliente mandó como archivo, y el operador
         // espera verla, no bajarla.

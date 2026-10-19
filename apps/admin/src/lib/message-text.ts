@@ -23,6 +23,16 @@ export function stripAttachmentMarker(text: string, hasAttachments: boolean): st
   return splitMarker(text).rest
 }
 
+/**
+ * Cuerpo de la burbuja según los adjuntos. Con un contacto o una ubicación, el texto es un
+ * resumen que ai-api arma para el bot (no lo escribió el cliente) y la tarjeta ya muestra
+ * lo mismo: repetirlo abajo sería ruido.
+ */
+export function bubbleText(text: string, attachments?: ReadonlyArray<object>): string {
+  if (attachments?.some((a) => "contacts" in a || "location" in a)) return ""
+  return stripAttachmentMarker(text, !!attachments?.length)
+}
+
 const PREVIEW_ICONS: Array<[RegExp, string, string]> = [
   [/audio/i, "🎤", "Audio"],
   [/imagen/i, "📷", "Imagen"],

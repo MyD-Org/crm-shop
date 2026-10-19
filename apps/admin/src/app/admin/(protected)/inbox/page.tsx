@@ -30,6 +30,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   // Números activos en ai-api: una solapa con nombre solo queda fija si su canal sigue habilitado.
   // null = no se pudo consultar; las solapas se arman como antes.
   let canalesHabilitados: string[] | null = null
+  let telefonosCanal: Record<string, string> = {}
   // Política de canales con la fila FRESCA del usuario (no la cookie). Si no se puede resolver
   // se asume restringido sin canales (fail-closed): el layout protegido ya cubre el caso sin sesión.
   const guardedUser = await getGuardedAdminSession().catch(() => null)
@@ -73,9 +74,11 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
       const { convs, assignments } = await assignPendingConversations(tenantRef)
       contacts = await listEnrichedContacts(tenantRef, "active", convs, assignments, actor)
       botEnabled = await botStatusPromise
-      canalesHabilitados = await listWhatsappNumbersRaw(tenant.aiApiUrl, tenant.aiTenantId, session.role)
-        .then(async (r) => (r.ok ? parseWhatsappNumbers(filtrarNumerosRaw(actor, await r.json())).map((n) => n.id) : null))
+      const numeros = await listWhatsappNumbersRaw(tenant.aiApiUrl, tenant.aiTenantId, session.role)
+        .then(async (r) => (r.ok ? parseWhatsappNumbers(filtrarNumerosRaw(actor, await r.json())) : null))
         .catch(() => null)
+      canalesHabilitados = numeros?.map((n) => n.id) ?? null
+      telefonosCanal = Object.fromEntries((numeros ?? []).flatMap((n) => (n.phone ? [[n.id, n.phone]] : [])))
     } catch {
       configError = "No se pudo conectar con la API. Verifique la configuración."
     }
@@ -105,6 +108,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
         <InboxList initialContacts={contacts} currentUserId={session.userId} initialBotEnabled={botEnabled}
           initialCanalNombres={canalNombres}
           canalesHabilitados={canalesHabilitados}
+          telefonosCanal={telefonosCanal}
           canEditCanales={roleRank(session.role) >= 1}
           casillas={casillas}
           correoHabilitado={correoOn}

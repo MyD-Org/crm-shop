@@ -44,11 +44,22 @@ export function canalLineLabel(
 /**
  * Una solapa por canal: primero los que nombró el admin (quedan fijos aunque no tengan
  * conversaciones), después los que aparecen en los contactos, en orden de aparición.
+ * Con `habilitados` (ids de los números activos en ai-api), un nombre solo fija la solapa si su
+ * clave está ahí: un canal dado de baja sin conversaciones no deja una solapa huérfana. Las
+ * claves "canal:..." (sin cuenta) no figuran en esa lista y se conservan. `null` = no se pudo
+ * consultar ai-api: se conservan todas.
  */
-export function buildCanalTabs(contacts: CanalContacto[], nombres: Record<string, string>): CanalTab[] {
+export function buildCanalTabs(
+  contacts: CanalContacto[],
+  nombres: Record<string, string>,
+  habilitados: string[] | null = null,
+): CanalTab[] {
+  const activos = habilitados && new Set(habilitados)
   const tabs = new Map<string, CanalTab & { phone: string | null; channel: string }>()
   for (const [key, nombre] of Object.entries(nombres)) {
-    if (nombre.trim()) tabs.set(key, { key, label: "", pending: 0, phone: null, channel: "" })
+    if (!nombre.trim()) continue
+    if (activos && !activos.has(key) && !key.startsWith(PREFIJO_SIN_CUENTA)) continue
+    tabs.set(key, { key, label: "", pending: 0, phone: null, channel: "" })
   }
   for (const c of contacts) {
     const key = canalKey(c)

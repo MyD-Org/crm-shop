@@ -21,6 +21,7 @@ export default async function UsuariosPage() {
       name: adminUsers.name,
       role: adminUsers.role,
       departments: adminUsers.departments,
+      canalesPermitidos: adminUsers.canalesPermitidos,
       createdAt: adminUsers.createdAt,
       passwordHash: adminUsers.passwordHash,
       inviteExpiresAt: adminPasswordTokens.expiresAt,
@@ -33,7 +34,12 @@ export default async function UsuariosPage() {
     )
     .where(eq(adminUsers.tenantId, session.tenantId))
 
-  const userList = users.map((u) => ({ ...u, hasPassword: !!u.passwordHash, passwordHash: undefined }))
+  const userList = users.map(({ canalesPermitidos, ...u }) => ({
+    ...u,
+    canales_permitidos: canalesPermitidos,
+    hasPassword: !!u.passwordHash,
+    passwordHash: undefined,
+  }))
 
   return (
     <div className="p-4 md:p-6">

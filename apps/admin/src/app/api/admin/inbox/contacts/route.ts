@@ -30,6 +30,10 @@ export async function GET(req: Request) {
     ? await assignPendingConversations(tenantRef)
     : { convs: undefined, assignments: undefined }
 
-  const enriched = await listEnrichedContacts(tenantRef, scope, convs, assignments)
+  const enriched = await listEnrichedContacts(tenantRef, scope, convs, assignments, {
+    id: guard.user.id,
+    role: guard.user.role,
+    canalesPermitidos: guard.user.canalesPermitidos,
+  })
   return NextResponse.json(enriched)
 }

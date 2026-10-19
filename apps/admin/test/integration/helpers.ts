@@ -71,6 +71,8 @@ export async function seedOperator(
     departments?: string[]
     availability?: "available" | "away"
     role?: "operator" | "admin" | "superadmin"
+    /** Canales del inbox permitidos (0092): omitido/null = todos. */
+    canalesPermitidos?: string[] | null
   } = {},
 ): Promise<string> {
   guard()
@@ -84,6 +86,7 @@ export async function seedOperator(
       name: opts.name ?? "Operador",
       role: opts.role ?? "operator",
       departments: opts.departments ?? [],
+      canalesPermitidos: opts.canalesPermitidos ?? null,
       availability: opts.availability ?? "away",
       passwordHash: "x", // cuenta "activa" (passwordHash != null)
     })

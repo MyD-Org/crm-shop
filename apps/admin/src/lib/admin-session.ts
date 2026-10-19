@@ -50,6 +50,8 @@ export type GuardedSession =
         email: string
         role: AdminSessionData["role"]
         availability: string
+        /** Canales del inbox permitidos: null = todos, [] = ninguno. Fila fresca (revocación inmediata). */
+        canalesPermitidos: string[] | null
       }
     }
   | { ok: false; reason: GuardFailReason }
@@ -98,6 +100,7 @@ export async function getGuardedAdminSession(req?: Request): Promise<GuardedSess
       email: adminUsers.email,
       role: adminUsers.role,
       availability: adminUsers.availability,
+      canalesPermitidos: adminUsers.canalesPermitidos,
       tenantId: adminUsers.tenantId,
       passwordHash: adminUsers.passwordHash,
       sessionsRevokedBefore: adminUsers.sessionsRevokedBefore,
@@ -124,6 +127,7 @@ export async function getGuardedAdminSession(req?: Request): Promise<GuardedSess
       email: me.email,
       role: me.role as AdminSessionData["role"],
       availability: me.availability,
+      canalesPermitidos: me.canalesPermitidos,
     },
   }
 }

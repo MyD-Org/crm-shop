@@ -7,6 +7,7 @@ import { adminUsers } from "@/db/schema"
 import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
 import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { assignableRoles, canActOnRole, canManageUsers } from "@/lib/roles"
+import { parseCanalesPermitidos } from "@/lib/canal-acceso"
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requireOperatorPlus(req)
@@ -31,6 +32,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "No tiene permisos sobre este usuario" }, { status: 403 })
   }
 
+  // Los canales del inbox los fija solo quien gestiona usuarios y sobre OTRO usuario: nadie se
+  // amplía ni se recorta su propio acceso (el operador, ni el admin sobre sí mismo).
+  const tocaCanales = Object.hasOwn(body, "canales_permitidos")
+  if (tocaCanales && (isSelf || !canManageUsers(guard.user.role))) {
+    return NextResponse.json({ error: "No tiene permisos para cambiar los canales de este usuario" }, { status: 403 })
+  }
+
   const updates: Partial<typeof adminUsers.$inferInsert> = {}
   if (body.name && typeof body.name === "string") updates.name = body.name.trim()
   // Rol y departamentos: solo al gestionar a otro (no a uno mismo). El rol a asignar debe estar
@@ -45,6 +53,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (Array.isArray(body.departments)) {
       updates.departments = body.departments.map((d: unknown) => String(d).trim()).filter(Boolean)
     }
+    // Canales del inbox (null = todos, [] = ninguno, lista = solo esos). Solo para operadores:
+    // admin y superadmin son siempre irrestrictos, así que un valor guardado no tendría efecto
+    // y confundiría. Si el rol cambia a uno no restringible, la lista se limpia (NULL) para que
+    // no reaparezca si después vuelve a ser operador.
+    const rolFinal = updates.role ?? target.role
+    if (tocaCanales) {
+      const parsed = parseCanalesPermitidos(body.canales_permitidos)
+      if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+      if (parsed.value !== null && rolFinal !== "operator") {
+        return NextResponse.json({ error: "Solo los operadores pueden tener canales restringidos." }, { status: 400 })
+      }
+      updates.canalesPermitidos = parsed.value
+    }
+    if (rolFinal !== "operator" && target.canalesPermitidos !== null) updates.canalesPermitidos = null
   }
 
   if (!Object.keys(updates).length) {
@@ -61,7 +83,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await session.save()
   }
 
-  return NextResponse.json({ id: updated.id, name: updated.name, role: updated.role, departments: updated.departments })
+  return NextResponse.json({
+    id: updated.id,
+    name: updated.name,
+    role: updated.role,
+    departments: updated.departments,
+    canales_permitidos: updated.canalesPermitidos,
+  })
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

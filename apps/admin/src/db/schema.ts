@@ -105,6 +105,11 @@ export const adminUsers = pgTable(
     // ['ventas', 'asesoramiento-tecnico']). Slugs, mismo formato que la tabla departments.
     // Se usa para el routing automático: matchea si el depto del handoff está incluido.
     departments: text("departments").array().notNull().default(sql`'{}'::text[]`),
+    // Canales del inbox que el usuario puede ver (claves de canalKey(): channel_account_id, o
+    // "canal:<canal>" sin cuenta). NULL = todos; {} = ninguno; lista = solo esos. Solo restringe a
+    // los operadores (admin/superadmin son exentos). Sin default: los usuarios existentes quedan
+    // en NULL y ven lo mismo que antes. Ver lib/canal-acceso.ts (0092).
+    canalesPermitidos: text("canales_permitidos").array(),
     // Presencia para asignación de handoff: 'available' = el operador está atendiendo y
     // puede recibir conversaciones; 'away' = no se le asignan. Distinto de "cuenta activa"
     // (passwordHash): existir ≠ estar disponible ahora. Default 'away'. Ver ADR 0006.

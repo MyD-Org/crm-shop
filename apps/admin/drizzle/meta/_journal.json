@@ -624,6 +624,13 @@
       "when": 1793370000000,
       "tag": "0088_ajuste_por_producto",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1793380000000,
+      "tag": "0092_admin_users_canales_permitidos",
+      "breakpoints": true
     }
   ]
 }

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, adminPasswordTokens, tenants } from "@/db/schema"
 import { generateToken } from "@/lib/admin-crypto"
+import { adminLinkBase } from "@/lib/admin-links"
 import { sendEmail } from "@/lib/email"
 import { safeLogoUrl } from "@/lib/email-layout"
 import { buildForgotPasswordEmail } from "@/lib/forgot-password-email"
 import { EMPTY_TENANT, tenantConfigFromRow } from "@/lib/tenants"
 import { ipDe, permitirAsync, respuestaLimite } from "@/lib/rate-limit"
+import { resolveRequestTenantId } from "@/lib/tenant-context"
 
 // Endpoint anónimo que dispara un mail: sin límite es un generador de spam contra los usuarios
 // del CRM. Por IP (429 visible) y por email (silencioso: la respuesta sigue siendo { ok: true }
@@ -26,8 +28,16 @@ export async function POST(req: NextRequest) {
   const email = body.email.trim().toLowerCase()
   if (!await permitirAsync(`forgot-password:email:${email}`, MAX_POR_EMAIL, VENTANA_MS)) return NextResponse.json({ ok: true })
 
+  // Igual que el login: el usuario se busca en el tenant del HOST. Un reset pedido desde el
+  // subdominio de otra empresa no debe generar un link (no podría entrar por ese login).
+  const tenantId = await resolveRequestTenantId(req)
+  if (!tenantId) return NextResponse.json({ ok: true })
+
   const db = getDb()
-  const [user] = await db.select().from(adminUsers).where(eq(adminUsers.email, email))
+  const [user] = await db
+    .select()
+    .from(adminUsers)
+    .where(and(eq(adminUsers.email, email), eq(adminUsers.tenantId, tenantId)))
 
   // Siempre responder OK para no filtrar si el email existe
   if (!user || !user.passwordHash) return NextResponse.json({ ok: true })
@@ -39,8 +49,8 @@ export async function POST(req: NextRequest) {
 
   await db.insert(adminPasswordTokens).values({ userId: user.id, tokenHash, type: "reset", expiresAt })
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"
-  const resetUrl = `${baseUrl}/admin/reset-password/${token}`
+  // El link va al host del tenant: ver adminLinkBase.
+  const resetUrl = `${adminLinkBase(req)}/admin/reset-password/${token}`
 
   const { subject, html, text } = buildForgotPasswordEmail({
     tenantName: tenant.name,

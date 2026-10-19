@@ -4,6 +4,7 @@ import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
 import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { listWhatsappNumbersRaw } from "@/lib/inbox-api"
+import { esRestringido, filtrarNumerosRaw } from "@/lib/canal-acceso"
 
 // GET /api/admin/whatsapp-numbers — los números de WhatsApp del tenant, para elegir por
 // cuál sale un envío proactivo (automatizaciones) o sobre qué WABA operar las plantillas.
@@ -21,5 +22,16 @@ export async function GET(req: Request) {
 
   const res = await listWhatsappNumbersRaw(tenant.aiApiUrl, tenant.aiTenantId, guard.user.role)
   const text = await res.text()
+  // Un operador restringido por canal solo ve los números de sus canales (lib/canal-acceso.ts).
+  // Los demás reciben la respuesta de ai-api sin tocar.
+  if (res.ok && esRestringido(guard.user)) {
+    let parsed: unknown = []
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      parsed = []
+    }
+    return NextResponse.json(filtrarNumerosRaw(guard.user, parsed), { status: res.status })
+  }
   return new NextResponse(text, { status: res.status, headers: { "content-type": "application/json" } })
 }

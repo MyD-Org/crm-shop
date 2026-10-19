@@ -4,7 +4,9 @@ import { eq } from "drizzle-orm"
 import { notFound } from "next/navigation"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { adminSessionOptions, getGuardedAdminSession, type AdminSessionData } from "@/lib/admin-session"
+import { canalKey } from "@/lib/inbox-canales"
+import { puedeVerCanal } from "@/lib/canal-acceso"
 import { getContact, getContactMessages, getBotStatus, listConversations } from "@/lib/inbox-api"
 import { enrichContact } from "@/lib/inbox-contacts"
 import { getAssignments } from "@/lib/assignment"
@@ -47,6 +49,9 @@ export default async function ContactThreadPage({ params, searchParams }: {
   // Estado del kill switch: si el bot está pausado, el footer no dice "el bot responde".
   const botStatusP = getBotStatus(tenant.aiApiUrl, tenant.aiTenantId).catch(() => true)
 
+  // También arranca antes del contacto: no depende de él (una tanda menos en la cascada).
+  const guardedP = getGuardedAdminSession().catch(() => null)
+
   const result = await Promise.all([
     getContact(tenant.aiApiUrl, tenant.aiTenantId, endUserId, channelAccountId),
     getContactMessages(tenant.aiApiUrl, tenant.aiTenantId, endUserId, { limit: 30 }),
@@ -54,6 +59,12 @@ export default async function ContactThreadPage({ params, searchParams }: {
 
   if (!result) notFound()
   const [contact, page] = result
+
+  // Política de canales con la fila fresca del usuario (no la cookie). Se valida el canal del
+  // contacto DEVUELTO por ai-api, no el ?cuenta= de la URL. Sin acceso: el mismo notFound().
+  // Sin guard válido el layout protegido ya habría redirigido; por las dudas, también 404.
+  const guarded = await guardedP
+  if (!guarded?.ok || !puedeVerCanal(guarded.user, canalKey(contact))) notFound()
 
   // Operador (fuente de verdad: CRM) + departamento (de ai-api).
   const [enrichedContact, botEnabled] = await Promise.all([

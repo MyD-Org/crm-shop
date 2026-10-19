@@ -56,6 +56,25 @@ describe("buildCanalTabs", () => {
     ])
   })
 
+  it("un canal nombrado pero deshabilitado en ai-api no queda fijo sin conversaciones", () => {
+    const tabs = buildCanalTabs([c({ channel_account_id: "b" })], { a: "Sucursal Centro", b: "Extra" }, ["b"])
+    expect(tabs.map((t) => t.key)).toEqual(["b"])
+  })
+
+  it("un canal deshabilitado con conversaciones actuales sigue visible", () => {
+    const tabs = buildCanalTabs([c({ channel_account_id: "a" })], { a: "Sucursal Centro" }, [])
+    expect(tabs).toEqual([{ key: "a", label: "Sucursal Centro", pending: 0 }])
+  })
+
+  it("un canal nombrado y habilitado sigue fijo sin conversaciones", () => {
+    const tabs = buildCanalTabs([], { a: "Sucursal Centro" }, ["a"])
+    expect(tabs.map((t) => t.key)).toEqual(["a"])
+  })
+
+  it("sin la lista de habilitados (ai-api no respondió) se conservan todos los nombrados", () => {
+    expect(buildCanalTabs([], { a: "Sucursal Centro" }, null).map((t) => t.key)).toEqual(["a"])
+  })
+
   it("un solo canal da una sola solapa (la UI oculta la fila)", () => {
     expect(buildCanalTabs([c({ channel_account_id: "a" })], {})).toHaveLength(1)
   })

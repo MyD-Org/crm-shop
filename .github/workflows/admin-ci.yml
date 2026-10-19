@@ -44,21 +44,9 @@ jobs:
 
     # Los tests de integración corren contra un Postgres real. El global-setup crea la DB
     # crm_test y le aplica las migraciones de drizzle solo; acá solo hace falta el servidor.
-    # Imagen oficial desde el espejo público de ECR: Docker Hub corta las descargas anónimas de
-    # los runners compartidos (toomanyrequests) y el job fallaba antes de correr un solo test.
-    services:
-      postgres:
-        image: public.ecr.aws/docker/library/postgres:16
-        env:
-          POSTGRES_HOST_AUTH_METHOD: trust
-        ports:
-          - 5432:5432
-        # Sin healthcheck los tests pueden arrancar antes de que Postgres acepte conexiones.
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # Se usa el Postgres que ya trae la imagen ubuntu-latest (paso "Levantar Postgres"), sin
+    # bajar ninguna imagen: Docker Hub y el espejo público de ECR cortan las descargas anónimas
+    # de los runners compartidos (toomanyrequests) y el job fallaba antes de correr un test.
 
     env:
       # El helper db-url.ts exige host local y nombre con "test": es la red de seguridad para
@@ -67,6 +55,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # trust solo dentro del runner efímero, igual que antes con POSTGRES_HOST_AUTH_METHOD.
+      - name: Levantar Postgres
+        working-directory: .
+        run: |
+          sudo sed -i -E 's/(scram-sha-256|md5|peer)$/trust/' /etc/postgresql/*/main/pg_hba.conf
+          sudo systemctl start postgresql.service
+          timeout 60 bash -c 'until pg_isready -h localhost -p 5432; do sleep 1; done'
+          psql -h localhost -U postgres -c 'select version()'
 
       - uses: actions/setup-node@v4
         with:

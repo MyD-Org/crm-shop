@@ -4,11 +4,12 @@ import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
 import { adminSessionOptions, getGuardedAdminSession, type AdminSessionData } from "@/lib/admin-session"
-import { getBotStatus, type InboxContact } from "@/lib/inbox-api"
+import { getBotStatus, listWhatsappNumbersRaw, type InboxContact } from "@/lib/inbox-api"
 import { assignPendingConversations } from "@/lib/assignment"
 import { listEnrichedContacts } from "@/lib/inbox-contacts"
 import { listarNombres } from "@/lib/inbox-canales-repo"
-import { filtrarNombres, type ActorCanales } from "@/lib/canal-acceso"
+import { filtrarNombres, filtrarNumerosRaw, type ActorCanales } from "@/lib/canal-acceso"
+import { parseWhatsappNumbers } from "@/lib/inbox-canales"
 import { roleRank } from "@/lib/roles"
 import { casillasAccesibles } from "@/lib/correo-acceso"
 import { correoHabilitado } from "@/lib/correo-flag"
@@ -26,6 +27,9 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   let contacts: InboxContact[] = []
   let botEnabled = true
   let configError = ""
+  // Números activos en ai-api: una solapa con nombre solo queda fija si su canal sigue habilitado.
+  // null = no se pudo consultar; las solapas se arman como antes.
+  let canalesHabilitados: string[] | null = null
   // Política de canales con la fila FRESCA del usuario (no la cookie). Si no se puede resolver
   // se asume restringido sin canales (fail-closed): el layout protegido ya cubre el caso sin sesión.
   const guardedUser = await getGuardedAdminSession().catch(() => null)
@@ -69,6 +73,9 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
       const { convs, assignments } = await assignPendingConversations(tenantRef)
       contacts = await listEnrichedContacts(tenantRef, "active", convs, assignments, actor)
       botEnabled = await botStatusPromise
+      canalesHabilitados = await listWhatsappNumbersRaw(tenant.aiApiUrl, tenant.aiTenantId, session.role)
+        .then(async (r) => (r.ok ? parseWhatsappNumbers(filtrarNumerosRaw(actor, await r.json())).map((n) => n.id) : null))
+        .catch(() => null)
     } catch {
       configError = "No se pudo conectar con la API. Verifique la configuración."
     }
@@ -97,6 +104,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
       ) : (
         <InboxList initialContacts={contacts} currentUserId={session.userId} initialBotEnabled={botEnabled}
           initialCanalNombres={canalNombres}
+          canalesHabilitados={canalesHabilitados}
           canEditCanales={roleRank(session.role) >= 1}
           casillas={casillas}
           correoHabilitado={correoOn}

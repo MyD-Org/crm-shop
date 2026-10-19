@@ -33,6 +33,8 @@ interface Props {
   initialBotEnabled: boolean
   /** Nombres de los canales definidos por el admin (clave = channel_account_id). */
   initialCanalNombres: Record<string, string>
+  /** Ids de los números activos en ai-api; null si no se pudo consultar. */
+  canalesHabilitados?: string[] | null
   /** Admin o superadmin: puede editar los nombres de los canales. */
   canEditCanales: boolean
   /** Casillas de correo accesibles para el usuario (vacío con el flag `correo` apagado). */
@@ -50,6 +52,7 @@ export function InboxList({
   initialBotEnabled,
   initialCanalNombres,
   canEditCanales,
+  canalesHabilitados = null,
   casillas = [],
   correoHabilitado = false,
   initialCasillaId = null,
@@ -169,7 +172,7 @@ export function InboxList({
 
   const mine = contacts.filter((c) => c.assigned_operator_id === currentUserId)
   const pendingCount = contacts.filter((c) => c.awaiting_reply).length
-  const canalTabs = buildCanalTabs(contacts, canalNombres)
+  const canalTabs = buildCanalTabs(contacts, canalNombres, canalesHabilitados)
   const casillaTabs = buildCasillaTabs(casillas, noLeidos)
   const seleccion = resolveSelectedConCasillas(canalSel, canalTabs, casillaTabs)
   const casillaActiva = casillaIdDeTab(seleccion)

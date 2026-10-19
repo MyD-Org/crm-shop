@@ -6,7 +6,7 @@ const casillas = [
   { id: "c1", nombre: "Ventas", email: "ventas@cliente.example" },
   { id: "c2", nombre: "", email: "soporte@cliente.example" },
 ]
-const canales: CanalTab[] = [{ key: "wa1", label: "Wsp Mdp", pending: 0 }]
+const canales: CanalTab[] = [{ key: "wa1", label: "Wsp Mdp", pending: 0, phone: null }]
 
 describe("tabs de casillas de correo dentro de Mensajes", () => {
   it("una tab por casilla, con el nombre visible o, sin nombre, el email, y su conteo de no leídos", () => {

@@ -44,7 +44,7 @@ function login(userId: string, opts: { cookieRole?: string; tenantId?: string } 
   // La cookie DICE un rol y un tenant; el guard manda lo de la fila fresca y el host.
   session = {
     userId,
-    role: opts.cookieRole ?? "operator",
+    role: opts.cookieRole ?? "admin",
     tenantId: opts.tenantId ?? TENANT_A,
     name: "Nombre De Cookie",
     email: "cookie@example.com",
@@ -89,10 +89,11 @@ function seedEn(estado: EstadoPedido, tenantId = TENANT_A, overrides: Parameters
   })
 }
 
+let actorA: string
 let operatorA: string
 let adminA: string
 let superA: string
-let operatorB: string
+let adminB: string
 let superB: string
 
 describe("admin: pedidos del Shop", () => {
@@ -101,13 +102,14 @@ describe("admin: pedidos del Shop", () => {
     await truncateAll()
     await seedTenant(TENANT_A)
     await seedTenant(TENANT_B)
-    operatorA = await seedOperator(TENANT_A, { role: "operator", name: "Ope Rador", email: "ope@example.com" })
+    actorA = await seedOperator(TENANT_A, { role: "admin", name: "Ope Rador", email: "ope@example.com" })
+    operatorA = await seedOperator(TENANT_A, { role: "operator", name: "Opera Dora", email: "opera@example.com" })
     adminA = await seedOperator(TENANT_A, { role: "admin", name: "Ana Admin", email: "ana@example.com" })
     superA = await seedOperator(TENANT_A, { role: "superadmin", name: "Beto Super", email: "beto@example.com" })
-    operatorB = await seedOperator(TENANT_B, { role: "operator", name: "Ope Bee", email: "ope.b@example.com" })
+    adminB = await seedOperator(TENANT_B, { role: "admin", name: "Ope Bee", email: "ope.b@example.com" })
     superB = await seedOperator(TENANT_B, { role: "superadmin", name: "Super Bee", email: "super.b@example.com" })
     invalidateTenantRegistry()
-    login(operatorA)
+    login(actorA)
   })
 
   afterAll(async () => {
@@ -115,7 +117,7 @@ describe("admin: pedidos del Shop", () => {
   })
 
   // ───────────────────────────── ADM-1: autorización ─────────────────────────────
-  describe("ADM-1: requireOperatorPlus", () => {
+  describe("ADM-1: requireAdminPlus", () => {
     let pedido: ShopOrderRow
 
     beforeEach(async () => {
@@ -128,9 +130,9 @@ describe("admin: pedidos del Shop", () => {
       ["PATCH", () => patch(pedido.id, { estado: "confirmado", estadoEsperado: "pendiente" })],
     ]
 
-    it("operator, admin y superadmin → 200", async () => {
+    it("admin y superadmin → 200", async () => {
       for (const [userId, cookieRole] of [
-        [operatorA, "operator"],
+        [actorA, "admin"],
         [adminA, "admin"],
         [superA, "superadmin"],
       ]) {
@@ -138,6 +140,20 @@ describe("admin: pedidos del Shop", () => {
         expect((await list()).status).toBe(200)
         expect((await detail(pedido.id)).status).toBe(200)
       }
+    })
+
+    it.each(RUTAS)("%s → 404 para un operador, con el cuerpo estándar", async (_n, call) => {
+      login(operatorA, { cookieRole: "operator" })
+      const res = await call()
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual(NOT_FOUND_BODY)
+    })
+
+    it("un operador no modifica nada", async () => {
+      login(operatorA, { cookieRole: "operator" })
+      const antes = await rowById(pedido.id)
+      await patch(pedido.id, { estado: "confirmado", estadoEsperado: "pendiente" })
+      expect(await rowById(pedido.id)).toEqual(antes)
     })
 
     it.each(RUTAS)("%s → 401 sin sesión, con el cuerpo estándar y sin filtrar el motivo", async (_n, call) => {
@@ -151,35 +167,35 @@ describe("admin: pedidos del Shop", () => {
     })
 
     it.each(RUTAS)("%s → 401 si la cookie es de otro tenant que el host", async (_n, call) => {
-      login(operatorA, { tenantId: TENANT_B })
+      login(actorA, { tenantId: TENANT_B })
       const res = await call()
       expect(res.status).toBe(401)
       expect(await res.json()).toEqual(UNAUTHORIZED_BODY)
     })
 
     it.each(RUTAS)("%s → 401 si la fila de admin_users ya no existe", async (_n, call) => {
-      await getDb().delete(adminUsers).where(eq(adminUsers.id, operatorA))
+      await getDb().delete(adminUsers).where(eq(adminUsers.id, actorA))
       const res = await call()
       expect(res.status).toBe(401)
       expect(await res.json()).toEqual(UNAUTHORIZED_BODY)
     })
 
     it.each(RUTAS)("%s → 401 si la cuenta está desactivada (sin passwordHash)", async (_n, call) => {
-      await getDb().update(adminUsers).set({ passwordHash: null }).where(eq(adminUsers.id, operatorA))
+      await getDb().update(adminUsers).set({ passwordHash: null }).where(eq(adminUsers.id, actorA))
       expect((await call()).status).toBe(401)
     })
 
     it.each(RUTAS)("%s → 404 para un rol desconocido (allow-list, no rank)", async (_n, call) => {
       // `roleRank("viewer")` da 0 = operator: por eso el guard NO puede ser "rank >= 0".
-      await getDb().update(adminUsers).set({ role: "viewer" }).where(eq(adminUsers.id, operatorA))
-      login(operatorA, { cookieRole: "operator" }) // la cookie miente; manda la fila
+      await getDb().update(adminUsers).set({ role: "viewer" }).where(eq(adminUsers.id, actorA))
+      login(actorA, { cookieRole: "admin" }) // la cookie miente; manda la fila
       const res = await call()
       expect(res.status).toBe(404)
       expect(await res.json()).toEqual(NOT_FOUND_BODY)
     })
 
     it("un rol desconocido no modifica nada", async () => {
-      await getDb().update(adminUsers).set({ role: "viewer" }).where(eq(adminUsers.id, operatorA))
+      await getDb().update(adminUsers).set({ role: "viewer" }).where(eq(adminUsers.id, actorA))
       const antes = await rowById(pedido.id)
       await patch(pedido.id, { estado: "confirmado", estadoEsperado: "pendiente" })
       expect(await rowById(pedido.id)).toEqual(antes)
@@ -192,8 +208,8 @@ describe("admin: pedidos del Shop", () => {
       expect(await rowById(pedido.id)).toEqual(antes)
     })
 
-    it("requireAdminPlus no cambió: operator sigue viendo 404 en /api/admin/comprobantes", async () => {
-      login(operatorA)
+    it("requireAdminPlus: operator también ve 404 en /api/admin/comprobantes", async () => {
+      login(operatorA, { cookieRole: "operator" })
       const res = await comprobantesRoute(adminReq("/api/admin/comprobantes"))
       expect(res.status).toBe(404)
       expect(await res.json()).toEqual(NOT_FOUND_BODY)
@@ -331,7 +347,7 @@ describe("admin: pedidos del Shop", () => {
       lineasATraer: [],
     }
 
-    it("filtra por sucursal, sin filtro trae todos y un operador ve todas las sucursales", async () => {
+    it("filtra por sucursal, sin filtro trae todos y un admin ve todas las sucursales", async () => {
       await crearSucursal(TENANT_A, { slug: "igz", nombre: "Iguazú" })
       await crearSucursal(TENANT_A, { slug: "mdp", nombre: "Mar del Plata" })
       const enIgz = await seedEn("pendiente", TENANT_A, { sucursal: "igz", sucursalRegla: regla as never })
@@ -462,16 +478,7 @@ describe("admin: pedidos del Shop", () => {
       const porNombre = (items: Record<string, unknown>[]) =>
         Object.fromEntries(items.map((i) => [i.name as string, i]))
 
-      // Operator: stock sí, y la clave `costoUnitario` NI APARECE.
-      const opRes = await detail(pedido.id)
-      expect(opRes.status).toBe(200)
-      const op = porNombre((await opRes.json()).items)
-      expect(op["Lámpara A"]).toMatchObject({ stockActual: 7 })
-      expect(op["Lámpara B"]).toMatchObject({ stockActual: 0 })
-      expect(op["Lámpara C"]).toMatchObject({ stockActual: null })
-      for (const i of Object.values(op)) expect(i).not.toHaveProperty("costoUnitario")
-
-      // Admin: además el costo (null si Alegra no lo tiene o el producto no está en el espejo).
+      // Admin: stock y además el costo (null si Alegra no lo tiene o el producto no está en el espejo).
       login(adminA)
       const adRes = await detail(pedido.id)
       expect(adRes.status).toBe(200)
@@ -557,7 +564,7 @@ describe("admin: pedidos del Shop", () => {
           const despues = await rowById(pedido.id)
           expect(despues.estado).toBe(hacia)
           // ADM-7: auditoría.
-          expect(despues.estadoActualizadoPor).toBe(operatorA)
+          expect(despues.estadoActualizadoPor).toBe(actorA)
           expect(despues.estadoActualizadoPorNombre).toBe("Ope Rador")
           expect(despues.estadoActualizadoEn).not.toBeNull()
           expect(despues.estadoActualizadoEn!.getTime()).toBeGreaterThanOrEqual(t0 - 1000)
@@ -658,10 +665,11 @@ describe("admin: pedidos del Shop", () => {
         const forzada = (id: string, estadoEsperado: EstadoPedido, motivo?: string) =>
           patch(id, { estado: "cancelado", estadoEsperado, forzar: true, ...(motivo !== undefined ? { motivo } : {}) })
 
-        it("operador: 403 y el pedido no cambia", async () => {
+        it("operador: 404 y el pedido no cambia", async () => {
+          login(operatorA, { cookieRole: "operator" })
           const pedido = await seedEn("confirmado", TENANT_A, { pagoEstado: "pagado" })
           const res = await forzada(pedido.id, "confirmado", "Devolución")
-          expect(res.status).toBe(403)
+          expect(res.status).toBe(404)
           await sinCambios(pedido.id, "confirmado")
         })
 
@@ -750,7 +758,7 @@ describe("admin: pedidos del Shop", () => {
       expect(body).toMatchObject({
         id: pedido.id,
         estado: "confirmado",
-        estadoActualizadoPor: operatorA,
+        estadoActualizadoPor: actorA,
         estadoActualizadoPorNombre: "Ope Rador",
       })
       expect(body.items).toHaveLength(1)
@@ -839,7 +847,7 @@ describe("admin: pedidos del Shop", () => {
       const fila = await rowById(pedido.id)
       expect(fila.estado).toBe("cancelado")
       expect(fila.cancelacionMotivo).toBe("Cliente desistió")
-      expect(fila.estadoActualizadoPor).toBe(operatorA)
+      expect(fila.estadoActualizadoPor).toBe(actorA)
       expect((await (await detail(pedido.id)).json()).cancelacionMotivo).toBe("Cliente desistió")
     })
 
@@ -909,7 +917,7 @@ describe("admin: pedidos del Shop", () => {
       const pedido = await seedEn("pendiente")
       await patch(pedido.id, { estado: "confirmado", estadoEsperado: "pendiente" })
       const primero = await rowById(pedido.id)
-      expect(primero.estadoActualizadoPor).toBe(operatorA)
+      expect(primero.estadoActualizadoPor).toBe(actorA)
 
       login(adminA, { cookieRole: "admin" })
       await patch(pedido.id, { estado: "pendiente", estadoEsperado: "confirmado" }) // corrección
@@ -929,7 +937,7 @@ describe("admin: pedidos del Shop", () => {
         actor: { id: adminA, name: "Otro" },
       })
       const fila = await rowById(pedido.id)
-      expect(fila.estadoActualizadoPor).toBe(operatorA)
+      expect(fila.estadoActualizadoPor).toBe(actorA)
       // El nombre es el de la FILA de admin_users, no el de la cookie.
       expect(fila.estadoActualizadoPorNombre).toBe("Ope Rador")
     })
@@ -971,19 +979,19 @@ describe("admin: pedidos del Shop", () => {
     })
 
     it("listado: cada tenant ve sólo lo suyo, y el total no cuenta lo ajeno", async () => {
-      login(operatorB, { tenantId: TENANT_B })
+      login(adminB, { tenantId: TENANT_B })
       const b = await (await list("", TENANT_B)).json()
       expect(b.total).toBe(1)
       expect(b.items.map((i: { id: string }) => i.id)).toEqual([deB.id])
 
-      login(operatorA)
+      login(actorA)
       const a = await (await list()).json()
       expect(a.total).toBe(1)
       expect(a.items.map((i: { id: string }) => i.id)).toEqual([deA.id])
     })
 
     it("detalle: el pedido de otro tenant es indistinguible de uno inexistente", async () => {
-      login(operatorB, { tenantId: TENANT_B })
+      login(adminB, { tenantId: TENANT_B })
       const ajeno = await detail(deA.id, TENANT_B)
       const inexistente = await detail(randomUUID(), TENANT_B)
       expect(ajeno.status).toBe(404)
@@ -991,7 +999,7 @@ describe("admin: pedidos del Shop", () => {
     })
 
     it("PATCH válido sobre un pedido ajeno → 404 (no 409 ni 422) y la fila no cambia", async () => {
-      login(operatorB, { tenantId: TENANT_B })
+      login(adminB, { tenantId: TENANT_B })
       const antes = await rowById(deA.id)
       const res = await patch(deA.id, { estado: "confirmado", estadoEsperado: "pendiente" }, TENANT_B)
       expect(res.status).toBe(404)
@@ -1009,7 +1017,7 @@ describe("admin: pedidos del Shop", () => {
     })
 
     it("el tenant no se acepta por query ni por body", async () => {
-      login(operatorB, { tenantId: TENANT_B })
+      login(adminB, { tenantId: TENANT_B })
       const lista = await (await list(`?tenantId=${TENANT_A}`, TENANT_B)).json()
       expect(lista.items.map((i: { id: string }) => i.id)).toEqual([deB.id])
 
@@ -1035,7 +1043,7 @@ describe("admin: pedidos del Shop", () => {
     })
 
     it("una sesión de tenant-a contra el host de tenant-b → 401 (no cruza por el host)", async () => {
-      login(operatorA) // cookie de tenant-a
+      login(actorA) // cookie de tenant-a
       expect((await list("", TENANT_B)).status).toBe(401)
       expect((await detail(deB.id, TENANT_B)).status).toBe(401)
     })

@@ -5,7 +5,7 @@ import {
   listarClientesTienda,
   type ClienteTiendaDto,
 } from "@/lib/clientes-tienda-repo"
-import { isKnownAdminRole, roleRank } from "@/lib/roles"
+import { roleRank } from "@/lib/roles"
 import { ClientesTiendaShell } from "@/components/admin/clientes-tienda/ClientesTiendaShell"
 
 export const dynamic = "force-dynamic"
@@ -13,15 +13,15 @@ export const dynamic = "force-dynamic"
 const ERROR_PAGINA = "No se pudo cargar el listado. Inténtelo de nuevo."
 
 // "Clientes de la tienda": usuarios registrados en el Shop (espejo de Clerk) con su vínculo a
-// Alegra, acceso a Facturación y pedidos. La ven operator, admin y superadmin (misma lista que
-// `requireOperatorPlus` en la API); las acciones del detalle (vincular, desvincular, dar y quitar
+// Alegra, acceso a Facturación y pedidos. La ven admin y superadmin (igual que
+// `requireAdminPlus` en la API); las acciones del detalle (vincular, desvincular, dar y quitar
 // acceso a Facturación) sólo admin y superadmin: `puedeGestionar` esconde los botones y la
 // autoridad es `requireAdminPlus` en cada API. Sin sesión, el layout protegido
 // ya redirigió al login; acá se repite el guard para tener el tenant verificado por host y el
 // rol FRESCO de la base, nunca los de la cookie.
 export default async function ClientesTiendaPage() {
   const guard = await getGuardedAdminSession()
-  if (!guard.ok || !isKnownAdminRole(guard.user.role)) notFound()
+  if (!guard.ok || roleRank(guard.user.role) < roleRank("admin")) notFound()
 
   // Primera página sin filtros, directo del repo (no se le pega a la propia API). Si falla se
   // muestra el aviso y el shell reintenta por la API al montar.

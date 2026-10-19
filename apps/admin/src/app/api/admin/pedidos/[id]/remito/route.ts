@@ -14,7 +14,7 @@ import { canSeeCosts } from "@/lib/roles"
 //   DELETE /api/admin/pedidos/[id]/remito → desvincula (no toca Alegra: el remito sigue
 //          existiendo allá).
 //
-// SÓLO admin+ (`requireAdminPlus`, a diferencia de "vincular factura" que es operator+): el
+// SÓLO admin+ (`requireAdminPlus`, como todo Pedidos): el
 // remito, igual que "Emitir factura", es una acción del dominio de facturación/depósito, no del
 // día a día del operador de mostrador. Pedido inexistente, ajeno o con id malformado → 404.
 //

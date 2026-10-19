@@ -68,7 +68,7 @@ import { canSeeCosts } from "@/lib/roles"
 // informa en `cuenta.avisoCobro` (campo aparte: `avisos[]` bloquea) y el POST exige
 // `confirmarCuentaDistintaDeCobro: true` (409 `confirmar_cuenta_distinta_de_cobro` si falta).
 //
-// Permiso `requireAdminPlus` (no `requireOperatorPlus`, a diferencia de "vincular") en los dos
+// Permiso `requireAdminPlus` en los dos
 // verbos: emitir crea dinero real e irreversible en Alegra, aunque el GET sólo lea.
 //
 // Concurrencia: dos POST casi simultáneos sobre el mismo pedido no pueden terminar en DOS

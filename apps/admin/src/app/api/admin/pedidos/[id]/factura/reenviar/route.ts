@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireOperatorPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { enviarFacturaPedido, logAvisoFactura, type AvisoFactura } from "@/lib/pedido-factura-aviso"
 import { getPedido } from "@/lib/pedidos-repo"
 
@@ -22,7 +22,7 @@ const fail = (status: number, code: string, error: string) =>
   Response.json({ error, code }, { status, headers: NO_STORE })
 
 export async function POST(req: Request, { params }: IdParams) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
 
   const { id } = await params

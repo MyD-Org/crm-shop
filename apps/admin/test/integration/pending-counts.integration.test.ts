@@ -131,19 +131,19 @@ describe("admin: pending-counts (badges de novedades)", () => {
     expect(await res.json()).toEqual({ inbox: 1, comprobantes: 2, pedidos: 0, correo: 0 })
   })
 
-  it("pedidos: solo los sin confirmar del tenant, filtrados por sincePedidos; los ve también el operador", async () => {
+  it("pedidos: solo los sin confirmar del tenant, filtrados por sincePedidos; solo los ve el admin", async () => {
     await seedShopOrder(TENANT_A, { createdAt: new Date("2026-09-13T10:00:00.000Z") }) // nuevo
     await seedShopOrder(TENANT_A, { createdAt: new Date("2026-09-01T10:00:00.000Z") }) // viejo
     await seedShopOrder(TENANT_A, { estado: "confirmado", createdAt: new Date("2026-09-14T10:00:00.000Z") }) // no cuenta
     await seedShopOrder(TENANT_B, { createdAt: new Date("2026-09-14T10:00:00.000Z") }) // otro tenant
-    login(operatorA)
+    login(adminA)
 
     const sinFiltro = await pendingCountsRoute(req())
     expect((await sinFiltro.json()).pedidos).toBe(2)
 
     clearPendingCountsCache()
     const res = await pendingCountsRoute(req(`?sincePedidos=${encodeURIComponent("2026-09-13T00:00:00.000Z")}`))
-    expect(await res.json()).toEqual({ inbox: 3, comprobantes: null, pedidos: 1, correo: 0 })
+    expect(await res.json()).toEqual({ inbox: 3, comprobantes: 0, pedidos: 1, correo: 0 })
   })
 
   it("since inválido = sin filtro (backlog completo)", async () => {
@@ -152,13 +152,14 @@ describe("admin: pending-counts (badges de novedades)", () => {
     expect((await res.json()).inbox).toBe(3)
   })
 
-  it("operador ⇒ comprobantes en null (no se expone el dato)", async () => {
+  it("operador ⇒ comprobantes y pedidos en null (no se expone el dato)", async () => {
     await seedReceipt(TENANT_A, "416")
+    await seedShopOrder(TENANT_A, { createdAt: new Date("2026-09-13T10:00:00.000Z") })
     login(operatorA)
 
     const res = await pendingCountsRoute(req())
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ inbox: 3, comprobantes: null, pedidos: 0, correo: 0 })
+    expect(await res.json()).toEqual({ inbox: 3, comprobantes: null, pedidos: null, correo: 0 })
   })
 
   it("tenant sin inbox configurado ⇒ inbox 0 (no es error)", async () => {

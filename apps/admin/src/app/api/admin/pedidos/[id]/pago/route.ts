@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireOperatorPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { avisarClientePedido, logAviso } from "@/lib/pedido-estado-aviso"
 import { validarPagoManual } from "@/lib/pedido-pago-validacion"
 import { registrarPagoManual, toPedidoDetalleDto, type PagoManualResult } from "@/lib/pedidos-repo"
@@ -35,7 +35,7 @@ const MSG = {
 } as const
 
 async function mover(req: Request, { params }: IdParams, pagado: boolean): Promise<Response> {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
 
   const { id } = await params

@@ -49,9 +49,9 @@ describe("admin: registrar el pago de un pedido offline", () => {
     await truncateAll()
     await seedTenant(TENANT_A)
     await seedTenant(TENANT_B)
-    const operator = await seedOperator(TENANT_A, { role: "operator", name: "Ope Rador", email: "ope@example.com" })
+    const operator = await seedOperator(TENANT_A, { role: "admin", name: "Ope Rador", email: "ope@example.com" })
     invalidateTenantRegistry()
-    session = { userId: operator, role: "operator", tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
+    session = { userId: operator, role: "admin", tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
   })
 
   afterAll(async () => {

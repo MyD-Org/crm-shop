@@ -33,7 +33,7 @@ const TENANT_A = "tenant-a"
 const TENANT_B = "tenant-b"
 
 function login(userId: string, tenantId = TENANT_A) {
-  session = { userId, role: "operator", tenantId, name: "Ope Rador", email: "ope@example.com", save: async () => {} }
+  session = { userId, role: "admin", tenantId, name: "Ope Rador", email: "ope@example.com", save: async () => {} }
 }
 
 const adminReq = (path: string, init: { method?: string; body?: unknown; host?: string } = {}) => {
@@ -73,8 +73,8 @@ describe("admin: historial, filtros, colas y tablero de Pedidos", () => {
     await truncateAll()
     await seedTenant(TENANT_A)
     await seedTenant(TENANT_B)
-    operatorA = await seedOperator(TENANT_A, { role: "operator", name: "Ope Rador", email: "ope@example.com" })
-    await seedOperator(TENANT_B, { role: "operator", name: "Ope Bee", email: "ope.b@example.com" })
+    operatorA = await seedOperator(TENANT_A, { role: "admin", name: "Ope Rador", email: "ope@example.com" })
+    await seedOperator(TENANT_B, { role: "admin", name: "Ope Bee", email: "ope.b@example.com" })
     invalidateTenantRegistry()
     login(operatorA)
   })

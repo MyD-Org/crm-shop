@@ -362,7 +362,7 @@ describe("clientes de la tienda: repo", () => {
 function login(userId: string) {
   session = {
     userId,
-    role: "operator",
+    role: "admin",
     tenantId: TENANT_A,
     name: "Nombre De Cookie",
     email: "cookie@example.com",
@@ -375,15 +375,15 @@ const adminReq = (path: string, host = TENANT_A) =>
 const get = (query = "", host?: string) => listRoute(adminReq(`/api/admin/clientes-tienda${query}`, host))
 
 describe("clientes de la tienda: GET /api/admin/clientes-tienda", () => {
-  let operatorA: string
+  let adminA: string
 
   beforeEach(async () => {
     await truncateAll()
     await seedTenant(TENANT_A)
     await seedTenant(TENANT_B)
-    operatorA = await seedOperator(TENANT_A, { role: "operator" })
+    adminA = await seedOperator(TENANT_A, { role: "admin" })
     invalidateTenantRegistry()
-    login(operatorA)
+    login(adminA)
     await seedShopCliente(TENANT_A, { clerkUserId: "user_a1", email: "a1@cliente.example", creadoEnClerk: alta(2) })
     await seedShopCliente(TENANT_A, { clerkUserId: "user_a2", email: "a2@cliente.example", creadoEnClerk: alta(1) })
     await seedShopCliente(TENANT_B, { clerkUserId: "user_b1", email: "b1@cliente.example" })
@@ -401,7 +401,7 @@ describe("clientes de la tienda: GET /api/admin/clientes-tienda", () => {
     expect(body.items).toBeUndefined()
   })
 
-  it("operador ⇒ 200 con los clientes de SU tenant y no cacheable", async () => {
+  it("admin ⇒ 200 con los clientes de SU tenant y no cacheable", async () => {
     const res = await get()
     expect(res.status).toBe(200)
     expect(res.headers.get("Cache-Control")).toBe("private, no-store")
@@ -411,16 +411,21 @@ describe("clientes de la tienda: GET /api/admin/clientes-tienda", () => {
     expect(body.items[0]).toMatchObject({ email: "a1@cliente.example", acceso: "no", pedidos: 0 })
   })
 
-  it("admin y superadmin también ven el listado", async () => {
-    for (const role of ["admin", "superadmin"] as const) {
-      login(await seedOperator(TENANT_A, { role }))
-      expect((await get()).status).toBe(200)
-    }
+  it("superadmin también ve el listado", async () => {
+    login(await seedOperator(TENANT_A, { role: "superadmin" }))
+    expect((await get()).status).toBe(200)
   })
 
-  it("un operador de otro tenant (host de A) no pasa el guard", async () => {
-    const operatorB = await seedOperator(TENANT_B, { role: "operator" })
-    login(operatorB)
+  it("operador ⇒ 404 sin datos (la sección es de admin en adelante)", async () => {
+    login(await seedOperator(TENANT_A, { role: "operator" }))
+    const res = await get()
+    expect(res.status).toBe(404)
+    expect((await res.json()).items).toBeUndefined()
+  })
+
+  it("un admin de otro tenant (host de A) no pasa el guard", async () => {
+    const adminB = await seedOperator(TENANT_B, { role: "admin" })
+    login(adminB)
     const res = await get()
     expect(res.status).toBe(401)
   })

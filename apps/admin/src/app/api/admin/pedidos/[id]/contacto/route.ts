@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireOperatorPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { contactoDe, estadoContacto, marcarContactado } from "@/lib/pedidos-contacto-repo"
 
 // Seguimiento de contacto de un pedido pendiente (change `sucursales-igz-mdp`, rebanada B).
@@ -17,7 +17,7 @@ const fail = (status: number, code: string, error: string) =>
   Response.json({ error, code }, { status, headers: NO_STORE })
 
 export async function GET(req: Request, { params }: IdParams) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
   const { id } = await params
   try {
@@ -38,7 +38,7 @@ export async function GET(req: Request, { params }: IdParams) {
 }
 
 export async function POST(req: Request, { params }: IdParams) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
   const { id } = await params
   try {

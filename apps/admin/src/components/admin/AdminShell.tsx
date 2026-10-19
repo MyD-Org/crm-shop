@@ -33,12 +33,12 @@ interface AdminShellProps {
 
 // Contadores de "novedades" del sidebar (GET /api/admin/pending-counts): items nuevos desde
 // la última visita a cada sección (modelo last-visit en localStorage, por dispositivo).
-// `comprobantes` viene en null para operadores: la ruta no lo expone a ese rol y la UI lo
+// `comprobantes` y `pedidos` vienen en null para operadores: la ruta no lo expone a ese rol y la UI lo
 // trata como "sin badge".
 interface PendingCounts {
   inbox: number
   comprobantes: number | null
-  pedidos: number
+  pedidos: number | null
   /** No leídos de las casillas de correo a las que tiene acceso (0 con el flag apagado). Va en la solapa de Mensajes. */
   correo?: number
 }
@@ -167,12 +167,10 @@ function roleLabel(role: AdminRole): string {
 //   Las entradas van ya ordenadas por grupo: SideNav no reordena.
 const NAV = [
   { href: "/admin/inbox", label: "Mensajes", group: "Operación", icon: <MessageSquare size={16} strokeWidth={1.6} />, badge: "inbox" as const },
-  // Sin `minRole`: los pedidos del Shop los ve y los mueve también el operador (operator es el piso).
-  { href: "/admin/pedidos", label: "Pedidos", group: "Operación", icon: <ShoppingBag size={16} strokeWidth={1.6} />, badge: "pedidos" as const },
+  { href: "/admin/pedidos", label: "Pedidos", group: "Operación", icon: <ShoppingBag size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "pedidos" as const },
   { href: "/admin/comprobantes", label: "Comprobantes", group: "Operación", icon: <Receipt size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "comprobantes" as const },
   { href: "/admin/catalogo", label: "Catálogo", group: "Datos", icon: <Package size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  // Sin `minRole`: el listado de usuarios de la tienda es de sólo lectura y lo ve el operador.
-  { href: "/admin/clientes-tienda", label: "Clientes de la tienda", group: "Datos", icon: <UserRound size={16} strokeWidth={1.6} /> },
+  { href: "/admin/clientes-tienda", label: "Clientes de la tienda", group: "Datos", icon: <UserRound size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/sucursales", label: "Sucursales", group: "Datos", icon: <Store size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/envios", label: "Envíos", group: "Datos", icon: <Truck size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/cuotas", label: "Pagos y cuotas", group: "Datos", icon: <CreditCard size={16} strokeWidth={1.6} />, minRole: "admin" as const },

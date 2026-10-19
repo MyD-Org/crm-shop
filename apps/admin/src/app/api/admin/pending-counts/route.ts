@@ -22,7 +22,7 @@ import { roleRank } from "@/lib/roles"
 //   - comprobantes: payment_receipts pending con submittedAt > since (o todos sin since).
 //     "Pendiente" deja de contar al visitar la sección aunque el admin ya lo haya abierto.
 //   - pedidos: pedidos del Shop sin confirmar (estado pendiente) con createdAt > since (o todos
-//     sin since). Lo ve cualquier rol: el operador también confirma pedidos.
+//     sin since). Solo admin+ (el operador no ve Pedidos).
 //   - parámetros: `?since=` aplica a TODAS (atajo), y `sinceInbox` / `sinceComprobantes` /
 //     `sincePedidos` filtran por sección (lo que manda el cliente: cada sección tiene su propio last-visit).
 //     Inválido o ausente = sin filtro (primer uso: backlog completo, razonable).
@@ -133,7 +133,7 @@ export async function GET(req: Request) {
 
   const esAdmin = roleRank(guarded.user.role) >= roleRank("admin")
   return Response.json(
-    { inbox, comprobantes: esAdmin ? comprobantes : null, pedidos, correo },
+    { inbox, comprobantes: esAdmin ? comprobantes : null, pedidos: esAdmin ? pedidos : null, correo },
     { headers: { "Cache-Control": "private, no-store" } },
   )
 }

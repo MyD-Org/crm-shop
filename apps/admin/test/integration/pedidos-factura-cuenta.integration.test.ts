@@ -157,9 +157,11 @@ describe("cuenta que factura: la calculada", () => {
     expect(dto.cruzada).toBe(false)
   })
 
-  it("operator puede ver la cuenta; sin pedido: 404", async () => {
-    login(operatorId, "operator", "Ope Rador")
+  it("operator no ve la cuenta (404); admin sin pedido: 404", async () => {
     const p = await pedido({ sucursal: "mdp" })
+    login(operatorId, "operator", "Ope Rador")
+    expect((await cuentaDto(p.id)).status).toBe(404)
+    login(adminId)
     expect((await cuentaDto(p.id)).status).toBe(200)
     expect((await cuentaDto("11111111-1111-4111-8111-111111111111")).status).toBe(404)
   })

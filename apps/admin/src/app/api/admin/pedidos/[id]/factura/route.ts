@@ -4,7 +4,7 @@ import {
   getFacturaPorId,
   type AlegraFacturaResumen,
 } from "@/lib/alegra"
-import { adminNotFoundResponse, requireOperatorPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { nombreDocumentoAlegra, resolverFactura, validarFactura, type MotivoFacturaInvalida } from "@/lib/factura-vincular"
 import { enviarFacturaPedido, logAvisoFactura, type AvisoFactura } from "@/lib/pedido-factura-aviso"
 import {
@@ -121,7 +121,7 @@ function respuestaResultado(result: FacturaResult, incluirCosto: boolean, aviso?
 }
 
 export async function GET(req: Request, { params }: IdParams) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
 
   const numero = (new URL(req.url).searchParams.get("numero") ?? "").trim()
@@ -172,7 +172,7 @@ export async function GET(req: Request, { params }: IdParams) {
 }
 
 export async function POST(req: Request, { params }: IdParams) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
 
   // Del body se lee SÓLO `alegraId`. Actor y tenant salen del guard.
@@ -249,7 +249,7 @@ export async function POST(req: Request, { params }: IdParams) {
 }
 
 export async function DELETE(req: Request, { params }: IdParams) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
 
   const esperada = (new URL(req.url).searchParams.get("alegraId") ?? "").trim() || null

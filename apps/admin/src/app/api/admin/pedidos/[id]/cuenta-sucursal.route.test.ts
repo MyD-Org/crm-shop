@@ -19,7 +19,6 @@ const vincularRemito = vi.fn()
 
 vi.mock("@/lib/admin-route-guard", () => ({
   adminNotFoundResponse: () => new Response(null, { status: 404 }),
-  requireOperatorPlus: async () => ({ ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } }),
   requireAdminPlus: async () => ({ ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } }),
 }))
 vi.mock("@/lib/alegra", () => ({

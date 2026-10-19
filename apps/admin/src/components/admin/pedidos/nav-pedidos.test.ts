@@ -3,8 +3,7 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
 // Test a nivel FUENTE (esta app no tiene jsdom y `NAV` no se exporta): fija que la entrada
-// "Pedidos" del sidebar exista y que NO declare `minRole` ni `flag`, que es lo que la hace
-// visible para el operador (ADM-1). Si alguien le agrega `minRole: "admin"`, esto se rompe.
+// "Pedidos" del sidebar exista, solo para admin+ (el operador no la ve) y sin `flag`.
 const fuente = readFileSync(fileURLToPath(new URL("../AdminShell.tsx", import.meta.url)), "utf8")
 const lineas = fuente.split("\n")
 
@@ -16,8 +15,8 @@ describe("AdminShell: entrada Pedidos", () => {
     expect(entrada[0]).toContain('label: "Pedidos"')
   })
 
-  it("no tiene rol mínimo ni feature flag: la ve el operador", () => {
-    expect(entrada[0]).not.toContain("minRole")
+  it("es solo admin+ y sin feature flag: el operador no la ve", () => {
+    expect(entrada[0]).toContain('minRole: "admin"')
     expect(entrada[0]).not.toContain("flag")
   })
 

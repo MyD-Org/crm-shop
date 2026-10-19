@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireOperatorPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { getAdmin, toAdminDtoConPedido } from "@/lib/payment-receipts"
 
 // GET /api/admin/pedidos/[id]/comprobantes/[receiptId] — detalle de un comprobante visto desde el
@@ -13,7 +13,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 type Params = { params: Promise<{ id: string; receiptId: string }> }
 
 export async function GET(req: Request, { params }: Params) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
 
   const { id, receiptId } = await params

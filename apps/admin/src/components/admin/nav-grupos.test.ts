@@ -31,9 +31,9 @@ describe("AdminShell: menú por grupos", () => {
     }
   })
 
-  it("el operador sólo ve Operación y Clientes de la tienda", () => {
+  it("el operador sólo ve Mensajes", () => {
     const sinRol = entradas.filter((l) => !l.includes("minRole"))
-    expect(sinRol.map(grupoDe)).toEqual(["Operación", "Operación", "Datos"])
-    expect(sinRol[2]).toContain('"/admin/clientes-tienda"')
+    expect(sinRol).toHaveLength(1)
+    expect(sinRol[0]).toContain('"/admin/inbox"')
   })
 })

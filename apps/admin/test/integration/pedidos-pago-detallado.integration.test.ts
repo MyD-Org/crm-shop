@@ -68,9 +68,9 @@ describe("admin: registrar pago con monto, fecha, referencia y comprobante", () 
     await truncateAll()
     await seedTenant(TENANT_A)
     await seedTenant(TENANT_B)
-    operatorId = await seedOperator(TENANT_A, { role: "operator", name: "Ope Rador", email: "ope@example.com" })
+    operatorId = await seedOperator(TENANT_A, { role: "admin", name: "Ope Rador", email: "ope@example.com" })
     invalidateTenantRegistry()
-    session = { userId: operatorId, role: "operator", tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
+    session = { userId: operatorId, role: "admin", tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
     r2Holder.client = new FakeR2()
   })
 
@@ -222,7 +222,7 @@ describe("admin: registrar pago con monto, fecha, referencia y comprobante", () 
     expect(((await sinCuenta.json()) as PedidoDetalleDto).cuentaPago).toBeNull()
   })
 
-  describe("GET /api/admin/pedidos/[id]/comprobantes/[receiptId]/file (un operador ve el comprobante de SU pedido)", () => {
+  describe("GET /api/admin/pedidos/[id]/comprobantes/[receiptId]/file (un admin ve el comprobante de SU pedido)", () => {
     const fileReq = (p: string, r: string) =>
       archivoRoute(req(`/api/admin/pedidos/${p}/comprobantes/${r}/file`, "GET"), { params: Promise.resolve({ id: p, receiptId: r }) })
 

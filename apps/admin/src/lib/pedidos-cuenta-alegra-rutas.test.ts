@@ -58,7 +58,6 @@ const guard = { ok: true, tenantId: TENANT, user: { id: "u1", name: "Operador", 
 
 vi.mock("@/lib/admin-route-guard", () => ({
   requireAdminPlus: async () => guard,
-  requireOperatorPlus: async () => guard,
   adminNotFoundResponse: () => Response.json({ error: "not found" }, { status: 404 }),
 }))
 vi.mock("@/lib/alegra", async (importOriginal) => ({

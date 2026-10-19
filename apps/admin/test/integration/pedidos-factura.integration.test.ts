@@ -91,7 +91,7 @@ function fakeFetch(input: unknown): Promise<Response> {
 }
 
 function login(userId: string) {
-  session = { userId, role: "operator", tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
+  session = { userId, role: "admin", tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
 }
 
 const req = (path: string, init: { method?: string; body?: unknown; host?: string } = {}) => {
@@ -139,8 +139,8 @@ describe("admin: vincular factura de Alegra a un pedido", () => {
     await truncateAll()
     await seedTenant(TENANT_A)
     await seedTenant(TENANT_B)
-    operatorA = await seedOperator(TENANT_A, { role: "operator", name: "Ope Rador", email: "ope@example.com" })
-    await seedOperator(TENANT_B, { role: "operator", name: "Ope Bee", email: "ope.b@example.com" })
+    operatorA = await seedOperator(TENANT_A, { role: "admin", name: "Ope Rador", email: "ope@example.com" })
+    await seedOperator(TENANT_B, { role: "admin", name: "Ope Bee", email: "ope.b@example.com" })
     invalidateTenantRegistry()
     login(operatorA)
   })

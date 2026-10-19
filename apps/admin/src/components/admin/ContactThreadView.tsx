@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation"
 import { channelLabel, type InboxContact, type ContactMessage, type ContactMessagesPage } from "@/lib/inbox-api"
 import { AiAssistPanel } from "./AiAssistPanel"
 import { subscribeAssistOpen, getAssistOpen, setAssistOpen } from "@/lib/assist-open"
-import { MessageAttachments, stripAttachmentMarker } from "./MessageAttachments"
+import { MessageAttachments, bubbleText } from "./MessageAttachments"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
 
 const PAGE_SIZE = 30
@@ -546,7 +546,7 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
           return (
             <div key={msg.client_key ?? msg.id} className="flex flex-col gap-3">
               {newSession && <SessionDivider date={msg.created_at} />}
-              <MessageBubble message={msg} onRetry={handleRetry} onDismiss={handleDismiss} />
+              <MessageBubble message={msg} channelAccountId={contact.channel_account_id} onRetry={handleRetry} onDismiss={handleDismiss} />
             </div>
           )
         })}
@@ -704,8 +704,9 @@ function SessionDivider({ date }: { date: string }) {
   )
 }
 
-function MessageBubble({ message, onRetry, onDismiss }: {
+function MessageBubble({ message, channelAccountId, onRetry, onDismiss }: {
   message: ContactMessage
+  channelAccountId?: string | null
   onRetry: (m: ContactMessage) => Promise<boolean>
   onDismiss: (m: ContactMessage) => Promise<boolean>
 }) {
@@ -721,7 +722,7 @@ function MessageBubble({ message, onRetry, onDismiss }: {
   const failed = message.delivery_status === "failed" && !dismissed && !pending
   const [retrying, setRetrying] = useState(false)
   const [dismissing, setDismissing] = useState(false)
-  const bodyText = stripAttachmentMarker(message.text, !!message.attachments?.length)
+  const bodyText = bubbleText(message.text, message.attachments)
 
   async function retry() {
     setRetrying(true)
@@ -741,7 +742,7 @@ function MessageBubble({ message, onRetry, onDismiss }: {
             {isHuman ? "Operador" : isBot ? "Bot" : "Asistente"}
           </p>
         )}
-        <MessageAttachments attachments={message.attachments} />
+        <MessageAttachments attachments={message.attachments} channelAccountId={channelAccountId} />
         {/* Sin caption, el adjunto se explica solo: una burbuja vacía debajo del
             reproductor o de la foto sería ruido. */}
         {bodyText && (

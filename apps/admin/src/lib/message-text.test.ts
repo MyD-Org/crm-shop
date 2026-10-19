@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { stripAttachmentMarker, previewText } from "./message-text"
+import { bubbleText, stripAttachmentMarker, previewText } from "./message-text"
 
 // La marca entre corchetes existe para el BOT (que no puede ver el archivo). Al operador,
 // que tiene el adjunto a la vista, solo le sirve el caption. Pero es texto del mensaje, no
@@ -63,5 +63,18 @@ describe("previewText", () => {
   // Si mañana ai-api agrega un tipo nuevo, el preview no puede quedar en blanco.
   it("una marca desconocida cae al texto de la marca", () => {
     expect(previewText("[El cliente envió una cosa rara]")).toBe("El cliente envió una cosa rara")
+  })
+})
+
+describe("bubbleText", () => {
+  it("con contacto o ubicación no repite el resumen del bot", () => {
+    const text = "[El cliente envió un contacto]\nBruno: +54 9 223 668-0026"
+    expect(bubbleText(text, [{ id: "c", kind: "contacts", contacts: [] }])).toBe("")
+    expect(bubbleText("[El cliente envió una ubicación]\nTaller", [{ id: "l", kind: "location", location: {} }])).toBe("")
+  })
+
+  it("con un archivo deja el caption, y sin adjuntos el texto queda intacto", () => {
+    expect(bubbleText("[El cliente envió una imagen]\n¿tiene este?", [{ id: "a", kind: "image" }])).toBe("¿tiene este?")
+    expect(bubbleText("[hola]", undefined)).toBe("[hola]")
   })
 })

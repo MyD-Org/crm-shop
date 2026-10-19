@@ -5,7 +5,7 @@ import Link from "next/link"
 import { ArrowLeft, Send, CheckCheck, Bot, User } from "lucide-react"
 import { Button, Badge, Textarea } from "@myd-org/ui"
 import { useRouter } from "next/navigation"
-import { MessageAttachments, stripAttachmentMarker } from "./MessageAttachments"
+import { MessageAttachments, bubbleText } from "./MessageAttachments"
 import type { InboxConversation, InboxMessage } from "@/lib/inbox-api"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
 
@@ -204,7 +204,7 @@ function MessageBubble({ message }: { message: InboxMessage }) {
   const isOutbound = message.role === "assistant"
   const isHuman = message.source === "human"
   const isBot = message.source === "bot"
-  const bodyText = stripAttachmentMarker(message.text, !!message.attachments?.length)
+  const bodyText = bubbleText(message.text, message.attachments)
 
   return (
     <div className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>

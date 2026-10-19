@@ -44,7 +44,7 @@ export interface InboxConversation {
 // guardar. Y que exista no garantiza que el archivo esté: el bucket borra los adjuntos
 // pesados a los 30 días, y ahí la URL se firma igual pero devuelve 404. Es un estado
 // esperado, no un error — por eso el render tiene que tolerar que la carga falle.
-export interface MessageAttachment {
+export interface FileMessageAttachment {
   /** Identidad estable del adjunto. `url` cambia en cada request (se firma de nuevo), así
    *  que es lo único con lo que el cliente puede saber si es el MISMO archivo. */
   id: string
@@ -55,6 +55,36 @@ export interface MessageAttachment {
   /** null cuando ai-api no pudo firmar (storage sin configurar). */
   url: string | null
 }
+
+// Contacto compartido por WhatsApp. Sin archivo: los datos vienen en el propio adjunto.
+// `waId` es el número tal como lo identifica WhatsApp (solo dígitos): con eso se ubica la
+// conversación en el inbox.
+export interface SharedContact {
+  name?: string
+  company?: string
+  phones: Array<{ phone?: string; waId?: string }>
+}
+
+export interface SharedLocation {
+  latitude: number
+  longitude: number
+  name?: string
+  address?: string
+}
+
+export interface ContactsMessageAttachment {
+  id: string
+  kind: "contacts"
+  contacts: SharedContact[]
+}
+
+export interface LocationMessageAttachment {
+  id: string
+  kind: "location"
+  location: SharedLocation
+}
+
+export type MessageAttachment = FileMessageAttachment | ContactsMessageAttachment | LocationMessageAttachment
 
 export interface InboxMessage {
   id: string

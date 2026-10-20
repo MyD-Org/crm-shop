@@ -209,8 +209,11 @@ export async function listContacts(
   aiApiUrl: string,
   aiTenantId: string,
   scope: "active" | "all" = "active",
+  /** Búsqueda por nombre o teléfono: ai-api la hace sobre TODOS los contactos (ignora scope). */
+  q?: string,
 ): Promise<InboxContact[]> {
-  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/contacts?scope=${scope}`)
+  const qs = q ? `&q=${encodeURIComponent(q)}` : ""
+  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/contacts?scope=${scope}${qs}`)
   if (!res.ok) throw new Error(`ai-api error ${res.status}`)
   return res.json()
 }

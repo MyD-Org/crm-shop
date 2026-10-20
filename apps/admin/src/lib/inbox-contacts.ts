@@ -19,9 +19,10 @@ export async function listEnrichedContacts(
   // Quien consulta. Si está restringido por canal (lib/canal-acceso.ts) solo ve los contactos de
   // sus canales; sin actor, o irrestricto, el resultado es idéntico al de siempre.
   actor?: ActorCanales,
+  q?: string,
 ): Promise<InboxContact[]> {
   const [contacts, conversations, assignments] = await Promise.all([
-    listContacts(tenant.aiApiUrl, tenant.aiTenantId, scope),
+    listContacts(tenant.aiApiUrl, tenant.aiTenantId, scope, q),
     convs ?? listConversations(tenant.aiApiUrl, tenant.aiTenantId).catch(() => []),
     knownAssignments ?? getAssignments(tenant.id),
   ])

@@ -17,6 +17,8 @@ export async function GET(req: Request) {
 
   const params = new URL(req.url).searchParams
   const scope = params.get("scope") === "all" ? "all" : "active"
+  // Buscador del inbox y tarjeta de contacto: nombre o teléfono, sobre todos los contactos.
+  const q = params.get("q")?.trim().slice(0, 100) || undefined
   const tenantRef = { id: tenant.id, aiApiUrl: tenant.aiApiUrl, aiTenantId: tenant.aiTenantId }
 
   // Reconciliación de la cola (adoptar asignaciones viejas + repartir pendientes al operador
@@ -34,6 +36,6 @@ export async function GET(req: Request) {
     id: guard.user.id,
     role: guard.user.role,
     canalesPermitidos: guard.user.canalesPermitidos,
-  })
+  }, q)
   return NextResponse.json(enriched)
 }

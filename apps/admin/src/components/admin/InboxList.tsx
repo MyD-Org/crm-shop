@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { MessageSquare, Clock, Bot, User, MessageCircleWarning, AlertTriangle } from "lucide-react"
-import { Tabs, Badge, Checkbox, EmptyState, Tooltip } from "@myd-org/ui"
+import { Tabs, Badge, Checkbox, EmptyState, SearchInput, Tooltip } from "@myd-org/ui"
 import { contactRowKey, contactThreadHref, type InboxContact } from "@/lib/inbox-api"
 import { previewText } from "@/lib/message-text"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
@@ -65,6 +65,14 @@ export function InboxList({
   const [botEnabled, setBotEnabled] = useState(initialBotEnabled)
   const [tab, setTab] = useState<Tab>("active")
   const [soloMias, setSoloMias] = useState(false)
+  // Buscador por nombre o teléfono: `busqueda` es lo tipeado; `consulta`, lo que se pide a la
+  // API (con un respiro para no disparar un fetch por tecla). Busca en todos los contactos.
+  const [busqueda, setBusqueda] = useState("")
+  const [consulta, setConsulta] = useState("")
+  useEffect(() => {
+    const t = setTimeout(() => setConsulta(busqueda.trim()), 300)
+    return () => clearTimeout(t)
+  }, [busqueda])
   const [canalNombres, setCanalNombres] = useState(initialCanalNombres)
   // Canal elegido: se lee de localStorage recién tras montar (el SSR no lo tiene) y se
   // guarda por navegador. Sin storage arranca en "Todas".
@@ -104,16 +112,20 @@ export function InboxList({
 
   // La solapa vigente, para descartar la respuesta de un fetch que quedó en vuelo cuando el
   // operador ya cambió de solapa (antes lo hacía el flag `cancelled` del cleanup del effect).
+  // Lo mismo con la búsqueda: una respuesta vieja no pisa la de la consulta actual.
   const tabRef = useRef(tab)
+  const consultaRef = useRef(consulta)
   useEffect(() => {
     tabRef.current = tab
-  }, [tab])
+    consultaRef.current = consulta
+  }, [tab, consulta])
 
   // El fetch depende solo de la solapa principal: "Activas" trae solo ventana abierta;
   // "Históricas" trae todos. "Todas / Mis conversaciones" es una sub-solapa que filtra
   // esa misma lista en el cliente, no dispara otro fetch.
   const load = useCallback(async () => {
     const fetchScope = tab === "active" ? "active" : "all"
+    const q = consulta ? `&q=${encodeURIComponent(consulta)}` : ""
     // Leer va cada 10s, pero RECONCILIAR (que escribe en la DB) solo cada 60s: repartir la
     // cola en cada pasada era carga constante sobre Neon, multiplicada por pestaña abierta.
     const now = Date.now()
@@ -133,12 +145,13 @@ export function InboxList({
     // el toggle sin recargar. Las dos llamadas son independientes: en paralelo.
     const [res, bs] = await Promise.all([
       fetch(
-        `/api/admin/inbox/contacts?scope=${fetchScope}${shouldReconcile ? "&reconcile=1" : ""}`,
+        `/api/admin/inbox/contacts?scope=${fetchScope}${q}${shouldReconcile ? "&reconcile=1" : ""}`,
         { cache: "no-store" },
       ).catch(() => null),
       fetch("/api/admin/inbox/bot-status", { cache: "no-store" }).catch(() => null),
     ])
-    if (res?.ok && tabRef.current === tab) {
+    const vigente = () => tabRef.current === tab && consultaRef.current === consulta
+    if (res?.ok && vigente()) {
       const next: InboxContact[] = await res.json()
       setContacts(next)
       // Está parado en la sección (load exitoso): marca la visita. El badge del sidebar se
@@ -161,10 +174,10 @@ export function InboxList({
         forceReconcile.current = true
       }
     }
-    if (bs?.ok && tabRef.current === tab) setBotEnabled((await bs.json()).botEnabled)
-  }, [tab])
+    if (bs?.ok && vigente()) setBotEnabled((await bs.json()).botEnabled)
+  }, [tab, consulta])
 
-  // Carga inmediata al montar y al cambiar de solapa.
+  // Carga inmediata al montar, al cambiar de solapa y al cambiar la búsqueda.
   useEffect(() => {
     void load()
   }, [load])
@@ -265,7 +278,24 @@ export function InboxList({
       ) : (
       <>
 
+      <SearchInput
+        value={busqueda}
+        onValueChange={setBusqueda}
+        onClear={() => {
+          setBusqueda("")
+          setConsulta("")
+        }}
+        clearLabel="Borrar búsqueda"
+        placeholder="Buscar por nombre o teléfono"
+        aria-label="Buscar contacto por nombre o teléfono"
+      />
+
       <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
+        {consulta ? (
+          <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
+            Resultados en todos los contactos
+          </p>
+        ) : (
         <Tabs
           variant="pill"
           ariaLabel="Estado"
@@ -288,6 +318,7 @@ export function InboxList({
             { value: "history", label: "Históricas" },
           ]}
         />
+        )}
         <label htmlFor="inbox-solo-mias" className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: "var(--ink)" }}>
           <Checkbox id="inbox-solo-mias" checked={soloMias} onCheckedChange={setSoloMias} />
           Solo mis conversaciones
@@ -305,7 +336,8 @@ export function InboxList({
         <EmptyState
           icon={<MessageSquare size={28} strokeWidth={1.2} />}
           title={
-            soloMias ? "No tiene contactos asignados"
+            consulta ? "No se encontraron contactos"
+              : soloMias ? "No tiene contactos asignados"
               : tab === "history" ? "No hay contactos en el historial"
                 : "No hay conversaciones activas"
           }

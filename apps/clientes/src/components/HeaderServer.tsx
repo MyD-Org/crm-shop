@@ -24,13 +24,15 @@ import { UbicacionHeader } from "./ubicacion/UbicacionHeader"
 export async function Header() {
   // Badge administrable del nav (config de home, mismo contrato que el resto
   // del contenido). Cacheado: el layout ya lo lee para el anuncio.
-  const { navBadge: badge, visibilidad } = await getContenidoHome()
+  // "Marcas ▾" (spec 2026-10-20-marcas-tienda-oficial §8): cacheado con el tag de la home; si no
+  // hay páginas publicadas (o la lectura falla) la barra queda como siempre. Las dos lecturas en
+  // paralelo: una caché esperada DESPUÉS de otra llega tarde al shell y Next la toma como dinámica
+  // ("Uncached data accessed outside of <Suspense>").
+  const [{ navBadge: badge, visibilidad }, paginasMarca] = await Promise.all([getContenidoHome(), getPaginasMarca()])
   const vBadge = visibilidadDe(visibilidad, "navBadge")
   const navBadge = vBadge === "nunca" ? null : badge
   const navBadgeVisibleOn = vBadge === "mobile" || vBadge === "desktop" ? vBadge : undefined
-  // "Marcas ▾" (spec 2026-10-20-marcas-tienda-oficial §8): cacheado con el tag de la home; si no
-  // hay páginas publicadas (o la lectura falla) la barra queda como siempre.
-  const menuMarcas: ItemMenuMarca[] = itemsMenuMarcas(await getPaginasMarca())
+  const menuMarcas: ItemMenuMarca[] = itemsMenuMarcas(paginasMarca)
 
   const pendiente = {
     cuenta: { estado: "pendiente" } as const,

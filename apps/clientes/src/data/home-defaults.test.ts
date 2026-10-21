@@ -4,6 +4,7 @@ import {
   SECCIONES_HOME,
   erroresSeccion,
   combinarContenidoHome,
+  defaultsHomeGenerica,
   esHref,
   esImagen,
   aVisibleOn,
@@ -549,5 +550,30 @@ describe("datos legales (paginas-legales-shop)", () => {
     const legal = { key: KEY_LEGAL, payload: { razonSocial: "Comercio Ejemplo SA", cuit: "20-12345678-6" } };
     expect(combinarContenidoHome([legal])).toEqual(combinarContenidoHome([]));
     expect((SECCIONES_HOME as readonly string[]).includes(KEY_LEGAL)).toBe(false);
+  });
+});
+
+describe("tiendaOficial (spec 2026-10-20-marcas-tienda-oficial §9)", () => {
+  it("va justo después de destacados", () => {
+    expect(SECCIONES_HOME.indexOf("tiendaOficial")).toBe(SECCIONES_HOME.indexOf("destacados") + 1);
+  });
+
+  it("valida slug, título opcional, botón y skus", () => {
+    expect(erroresSeccion("tiendaOficial", { slug: "led-premium", cta: "Entrar", skus: [] })).toEqual([]);
+    expect(erroresSeccion("tiendaOficial", { slug: "led-premium", titulo: "Hola", cta: "Entrar", skus: ["A1"] })).toEqual([]);
+    expect(erroresSeccion("tiendaOficial", { slug: "led-premium", cta: "Entrar", skus: "x" }).length).toBeGreaterThan(0);
+    expect(erroresSeccion("tiendaOficial", { slug: "Mal Slug", cta: "Entrar", skus: [] }).length).toBeGreaterThan(0);
+    expect(erroresSeccion("tiendaOficial", { slug: "led-premium", skus: [] }).length).toBeGreaterThan(0);
+  });
+
+  it("la tienda genérica lo arranca oculto y sin marca", () => {
+    const generica = defaultsHomeGenerica({ nombre: "Otra tienda" });
+    expect(generica.visibilidad.tiendaOficial).toBe("nunca");
+    expect(generica.tiendaOficial.slug).toBeUndefined();
+  });
+
+  it("una fila guardada reemplaza al default", () => {
+    const home = combinarContenidoHome([{ key: "tiendaOficial", payload: { slug: "acme", cta: "Ir", skus: ["Z"] } }]);
+    expect(home.tiendaOficial).toEqual({ slug: "acme", cta: "Ir", skus: ["Z"] });
   });
 });

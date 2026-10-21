@@ -4,7 +4,7 @@ import { ChipRow, Pagination, ProductCardSkeleton } from "@myd-org/ui";
 import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
 import { linkNext } from "@/components/catalogo/link-next";
-import { destacadosHome, paginaCatalogoPublica } from "@/lib/catalogo-publico";
+import { destacadosHome, paginaMarcaPublica } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import type { ElegidosMarca, PaginaMarca } from "@/lib/marcas/pagina-marca";
 import { filtrosDeMarca, hrefCatalogoCompleto, hrefLinea, hrefPaginaMarca } from "@/lib/marcas/vista-marca";
@@ -34,7 +34,7 @@ async function contexto() {
 export async function totalProductosMarca(pagina: PaginaMarca): Promise<number | null> {
   try {
     const ctx = await contexto();
-    return (await paginaCatalogoPublica({ ...ctx, filtros: filtrosDeMarca(pagina), orden: "destacados", pagina: 1 })).total;
+    return (await paginaMarcaPublica({ ...ctx, filtros: filtrosDeMarca(pagina), orden: "destacados", pagina: 1 })).total;
   } catch (err) {
     console.error("[marcas] no se pudo contar los productos:", err);
     return null;
@@ -86,7 +86,7 @@ export async function ProductosMarcaBloque({
   titulo?: string;
   estado: { pagina: number; linea?: string };
 }) {
-  const resultado = await paginaCatalogoPublica({
+  const resultado = await paginaMarcaPublica({
     ...(await contexto()),
     filtros: filtrosDeMarca(pagina, estado.linea),
     orden: "destacados",

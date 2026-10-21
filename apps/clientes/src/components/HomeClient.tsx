@@ -153,6 +153,7 @@ function TituloSeccion({ textos, linkTodos }: { textos: TextosSeccion; linkTodos
 export function HomeClient({
   contenido,
   destacados,
+  tiendaOficial = null,
   busquedaAsistida = null,
 }: {
   contenido: HomeContent;
@@ -161,6 +162,11 @@ export function HomeClient({
    * (precio, stock, cuotas y flags). Lo arma app/page.tsx.
    */
   destacados: ReactNode;
+  /**
+   * Bloque "Tienda oficial" (página de marca destacada): hueco por request con su `<Suspense>`,
+   * armado en app/page.tsx. `null` si la sección no tiene una página publicada para mostrar.
+   */
+  tiendaOficial?: ReactNode;
   /**
    * "Cuéntenos qué necesita" (flag `busqueda-ia`): hueco por request con su
    * `<Suspense fallback={null}>`, armado en app/page.tsx. Va debajo de la
@@ -266,6 +272,13 @@ export function HomeClient({
               <TituloSeccion textos={secDestacados} linkTodos={secDestacados.linkTodos} />
               {destacados}
             </section>
+          </SeccionEditable>
+        </Reveal>
+
+        {/* Tienda oficial: una página de marca destacada (spec 2026-10-20-marcas-tienda-oficial §9). */}
+        <Reveal>
+          <SeccionEditable seccion="tiendaOficial" visibilidad={vis("tiendaOficial")} botonTop="top-[calc(clamp(56px,7vw,96px)+0.5rem)]">
+            {tiendaOficial}
           </SeccionEditable>
         </Reveal>
 

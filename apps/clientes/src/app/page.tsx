@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { HomeClient } from "@/components/HomeClient";
 import { DestacadosHome, DestacadosHomeSkeleton } from "@/components/home/DestacadosHome";
 import { EdicionSiAdmin } from "@/components/home/EdicionSiAdmin";
+import { TiendaOficialHome } from "@/components/home/TiendaOficialHome";
 import { CuentenosSiBusquedaIa } from "@/components/home/CuentenosQueNecesita";
 import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
 import { getContenidoHome } from "@/lib/home-datos";
@@ -45,6 +46,11 @@ export default async function Home() {
               cantidad={cantidad}
               skus={skus}
             />
+          </Suspense>
+        }
+        tiendaOficial={
+          <Suspense fallback={null}>
+            <TiendaOficialHome contenido={contenido.tiendaOficial} />
           </Suspense>
         }
         busquedaAsistida={

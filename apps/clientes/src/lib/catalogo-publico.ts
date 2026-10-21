@@ -52,6 +52,7 @@ import {
   type Faceta,
   type Facetas,
   type FiltrosCatalogo,
+  type FiltrosSinTexto,
   type PaginaCatalogo,
 } from "./catalog";
 import { conRespaldoSinCache } from "./cache-respaldo";
@@ -147,6 +148,15 @@ export function paginaCatalogoPublica(args: ArgsPaginaPublica): Promise<PaginaCa
   return filtrosCacheables(args.filtros)
     ? conRespaldoSinCache("catalogo-pagina", () => paginaCacheada(args), directa)
     : directa();
+}
+
+/**
+ * Una página del catálogo para una página de marca (`/marcas/<slug>`): los mismos filtros y caché
+ * que `paginaCatalogoPublica`, pero SIN texto (el tipo no lo admite). El texto de una búsqueda lo
+ * arma sólo el motor (`busqueda-v2/motor.ts`); una página de marca nunca busca.
+ */
+export function paginaMarcaPublica(args: Omit<ArgsPaginaPublica, "filtros"> & { filtros: FiltrosSinTexto }): Promise<PaginaCatalogo> {
+  return paginaCatalogoPublica(args);
 }
 
 function leerFacetas(

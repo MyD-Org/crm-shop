@@ -8,6 +8,7 @@ import { EditorHero } from "./EditorHero";
 import { EditorMarquee } from "./EditorMarquee";
 import { EditorNavBadge } from "./EditorNavBadge";
 import { EditorServicios } from "./EditorServicios";
+import { EditorTiendaOficial } from "./EditorTiendaOficial";
 import { EditorTiles } from "./EditorTiles";
 import { EditorWhatsapp } from "./EditorWhatsapp";
 
@@ -28,6 +29,7 @@ export const EDITORES: Record<SeccionHome, ComponentType<EditorProps<any>>> = {
   marquee: EditorMarquee,
   ambientes: EditorTiles,
   destacados: EditorDestacados,
+  tiendaOficial: EditorTiendaOficial,
   bannerDeco: EditorBannerDeco,
   decoGrid: EditorTiles,
   servicios: EditorServicios,

@@ -120,12 +120,27 @@ export type BusquedaAsistidaContent = TextosSeccion & {
   ejemplos: ItemEjemplo[];
 };
 
+/**
+ * Bloque "Tienda oficial" de la home (spec 2026-10-20-marcas-tienda-oficial §9): destaca una
+ * página de marca de nivel "oficial". Logo, nombre y bajada salen de esa página; si no existe o
+ * no está publicada, el bloque no se dibuja. `slug` ausente: no destaca ninguna.
+ */
+export type TiendaOficialContent = {
+  slug?: string;
+  /** Vacío: la bajada de la página de marca. */
+  titulo?: string;
+  cta: string;
+  /** Productos que se muestran (hasta 3); el resto se completa con la marca. */
+  skus: string[];
+};
+
 export type HomeContent = {
   anuncio: { texto?: string };
   hero: HeroContent;
   marquee: MarqueeContent;
   ambientes: SeccionTilesContent;
   destacados: DestacadosContent;
+  tiendaOficial: TiendaOficialContent;
   bannerDeco: BannerDecoContent;
   decoGrid: DecoGridContent;
   servicios: ServiciosContent;
@@ -154,6 +169,7 @@ export const SECCIONES_HOME = [
   "marquee",
   "ambientes",
   "destacados",
+  "tiendaOficial",
   "bannerDeco",
   "decoGrid",
   "servicios",
@@ -222,6 +238,11 @@ export const DEFAULTS_HOME: HomeContent = {
       "/images/prod-spot-warm.webp",
       "/images/prod-string-warm.webp",
     ],
+  },
+  tiendaOficial: {
+    slug: "led-premium",
+    cta: "Entrar a la tienda oficial",
+    skus: [],
   },
   bannerDeco: {
     eyebrow: "Línea decorativa · Nuevo",
@@ -331,6 +352,7 @@ export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent 
       ],
     },
     navBadge: null,
+    tiendaOficial: { cta: DEFAULTS_HOME.tiendaOficial.cta, skus: [] },
     whatsapp: DEFAULTS_HOME.whatsapp,
     busquedaAsistida: DEFAULTS_HOME.busquedaAsistida,
     visibilidad: {
@@ -339,6 +361,7 @@ export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent 
       ambientes: "nunca",
       bannerDeco: "nunca",
       decoGrid: "nunca",
+      tiendaOficial: "nunca",
     },
   };
 }
@@ -563,6 +586,14 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       if (!esVisibilidadTextos(o.visibilidadTextos, CAMPOS_WHATSAPP))
         errores.push(`visibilidadTextos debe indicar desktop, mobile o nunca para ${CAMPOS_WHATSAPP.join(", ")}`);
       if (!esHref(o.href)) errores.push("href debe ser una ruta interna (/) o una URL https");
+      break;
+    case "tiendaOficial":
+      if (o.slug !== undefined && (typeof o.slug !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(o.slug)))
+        errores.push("slug debe ser la dirección de una página de marca (minúsculas, números y guiones)");
+      texto("titulo", true);
+      texto("cta");
+      lista("skus", esTexto, "códigos de producto");
+      if (Array.isArray(o.skus) && o.skus.length > 3) errores.push("skus admite hasta 3 productos");
       break;
     case "busquedaAsistida":
       texto("eyebrow", true);

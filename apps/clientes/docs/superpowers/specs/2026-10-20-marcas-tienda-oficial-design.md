@@ -63,6 +63,7 @@ Decisiones tomadas en el brainstorming:
 | Relevancia en la home | **Bloque oscuro "Tienda oficial"** con productos y botón de entrada |
 | Estructura de la Tienda oficial | La del boceto: hero → confianza → líneas → más elegidos → componentes → obras → cotización de obra → todos los productos |
 | Cotización de obras grandes | **Le llega a Central Led**, que después la deriva a Led Premium |
+| Productos sin stock en las páginas de marca | **Se muestran**: la línea completa, marcados sin stock |
 | Estética | Solo la Tienda oficial usa la estética de Led Premium (negro y dorado). Las demás, la de Central |
 
 ## Goals
@@ -204,6 +205,12 @@ porque es mucho para 31 productos. _Llamada mía._
 
 - Los datos salen de `paginaCatalogoPublica` con el filtro de marca de §1, que es cacheable porque
   no lleva texto libre. Paginación de 24 (`PRODUCTOS_POR_PAGINA`).
+- **Se muestra la línea completa** (decisión de Emanuel): sin el filtro de stock por defecto del
+  catálogo (`soloStock: false`) y sin ocultar por zona. Un producto sin stock o no disponible en la
+  zona del visitante aparece igual, marcado como hace el catálogo con el filtro de stock apagado
+  ("Sin stock" o "Consultar"). Se siguen respetando `soloVisibles` y la visibilidad por sucursal del
+  overlay. Así el total ("31 productos", "Ver los N productos") es estable y la página nunca queda
+  vacía para Google.
 - **Las tarjetas son las del catálogo** (la grilla de `CatalogoProductos` o
   `TarjetaProductoCarrusel`), **no** un `ProductCard` pelado. Un `ProductCard` pelado mostraría el
   precio público a clientes con lista propia (`TarjetasPrecioCuenta`) y perdería los precios por

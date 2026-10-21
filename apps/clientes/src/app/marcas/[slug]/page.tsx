@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
 import { PaginaMarcaVista } from "@/components/marcas/PaginaMarcaVista";
+import { EdicionMarcaSiAdmin } from "@/components/marcas/edicion/EdicionMarcaSiAdmin";
 import { totalProductosMarca } from "@/components/marcas/bloques/ProductosMarca";
 import { esAdmin } from "@/lib/auth";
 import { enlaceWhatsapp } from "@/lib/contacto-pedido";
@@ -26,8 +28,9 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const [{ slug }, query, marca] = await Promise.all([params, searchParams, getMarca()]);
   const pagina = await getPaginaMarca(slug);
   if (!pagina) return {};
-  const meta = metadataMarca(pagina, marca.nombre, Object.keys(query).length > 0);
-  return pagina.publicada ? meta : { ...meta, robots: { index: false, follow: false } };
+  // Una oculta no delata nada (ni nombre ni bajada) en el <head>: para quien no es admin es un 404.
+  if (!pagina.publicada) return { robots: { index: false, follow: false } };
+  return metadataMarca(pagina, marca.nombre, Object.keys(query).length > 0);
 }
 
 export default function PaginaMarcaPage(props: Props) {
@@ -49,5 +52,12 @@ async function Contenido({ params, searchParams }: Props) {
   const cotizacion = pagina.bloques.cotizacion;
   const whatsapp = cotizacion ? enlaceWhatsapp(footer.whatsapp, cotizacion.mensaje) : null;
 
-  return <PaginaMarcaVista pagina={pagina} estado={estado} total={total} whatsapp={whatsapp} />;
+  return (
+    <ModoEdicionProvider>
+      <PaginaMarcaVista pagina={pagina} estado={estado} total={total} whatsapp={whatsapp} />
+      <Suspense fallback={null}>
+        <EdicionMarcaSiAdmin slug={pagina.slug} publicada={pagina.publicada} />
+      </Suspense>
+    </ModoEdicionProvider>
+  );
 }

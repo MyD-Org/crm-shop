@@ -425,6 +425,11 @@ interface ArgsDestacados {
   destacado?: MedioPrecio | null;
   /** Cuotas sin interés de las cards (flag `cuotas-cobro`). */
   cuotas?: MedioCuotas[] | null;
+  /**
+   * Con qué se completa después de los curados. Ausente: Iluminación (la home). Las páginas de
+   * marca pasan sus filtros (`marcasPropias`), así "Los más elegidos" no trae productos ajenos.
+   */
+  base?: FiltrosCatalogo;
 }
 
 export function destacadosHome(args: ArgsDestacados): Promise<Product[]> {
@@ -457,7 +462,7 @@ async function leerDestacados(args: ArgsDestacados): Promise<{ productos: Produc
   // Los curados se piden por código: buscarlos en una tanda del catálogo
   // dejaba afuera, sin aviso, a casi todos los productos.
   const [iluminacion, curados] = await Promise.all([
-    getPaginaCatalogo({ filtros: { categorias: [CATEGORIA_DESTACADOS] }, orden: "destacados", pagina: 1, soloVisibles, ...agrupado, disp, mediosPrecio }).catch(
+    getPaginaCatalogo({ filtros: args.base ?? { categorias: [CATEGORIA_DESTACADOS] }, orden: "destacados", pagina: 1, soloVisibles, ...agrupado, disp, mediosPrecio }).catch(
       (err: unknown): { productos: Product[] } => {
         registrar(err);
         return { productos: [] };

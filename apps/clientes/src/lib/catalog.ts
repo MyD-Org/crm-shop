@@ -1067,6 +1067,18 @@ export interface FiltrosCatalogo {
   categorias?: string[];
   marcas?: string[];
   /**
+   * Páginas de marca: valores CRUDOS de marca (`marcaPropiaSql`), sin el corte de
+   * `mostrar_marca`. Ese flag decide si la card muestra la marca, no si el producto es de
+   * la marca: con `marcas` un producto con la marca oculta quedaría fuera de su página.
+   */
+  marcasPropias?: string[];
+  /**
+   * Una línea de una página de marca: lo que está en alguna de estas categorías (con su
+   * subárbol, como `categorias`) O tiene alguno de estos códigos (como `getProductosPorSkus`).
+   * Las dos listas vacías no filtran.
+   */
+  linea?: { categorias: string[]; skus: string[] };
+  /**
    * Ids del diccionario de atributos (catalogo-atributos.ts): AND entre
    * grupos, OR dentro del grupo, con `~*` sobre el texto buscable.
    */
@@ -1155,6 +1167,31 @@ const textoDe = (f: Pick<FiltrosCatalogo, "texto">): TextoBusqueda => ({ ...f.te
  */
 const marcaSql = sql<string>`(case when ${crmOverlay.mostrarMarca} is false then null
   else coalesce(nullif(${crmCatalogo.brand}, ''), ${crmCategoriasAlegra.name}) end)`;
+
+/**
+ * Marca cruda del producto: el customField de Alegra o, vacío, la categoría de Alegra. Igual
+ * que `marcaSql` pero SIN `mostrar_marca` (ver `FiltrosCatalogo.marcasPropias`).
+ */
+const marcaPropiaSql = sql<string>`coalesce(nullif(${crmCatalogo.brand}, ''), ${crmCategoriasAlegra.name})`;
+
+/** El código del producto (en `code` o en `name`, según el ítem) entre estos, sin mayúsculas ni espacios. */
+function coincideCodigoSql(skus: readonly string[]) {
+  const codigos = [...new Set(skus.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+  if (codigos.length === 0) return undefined;
+  return or(
+    inArray(sql`upper(btrim(${crmCatalogo.code}))`, codigos),
+    inArray(sql`upper(btrim(${crmCatalogo.name}))`, codigos),
+  );
+}
+
+/** Ver `FiltrosCatalogo.linea`. `undefined` = no filtra. */
+function filtroLineaSql(linea: FiltrosCatalogo["linea"]) {
+  if (!linea) return undefined;
+  const porCategoria = linea.categorias.length ? filtroCategoriasSql(linea.categorias) : undefined;
+  const porCodigo = coincideCodigoSql(linea.skus);
+  if (!porCategoria && !porCodigo) return undefined;
+  return or(porCategoria, porCodigo);
+}
 
 /**
  * Precio de lista principal, extraído del jsonb `prices`. Equivalente en SQL de
@@ -1519,6 +1556,10 @@ function condicionesDe(
     aplicar.marcas && filtros.marcas?.length
       ? inArray(marcaSql, filtros.marcas)
       : undefined,
+    aplicar.marcas && filtros.marcasPropias?.length
+      ? inArray(marcaPropiaSql, filtros.marcasPropias)
+      : undefined,
+    aplicar.categorias ? filtroLineaSql(filtros.linea) : undefined,
     aplicar.atributos ? filtroAtributosSql(contextoAtributos(filtros), filtros.atributos) : undefined,
     aplicar.atributos ? filtroConClavesSql(filtros) : undefined,
     nombre && filtros.nombreConTodos ? and(...filtros.nombreConTodos.map((t) => sql`${nombre} ~ ${patronTermino(t)}`)) : undefined,
@@ -2018,6 +2059,31 @@ function facetasPorTipoDe(
  * sin el rango vigente: si no, los límites del slider se achicarían a lo que
  * el visitante acaba de elegir y ya no podría volver a abrirlo.
  */
+/**
+ * Los valores de marca que existen en el catálogo, con su cantidad de productos: el selector
+ * del editor de páginas de marca. Marca CRUDA (`marcaPropiaSql`) y sin stock ni zona: una marca
+ * sin stock momentáneo o con la marca oculta en las cards sigue apareciendo.
+ */
+export async function getValoresMarca(soloVisibles: boolean): Promise<{ valor: string; count: number }[]> {
+  return getDb()
+    .select({ valor: marcaPropiaSql, count: sql<number>`count(*)::int` })
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+    .leftJoin(crmOverlay, joinOverlay(false))
+    .where(
+      and(
+        enTenantCatalogo(),
+        activoSql,
+        enListado(false),
+        conPrecioSql,
+        soloVisiblesSql(soloVisibles),
+        sql`nullif(${marcaPropiaSql}, '') is not null`,
+      ),
+    )
+    .groupBy(marcaPropiaSql)
+    .orderBy(sql`count(*) desc`, sql`${marcaPropiaSql} asc`);
+}
+
 export async function getFacetas(
   filtros: FiltrosCatalogo,
   /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */

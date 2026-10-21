@@ -22,9 +22,12 @@ Lo que la página de Led Premium tiene que transmitir, en palabras de Emanuel:
 Lo que ya hay en el Shop y condiciona el diseño:
 
 - **La marca de un producto es solo texto.** `marcaSql` (`src/lib/catalog.ts`) toma el custom
-  field "marca" de Alegra y, si está vacío, cae al nombre de la categoría de Alegra. El filtro
-  `?marca=` compara el valor crudo exacto, sin normalizar (`inArray(marcaSql, filtros.marcas)`).
-  No hay tabla, logo, slug ni descripción de marca en ningún lado.
+  field "marca" de Alegra y, si está vacío, cae al nombre de la categoría de Alegra. Si el overlay
+  del CRM tiene `mostrar_marca = false`, devuelve `null`. El filtro `?marca=` compara el valor crudo
+  exacto, sin normalizar (`inArray(marcaSql, filtros.marcas)`). No hay tabla, logo, slug ni
+  descripción de marca en ningún lado.
+- **El catálogo muestra por defecto solo productos con stock** (`SOLO_STOCK_DEFAULT = true`),
+  visibles (`soloVisibles`) y disponibles en la zona del visitante (`disp`).
 - **`/catalogo?marca=…` es `noindex`** (`indexable()` en `src/lib/catalogo-vista.ts`). Para que una
   página de marca se indexe necesita ruta propia.
 - **Los productos de Led Premium ya están en el Alegra de Central Led**, con fotos (lo confirmó
@@ -34,9 +37,10 @@ Lo que ya hay en el Shop y condiciona el diseño:
   `pagina:<slug>` (`src/lib/institucional/paginas.ts`), y `/editar-paginas` es una ruta solo para
   admin.
 - **El DS (`@myd-org/ui` 0.56) no tiene submenús en el header**: `SiteNavItem` es
-  `{label, href, badge?, badgeVisibleOn?}`. **No hay menú hamburguesa**: en mobile y en la barra
-  compacta fija, el nav es una fila con scroll horizontal (`overflow-x-auto`). `Marquee` es
-  decorativo y no tiene `href` por ítem.
+  `{label, href, badge?, badgeVisibleOn?}`. **No hay menú hamburguesa**: la fila de nav del header
+  completo tiene scroll horizontal (`overflow-x-auto`) en todos los tamaños. La barra compacta fija
+  repite el nav solo desde `lg` (`hidden … lg:flex`). `Marquee` es decorativo de punta a punta:
+  `aria-hidden`, `pointer-events-none` y con cada ítem repetido muchas veces.
 - **La barra de categorías del header se ve solo en la home** (`HeaderUI.tsx`, hasta
   `MAX_CATEGORIAS_NAV = 8`).
 - **"Marca" ya es otra cosa en el código**: la identidad de la tienda (`Marca`, `getMarca`,
@@ -82,6 +86,7 @@ Decisiones tomadas en el brainstorming:
 - Cambios en la web de Led Premium: la redirección de su tienda a `/marcas/led-premium` la hace quien
   maneje esa web.
 - Un formulario de cotización: v1 usa WhatsApp.
+- Links en la cinta de marcas de la home (ver §9).
 - Enlazar la marca desde la ficha de producto (`/producto/[id]`) a su página. Queda como mejora
   posible.
 - Tocar los datos de Alegra o del CRM.
@@ -123,11 +128,16 @@ type PaginaMarca = {
 **El vínculo marca ↔ productos es `marcasCatalogo`.** Es la respuesta directa al anti-goal de la
 marca mal escrita:
 
-- El editor **no deja tipear** los valores. Ofrece la lista real de `facetasPublicas().marcas`
-  (los valores que existen en el catálogo, con su cantidad de productos) para elegir uno o
-  varios.
-- Los productos de la página se consultan con `filtros.marcas = marcasCatalogo`, que ya resuelve
-  `inArray(marcaSql, …)`. No hace falta normalizar nada en SQL.
+- El editor **no deja tipear** los valores. Ofrece la lista real de marcas del catálogo (la faceta
+  `marcas`, con su cantidad de productos) para elegir uno o varios. Esa lista se consulta **sin
+  filtro de stock ni de zona** (`soloStock: false`), así una marca sin stock momentáneo no
+  desaparece del selector.
+- Los productos de la página se consultan por `marcasCatalogo` comparando contra el valor de marca
+  **sin el corte de `mostrar_marca`**: ese flag del overlay decide si se *muestra* la marca en la
+  tarjeta, no si el producto es de la marca. Con `marcaSql` tal cual, un producto con
+  `mostrar_marca = false` quedaría afuera de su página, que es el anti-goal. Hace falta una variante
+  del filtro (por ejemplo `coalesce(nullif(brand,''), categoría)` sin el `case`). _Llamada mía._ No
+  hace falta normalizar mayúsculas: lo resuelve tener varios alias.
 - Si un valor elegido deja de existir en el catálogo (lo renombraron en Alegra), el editor lo marca
   como "sin productos" para que el admin lo corrija.
 - Cuidado: como `marcaSql` cae al nombre de la categoría de Alegra cuando la marca está vacía, en
@@ -150,8 +160,9 @@ marca mal escrita:
   Si no hay ninguna publicada, `/marcas` tampoco va al sitemap.
 - `/catalogo?marca=…` sigue siendo `noindex`.
 - Migas: Inicio › Marcas › {nombre}.
-- **Revisar** las rutas públicas en `src/proxy.ts` / `proxy-rutas-publicas.test.ts`: `/marcas` tiene
-  que ser pública.
+- `src/proxy.ts` **no se toca**. Las páginas ya son públicas, y `RUTAS_PUBLICAS` es solo para rutas
+  servidor a servidor que se saltean el cartel "Próximamente". Agregar `/marcas` ahí sería un
+  error.
 
 ### 3. Página nivel "oficial" (Led Premium)
 
@@ -191,11 +202,17 @@ existen en este nivel. _Llamada mía._
 Para v1 no se reusa `CatalogoClient` (que trae búsqueda, facetas completas, IA y estado en URL),
 porque es mucho para 31 productos. _Llamada mía._
 
-- Grilla con `ProductCard` alimentada por `paginaCatalogoPublica({ filtros: { marcas: marcasCatalogo, … } })`,
-  que es cacheable porque no lleva texto libre. Paginación de 24 (`PRODUCTOS_POR_PAGINA`).
-- **Filtro por línea** con chips arriba de la grilla. Cada chip tiene una etiqueta y una o varias
-  categorías del Shop (`?categoria=`), se configura en el editor del bloque y se refleja en
-  `?linea=<slug>`. Es lo que usan los tiles del bloque 3.
+- Los datos salen de `paginaCatalogoPublica` con el filtro de marca de §1, que es cacheable porque
+  no lleva texto libre. Paginación de 24 (`PRODUCTOS_POR_PAGINA`).
+- **Las tarjetas son las del catálogo** (la grilla de `CatalogoProductos` o
+  `TarjetaProductoCarrusel`), **no** un `ProductCard` pelado. Un `ProductCard` pelado mostraría el
+  precio público a clientes con lista propia (`TarjetasPrecioCuenta`) y perdería los precios por
+  medio de pago, las cuotas y favoritos.
+- **Filtro por línea** con chips arriba de la grilla, que se refleja en `?linea=<slug>` y es lo que
+  usan los tiles del bloque 3. Cada línea se define en el editor del bloque con **una o varias
+  categorías del Shop, una lista de SKUs, o las dos cosas** (unión). Hoy no sabemos cómo están
+  repartidos los productos de Led Premium entre las categorías del Shop. Si caen todos en
+  "Iluminación", las líneas se arman por SKU. _Llamada mía._
 - Orden por defecto: el del catálogo. Selector de orden de precio opcional.
 - Link "Ver con todos los filtros →" a `/catalogo?marca=…` (con todos los valores de
   `marcasCatalogo`) para quien quiera filtrar por precio o stock.
@@ -228,19 +245,28 @@ porque es mucho para 31 productos. _Llamada mía._
 **Va por el DS.** `@myd-org/ui` suma a `SiteNavItem` un campo opcional
 `menu?: { label: string; href: string; destacado?: boolean; descripcion?: string }[]`. Un ítem con
 `menu` se dibuja como disparador de un desplegable de Radix (`react-dropdown-menu`, con portal para
-que la fila con `overflow-x-auto` no lo recorte), tanto en la barra normal como en la compacta fija.
-Los ítems navegan con el `renderLink` del header. _Llamada mía:_ es más limpio que poner un
-disparador aparte en la app, y el mismo cambio del DS trae el `href` del Marquee (§9).
+que la fila con `overflow-x-auto` no lo recorte), tanto en la barra normal como en la compacta fija
+(que solo existe desde `lg`). Los ítems navegan con el `renderLink` del header. _Llamada mía:_ es más
+limpio que poner un disparador aparte en la app.
+
+**`destacado` se dibuja con tokens, no con dorado fijo**: fondo y texto invertidos
+(`foreground`/`background`) y el acento del tema. El DS es compartido y no puede saber nada de Led
+Premium. En la tienda de Central se verá oscuro con el acento de Central. Si más adelante se quiere
+el dorado exacto, el camino es que el ítem acepte variables CSS de color desde la app, no un
+color en el DS. _Llamada mía._
 
 - La app agrega "Marcas" como **último ítem** de la barra de la home **solo si hay al menos una
   página publicada**. Si no hay ninguna, la barra queda como hoy (8 categorías). Si hay, quedan 7
   categorías y "Marcas".
+- **`EditorNavBadge` también se ajusta**: usa `MAX_CATEGORIAS_NAV` (`src/lib/nav-badge.ts`) para
+  ofrecer las categorías visibles. Si "Marcas" ocupa el lugar 8, tiene que ofrecer 7, porque si no
+  un badge puesto en la octava categoría no se ve nunca.
 - Contenido del desplegable:
-  1. La(s) página(s) "oficial", destacadas en negro y dorado con su bajada.
+  1. La(s) página(s) "oficial", destacadas (ver arriba) con su bajada.
   2. Las de nivel "marca", por `orden`.
   3. "Ver todas las marcas →" a `/marcas`.
-- **Mobile:** no hay menú hamburguesa. "Marcas" es un ítem más de la fila con scroll y al tocarlo
-  abre el mismo desplegable. Si en pantalla chica el desplegable no anda bien, el builder puede
+- **Mobile:** no hay menú hamburguesa. "Marcas" es un ítem más de la fila con scroll del header
+  completo y al tocarlo abre el mismo desplegable. Si en pantalla chica el desplegable no anda bien, el builder puede
   hacer que en mobile "Marcas" navegue directo a `/marcas`.
 - Igual que las categorías, se ve **solo en la home**. Desde el resto del sitio se llega por el
   bloque de la home y por `/marcas`.
@@ -271,11 +297,11 @@ Puntos a tocar, para que no se escape ninguno:
 - `Editor*.tsx` nuevo con el selector de SKUs de destacados.
 - El slot en `HomeClient`.
 
-**Cinta de marcas (`marquee`)**: `ItemMarquee` suma `href?`, editable. El admin pone
-`/marcas/macroled` o `/catalogo?marca=CHINT`; no se deriva de `texto`, que es texto de pantalla.
-Requiere `MarqueeLogo.href?` (y para texto suelto, algo equivalente) en el DS, en el mismo cambio
-que §8. Es lo último del plan y se puede postergar sin afectar lo demás. Agregar el logo de Led
-Premium a la cinta es contenido, no código.
+**Cinta de marcas (`marquee`): queda como está en v1.** Agregarle links no es sumar un `href`: el
+`Marquee` es `aria-hidden`, `pointer-events-none` y repite cada ítem decenas de veces, así que
+habría que rehacer su accesibilidad e interacción. La entrada a las marcas ya la dan "Marcas ▾",
+`/marcas` y el bloque de la home. Agregar el logo de Led Premium a la cinta es contenido y lo puede
+hacer el admin hoy. _Llamada mía._ Pasa a non-goals.
 
 ### 10. Edición
 
@@ -303,7 +329,7 @@ builder. Nunca quedan como dato de código que aparezca en otra tienda.
 
 ## Dependencias y orden sugerido
 
-1. **DS** (`MyD-Org/ui`): `SiteNavItem.menu` y `MarqueeLogo.href`, con release y bump en
+1. **DS** (`MyD-Org/ui`): `SiteNavItem.menu`, con release y bump en
    `apps/clientes`. Es un repo aparte; ver la memoria sobre el registro `@myd-org` para instalar.
    Se puede hacer en paralelo con el paso 2.
 2. **Shop**:
@@ -314,7 +340,6 @@ builder. Nunca quedan como dato de código que aparezca en otra tienda.
    5. SEO y sitemap.
    6. Bloque `tiendaOficial` en la home.
    7. "Marcas ▾" (necesita el paso 1).
-   8. `href` en la cinta.
 3. **Contenido** (Emanuel, antes de publicar):
    - Valor real de la marca en Alegra para Led Premium, Macroled y Jadever.
    - Logo de Led Premium en buena resolución, fotos de obras y textos de confianza confirmados por
@@ -334,7 +359,12 @@ Vitest, al lado del código:
 - `erroresSeccion("tiendaOficial", …)`.
 - Defaults de la tienda genérica.
 
-En el DS, tests de `SiteHeader` con `menu` (accesible por teclado) y de `Marquee` con `href`.
+- Un producto con `mostrar_marca = false` igual aparece en su página de marca.
+- El selector de marcas del editor lista marcas sin stock.
+- `EditorNavBadge` ofrece 7 categorías cuando se muestra "Marcas".
+
+En el DS, tests de `SiteHeader` con `menu` (accesible por teclado, portal fuera de la fila con
+scroll) y de `destacado`.
 
 ## Lo que queda al builder
 

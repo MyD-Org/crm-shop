@@ -33,11 +33,14 @@ import { ElegidosMarcaBloque, ElegidosMarcaSkeleton, ProductosMarcaBloque } from
 export function PaginaMarcaVista({
   pagina,
   estado,
+  query,
   total,
   cotizar,
 }: {
   pagina: PaginaMarca;
   estado: { pagina: number; linea?: string };
+  /** Search params crudos (filtros del catálogo dentro de la marca). */
+  query: Record<string, string | string[] | undefined>;
   total: number | null;
   /** A dónde lleva "cotizar" (`hrefCotizacion`; null = sin destino válido: el bloque no se dibuja). */
   cotizar: string | null;
@@ -69,7 +72,7 @@ export function PaginaMarcaVista({
       bloque(
         "productos",
         <Suspense fallback={<div id="productos" className="min-h-[50vh]" />}>
-          <ProductosMarcaBloque pagina={pagina} titulo={b.productos?.titulo} estado={estado} />
+          <ProductosMarcaBloque pagina={pagina} titulo={b.productos?.titulo} query={query} linea={estado.linea} />
         </Suspense>,
       ),
   };

@@ -64,22 +64,6 @@ export function hrefLinea(slug: string, linea?: string): string {
   return linea ? `${hrefMarca(slug)}?linea=${encodeURIComponent(linea)}#productos` : `${hrefMarca(slug)}#productos`;
 }
 
-/** Página `n` de resultados de la página de marca (con la línea vigente). */
-export function hrefPaginaMarca(slug: string, n: number, linea?: string): string {
-  const q = new URLSearchParams();
-  if (linea) q.set("linea", linea);
-  if (n > 1) q.set("pagina", String(n));
-  const s = q.toString();
-  return `${hrefMarca(slug)}${s ? `?${s}` : ""}#productos`;
-}
-
-/** El catálogo completo con todos los filtros, acotado a la marca. */
-export function hrefCatalogoCompleto(p: PaginaMarca): string {
-  const q = new URLSearchParams();
-  for (const v of p.marcasCatalogo) q.append("marca", v);
-  return `/catalogo?${q.toString()}`;
-}
-
 /** Rutas de marca para el sitemap: nada si no hay publicadas. */
 export function rutasSitemapMarcas(ps: readonly PaginaMarca[]): string[] {
   const publicadas = ps.filter((p) => p.publicada);

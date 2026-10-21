@@ -53,7 +53,7 @@ async function Contenido({ params, searchParams }: Props) {
 
   return (
     <ModoEdicionProvider>
-      <PaginaMarcaVista pagina={pagina} estado={estado} total={total} cotizar={cotizar} />
+      <PaginaMarcaVista pagina={pagina} estado={estado} query={query} total={total} cotizar={cotizar} />
       <Suspense fallback={null}>
         <EdicionMarcaSiAdmin slug={pagina.slug} publicada={pagina.publicada} />
       </Suspense>

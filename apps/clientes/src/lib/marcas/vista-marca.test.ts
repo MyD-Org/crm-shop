@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PaginaMarca } from "./pagina-marca";
 import {
   filtrosDeMarca,
-  hrefCatalogoCompleto,
   hrefCotizacion,
   hrefLinea,
   leerEstadoMarca,
@@ -92,9 +91,6 @@ describe("hrefs", () => {
     expect(hrefLinea("led-premium")).toBe("/marcas/led-premium#productos");
   });
 
-  it("hrefCatalogoCompleto repite ?marca= por cada valor", () => {
-    expect(hrefCatalogoCompleto(pagina())).toBe("/catalogo?marca=LED+PREMIUM&marca=Led+Premium");
-  });
 });
 
 describe("rutasSitemapMarcas", () => {

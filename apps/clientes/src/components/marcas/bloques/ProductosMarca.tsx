@@ -1,15 +1,17 @@
-import Link from "next/link";
 import { connection } from "next/server";
-import { ChipRow, ProductCardSkeleton } from "@myd-org/ui";
+import { ProductCardSkeleton } from "@myd-org/ui";
 import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
-import { destacadosHome, paginaMarcaPublica } from "@/lib/catalogo-publico";
+import { destacadosHome, facetasPublicas, paginaMarcaPublica } from "@/lib/catalogo-publico";
+import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
+import { filtrosPorTipo } from "@/lib/catalogo-car";
+import { filtrosDeEstado } from "@/lib/catalogo-url";
+import { estadoCatalogoDeMarca } from "@/lib/marcas/estado-marca";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import type { ElegidosMarca, PaginaMarca } from "@/lib/marcas/pagina-marca";
-import { filtrosDeMarca, hrefCatalogoCompleto, hrefLinea } from "@/lib/marcas/vista-marca";
+import { filtrosDeMarca } from "@/lib/marcas/vista-marca";
 import { dispCatalogo } from "@/lib/zona-servidor";
-import { GrillaProductosMarca } from "../GrillaProductosMarca";
-import { PaginacionMarca } from "../PaginacionMarca";
+import { ProductosMarcaClient } from "../ProductosMarcaClient";
 import { SeccionMarca, TituloBloque } from "./BloquesMarca";
 
 /**
@@ -74,52 +76,52 @@ export function ElegidosMarcaSkeleton({ cantidad }: { cantidad: number }) {
 }
 
 /**
- * "Todos los productos": la línea completa (sin filtro de stock), chips por
- * línea, paginación con enlaces reales y la salida al catálogo con filtros.
+ * "Todos los productos": la línea completa (sin filtro de stock por defecto) con el panel de
+ * filtros del catálogo (categoría, precio, características, stock, orden y vista), chips por
+ * línea y paginación con enlaces reales. Los filtros viajan en la URL de la página de la marca
+ * (`estado-marca.ts`); lo interactivo vive en `ProductosMarcaClient`.
  */
 export async function ProductosMarcaBloque({
   pagina,
   titulo,
-  estado,
+  query,
+  linea,
 }: {
   pagina: PaginaMarca;
   titulo?: string;
-  estado: { pagina: number; linea?: string };
+  /** Los search params crudos de la página. */
+  query: Record<string, string | string[] | undefined>;
+  /** La línea vigente (ya validada contra las líneas de la página). */
+  linea?: string;
 }) {
-  const resultado = await paginaMarcaPublica({
-    ...(await contexto()),
-    filtros: filtrosDeMarca(pagina, estado.linea),
-    orden: "destacados",
-    pagina: estado.pagina,
-  });
-  const lineas = pagina.bloques.lineas?.items ?? [];
+  const [ctx, tablaLegible] = await Promise.all([contexto(), atributosEstructuradosDisponibles()]);
+  const estado = estadoCatalogoDeMarca(query);
+  const filtros = {
+    ...filtrosDeEstado(estado),
+    ...filtrosPorTipo(tablaLegible, estado.caracteristicas),
+    ...filtrosDeMarca(pagina, linea),
+    marcas: [],
+    sinFacetaAtributos: true as const,
+  };
+  const [resultado, facetas] = await Promise.all([
+    paginaMarcaPublica({ ...ctx, filtros, orden: estado.orden, pagina: estado.pagina }),
+    ctx.agrupar ? facetasPublicas(filtros, ctx.soloVisibles, ctx.disp, true) : facetasPublicas(filtros, ctx.soloVisibles, ctx.disp),
+  ]);
   return (
     <SeccionMarca id="productos" className="scroll-mt-24">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <TituloBloque bajada={`${resultado.total} ${resultado.total === 1 ? "producto" : "productos"}`}>
-          {titulo || `Todos los productos ${pagina.nombre}`}
-        </TituloBloque>
-        <Link href={hrefCatalogoCompleto(pagina)} className="text-sm font-semibold text-accent underline-offset-4 hover:underline">
-          Ver con todos los filtros →
-        </Link>
-      </div>
-      {lineas.length > 0 ? (
-        <ChipRow
-          className="mb-6"
-          chips={[
-            { label: "Todas", href: hrefLinea(pagina.slug) },
-            ...lineas.map((l) => ({ label: estado.linea === l.slug ? `✓ ${l.titulo}` : l.titulo, href: hrefLinea(pagina.slug, l.slug) })),
-          ]}
-        />
-      ) : null}
-      {resultado.productos.length > 0 ? (
-        <GrillaProductosMarca productos={resultado.productos} />
-      ) : (
-        <p className="py-10 text-center text-base text-muted">No hay productos para mostrar en este momento.</p>
-      )}
-      {resultado.paginas > 1 ? (
-        <PaginacionMarca slug={pagina.slug} linea={estado.linea} pagina={resultado.pagina} paginas={resultado.paginas} />
-      ) : null}
+      <TituloBloque bajada={`${resultado.total} ${resultado.total === 1 ? "producto" : "productos"}`}>
+        {titulo || `Todos los productos ${pagina.nombre}`}
+      </TituloBloque>
+      <ProductosMarcaClient
+        slug={pagina.slug}
+        linea={linea}
+        lineas={pagina.bloques.lineas?.items ?? []}
+        productos={resultado.productos}
+        // La marca la fija la página: el panel no la ofrece.
+        facetas={{ ...facetas, marcas: [] }}
+        estado={{ ...estado, pagina: resultado.pagina }}
+        paginas={resultado.paginas}
+      />
     </SeccionMarca>
   );
 }

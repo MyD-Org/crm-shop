@@ -2,6 +2,8 @@ import type { MetadataRoute } from "next";
 import { idsProductosPublicos } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { getPaginasPublicadas } from "@/lib/institucional/datos";
+import { getPaginasMarcaPublicadas } from "@/lib/marcas/marcas-datos";
+import { rutasSitemapMarcas } from "@/lib/marcas/vista-marca";
 import { baseDelSitio, entradasSitemap } from "@/lib/seo";
 
 /**
@@ -13,9 +15,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const sitio = process.env.NEXT_PUBLIC_SITE_URL;
   if (!baseDelSitio(sitio)) return [];
   const { soloVisibles, variantes } = await flagsPublicos();
-  const [ids, paginas] = await Promise.all([
+  const [ids, paginas, marcas] = await Promise.all([
     variantes ? idsProductosPublicos(soloVisibles, true) : idsProductosPublicos(soloVisibles),
     getPaginasPublicadas(),
+    getPaginasMarcaPublicadas(),
   ]);
-  return entradasSitemap(sitio, ids, paginas.map((p) => p.href));
+  return entradasSitemap(sitio, ids, [...paginas.map((p) => p.href), ...rutasSitemapMarcas(marcas)]);
 }

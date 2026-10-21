@@ -161,3 +161,58 @@ describe("orden y menú", () => {
     expect(itemsMenuMarcas([oculta])).toEqual([]);
   });
 });
+
+describe("bloque La empresa (fotos y videos)", () => {
+  it("es de la tienda oficial, entre componentes y obras", () => {
+    const orden = BLOQUES_POR_NIVEL.oficial;
+    expect(orden.indexOf("empresa")).toBe(orden.indexOf("componentes") + 1);
+    expect(orden.indexOf("obras")).toBe(orden.indexOf("empresa") + 1);
+    expect(BLOQUES_POR_NIVEL.marca).not.toContain("empresa");
+  });
+
+  it("acepta fotos y videos de YouTube o Vimeo; rechaza otros videos", () => {
+    const foto = { tipo: "foto", imagen: "https://media.cliente.example/f.webp", alt: "La planta" };
+    const video = { tipo: "video", url: "https://youtu.be/abcDEF12345" };
+    expect(validarBloqueMarca("empresa", { titulo: "La fábrica", items: [foto, video] }, HOSTS)).toEqual([]);
+    expect(
+      validarBloqueMarca("empresa", { titulo: "x", items: [{ tipo: "video", url: "https://otro.example/v.mp4" }] }, HOSTS)[0],
+    ).toMatch(/YouTube o Vimeo/);
+  });
+
+  it("sanear descarta ítems rotos y conserva el tipo", () => {
+    const p = sanearPaginaMarca({
+      ...pagina({ nivel: "oficial" }),
+      bloques: {
+        empresa: {
+          titulo: "La fábrica",
+          items: [
+            { tipo: "video", url: "https://www.youtube.com/watch?v=abcDEF12345" },
+            { tipo: "video", url: "javascript:alert(1)" },
+            { tipo: "foto", imagen: "/images/x.webp", alt: "Planta" },
+            { tipo: "otro" },
+          ],
+        },
+      },
+    });
+    expect(p?.bloques.empresa?.items).toEqual([
+      { tipo: "video", url: "https://www.youtube.com/watch?v=abcDEF12345" },
+      { tipo: "foto", imagen: "/images/x.webp", alt: "Planta" },
+    ]);
+  });
+});
+
+describe("cotización configurable", () => {
+  it("WhatsApp con número propio o enlace", () => {
+    const base = { titulo: "Obras", boton: "Cotizar", mensaje: "Hola" };
+    expect(validarBloqueMarca("cotizacion", { ...base, destino: "whatsapp", whatsapp: "+54 9 223 555-1234" }, HOSTS)).toEqual([]);
+    expect(validarBloqueMarca("cotizacion", { ...base, destino: "whatsapp", whatsapp: "123" }, HOSTS)[0]).toMatch(/WhatsApp/);
+    expect(validarBloqueMarca("cotizacion", { ...base, destino: "enlace", href: "/contacto" }, HOSTS)).toEqual([]);
+    expect(validarBloqueMarca("cotizacion", { ...base, destino: "enlace", href: "mailto:ventas@cliente.example" }, HOSTS)).toEqual([]);
+    expect(validarBloqueMarca("cotizacion", { ...base, destino: "enlace", href: "javascript:alert(1)" }, HOSTS).length).toBeGreaterThan(0);
+    expect(validarBloqueMarca("cotizacion", { ...base, destino: "enlace" }, HOSTS).length).toBeGreaterThan(0);
+  });
+
+  it("con enlace el mensaje no es obligatorio", () => {
+    expect(validarBloqueMarca("cotizacion", { titulo: "Obras", boton: "Cotizar", mensaje: "", destino: "enlace", href: "/contacto" }, HOSTS)).toEqual([]);
+  });
+});

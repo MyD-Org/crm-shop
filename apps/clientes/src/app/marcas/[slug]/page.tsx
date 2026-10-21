@@ -6,11 +6,10 @@ import { PaginaMarcaVista } from "@/components/marcas/PaginaMarcaVista";
 import { EdicionMarcaSiAdmin } from "@/components/marcas/edicion/EdicionMarcaSiAdmin";
 import { totalProductosMarca } from "@/components/marcas/bloques/ProductosMarca";
 import { esAdmin } from "@/lib/auth";
-import { enlaceWhatsapp } from "@/lib/contacto-pedido";
 import { getDatosFooter } from "@/lib/home-datos";
 import { getMarca } from "@/lib/marca";
 import { getPaginaMarca } from "@/lib/marcas/marcas-datos";
-import { leerEstadoMarca, metadataMarca } from "@/lib/marcas/vista-marca";
+import { hrefCotizacion, leerEstadoMarca, metadataMarca } from "@/lib/marcas/vista-marca";
 
 /**
  * Página de una marca (spec 2026-10-20-marcas-tienda-oficial §2-§7). La
@@ -50,11 +49,11 @@ async function Contenido({ params, searchParams }: Props) {
   const estado = leerEstadoMarca(query, pagina);
   const [total, footer] = await Promise.all([totalProductosMarca(pagina), getDatosFooter()]);
   const cotizacion = pagina.bloques.cotizacion;
-  const whatsapp = cotizacion ? enlaceWhatsapp(footer.whatsapp, cotizacion.mensaje) : null;
+  const cotizar = cotizacion ? hrefCotizacion(cotizacion, footer.whatsapp) : null;
 
   return (
     <ModoEdicionProvider>
-      <PaginaMarcaVista pagina={pagina} estado={estado} total={total} whatsapp={whatsapp} />
+      <PaginaMarcaVista pagina={pagina} estado={estado} total={total} cotizar={cotizar} />
       <Suspense fallback={null}>
         <EdicionMarcaSiAdmin slug={pagina.slug} publicada={pagina.publicada} />
       </Suspense>

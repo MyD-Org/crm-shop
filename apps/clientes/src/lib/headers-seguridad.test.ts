@@ -35,6 +35,13 @@ describe("politicaCsp", () => {
     expect(csp).toMatch(/connect-src [^;]*https:\/\/clerk\.tienda\.example/);
   });
 
+  it("videos de las páginas de marca: reproductor de YouTube sin cookies y de Vimeo, y miniaturas de YouTube", () => {
+    const csp = politicaCsp({});
+    expect(csp).toMatch(/frame-src [^;]*https:\/\/www\.youtube-nocookie\.com/);
+    expect(csp).toMatch(/frame-src [^;]*https:\/\/player\.vimeo\.com/);
+    expect(csp).toMatch(/img-src [^;]*https:\/\/i\.ytimg\.com/);
+  });
+
   it("incluye Mercado Pago, los medios de SHOP_MEDIA_HOSTS y R2", () => {
     const csp = politicaCsp({
       SHOP_MEDIA_HOSTS: "media.plataforma.example, otro.example",

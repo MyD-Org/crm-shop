@@ -167,6 +167,8 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
       "data:",
       "blob:",
       "https://img.clerk.com",
+      // Miniaturas de los videos de YouTube de las páginas de marca (bloque "La empresa").
+      "https://i.ytimg.com",
       ...medios,
       ...MERCADO_PAGO,
       ...(payway ? [CYBERSOURCE_FINGERPRINT] : []),
@@ -192,6 +194,9 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
       CLOUDFLARE_CHALLENGES,
       ...MERCADO_PAGO,
       "https://www.google.com",
+      // Videos de las páginas de marca: se cargan recién al tocar "Reproducir".
+      "https://www.youtube-nocookie.com",
+      "https://player.vimeo.com",
       ...(payway ? [CYBERSOURCE_FINGERPRINT] : []),
     ],
     "worker-src": ["'self'", "blob:"],

@@ -3,10 +3,12 @@ import type { PaginaMarca } from "./pagina-marca";
 import {
   filtrosDeMarca,
   hrefCatalogoCompleto,
+  hrefCotizacion,
   hrefLinea,
   leerEstadoMarca,
   metadataMarca,
   rutasSitemapMarcas,
+  videoEmbebible,
 } from "./vista-marca";
 
 const lineas = {
@@ -100,5 +102,48 @@ describe("rutasSitemapMarcas", () => {
     expect(rutasSitemapMarcas([])).toEqual([]);
     expect(rutasSitemapMarcas([pagina({ publicada: false })])).toEqual([]);
     expect(rutasSitemapMarcas([pagina()])).toEqual(["/marcas", "/marcas/led-premium"]);
+  });
+});
+
+describe("hrefCotizacion", () => {
+  const cot = { titulo: "Obras", boton: "Cotizar", mensaje: "Hola, quiero cotizar" };
+
+  it("WhatsApp: el número propio del bloque le gana al de la tienda", () => {
+    expect(hrefCotizacion({ ...cot, whatsapp: "5492235551234" }, "5493757000000")).toBe(
+      "https://wa.me/5492235551234?text=Hola%2C%20quiero%20cotizar",
+    );
+    expect(hrefCotizacion(cot, "5493757000000")).toBe("https://wa.me/5493757000000?text=Hola%2C%20quiero%20cotizar");
+  });
+
+  it("sin número válido no hay botón", () => {
+    expect(hrefCotizacion(cot, "")).toBeNull();
+  });
+
+  it("enlace: va tal cual", () => {
+    expect(hrefCotizacion({ ...cot, destino: "enlace", href: "/contacto" }, "")).toBe("/contacto");
+  });
+});
+
+describe("videoEmbebible", () => {
+  it("YouTube (watch, youtu.be, shorts) y Vimeo", () => {
+    expect(videoEmbebible("https://www.youtube.com/watch?v=abcDEF12345&t=3")).toEqual({
+      proveedor: "youtube",
+      id: "abcDEF12345",
+      embed: "https://www.youtube-nocookie.com/embed/abcDEF12345",
+      poster: "https://i.ytimg.com/vi/abcDEF12345/hqdefault.jpg",
+    });
+    expect(videoEmbebible("https://youtu.be/abcDEF12345")?.id).toBe("abcDEF12345");
+    expect(videoEmbebible("https://youtube.com/shorts/abcDEF12345")?.id).toBe("abcDEF12345");
+    expect(videoEmbebible("https://vimeo.com/123456789")).toEqual({
+      proveedor: "vimeo",
+      id: "123456789",
+      embed: "https://player.vimeo.com/video/123456789",
+    });
+  });
+
+  it("cualquier otra cosa: null", () => {
+    expect(videoEmbebible("https://otro.example/video.mp4")).toBeNull();
+    expect(videoEmbebible("javascript:alert(1)")).toBeNull();
+    expect(videoEmbebible("http://www.youtube.com/watch?v=abcDEF12345")).toBeNull();
   });
 });

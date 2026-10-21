@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { cn } from "@myd-org/ui";
+import { Badge, cn } from "@myd-org/ui";
 import { ImagenMarca } from "@/components/marcas/ImagenMarca";
 import { getMarca } from "@/lib/marca";
-import { getPaginasMarcaPublicadas } from "@/lib/marcas/marcas-datos";
+import { esAdmin } from "@/lib/auth";
+import { getPaginasMarca } from "@/lib/marcas/marcas-datos";
 import { hrefMarca } from "@/lib/marcas/pagina-marca";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -19,7 +20,9 @@ export async function generateMetadata(): Promise<Metadata> {
 /**
  * Índice de las páginas de marca publicadas (spec 2026-10-20 §2). La tienda
  * oficial va primero, en tarjeta oscura con su bajada. Sin ninguna publicada:
- * 404 (una tienda que no armó marcas no tiene esta página).
+ * 404 (una tienda que no armó marcas no tiene esta página). Un admin ve además
+ * las ocultas, marcadas: la miga "Marcas" de una vista previa no lleva a un 404.
+ * La sesión sólo se consulta si hay ocultas.
  */
 export default function MarcasPage() {
   return (
@@ -30,7 +33,9 @@ export default function MarcasPage() {
 }
 
 async function Contenido() {
-  const paginas = await getPaginasMarcaPublicadas();
+  const todas = await getPaginasMarca();
+  const hayOcultas = todas.some((p) => !p.publicada);
+  const paginas = hayOcultas && (await esAdmin()) ? todas : todas.filter((p) => p.publicada);
   if (paginas.length === 0) notFound();
   return (
     <main className="mx-auto w-full max-w-contenido flex-1 px-[clamp(18px,4vw,48px)] py-10">
@@ -59,6 +64,11 @@ async function Contenido() {
                   {oficial ? (
                     <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">Tienda oficial</span>
                   ) : null}
+                  {p.publicada ? null : (
+                    <Badge tone="warning" className="self-start">
+                      Oculta
+                    </Badge>
+                  )}
                   <span className="font-display text-xl font-medium text-text">{p.nombre}</span>
                   {oficial && p.bajada ? <span className="text-sm text-muted">{p.bajada}</span> : null}
                 </span>

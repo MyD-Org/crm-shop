@@ -13,6 +13,7 @@ import {
   ComponentesBloque,
   ConfianzaBloque,
   CotizacionBloque,
+  EmpresaBloque,
   HeroMarcaBloque,
   LineasBloque,
   ObrasBloque,
@@ -33,13 +34,13 @@ export function PaginaMarcaVista({
   pagina,
   estado,
   total,
-  whatsapp,
+  cotizar,
 }: {
   pagina: PaginaMarca;
   estado: { pagina: number; linea?: string };
   total: number | null;
-  /** Enlace de WhatsApp de la cotización (null = no hay número válido: el bloque no se dibuja). */
-  whatsapp: string | null;
+  /** A dónde lleva "cotizar" (`hrefCotizacion`; null = sin destino válido: el bloque no se dibuja). */
+  cotizar: string | null;
 }) {
   const b = pagina.bloques;
   const bloque = (nombre: BloqueMarca, contenido: ReactNode) => (
@@ -61,8 +62,9 @@ export function PaginaMarcaVista({
         ) : null,
       ),
     componentes: () => bloque("componentes", b.componentes ? <ComponentesBloque componentes={b.componentes} /> : null),
+    empresa: () => bloque("empresa", b.empresa ? <EmpresaBloque empresa={b.empresa} /> : null),
     obras: () => bloque("obras", b.obras ? <ObrasBloque obras={b.obras} /> : null),
-    cotizacion: () => bloque("cotizacion", b.cotizacion ? <CotizacionBloque cotizacion={b.cotizacion} href={whatsapp} /> : null),
+    cotizacion: () => bloque("cotizacion", b.cotizacion ? <CotizacionBloque cotizacion={b.cotizacion} href={cotizar} /> : null),
     productos: () =>
       bloque(
         "productos",

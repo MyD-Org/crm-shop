@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentType } from "react";
-import { Field, Input, Textarea } from "@myd-org/ui";
+import { Field, Input, SegmentedControl, Textarea } from "@myd-org/ui";
 import { ListaEditable } from "@/components/home/ListaEditable";
 import { CampoImagen } from "@/components/home/editores/CampoImagen";
 import { SelectorSkusDestacados } from "@/components/home/editores/SelectorSkusDestacados";
@@ -14,6 +14,8 @@ import {
   type ConfianzaMarca,
   type CotizacionMarca,
   type ElegidosMarca,
+  type EmpresaMarca,
+  type MediaEmpresa,
   type FotoObra,
   type HeroMarca,
   type LineasMarca,
@@ -33,6 +35,7 @@ export const TITULOS_BLOQUE: Record<BloqueMarca, string> = {
   lineas: "Líneas",
   elegidos: "Los más elegidos",
   componentes: "Componentes",
+  empresa: "La empresa",
   obras: "Obras",
   cotizacion: "Cotización de obra",
   productos: "Todos los productos",
@@ -196,7 +199,13 @@ function EditorObras({ valor, onChange }: EditorProps<ObrasMarca>) {
   );
 }
 
+const DESTINOS = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "enlace", label: "Otro enlace" },
+];
+
 function EditorCotizacion({ valor, onChange }: EditorProps<CotizacionMarca>) {
+  const destino = valor.destino ?? "whatsapp";
   return (
     <div className="flex flex-col gap-4">
       <Field label="Título">
@@ -208,9 +217,91 @@ function EditorCotizacion({ valor, onChange }: EditorProps<CotizacionMarca>) {
       <Field label="Botón">
         <Input value={valor.boton} onChange={(e) => onChange({ ...valor, boton: e.target.value })} />
       </Field>
-      <Field label="Mensaje de WhatsApp" hint="Se precarga en el chat con la tienda. Se usa el número de WhatsApp del pie de página.">
-        <Textarea value={valor.mensaje} onChange={(e) => onChange({ ...valor, mensaje: e.target.value })} />
+      <Field label="El botón lleva a">
+        <SegmentedControl
+          size="sm"
+          ariaLabel="A dónde lleva el botón"
+          options={DESTINOS}
+          value={destino}
+          onValueChange={(v) => onChange({ ...valor, destino: v === "enlace" ? "enlace" : undefined })}
+        />
       </Field>
+      {destino === "enlace" ? (
+        <Field
+          label="Enlace"
+          hint="Una página de la tienda (por ejemplo /contacto), un formulario (https://…), un correo (mailto:…) o un teléfono (tel:…)."
+        >
+          <Input value={valor.href ?? ""} onChange={(e) => onChange({ ...valor, href: e.target.value })} />
+        </Field>
+      ) : (
+        <>
+          <Field
+            label="Número de WhatsApp"
+            hint="Con código de país y de área, por ejemplo 54 9 223 555 1234. Vacío: el número de WhatsApp del pie de página de la tienda."
+          >
+            <Input inputMode="tel" value={valor.whatsapp ?? ""} onChange={(e) => onChange({ ...valor, whatsapp: e.target.value })} />
+          </Field>
+          <Field label="Mensaje" hint="Se precarga en el chat.">
+            <Textarea value={valor.mensaje} onChange={(e) => onChange({ ...valor, mensaje: e.target.value })} />
+          </Field>
+        </>
+      )}
+    </div>
+  );
+}
+
+const TIPOS_MEDIA = [
+  { value: "foto", label: "Foto" },
+  { value: "video", label: "Video" },
+];
+
+function EditorEmpresa({ valor, onChange }: EditorProps<EmpresaMarca>) {
+  return (
+    <div className="flex flex-col gap-4">
+      <Field label="Título">
+        <Input value={valor.titulo} onChange={(e) => onChange({ ...valor, titulo: e.target.value })} />
+      </Field>
+      <Field label="Bajada" hint="Opcional. Por ejemplo, unas líneas sobre la fábrica o el equipo.">
+        <Textarea value={valor.bajada ?? ""} onChange={(e) => onChange({ ...valor, bajada: e.target.value })} />
+      </Field>
+      <ListaEditable
+        items={valor.items}
+        onChange={(items) => onChange({ ...valor, items: items.slice(0, 8) })}
+        nuevo={(): MediaEmpresa => ({ tipo: "foto", imagen: "", alt: "" })}
+        nombreItem="elemento"
+        renderItem={(item, onItem) => (
+          <div className="flex flex-col gap-3">
+            <SegmentedControl
+              size="sm"
+              ariaLabel="Foto o video"
+              options={TIPOS_MEDIA}
+              value={item.tipo}
+              onValueChange={(t) =>
+                onItem(
+                  t === "video"
+                    ? { tipo: "video", url: "", epigrafe: item.epigrafe }
+                    : { tipo: "foto", imagen: "", alt: "", epigrafe: item.epigrafe },
+                )
+              }
+            />
+            {item.tipo === "video" ? (
+              <Field label="Enlace del video" hint="De YouTube o Vimeo, por ejemplo https://youtu.be/… o https://vimeo.com/…">
+                <Input value={item.url} onChange={(e) => onItem({ ...item, url: e.target.value })} />
+              </Field>
+            ) : (
+              <CampoImagen
+                valor={item.imagen}
+                onChange={(imagen) => onItem({ ...item, imagen })}
+                alt={item.alt}
+                onAltChange={(alt) => onItem({ ...item, alt })}
+              />
+            )}
+            <Field label="Epígrafe" hint="Opcional.">
+              <Input value={item.epigrafe ?? ""} onChange={(e) => onItem({ ...item, epigrafe: e.target.value })} />
+            </Field>
+          </div>
+        )}
+      />
     </div>
   );
 }
@@ -230,6 +321,7 @@ export const EDITORES_MARCA: Record<BloqueMarca, ComponentType<EditorProps<any>>
   lineas: EditorLineas,
   elegidos: EditorElegidos,
   componentes: EditorComponentes,
+  empresa: EditorEmpresa,
   obras: EditorObras,
   cotizacion: EditorCotizacion,
   productos: EditorProductos,
@@ -242,6 +334,7 @@ export const VACIOS: { [B in BloqueMarca]: unknown } = {
   lineas: { items: [] },
   elegidos: { titulo: "Los más elegidos", skus: [], cantidad: 8 },
   componentes: { titulo: "Lo que va adentro", chips: [] },
+  empresa: { titulo: "Conozca la empresa", items: [] },
   obras: { titulo: "Obras", fotos: [] },
   cotizacion: { titulo: "", boton: "Pedir cotización de obra", mensaje: "" },
   productos: {},

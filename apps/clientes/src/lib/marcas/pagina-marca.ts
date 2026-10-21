@@ -19,6 +19,7 @@
 import { motivoImagenInvalida, VISIBILIDADES, type Visibilidad } from "@/data/home-defaults";
 import { textoPlano } from "@/lib/institucional/paginas";
 import { razonDeContraste } from "@/lib/tema-tenant";
+import { videoEmbebible } from "./video";
 
 export type NivelMarca = "oficial" | "marca";
 
@@ -28,6 +29,7 @@ export const BLOQUES_MARCA = [
   "lineas",
   "elegidos",
   "componentes",
+  "empresa",
   "obras",
   "cotizacion",
   "productos",
@@ -49,7 +51,26 @@ export type ElegidosMarca = { titulo: string; skus: string[]; cantidad: number }
 export type ComponentesMarca = { titulo: string; bajada?: string; chips: string[] };
 export type FotoObra = { imagen: string; alt: string; epigrafe?: string };
 export type ObrasMarca = { titulo: string; fotos: FotoObra[] };
-export type CotizacionMarca = { titulo: string; bajada?: string; boton: string; mensaje: string };
+/** Foto o video de la empresa (fábrica, instalaciones, equipo). Video: enlace de YouTube o Vimeo. */
+export type MediaEmpresa =
+  | { tipo: "foto"; imagen: string; alt: string; epigrafe?: string }
+  | { tipo: "video"; url: string; epigrafe?: string };
+export type EmpresaMarca = { titulo: string; bajada?: string; items: MediaEmpresa[] };
+/**
+ * A dónde lleva el botón de cotizar. `whatsapp` (default): `whatsapp` propio del bloque o, vacío,
+ * el número del pie de la tienda, con `mensaje` precargado. `enlace`: `href` tal cual (ruta
+ * interna, https, mailto: o tel:).
+ */
+export type DestinoCotizacion = "whatsapp" | "enlace";
+export type CotizacionMarca = {
+  titulo: string;
+  bajada?: string;
+  boton: string;
+  mensaje: string;
+  destino?: DestinoCotizacion;
+  whatsapp?: string;
+  href?: string;
+};
 export type ProductosMarca = { titulo?: string };
 
 export type ContenidoBloques = {
@@ -58,6 +79,7 @@ export type ContenidoBloques = {
   lineas: LineasMarca;
   elegidos: ElegidosMarca;
   componentes: ComponentesMarca;
+  empresa: EmpresaMarca;
   obras: ObrasMarca;
   cotizacion: CotizacionMarca;
   productos: ProductosMarca;
@@ -106,6 +128,7 @@ export const MAX_MARCA = {
   skus: 60,
   chips: 12,
   fotos: 6,
+  mediaEmpresa: 8,
   cantidadElegidos: 12,
 } as const;
 
@@ -163,6 +186,7 @@ export function contenidoInicial(nivel: NivelMarca, nombre: string): Partial<Con
     confianza: { items: [] },
     elegidos: { titulo: "Los más elegidos", skus: [], cantidad: 8 },
     componentes: { titulo: "Lo que va adentro", chips: [] },
+    empresa: { titulo: "Conozca la empresa", items: [] },
     obras: { titulo: `Obras con ${nombre}`, fotos: [] },
     cotizacion: {
       titulo: "¿Tiene una obra grande o un proyecto de arquitectura?",
@@ -218,6 +242,21 @@ const textos = (v: unknown, max: number): string[] =>
 const imagen = (v: unknown): string | undefined =>
   typeof v === "string" && motivoImagenInvalida(v, []) !== "formato" ? v.trim() : undefined;
 
+const digitos = (v: unknown): string => (typeof v === "string" ? v.replace(/\D/g, "") : "");
+
+/** Destino de "cotizar": ruta interna, https, mailto: o tel: (nunca javascript: ni data:). */
+export function esHrefCotizacion(v: unknown): v is string {
+  if (typeof v !== "string" || !v.trim()) return false;
+  const h = v.trim();
+  if (h.startsWith("/")) return !h.startsWith("//");
+  try {
+    const u = new URL(h);
+    return u.protocol === "https:" || u.protocol === "mailto:" || u.protocol === "tel:";
+  } catch {
+    return false;
+  }
+}
+
 const SANEAR: { [B in BloqueMarca]: (raw: Record<string, unknown>) => ContenidoBloques[B] } = {
   hero: (r) => ({
     imagen: imagen(r.imagen),
@@ -267,11 +306,32 @@ const SANEAR: { [B in BloqueMarca]: (raw: Record<string, unknown>) => ContenidoB
       .filter((f) => f.imagen)
       .slice(0, MAX_MARCA.fotos),
   }),
+  empresa: (r) => ({
+    titulo: texto(r.titulo),
+    bajada: textoOpcional(r.bajada, MAX_MARCA.bajada),
+    items: lista(r.items)
+      .filter(registro)
+      .map((i): MediaEmpresa | null => {
+        if (i.tipo === "foto") {
+          const img = imagen(i.imagen);
+          return img ? { tipo: "foto", imagen: img, alt: texto(i.alt), epigrafe: textoOpcional(i.epigrafe) } : null;
+        }
+        if (i.tipo === "video" && videoEmbebible(i.url)) {
+          return { tipo: "video", url: (i.url as string).trim(), epigrafe: textoOpcional(i.epigrafe) };
+        }
+        return null;
+      })
+      .filter((i): i is MediaEmpresa => i !== null)
+      .slice(0, MAX_MARCA.mediaEmpresa),
+  }),
   cotizacion: (r) => ({
     titulo: texto(r.titulo),
     bajada: textoOpcional(r.bajada, MAX_MARCA.bajada),
     boton: texto(r.boton, 60),
     mensaje: texto(r.mensaje, 300),
+    destino: r.destino === "enlace" ? "enlace" : undefined,
+    whatsapp: digitos(r.whatsapp) || undefined,
+    href: r.destino === "enlace" && esHrefCotizacion(r.href) ? (r.href as string).trim() : undefined,
   }),
   productos: (r) => ({ titulo: textoOpcional(r.titulo) }),
 };
@@ -448,10 +508,36 @@ export function validarBloqueMarca(bloque: BloqueMarca, raw: unknown, hosts: rea
       });
       break;
     }
+    case "empresa": {
+      if (textoVacio(raw.titulo)) errores.push("Ingrese el título del bloque.");
+      const items = lista(raw.items);
+      if (items.length > MAX_MARCA.mediaEmpresa) errores.push(`Admite hasta ${MAX_MARCA.mediaEmpresa} fotos o videos.`);
+      items.forEach((i, n) => {
+        if (!registro(i)) return errores.push(`El elemento ${n + 1} no es válido.`);
+        if (i.tipo === "video") {
+          if (!videoEmbebible(i.url)) errores.push(`El video ${n + 1} debe ser un enlace de YouTube o Vimeo.`);
+        } else if (i.tipo === "foto") {
+          if (textoVacio(i.imagen)) errores.push(`Suba la imagen de la foto ${n + 1}.`);
+          else errores.push(...erroresImagen(i.imagen, hosts, `Foto ${n + 1}`));
+          if (textoVacio(i.alt)) errores.push(`Describa la foto ${n + 1} (texto alternativo).`);
+        } else errores.push(`El elemento ${n + 1} no es válido.`);
+      });
+      break;
+    }
     case "cotizacion":
       if (textoVacio(raw.titulo)) errores.push("Ingrese el título del bloque.");
       if (textoVacio(raw.boton)) errores.push("Ingrese el texto del botón.");
-      if (textoVacio(raw.mensaje)) errores.push("Ingrese el mensaje que se precarga en WhatsApp.");
+      if (raw.destino === "enlace") {
+        if (!esHrefCotizacion(raw.href)) {
+          errores.push("Ingrese a dónde lleva el botón: una ruta de la tienda (/contacto), una dirección https, mailto: o tel:.");
+        }
+      } else {
+        if (textoVacio(raw.mensaje)) errores.push("Ingrese el mensaje que se precarga en WhatsApp.");
+        const d = digitos(raw.whatsapp);
+        if (d && (d.length < 8 || d.length > 15)) {
+          errores.push("El número de WhatsApp no es válido. Ingréselo con código de país y de área, o déjelo vacío para usar el de la tienda.");
+        }
+      }
       break;
     case "productos":
       break;

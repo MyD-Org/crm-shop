@@ -4,7 +4,10 @@
  */
 import type { Metadata } from "next";
 import type { FiltrosSinTexto } from "@/lib/catalog";
-import { hrefMarca, type PaginaMarca } from "./pagina-marca";
+import { enlaceWhatsapp } from "@/lib/contacto-pedido";
+import { hrefMarca, type CotizacionMarca, type PaginaMarca } from "./pagina-marca";
+
+export { videoEmbebible, type VideoEmbebible } from "./video";
 
 type Params = Record<string, string | string[] | undefined>;
 
@@ -81,4 +84,14 @@ export function hrefCatalogoCompleto(p: PaginaMarca): string {
 export function rutasSitemapMarcas(ps: readonly PaginaMarca[]): string[] {
   const publicadas = ps.filter((p) => p.publicada);
   return publicadas.length ? ["/marcas", ...publicadas.map((p) => hrefMarca(p.slug))] : [];
+}
+
+/**
+ * A dónde lleva "Pedir cotización de obra": el enlace del bloque, o WhatsApp con el número propio
+ * del bloque (si no, el de la tienda) y el mensaje precargado. `null` = no hay destino válido y el
+ * bloque no se dibuja.
+ */
+export function hrefCotizacion(c: CotizacionMarca, whatsappTienda: string | null | undefined): string | null {
+  if (c.destino === "enlace") return c.href ?? null;
+  return enlaceWhatsapp(c.whatsapp || whatsappTienda, c.mensaje);
 }

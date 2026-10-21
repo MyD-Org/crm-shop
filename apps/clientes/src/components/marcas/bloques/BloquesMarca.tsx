@@ -5,6 +5,7 @@ import type {
   ComponentesMarca,
   ConfianzaMarca,
   CotizacionMarca,
+  EmpresaMarca,
   HeroMarca,
   LineasMarca,
   ObrasMarca,
@@ -12,6 +13,7 @@ import type {
 } from "@/lib/marcas/pagina-marca";
 import { hrefLinea } from "@/lib/marcas/vista-marca";
 import { ImagenMarca } from "../ImagenMarca";
+import { VideoMarca } from "../VideoMarca";
 
 /**
  * Bloques estáticos de una página de marca (spec 2026-10-20 §3 y §4). Server
@@ -191,6 +193,32 @@ export function ComponentesBloque({ componentes }: { componentes: ComponentesMar
   );
 }
 
+/** Fotos y videos de la empresa (fábrica, instalaciones, equipo). */
+export function EmpresaBloque({ empresa }: { empresa: EmpresaMarca }) {
+  if (empresa.items.length === 0) return null;
+  return (
+    <SeccionMarca>
+      <TituloBloque bajada={empresa.bajada}>{empresa.titulo}</TituloBloque>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {empresa.items.map((m, i) => (
+          <li key={(m.tipo === "video" ? m.url : m.imagen) + i} className={cn(i === 0 && empresa.items.length % 2 === 1 && "sm:col-span-2")}>
+            <figure className="flex flex-col gap-2">
+              <div className="relative aspect-video overflow-hidden rounded-lg bg-elevated">
+                {m.tipo === "video" ? (
+                  <VideoMarca url={m.url} titulo={m.epigrafe || empresa.titulo} />
+                ) : (
+                  <ImagenMarca src={m.imagen} alt={m.alt} sizes="(max-width: 640px) 100vw, 50vw" fit="cover" className="object-cover" />
+                )}
+              </div>
+              {m.epigrafe ? <figcaption className="text-sm text-muted">{m.epigrafe}</figcaption> : null}
+            </figure>
+          </li>
+        ))}
+      </ul>
+    </SeccionMarca>
+  );
+}
+
 export function ObrasBloque({ obras }: { obras: ObrasMarca }) {
   if (obras.fotos.length === 0) return null;
   return (
@@ -223,8 +251,7 @@ export function CotizacionBloque({ cotizacion, href }: { cotizacion: CotizacionM
         </div>
         <a
           href={href}
-          target="_blank"
-          rel="noopener noreferrer"
+          {...(href.startsWith("https:") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
           className="inline-flex items-center justify-center rounded-md bg-accent px-5 py-3 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
         >
           {cotizacion.boton} →

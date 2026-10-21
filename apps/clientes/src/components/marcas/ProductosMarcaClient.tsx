@@ -84,7 +84,7 @@ export function ProductosMarcaClient({
 
       <div className="flex items-center justify-between gap-3 lg:justify-end">
         <div className="lg:hidden">
-          <CatalogoFiltrosSheet facetas={facetas} estado={estadoVisible} navegar={navegar} navegando={navegando} />
+          <CatalogoFiltrosSheet facetas={facetas} estado={estadoVisible} navegar={navegar} navegando={navegando} sinMarcas />
         </div>
         <CatalogoControles estado={estadoVisible} ir={ir} />
       </div>
@@ -97,7 +97,7 @@ export function ProductosMarcaClient({
           fadeFrom="lg"
           className="sticky top-20 hidden max-h-[calc(100dvh-5rem)] w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-12 lg:block"
         >
-          <CatalogoFiltros facetas={facetas} estado={estadoVisible} ir={ir} />
+          <CatalogoFiltros facetas={facetas} estado={estadoVisible} ir={ir} sinMarcas />
         </FadeScroll>
         <div className={cn("flex min-w-0 flex-1 flex-col gap-6 transition-opacity", navegando && "opacity-50")}>
           {productos.length > 0 ? (

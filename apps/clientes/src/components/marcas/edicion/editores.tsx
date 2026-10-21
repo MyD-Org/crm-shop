@@ -16,6 +16,7 @@ import {
   type ElegidosMarca,
   type EmpresaMarca,
   type MediaEmpresa,
+  type NivelMarca,
   type FotoObra,
   type HeroMarca,
   type LineasMarca,
@@ -47,22 +48,49 @@ const lista = (texto: string) =>
     .map((t) => t.trim())
     .filter(Boolean);
 
-function EditorHero({ valor, onChange }: EditorProps<HeroMarca>) {
+/**
+ * Borrador del encabezado: lo que se ve en esa franja. Nombre, bajada y logo son datos de la
+ * página (también están en "Datos de la página"); `hero` es el bloque. Lo guarda
+ * `guardarEncabezadoMarca` en una sola escritura.
+ */
+export type BorradorEncabezado = {
+  nivel: NivelMarca;
+  nombre: string;
+  bajada: string;
+  logo?: string;
+  hero: HeroMarca;
+};
+
+function EditorHero({ valor, onChange }: EditorProps<BorradorEncabezado>) {
+  const hero = valor.hero;
+  const setHero = (cambios: Partial<HeroMarca>) => onChange({ ...valor, hero: { ...hero, ...cambios } });
+  const oficial = valor.nivel === "oficial";
   return (
     <div className="flex flex-col gap-4">
-      <CampoImagen
-        label="Imagen de fondo"
-        hint="Una foto nocturna de obra funciona muy bien. Se oscurece para que el texto se lea."
-        valor={valor.imagen ?? ""}
-        onChange={(imagen) => onChange({ ...valor, imagen: imagen || undefined })}
-        alt={valor.imagenAlt ?? ""}
-        onAltChange={(imagenAlt) => onChange({ ...valor, imagenAlt })}
-      />
-      <Field label="Sello" hint='Por ejemplo "Tienda oficial · Vendedor oficial online". Vacío: no se muestra.'>
-        <Input value={valor.sello ?? ""} onChange={(e) => onChange({ ...valor, sello: e.target.value })} />
+      <Field label="Nombre de la marca">
+        <Input value={valor.nombre} onChange={(e) => onChange({ ...valor, nombre: e.target.value })} />
       </Field>
-      <Field label="Botón" hint="Lleva a la lista de productos; se le suma la cantidad.">
-        <Input value={valor.cta ?? ""} onChange={(e) => onChange({ ...valor, cta: e.target.value })} />
+      <Field label="Bajada" hint="Una línea de quiénes son. Vacío: no se muestra.">
+        <Textarea value={valor.bajada} onChange={(e) => onChange({ ...valor, bajada: e.target.value })} />
+      </Field>
+      <CampoImagen label="Logo" contener valor={valor.logo ?? ""} onChange={(logo) => onChange({ ...valor, logo: logo || undefined })} />
+      {oficial ? (
+        <>
+          <CampoImagen
+            label="Imagen de fondo"
+            hint="Una foto nocturna de obra funciona muy bien. Se oscurece para que el texto se lea."
+            valor={hero.imagen ?? ""}
+            onChange={(imagen) => setHero({ imagen: imagen || undefined })}
+            alt={hero.imagenAlt ?? ""}
+            onAltChange={(imagenAlt) => setHero({ imagenAlt })}
+          />
+          <Field label="Sello" hint='Por ejemplo "Tienda oficial · Vendedor oficial online". Vacío: no se muestra.'>
+            <Input value={hero.sello ?? ""} onChange={(e) => setHero({ sello: e.target.value })} />
+          </Field>
+        </>
+      ) : null}
+      <Field label="Botón" hint="Lleva a la lista de productos; se le suma la cantidad. Vacío: no se muestra.">
+        <Input value={hero.cta ?? ""} onChange={(e) => setHero({ cta: e.target.value })} />
       </Field>
     </div>
   );

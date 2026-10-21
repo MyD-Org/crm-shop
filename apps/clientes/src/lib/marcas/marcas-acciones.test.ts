@@ -28,6 +28,7 @@ import {
   crearPaginaMarca,
   guardarBloqueMarca,
   guardarDatosMarca,
+  guardarEncabezadoMarca,
   leerPaginaMarcaParaEditar,
   leerPaginasMarcaParaEditor,
   moverPaginaMarca,
@@ -177,5 +178,36 @@ describe("lecturas del editor", () => {
     m.leer.mockResolvedValue(fila("acme"));
     const r = await leerPaginaMarcaParaEditar("acme");
     expect(r.ok && r.pagina.slug).toBe("acme");
+  });
+});
+
+describe("guardarEncabezadoMarca (nombre, bajada y logo junto con el bloque hero)", () => {
+  it("guarda todo en una sola escritura, sin tocar el resto", async () => {
+    m.leer.mockResolvedValue(fila("acme", { bloques: { componentes: { titulo: "C", chips: ["A"] } } }));
+    const r = await guardarEncabezadoMarca("acme", {
+      nombre: "Acme SA",
+      bajada: "Fábrica de luces",
+      logo: "/images/marcas/acme.webp",
+      hero: { sello: "Tienda oficial", cta: "Ver" },
+    });
+    expect(r).toEqual({ ok: true });
+    expect(m.guardar).toHaveBeenCalledTimes(1);
+    const [clave, payload] = m.guardar.mock.calls[0];
+    expect(clave).toBe("pagina-marca:acme");
+    expect(payload).toMatchObject({ slug: "acme", nombre: "Acme SA", bajada: "Fábrica de luces", logo: "/images/marcas/acme.webp" });
+    expect(payload.bloques.hero).toEqual({ sello: "Tienda oficial", cta: "Ver" });
+    expect(payload.bloques.componentes).toEqual({ titulo: "C", chips: ["A"] });
+  });
+
+  it("valida el nombre y no escribe si falta", async () => {
+    m.leer.mockResolvedValue(fila("acme"));
+    const r = await guardarEncabezadoMarca("acme", { nombre: " ", bajada: "", hero: {} });
+    expect(r.ok).toBe(false);
+    expect(m.guardar).not.toHaveBeenCalled();
+  });
+
+  it("sin admin no escribe", async () => {
+    m.esAdmin.mockResolvedValue(false);
+    expect(await guardarEncabezadoMarca("acme", { nombre: "X", bajada: "", hero: {} })).toEqual({ ok: false, errores: [SIN_PERMISO] });
   });
 });

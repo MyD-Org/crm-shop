@@ -7,10 +7,11 @@ import { OPCIONES_VISIBILIDAD } from "@/components/home/editores/SelectorVisibil
 import {
   cambiarVisibilidadBloqueMarca,
   guardarBloqueMarca,
+  guardarEncabezadoMarca,
   leerPaginaMarcaParaEditar,
 } from "@/lib/marcas/marcas-acciones";
 import type { BloqueMarca } from "@/lib/marcas/pagina-marca";
-import { EDITORES_MARCA, TITULOS_BLOQUE, VACIOS } from "./editores";
+import { EDITORES_MARCA, TITULOS_BLOQUE, VACIOS, type BorradorEncabezado } from "./editores";
 
 const ERROR_CARGA = "No se pudo cargar el bloque. Inténtelo de nuevo.";
 const AVISO: Record<Visibilidad, string | null> = {
@@ -66,7 +67,12 @@ export function DialogoBloqueMarca({
       (r) => {
         if (!vigente) return;
         if (r.ok) {
-          setBorrador(r.pagina.bloques[bloque] ?? VACIOS[bloque]);
+          const p = r.pagina;
+          setBorrador(
+            bloque === "hero"
+              ? ({ nivel: p.nivel, nombre: p.nombre, bajada: p.bajada, logo: p.logo, hero: p.bloques.hero ?? {} } satisfies BorradorEncabezado)
+              : (p.bloques[bloque] ?? VACIOS[bloque]),
+          );
           setCarga({ estado: "lista" });
         } else {
           setCarga({ estado: "error", mensaje: r.error });
@@ -83,7 +89,10 @@ export function DialogoBloqueMarca({
 
   function guardar() {
     startTransition(async () => {
-      const r = await guardarBloqueMarca(slug, bloque, borrador);
+      const r =
+        bloque === "hero"
+          ? await guardarEncabezadoMarca(slug, borrador as BorradorEncabezado)
+          : await guardarBloqueMarca(slug, bloque, borrador);
       if (!r.ok) {
         setErrores(r.errores);
         return;

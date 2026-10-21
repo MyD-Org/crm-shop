@@ -155,6 +155,33 @@ export async function guardarBloqueMarca(slug: string, bloque: BloqueMarca, payl
   });
 }
 
+/**
+ * El encabezado completo de una página: lo que se ve en esa franja (nombre, bajada, logo) más el
+ * bloque `hero` (foto de fondo, sello, botón), en UNA escritura. Es lo que guarda "Editar:
+ * Encabezado"; los datos generales siguen también en "Datos de la página".
+ */
+export async function guardarEncabezadoMarca(
+  slug: string,
+  datos: { nombre: string; bajada: string; logo?: string; hero: unknown },
+): Promise<ResultadoMarca> {
+  return comoAdmin("guardar encabezado", async () => {
+    const actual = await leerPagina(slug);
+    if (!actual) return { ok: false, errores: [NO_EXISTE] };
+    const erroresHero = validarBloqueMarca("hero", datos?.hero, hostsDeMedios());
+    const r = comoGuardable({
+      ...actual,
+      nombre: typeof datos?.nombre === "string" ? datos.nombre.trim() : "",
+      bajada: typeof datos?.bajada === "string" ? datos.bajada : "",
+      logo: datos?.logo || undefined,
+      slug: actual.slug,
+    });
+    if (erroresHero.length > 0 || !r.ok) return { ok: false, errores: [...(r.ok ? [] : r.errores), ...erroresHero] };
+    await escribir({ ...r.pagina, bloques: { ...r.pagina.bloques, hero: sanearContenidoBloque("hero", datos.hero) } });
+    updateTag(TAG_HOME);
+    return { ok: true };
+  });
+}
+
 export async function cambiarVisibilidadBloqueMarca(
   slug: string,
   bloque: BloqueMarca,

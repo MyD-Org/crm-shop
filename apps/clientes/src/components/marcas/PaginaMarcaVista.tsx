@@ -1,4 +1,4 @@
-import { Suspense, type CSSProperties, type ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Breadcrumb } from "@myd-org/ui";
 import { linkNext } from "@/components/catalogo/link-next";
 import {
@@ -9,6 +9,7 @@ import {
   type PaginaMarca,
 } from "@/lib/marcas/pagina-marca";
 import { BloqueMarcaEditable } from "./edicion/BloqueMarcaEditable";
+import { propsTemaOficial } from "./tema-oficial";
 import {
   ComponentesBloque,
   ConfianzaBloque,
@@ -96,10 +97,9 @@ export function PaginaMarcaVista({
       </main>
     );
   }
-  const estilo = pagina.acento ? ({ "--acento-marca": pagina.acento } as CSSProperties) : undefined;
   return (
     <main className="flex-1" data-pagina-marca={hrefMarca(pagina.slug)}>
-      <div data-tema-marca="oficial" style={estilo}>
+      <div {...propsTemaOficial(pagina)}>
         {migas}
         {deMarca.map((n) => render[n]())}
       </div>

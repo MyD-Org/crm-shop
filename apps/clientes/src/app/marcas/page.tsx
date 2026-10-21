@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Badge, cn } from "@myd-org/ui";
 import { ImagenMarca } from "@/components/marcas/ImagenMarca";
+import { propsTemaOficial } from "@/components/marcas/tema-oficial";
 import { getMarca } from "@/lib/marca";
 import { esAdmin } from "@/lib/auth";
 import { getPaginasMarca } from "@/lib/marcas/marcas-datos";
@@ -47,7 +48,7 @@ async function Contenido() {
             <li key={p.slug} className={cn(oficial && "col-span-2")}>
               <Link
                 href={hrefMarca(p.slug)}
-                data-tema-marca={oficial ? "oficial" : undefined}
+                {...(oficial ? propsTemaOficial(p) : {})}
                 className={cn(
                   "flex h-full flex-col gap-4 rounded-xl border border-border p-5 transition-shadow hover:shadow-md",
                   oficial ? "sm:flex-row sm:items-center" : "items-center bg-surface text-center",

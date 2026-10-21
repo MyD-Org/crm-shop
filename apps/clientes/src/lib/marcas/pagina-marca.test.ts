@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   BLOQUES_POR_NIVEL,
+  acentoDe,
+  temaDe,
   claveDeMarca,
   contenidoInicial,
   esSlugMarca,
@@ -214,5 +216,30 @@ describe("cotización configurable", () => {
 
   it("con enlace el mensaje no es obligatorio", () => {
     expect(validarBloqueMarca("cotizacion", { titulo: "Obras", boton: "Cotizar", mensaje: "", destino: "enlace", href: "/contacto" }, HOSTS)).toEqual([]);
+  });
+});
+
+describe("tema claro u oscuro de la tienda oficial", () => {
+  it("sin tema es oscuro; 'claro' se conserva; otra cosa se descarta", () => {
+    expect(temaDe(pagina({ nivel: "oficial" }))).toBe("oscuro");
+    expect(sanearPaginaMarca({ ...pagina({ nivel: "oficial" }), tema: "claro" })?.tema).toBe("claro");
+    expect(sanearPaginaMarca({ ...pagina({ nivel: "oficial" }), tema: "rosa" })?.tema).toBeUndefined();
+  });
+
+  it("el acento por defecto depende del tema", () => {
+    expect(acentoDe(pagina({ nivel: "oficial" }))).toBe("#c0a15a");
+    expect(acentoDe(pagina({ nivel: "oficial", tema: "claro" }))).toBe("#7d6328");
+    expect(acentoDe(pagina({ nivel: "oficial", tema: "claro", acento: "#1e5aa8" }))).toBe("#1e5aa8");
+  });
+
+  it("el contraste del acento se mide contra el fondo y la superficie del tema elegido", () => {
+    // El dorado claro se lee sobre negro pero no sobre el fondo claro.
+    expect(validarPaginaMarca(pagina({ nivel: "oficial", acento: "#c0a15a" }), HOSTS)).toEqual([]);
+    expect(validarPaginaMarca(pagina({ nivel: "oficial", tema: "claro", acento: "#c0a15a" }), HOSTS).some((e) => e.includes("contraste"))).toBe(true);
+    expect(validarPaginaMarca(pagina({ nivel: "oficial", tema: "claro", acento: "#7d6328" }), HOSTS)).toEqual([]);
+  });
+
+  it("un tema inválido se rechaza al guardar", () => {
+    expect(validarPaginaMarca({ ...pagina({ nivel: "oficial" }), tema: "rosa" }, HOSTS).length).toBeGreaterThan(0);
   });
 });

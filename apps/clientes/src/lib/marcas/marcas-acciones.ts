@@ -119,9 +119,9 @@ export async function crearPaginaMarca(datos: {
 }
 
 type DatosEditables = Partial<
-  Pick<PaginaMarca, "nombre" | "nivel" | "marcasCatalogo" | "logo" | "bajada" | "acento" | "seo" | "publicada">
+  Pick<PaginaMarca, "nombre" | "nivel" | "marcasCatalogo" | "logo" | "bajada" | "tema" | "acento" | "seo" | "publicada">
 >;
-const CAMPOS_DATOS = ["nombre", "nivel", "marcasCatalogo", "logo", "bajada", "acento", "seo", "publicada"] as const;
+const CAMPOS_DATOS = ["nombre", "nivel", "marcasCatalogo", "logo", "bajada", "tema", "acento", "seo", "publicada"] as const;
 
 /** Datos generales (no el slug, ni el orden, ni los bloques). */
 export async function guardarDatosMarca(slug: string, datos: DatosEditables): Promise<ResultadoMarca> {

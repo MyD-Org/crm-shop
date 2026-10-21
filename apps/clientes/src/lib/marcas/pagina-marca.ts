@@ -100,7 +100,9 @@ export type PaginaMarca = {
   marcasCatalogo: string[];
   logo?: string;
   bajada: string;
-  /** Acento `#rrggbb` de la tienda oficial (sobre fondo oscuro). Ausente: el dorado por defecto. */
+  /** Tema de la tienda oficial. Ausente: oscuro (el de siempre). */
+  tema?: TemaMarca;
+  /** Acento `#rrggbb` de la tienda oficial. Ausente: el del tema (`acentoDe`). */
   acento?: string;
   seo?: SeoMarca;
   bloques: Partial<ContenidoBloques>;
@@ -112,9 +114,26 @@ export type PaginaMarca = {
 export type ItemMenuMarca = { label: string; href: string; destacado?: boolean; descripcion?: string };
 
 export const PREFIJO_CLAVE_MARCA = "pagina-marca:";
-export const ACENTO_OFICIAL = "#c0a15a";
-/** Fondo de la tienda oficial: contra él se mide el contraste del acento. */
-export const FONDO_OFICIAL = "#0c0c0c";
+
+/**
+ * Temas de la tienda oficial: los mismos valores que `[data-tema-marca="oficial"]` y su variante
+ * `[data-tono="claro"]` en `globals.css`. Contra `fondo` y `superficie` se mide el contraste del
+ * acento; `acento` es el que se usa si la página no elige uno.
+ */
+export type TemaMarca = "oscuro" | "claro";
+export const TEMAS_MARCA: Record<TemaMarca, { fondo: string; superficie: string; acento: string }> = {
+  oscuro: { fondo: "#0c0c0c", superficie: "#141418", acento: "#c0a15a" },
+  claro: { fondo: "#faf9f6", superficie: "#ffffff", acento: "#7d6328" },
+};
+
+export function temaDe(p: Pick<PaginaMarca, "tema">): TemaMarca {
+  return p.tema === "claro" ? "claro" : "oscuro";
+}
+
+/** El acento que se pinta: el de la página o, si no eligió, el de su tema. */
+export function acentoDe(p: Pick<PaginaMarca, "tema" | "acento">): string {
+  return p.acento ?? TEMAS_MARCA[temaDe(p)].acento;
+}
 
 export const MAX_MARCA = {
   slug: 60,
@@ -397,6 +416,7 @@ export function sanearPaginaMarca(raw: unknown): PaginaMarca | null {
       .slice(0, MAX_MARCA.marcasCatalogo),
     logo: imagen(raw.logo),
     bajada: texto(raw.bajada, MAX_MARCA.bajada),
+    tema: raw.tema === "claro" || raw.tema === "oscuro" ? (raw.tema as TemaMarca) : undefined,
     acento: typeof raw.acento === "string" && HEX.test(raw.acento) ? raw.acento : undefined,
     seo: seo && Object.keys(seo).length ? seo : undefined,
     bloques,
@@ -436,11 +456,20 @@ export function validarPaginaMarca(raw: unknown, hosts: readonly string[]): stri
     errores.push(`La bajada admite hasta ${MAX_MARCA.bajada} caracteres.`);
   }
   errores.push(...erroresImagen(raw.logo, hosts, "Logo"));
+  if (raw.tema !== undefined && raw.tema !== "oscuro" && raw.tema !== "claro") {
+    errores.push("Elija un tema claro u oscuro.");
+  }
   if (raw.acento !== undefined && raw.acento !== "") {
+    const tema = raw.tema === "claro" ? "claro" : "oscuro";
+    const { fondo, superficie } = TEMAS_MARCA[tema];
     if (typeof raw.acento !== "string" || !HEX.test(raw.acento)) {
       errores.push("El color de acento debe tener la forma #rrggbb.");
-    } else if (razonDeContraste(raw.acento, FONDO_OFICIAL) < UMBRAL_CONTRASTE) {
-      errores.push("El color de acento no tiene contraste suficiente sobre el fondo oscuro. Elija uno más claro.");
+    } else if (Math.min(razonDeContraste(raw.acento, fondo), razonDeContraste(raw.acento, superficie)) < UMBRAL_CONTRASTE) {
+      errores.push(
+        tema === "claro"
+          ? "El color de acento no tiene contraste suficiente sobre el fondo claro. Elija uno más oscuro."
+          : "El color de acento no tiene contraste suficiente sobre el fondo oscuro. Elija uno más claro.",
+      );
     }
   }
   if (registro(raw.seo)) errores.push(...erroresImagen(raw.seo.imagenOg, hosts, "Imagen para redes"));

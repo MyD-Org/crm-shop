@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Alert, Button, Dialog, Field, Input, Spinner, Switch, Textarea, useToast } from "@myd-org/ui";
+import { Alert, Button, Dialog, Field, Input, SegmentedControl, Spinner, Switch, Textarea, useToast } from "@myd-org/ui";
 import { CampoImagen } from "@/components/home/editores/CampoImagen";
 import { guardarDatosMarca, leerPaginaMarcaParaEditar } from "@/lib/marcas/marcas-acciones";
-import { ACENTO_OFICIAL, type PaginaMarca } from "@/lib/marcas/pagina-marca";
+import { TEMAS_MARCA, temaDe, type PaginaMarca, type TemaMarca } from "@/lib/marcas/pagina-marca";
 import { SelectorValoresMarca } from "../SelectorValoresMarca";
 
-type Datos = Pick<PaginaMarca, "nombre" | "bajada" | "logo" | "acento" | "seo" | "publicada" | "marcasCatalogo" | "nivel">;
+type Datos = Pick<PaginaMarca, "nombre" | "bajada" | "logo" | "tema" | "acento" | "seo" | "publicada" | "marcasCatalogo" | "nivel">;
+
+const OPCIONES_TEMA = [
+  { value: "oscuro", label: "Oscuro" },
+  { value: "claro", label: "Claro" },
+];
 
 /**
  * Datos generales de una página de marca: nombre, bajada, logo, acento (solo
@@ -47,8 +52,8 @@ export function DialogoDatosMarca({
       (r) => {
         if (!vigente) return;
         if (r.ok) {
-          const { nombre, bajada, logo, acento, seo, publicada, marcasCatalogo, nivel } = r.pagina;
-          setDatos({ nombre, bajada, logo, acento, seo, publicada, marcasCatalogo, nivel });
+          const { nombre, bajada, logo, tema, acento, seo, publicada, marcasCatalogo, nivel } = r.pagina;
+          setDatos({ nombre, bajada, logo, tema, acento, seo, publicada, marcasCatalogo, nivel });
         } else setError(r.error);
       },
       () => vigente && setError("No se pudo cargar la página. Inténtelo de nuevo."),
@@ -120,9 +125,27 @@ export function DialogoDatosMarca({
           </Field>
           <CampoImagen label="Logo" contener valor={datos.logo ?? ""} onChange={(logo) => set({ logo })} />
           {datos.nivel === "oficial" ? (
-            <Field label="Color de acento" hint={`Formato #rrggbb, sobre fondo negro. Vacío: ${ACENTO_OFICIAL}.`}>
-              <Input value={datos.acento ?? ""} placeholder={ACENTO_OFICIAL} onChange={(e) => set({ acento: e.target.value })} />
-            </Field>
+            <>
+              <Field label="Tema" hint="Los colores de fondo del contenido de la página. El encabezado y el pie de la tienda no cambian.">
+                <SegmentedControl
+                  size="sm"
+                  ariaLabel="Tema de la página"
+                  options={OPCIONES_TEMA}
+                  value={temaDe(datos)}
+                  onValueChange={(v) => set({ tema: v as TemaMarca })}
+                />
+              </Field>
+              <Field
+                label="Color de acento"
+                hint={`Formato #rrggbb. Tiene que leerse bien sobre el fondo ${temaDe(datos) === "claro" ? "claro" : "oscuro"}. Vacío: ${TEMAS_MARCA[temaDe(datos)].acento}.`}
+              >
+                <Input
+                  value={datos.acento ?? ""}
+                  placeholder={TEMAS_MARCA[temaDe(datos)].acento}
+                  onChange={(e) => set({ acento: e.target.value })}
+                />
+              </Field>
+            </>
           ) : null}
           <Field label="Marcas del catálogo" hint="Cómo figura esta marca en el catálogo. Si aparece escrita de varias formas, elija todas.">
             <SelectorValoresMarca elegidos={datos.marcasCatalogo} onChange={(marcasCatalogo) => set({ marcasCatalogo })} />

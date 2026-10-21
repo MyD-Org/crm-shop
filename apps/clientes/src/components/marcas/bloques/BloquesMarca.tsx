@@ -11,6 +11,7 @@ import type {
   ObrasMarca,
   PaginaMarca,
 } from "@/lib/marcas/pagina-marca";
+import { temaDe } from "@/lib/marcas/pagina-marca";
 import { hrefLinea } from "@/lib/marcas/vista-marca";
 import { ImagenMarca } from "../ImagenMarca";
 import { VideoMarca } from "../VideoMarca";
@@ -68,6 +69,7 @@ export function HeroMarcaBloque({
   total: number | null;
 }) {
   const cta = hero?.cta ? `${hero.cta}${total ? ` (${total})` : ""}` : null;
+  const claro = temaDe(pagina) === "claro";
   if (pagina.nivel === "marca") {
     return (
       <section className="border-b border-border bg-surface">
@@ -98,11 +100,24 @@ export function HeroMarcaBloque({
           className="-z-10 object-cover"
         />
       ) : (
-        <div aria-hidden className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_75%_40%,#4a3d22_0%,#17140f_45%,#0a0a0c_80%)]" />
+        <div
+          aria-hidden
+          className={cn(
+            "absolute inset-0 -z-10",
+            claro
+              ? "bg-[radial-gradient(ellipse_at_75%_40%,#efe6d2_0%,#f6f2ea_45%,#faf9f6_80%)]"
+              : "bg-[radial-gradient(ellipse_at_75%_40%,#4a3d22_0%,#17140f_45%,#0a0a0c_80%)]",
+          )}
+        />
       )}
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(10,10,12,0.94)_0%,rgba(10,10,12,0.6)_55%,rgba(10,10,12,0.25)_100%)]"
+        className={cn(
+          "absolute inset-0 -z-10",
+          claro
+            ? "bg-[linear-gradient(90deg,rgba(250,249,246,0.95)_0%,rgba(250,249,246,0.7)_55%,rgba(250,249,246,0.2)_100%)]"
+            : "bg-[linear-gradient(90deg,rgba(10,10,12,0.94)_0%,rgba(10,10,12,0.6)_55%,rgba(10,10,12,0.25)_100%)]",
+        )}
       />
       <div className={cn(ANCHO, "flex min-h-[clamp(320px,42vw,520px)] flex-col justify-end gap-6 py-[clamp(32px,5vw,64px)] sm:flex-row sm:items-end")}>
         <Logo pagina={pagina} claro />

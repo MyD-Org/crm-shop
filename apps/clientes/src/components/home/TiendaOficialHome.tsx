@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import type { CSSProperties } from "react";
 import type { TiendaOficialContent } from "@/data/home-defaults";
 import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
 import { ImagenMarca } from "@/components/marcas/ImagenMarca";
+import { propsTemaOficial } from "@/components/marcas/tema-oficial";
 import { destacadosHome } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { getPaginaMarca } from "@/lib/marcas/marcas-datos";
@@ -35,13 +35,11 @@ export async function TiendaOficialHome({ contenido }: { contenido: TiendaOficia
     base: filtrosDeMarca(pagina),
   });
   const titulo = contenido.titulo || pagina.bajada;
-  const estilo = pagina.acento ? ({ "--acento-marca": pagina.acento } as CSSProperties) : undefined;
 
   return (
     <section className="pt-[clamp(56px,7vw,96px)]">
       <div
-        data-tema-marca="oficial"
-        style={estilo}
+        {...propsTemaOficial(pagina)}
         className="grid overflow-hidden rounded-2xl lg:grid-cols-[1.1fr_1.6fr]"
       >
         <div className="flex flex-col justify-center gap-4 p-[clamp(24px,3vw,40px)]">

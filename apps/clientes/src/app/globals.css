@@ -385,3 +385,37 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
 }
+
+/*
+ * Tienda oficial en tema claro (`data-tono="claro"`, elegido en "Datos de la
+ * página"): crema con el acento de la marca, por defecto un dorado oscuro
+ * (#7d6328) que llega a AA sobre el fondo, la superficie y el gris de las fotos.
+ * Los roles de estado son los claros del DS (stock y cuotas de las cards).
+ */
+[data-tema-marca="oficial"][data-tono="claro"] {
+  --color-bg: #faf9f6;
+  --color-surface: #ffffff;
+  --color-elevated: #f1efe9;
+  --color-border: rgba(20, 20, 20, 0.1);
+  --color-border-strong: rgba(20, 20, 20, 0.22);
+  --color-text: #141414;
+  --color-muted: #5c5f66;
+  --color-subtle: #5c5f66;
+  --color-accent: var(--acento-marca, #7d6328);
+  --color-accent-strong: var(--acento-marca, #7d6328);
+  --color-accent-soft: rgba(125, 99, 40, 0.1);
+  --color-ring: var(--acento-marca, #7d6328);
+  --color-primary: var(--acento-marca, #7d6328);
+  --color-primary-hover: #141414;
+  --color-primary-soft: #f1efe9;
+  --color-on-primary: #ffffff;
+  --color-highlight: var(--acento-marca, #7d6328);
+  --color-success: #15803d;
+  --color-success-soft: #ecfdf3;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fef2f2;
+  --color-warning: #b45309;
+  --color-warning-soft: #fffbeb;
+  --color-info: #0369a1;
+  --color-info-soft: #f0f9ff;
+}

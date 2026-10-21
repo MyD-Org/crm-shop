@@ -1,5 +1,7 @@
 import type { SiteNavItem, VisibleOn } from "@myd-org/ui";
 import type { NavBadgeContent } from "@/data/home-defaults";
+import { formatRubro } from "@/lib/formato-rubro";
+import type { ItemMenuMarca } from "@/lib/marcas/pagina-marca";
 
 /**
  * Cuántas categorías entran en la barra del header. Lo comparten el header y
@@ -7,6 +9,28 @@ import type { NavBadgeContent } from "@/data/home-defaults";
  * menú, porque un badge sobre una categoría que no está ahí no aparece nunca.
  */
 export const MAX_CATEGORIAS_NAV = 8;
+
+/** Con "Marcas" en la barra (hay páginas de marca publicadas) entra una categoría menos. */
+export function maxCategoriasNav(conMarcas: boolean): number {
+  return conMarcas ? MAX_CATEGORIAS_NAV - 1 : MAX_CATEGORIAS_NAV;
+}
+
+/** Un ítem del nav con el desplegable de marcas (`SiteNavItem.menu` del DS; con un DS sin `menu`, un link a `/marcas`). */
+export type ItemNavHome = SiteNavItem & { menu?: ItemMenuMarca[] };
+
+/**
+ * La barra de la home: las categorías que entran y, si hay páginas de marca publicadas, "Marcas"
+ * al final con su desplegable (spec 2026-10-20-marcas-tienda-oficial §8). Sin marcas, igual que
+ * siempre.
+ */
+export function itemsNavHome(categorias: readonly string[], menuMarcas: ItemMenuMarca[]): ItemNavHome[] {
+  const conMarcas = menuMarcas.length > 0;
+  const items: ItemNavHome[] = categorias.slice(0, maxCategoriasNav(conMarcas)).map((cat) => ({
+    label: formatRubro(cat),
+    href: `/catalogo?categoria=${encodeURIComponent(cat)}`,
+  }));
+  return conMarcas ? [...items, { label: "Marcas", href: "/marcas", menu: menuMarcas }] : items;
+}
 
 /**
  * Forma de comparar categorías: sin tildes, sin espacios en los bordes y en

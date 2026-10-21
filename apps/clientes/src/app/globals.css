@@ -346,3 +346,30 @@ body {
     font-size: 16px !important;
   }
 }
+
+/*
+ * Tienda oficial de una marca (`/marcas/<slug>` nivel "oficial", spec
+ * 2026-10-20-marcas-tienda-oficial §6): negro con acento propio de la marca
+ * (`--acento-marca`, editable y validado ≥4,5:1 sobre #0c0c0c; por defecto el
+ * dorado #c0a15a). Solo pisa los tokens DENTRO del contenido de la página:
+ * header, footer y carrito siguen siendo los de la tienda.
+ */
+[data-tema-marca="oficial"] {
+  --color-bg: #0c0c0c;
+  --color-surface: #141418;
+  --color-elevated: #1b1b20;
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-text: #f2f2f0;
+  --color-muted: #a9adb3;
+  --color-subtle: #a9adb3;
+  --color-accent: var(--acento-marca, #c0a15a);
+  --color-accent-strong: var(--acento-marca, #c0a15a);
+  --color-accent-soft: rgba(192, 161, 90, 0.12);
+  --color-ring: var(--acento-marca, #c0a15a);
+  --color-primary: var(--acento-marca, #c0a15a);
+  --color-primary-hover: #f2f2f0;
+  --color-on-primary: #0c0c0c;
+  --color-highlight: var(--acento-marca, #c0a15a);
+  background: var(--color-bg);
+  color: var(--color-text);
+}

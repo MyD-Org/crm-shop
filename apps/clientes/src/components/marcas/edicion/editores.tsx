@@ -5,6 +5,7 @@ import { Field, Input, Textarea } from "@myd-org/ui";
 import { ListaEditable } from "@/components/home/ListaEditable";
 import { CampoImagen } from "@/components/home/editores/CampoImagen";
 import { SelectorSkusDestacados } from "@/components/home/editores/SelectorSkusDestacados";
+import { SelectorCategoriasLinea } from "./SelectorCategoriasLinea";
 import type { EditorProps } from "@/components/home/editores";
 import {
   slugDeNombre,
@@ -107,12 +108,9 @@ function EditorLineas({ valor, onChange }: EditorProps<LineasMarca>) {
             <CampoImagen valor={item.imagen ?? ""} onChange={(imagen) => onItem({ ...item, imagen: imagen || undefined })} />
             <Field
               label="Categorías de la tienda"
-              hint="Separadas por coma, como figuran en el catálogo. La línea muestra los productos de la marca en estas categorías."
+              hint="La línea muestra los productos de la marca que están en estas categorías."
             >
-              <Input
-                defaultValue={item.categorias.join(", ")}
-                onBlur={(e) => onItem({ ...item, categorias: lista(e.target.value) })}
-              />
+              <SelectorCategoriasLinea valor={item.categorias} onChange={(categorias) => onItem({ ...item, categorias })} />
             </Field>
             <div>
               <p className="mb-2 text-sm font-medium text-text">Productos sueltos</p>

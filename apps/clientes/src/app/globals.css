@@ -370,6 +370,18 @@ body {
   --color-primary-hover: #f2f2f0;
   --color-on-primary: #0c0c0c;
   --color-highlight: var(--acento-marca, #c0a15a);
+  /* Roles de estado del set oscuro del DS (tokens.css): las cards de producto
+     pintan stock y cuotas con ellos y los claros no llegan a AA sobre negro. */
+  --color-primary-soft: #27272a;
+  --color-border-strong: rgba(255, 255, 255, 0.26);
+  --color-success: #3fbf6f;
+  --color-success-soft: #10281a;
+  --color-danger: #f87171;
+  --color-danger-soft: #341717;
+  --color-warning: #d9a441;
+  --color-warning-soft: #33280f;
+  --color-info: #38bdf8;
+  --color-info-soft: #0c2a3f;
   background: var(--color-bg);
   color: var(--color-text);
 }

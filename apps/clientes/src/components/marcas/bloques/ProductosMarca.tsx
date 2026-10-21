@@ -1,15 +1,15 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import { ChipRow, Pagination, ProductCardSkeleton } from "@myd-org/ui";
+import { ChipRow, ProductCardSkeleton } from "@myd-org/ui";
 import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
-import { linkNext } from "@/components/catalogo/link-next";
 import { destacadosHome, paginaMarcaPublica } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import type { ElegidosMarca, PaginaMarca } from "@/lib/marcas/pagina-marca";
-import { filtrosDeMarca, hrefCatalogoCompleto, hrefLinea, hrefPaginaMarca } from "@/lib/marcas/vista-marca";
+import { filtrosDeMarca, hrefCatalogoCompleto, hrefLinea } from "@/lib/marcas/vista-marca";
 import { dispCatalogo } from "@/lib/zona-servidor";
 import { GrillaProductosMarca } from "../GrillaProductosMarca";
+import { PaginacionMarca } from "../PaginacionMarca";
 import { SeccionMarca, TituloBloque } from "./BloquesMarca";
 
 /**
@@ -118,13 +118,7 @@ export async function ProductosMarcaBloque({
         <p className="py-10 text-center text-base text-muted">No hay productos para mostrar en este momento.</p>
       )}
       {resultado.paginas > 1 ? (
-        <Pagination
-          className="mt-8"
-          page={resultado.pagina}
-          totalPages={resultado.paginas}
-          hrefFor={(n) => hrefPaginaMarca(pagina.slug, n, estado.linea)}
-          renderLink={linkNext}
-        />
+        <PaginacionMarca slug={pagina.slug} linea={estado.linea} pagina={resultado.pagina} paginas={resultado.paginas} />
       ) : null}
     </SeccionMarca>
   );

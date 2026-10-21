@@ -10,7 +10,10 @@ import { hrefMarca } from "@/lib/marcas/pagina-marca";
 
 export async function generateMetadata(): Promise<Metadata> {
   const marca = await getMarca();
-  return { title: { absolute: `Marcas | ${marca.nombre}` }, alternates: { canonical: "/marcas" } };
+  return {
+    title: { absolute: `Marcas | ${marca.nombre}` },
+    ...(process.env.NEXT_PUBLIC_SITE_URL ? { alternates: { canonical: "/marcas" } } : {}),
+  };
 }
 
 /**

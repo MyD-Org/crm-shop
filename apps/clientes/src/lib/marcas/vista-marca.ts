@@ -23,11 +23,14 @@ export function tituloMarca(p: PaginaMarca, nombreTienda: string): string {
 export function metadataMarca(p: PaginaMarca, nombreTienda: string, conQuery: boolean): Metadata {
   const titulo = tituloMarca(p, nombreTienda);
   const descripcion = p.seo?.descripcion ?? (p.bajada || undefined);
-  const imagen = p.seo?.imagenOg ?? p.logo;
+  // Canonical e imagen relativos sólo con la base del sitio (como `/catalogo` y la ficha): sin
+  // `NEXT_PUBLIC_SITE_URL` un canonical relativo rompe el build y uno a localhost es peor que nada.
+  const conBase = Boolean(process.env.NEXT_PUBLIC_SITE_URL);
+  const imagen = conBase ? (p.seo?.imagenOg ?? p.logo) : undefined;
   return {
     title: { absolute: titulo },
     ...(descripcion ? { description: descripcion } : {}),
-    alternates: { canonical: hrefMarca(p.slug) },
+    ...(conBase ? { alternates: { canonical: hrefMarca(p.slug) } } : {}),
     openGraph: { title: titulo, ...(descripcion ? { description: descripcion } : {}), ...(imagen ? { images: [imagen] } : {}) },
     ...(conQuery ? { robots: { index: false, follow: true } } : {}),
   };

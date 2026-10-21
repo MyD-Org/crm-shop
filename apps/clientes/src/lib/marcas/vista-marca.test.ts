@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PaginaMarca } from "./pagina-marca";
 import {
   filtrosDeMarca,
@@ -30,6 +30,17 @@ function pagina(extra: Partial<PaginaMarca> = {}): PaginaMarca {
 }
 
 describe("metadataMarca", () => {
+  beforeEach(() => vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://tienda.example"));
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("sin NEXT_PUBLIC_SITE_URL no emite canonical ni imagen relativa (rompe el build)", () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
+    const m = metadataMarca(pagina(), "Central Led", false);
+    expect(m.alternates).toBeUndefined();
+    expect(m.openGraph?.images).toBeUndefined();
+    expect(m.title).toEqual({ absolute: "Led Premium — Tienda oficial | Central Led" });
+  });
+
   it("título de tienda oficial, descripción y canonical", () => {
     const m = metadataMarca(pagina(), "Central Led", false);
     expect(m.title).toEqual({ absolute: "Led Premium — Tienda oficial | Central Led" });

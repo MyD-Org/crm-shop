@@ -1,9 +1,9 @@
-import { Suspense, type ReactNode } from "react";
+import { Fragment, Suspense, type ReactNode } from "react";
 import { Breadcrumb } from "@myd-org/ui";
 import { linkNext } from "@/components/catalogo/link-next";
 import {
-  BLOQUES_POR_NIVEL,
   hrefMarca,
+  ordenBloques,
   visibilidadBloque,
   type BloqueMarca,
   type PaginaMarca,
@@ -78,8 +78,8 @@ export function PaginaMarcaVista({
       ),
   };
 
-  const orden = BLOQUES_POR_NIVEL[pagina.nivel];
-  const deMarca = orden.filter((n) => n !== "productos");
+  // En el orden elegido ("Ordenar secciones"), completado con el de su nivel.
+  const orden = ordenBloques(pagina);
   const migas = (
     <div className="mx-auto w-full max-w-contenido px-[clamp(18px,4vw,48px)] py-3">
       <Breadcrumb
@@ -97,13 +97,21 @@ export function PaginaMarcaVista({
       </main>
     );
   }
+  // Tienda oficial: cada bloque con el tema de la marca, salvo "Todos los productos", que va con el
+  // de la tienda. Uno por uno (no un solo contenedor) para que productos pueda ir en cualquier lugar.
+  const tema = propsTemaOficial(pagina);
   return (
     <main className="flex-1" data-pagina-marca={hrefMarca(pagina.slug)} data-fotos-con-aire="">
-      <div {...propsTemaOficial(pagina)}>
-        {migas}
-        {deMarca.map((n) => render[n]())}
-      </div>
-      {render.productos()}
+      <div {...tema}>{migas}</div>
+      {orden.map((n) =>
+        n === "productos" ? (
+          <Fragment key={n}>{render[n]()}</Fragment>
+        ) : (
+          <div key={n} {...tema}>
+            {render[n]()}
+          </div>
+        ),
+      )}
     </main>
   );
 }

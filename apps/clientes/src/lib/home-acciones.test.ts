@@ -52,6 +52,7 @@ import {
   firmarSubidaImagenHome,
   guardarDatosLegales,
   guardarFooter,
+  guardarOrdenHome,
   guardarSeccion,
   leerSeccionParaEditar,
   resolverProductosHome,
@@ -584,5 +585,33 @@ describe("leerSeccionParaEditar (performance-mobile-shop 4a)", () => {
     for (const texto of ["No tiene permisos para editar esta sección.", "No se pudo cargar la sección. Inténtelo de nuevo."]) {
       expect(infracciones(`<p>${texto}</p>`, REGISTRO)).toEqual([]);
     }
+  });
+});
+
+describe("guardarOrdenHome", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    esAdminMock.mockResolvedValue(true);
+    guardarMock.mockResolvedValue({ updatedAt: new Date("2026-10-22T00:00:00Z") });
+  });
+
+  it("guarda una permutación de las secciones y revalida la home", async () => {
+    const orden = ["whatsapp", "hero", "marquee", "busquedaAsistida", "ambientes", "destacados", "tiendaOficial", "bannerDeco", "decoGrid", "servicios"];
+    const r = await guardarOrdenHome(orden);
+    expect(r.ok).toBe(true);
+    expect(guardarMock).toHaveBeenCalledWith("orden", { secciones: orden });
+    expect(revalidateMock).toHaveBeenCalledWith("home");
+  });
+
+  it("rechaza un orden incompleto o con secciones desconocidas", async () => {
+    expect((await guardarOrdenHome(["hero"])).ok).toBe(false);
+    expect((await guardarOrdenHome(["hero", "anuncio"])).ok).toBe(false);
+    expect(guardarMock).not.toHaveBeenCalled();
+  });
+
+  it("sin admin no guarda", async () => {
+    esAdminMock.mockResolvedValue(false);
+    expect((await guardarOrdenHome([])).ok).toBe(false);
+    expect(guardarMock).not.toHaveBeenCalled();
   });
 });

@@ -20,6 +20,7 @@ import { motivoImagenInvalida, VISIBILIDADES, type Visibilidad } from "@/data/ho
 import { textoPlano } from "@/lib/institucional/paginas";
 import { razonDeContraste } from "@/lib/tema-tenant";
 import { videoEmbebible } from "./video";
+import { completarOrden } from "@/lib/orden-secciones";
 
 export type NivelMarca = "oficial" | "marca";
 
@@ -110,6 +111,8 @@ export type PaginaMarca = {
   bloques: Partial<ContenidoBloques>;
   /** Dónde se ve cada bloque; ausente = `visibilidadBloque` decide. */
   visibilidad: Partial<Record<BloqueMarca, Visibilidad>>;
+  /** Orden de los bloques ("Ordenar secciones"); ausente = el de su nivel. Ver `ordenBloques`. */
+  bloquesOrden?: BloqueMarca[];
 };
 
 export const PREFIJO_CLAVE_MARCA = "pagina-marca:";
@@ -183,6 +186,11 @@ export function esNivelMarca(v: unknown): v is NivelMarca {
 
 export function bloqueDelNivel(nivel: NivelMarca, bloque: BloqueMarca): boolean {
   return BLOQUES_POR_NIVEL[nivel].includes(bloque);
+}
+
+/** Los bloques de la página en el orden en que se dibujan: el guardado, completado con su nivel. */
+export function ordenBloques(p: Pick<PaginaMarca, "nivel" | "bloquesOrden">): BloqueMarca[] {
+  return completarOrden(p.bloquesOrden, BLOQUES_POR_NIVEL[p.nivel]);
 }
 
 /** Dónde se ve un bloque. Sin dato: siempre, salvo "líneas" en el nivel marca (apagado). */
@@ -407,6 +415,9 @@ export function sanearPaginaMarca(raw: unknown): PaginaMarca | null {
     seo: seo && Object.keys(seo).length ? seo : undefined,
     bloques,
     visibilidad,
+    bloquesOrden: Array.isArray(raw.bloquesOrden)
+      ? raw.bloquesOrden.filter((b, i, todos): b is BloqueMarca => esBloqueMarca(b) && bloqueDelNivel(nivel, b) && todos.indexOf(b) === i)
+      : undefined,
   });
 }
 

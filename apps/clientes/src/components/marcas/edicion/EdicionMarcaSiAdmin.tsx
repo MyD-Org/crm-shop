@@ -1,5 +1,6 @@
 import { esAdmin } from "@/lib/auth";
 import { HabilitarEdicion } from "@/components/home/HabilitarEdicion";
+import type { BloqueMarca } from "@/lib/marcas/pagina-marca";
 import { BarraEdicionMarca } from "./BarraEdicionMarca";
 
 /**
@@ -7,12 +8,21 @@ import { BarraEdicionMarca } from "./BarraEdicionMarca";
  * la home: va dentro de `<Suspense fallback={null}>`, así al visitante no le
  * llega nada del editor.
  */
-export async function EdicionMarcaSiAdmin({ slug, publicada }: { slug: string; publicada: boolean }) {
+export async function EdicionMarcaSiAdmin({
+  slug,
+  publicada,
+  bloques,
+}: {
+  slug: string;
+  publicada: boolean;
+  /** Los bloques en el orden vigente (para "Ordenar secciones"). */
+  bloques: BloqueMarca[];
+}) {
   if (!(await esAdmin())) return null;
   return (
     <>
       <HabilitarEdicion />
-      <BarraEdicionMarca slug={slug} publicada={publicada} />
+      <BarraEdicionMarca slug={slug} publicada={publicada} bloques={bloques} />
     </>
   );
 }

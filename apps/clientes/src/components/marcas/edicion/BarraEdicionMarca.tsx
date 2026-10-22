@@ -5,17 +5,25 @@ import { useState } from "react";
 import { Badge, Button, Switch } from "@myd-org/ui";
 import { useModoEdicion } from "@/components/home/ModoEdicion";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
+import { DialogoOrden } from "@/components/home/DialogoOrden";
+import { guardarOrdenMarca } from "@/lib/marcas/marcas-acciones";
+import type { BloqueMarca } from "@/lib/marcas/pagina-marca";
 import { DialogoDatosMarca } from "./DialogoDatosMarca";
+import { TITULOS_BLOQUE } from "./editores";
 
 /**
  * Barra fija de edición de una página de marca (solo admins, la monta
  * `EdicionMarcaSiAdmin`): el mismo switch "Modo edición" que la home, los
  * datos generales de la página y el acceso a la lista de marcas.
  */
-export function BarraEdicionMarca({ slug, publicada }: { slug: string; publicada: boolean }) {
+export function BarraEdicionMarca({ slug, publicada, bloques }: { slug: string; publicada: boolean; bloques: BloqueMarca[] }) {
   const { activo, setActivo } = useModoEdicion();
   const [abrirDatos, setAbrirDatos] = useState(false);
-  useAlOcultar(() => setAbrirDatos(false));
+  const [abrirOrden, setAbrirOrden] = useState(false);
+  useAlOcultar(() => {
+    setAbrirDatos(false);
+    setAbrirOrden(false);
+  });
   return (
     <div
       data-editor=""
@@ -26,10 +34,19 @@ export function BarraEdicionMarca({ slug, publicada }: { slug: string; publicada
       <Button variant="outline" size="sm" onClick={() => setAbrirDatos(true)}>
         Datos de la página
       </Button>
+      <Button variant="outline" size="sm" onClick={() => setAbrirOrden(true)}>
+        Ordenar secciones
+      </Button>
       <Link href="/editar-marcas" className="text-sm font-medium text-accent underline-offset-4 hover:underline">
         Todas las marcas
       </Link>
       <DialogoDatosMarca slug={slug} open={abrirDatos} onOpenChange={setAbrirDatos} />
+      <DialogoOrden
+        items={bloques.map((b) => ({ id: b, label: TITULOS_BLOQUE[b] }))}
+        open={abrirOrden}
+        onOpenChange={setAbrirOrden}
+        onGuardar={(orden) => guardarOrdenMarca(slug, orden)}
+      />
     </div>
   );
 }

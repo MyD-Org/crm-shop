@@ -14,7 +14,9 @@ import {
   leerSeccionesHomePorPrefijo,
   leerSeccionHome,
 } from "@/lib/home-guardar";
+import { errorOrden } from "@/lib/orden-secciones";
 import {
+  BLOQUES_POR_NIVEL,
   bloqueDelNivel,
   claveDeMarca,
   contenidoInicial,
@@ -150,6 +152,19 @@ export async function guardarBloqueMarca(slug: string, bloque: BloqueMarca, payl
     if (errores.length > 0) return { ok: false, errores };
     const contenido = sanearContenidoBloque(bloque, payload);
     await escribir({ ...actual, bloques: { ...actual.bloques, [bloque]: contenido } });
+    updateTag(TAG_HOME);
+    return { ok: true };
+  });
+}
+
+/** Orden de los bloques ("Ordenar secciones"): una permutación exacta de los bloques de su nivel. */
+export async function guardarOrdenMarca(slug: string, orden: unknown): Promise<ResultadoMarca> {
+  return comoAdmin("orden", async () => {
+    const actual = await leerPagina(slug);
+    if (!actual) return { ok: false, errores: [NO_EXISTE] };
+    const error = errorOrden(orden, BLOQUES_POR_NIVEL[actual.nivel]);
+    if (error) return { ok: false, errores: [error] };
+    await escribir({ ...actual, bloquesOrden: orden as BloqueMarca[] });
     updateTag(TAG_HOME);
     return { ok: true };
   });

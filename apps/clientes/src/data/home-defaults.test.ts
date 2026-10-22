@@ -4,6 +4,8 @@ import {
   SECCIONES_HOME,
   erroresSeccion,
   combinarContenidoHome,
+  KEY_ORDEN,
+  ORDEN_HOME,
   defaultsHomeGenerica,
   esHref,
   esImagen,
@@ -581,5 +583,30 @@ describe("tiendaOficial (spec 2026-10-20-marcas-tienda-oficial §9)", () => {
   it("una fila guardada reemplaza al default", () => {
     const home = combinarContenidoHome([{ key: "tiendaOficial", payload: { slug: "acme", cta: "Ir", skus: ["Z"] } }]);
     expect(home.tiendaOficial).toEqual({ slug: "acme", cta: "Ir", skus: ["Z"] });
+  });
+});
+
+describe("orden de las secciones de la home", () => {
+  it("por defecto, el de siempre (sin anuncio ni badge, que no van en el cuerpo)", () => {
+    expect(DEFAULTS_HOME.orden).toEqual([...ORDEN_HOME]);
+    expect(ORDEN_HOME).toEqual([
+      "hero",
+      "marquee",
+      "busquedaAsistida",
+      "ambientes",
+      "destacados",
+      "tiendaOficial",
+      "bannerDeco",
+      "decoGrid",
+      "servicios",
+      "whatsapp",
+    ]);
+  });
+
+  it("la fila `orden` manda y se completa con lo que falte", () => {
+    const home = combinarContenidoHome([{ key: KEY_ORDEN, payload: { secciones: ["whatsapp", "hero", "nada"] } }]);
+    expect(home.orden[0]).toBe("whatsapp");
+    expect(home.orden[1]).toBe("hero");
+    expect([...home.orden].sort()).toEqual([...ORDEN_HOME].sort());
   });
 });

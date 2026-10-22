@@ -29,6 +29,7 @@ import {
   guardarBloqueMarca,
   guardarDatosMarca,
   guardarEncabezadoMarca,
+  guardarOrdenMarca,
   leerPaginaMarcaParaEditar,
   leerPaginasMarcaParaEditor,
   moverPaginaMarca,
@@ -209,5 +210,21 @@ describe("guardarEncabezadoMarca (nombre, bajada y logo junto con el bloque hero
   it("sin admin no escribe", async () => {
     m.esAdmin.mockResolvedValue(false);
     expect(await guardarEncabezadoMarca("acme", { nombre: "X", bajada: "", hero: {} })).toEqual({ ok: false, errores: [SIN_PERMISO] });
+  });
+});
+
+describe("guardarOrdenMarca", () => {
+  it("guarda una permutación de los bloques del nivel", async () => {
+    m.leer.mockResolvedValue(fila("acme", { nivel: "marca" }));
+    expect(await guardarOrdenMarca("acme", ["productos", "hero", "lineas"])).toEqual({ ok: true });
+    expect(m.guardar.mock.calls[0][1].bloquesOrden).toEqual(["productos", "hero", "lineas"]);
+    expect(m.updateTag).toHaveBeenCalledWith("home");
+  });
+
+  it("rechaza bloques de otro nivel o un orden incompleto", async () => {
+    m.leer.mockResolvedValue(fila("acme", { nivel: "marca" }));
+    expect((await guardarOrdenMarca("acme", ["productos", "obras", "hero"])).ok).toBe(false);
+    expect((await guardarOrdenMarca("acme", ["hero"])).ok).toBe(false);
+    expect(m.guardar).not.toHaveBeenCalled();
   });
 });

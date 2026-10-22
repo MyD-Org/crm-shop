@@ -63,7 +63,7 @@ export default async function Home() {
         }
       />
       <Suspense fallback={null}>
-        <EdicionSiAdmin visibilidad={contenido.visibilidad} />
+        <EdicionSiAdmin visibilidad={contenido.visibilidad} orden={contenido.orden} />
       </Suspense>
     </ModoEdicionProvider>
   );

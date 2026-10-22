@@ -2,6 +2,7 @@ import type { VisibleOn } from "@myd-org/ui";
 import { hostsDeMedios } from "../lib/catalogo-medios";
 import { cuitValido, formatearCuit } from "../lib/facturacion";
 import type { Marca } from "../lib/marca-base";
+import { completarOrden } from "../lib/orden-secciones";
 
 /**
  * Contenido por defecto de la home, editable desde la home por un usuario
@@ -155,6 +156,8 @@ export type HomeContent = {
    *  que no figuran se ven siempre). Se guarda en su propia fila de
    *  home_content (`ocultas`), así no pisa el contenido de la sección. */
   visibilidad: MapaVisibilidad;
+  /** Orden de las secciones del cuerpo (fila `orden`, "Ordenar secciones"). Ver `ORDEN_HOME`. */
+  orden: SeccionOrdenable[];
 };
 
 /** Dónde se ve algo de la home. El corte es `md` (768px), el mismo de las
@@ -182,6 +185,26 @@ export const SECCIONES_HOME = [
 ] as const;
 
 export type SeccionHome = (typeof SECCIONES_HOME)[number];
+
+/**
+ * Secciones del cuerpo de la home que se pueden ordenar, en su orden por defecto (el diseño
+ * aprobado). El anuncio y el badge del menú no están: no van en el cuerpo. El orden elegido se
+ * guarda en su propia fila (`orden`), como la visibilidad.
+ */
+export const ORDEN_HOME = [
+  "hero",
+  "marquee",
+  "busquedaAsistida",
+  "ambientes",
+  "destacados",
+  "tiendaOficial",
+  "bannerDeco",
+  "decoGrid",
+  "servicios",
+  "whatsapp",
+] as const satisfies readonly SeccionHome[];
+export type SeccionOrdenable = (typeof ORDEN_HOME)[number];
+export const KEY_ORDEN = "orden";
 
 const CATALOGO_ILUMINACION = "/catalogo?categoria=ILUMINACION";
 
@@ -303,6 +326,7 @@ export const DEFAULTS_HOME: HomeContent = {
   // El anuncio en mobile ocupa varias filas: arranca solo en desktop hasta que
   // sea un carrusel de mensajes. El admin lo puede cambiar desde el editor.
   visibilidad: { anuncio: "desktop" },
+  orden: [...ORDEN_HOME],
 };
 
 /**
@@ -366,6 +390,7 @@ export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent 
       decoGrid: "nunca",
       tiendaOficial: "nunca",
     },
+    orden: [...ORDEN_HOME],
   };
 }
 
@@ -717,6 +742,7 @@ export function resolverSeccion(key: string, payload: unknown): unknown {
  *  porque antes guardaba sólo la lista de secciones ocultas. */
 export const KEY_OCULTAS = "ocultas";
 
+
 /**
  * Datos legales del comercio (páginas legales + footer). Viven en home_content
  * bajo su propia key, pero NO son una sección de la home: no están en
@@ -879,6 +905,10 @@ export function combinarContenidoHome(
     } else if (key === "navBadge") {
       resultado.navBadge = null;
     }
+  }
+  if (porKey.has(KEY_ORDEN)) {
+    const fila = porKey.get(KEY_ORDEN) as { secciones?: unknown } | null;
+    resultado.orden = completarOrden(fila?.secciones, ORDEN_HOME);
   }
   if (porKey.has(KEY_OCULTAS)) {
     resultado.visibilidad = { ...defaults.visibilidad, ...resolverVisibilidad(porKey.get(KEY_OCULTAS)) };

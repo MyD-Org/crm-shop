@@ -9,6 +9,7 @@ import { esAdmin } from "@/lib/auth";
 import { getDatosFooter } from "@/lib/home-datos";
 import { getMarca } from "@/lib/marca";
 import { getPaginaMarca } from "@/lib/marcas/marcas-datos";
+import { ordenBloques } from "@/lib/marcas/pagina-marca";
 import { hrefCotizacion, leerEstadoMarca, metadataMarca } from "@/lib/marcas/vista-marca";
 
 /**
@@ -55,7 +56,7 @@ async function Contenido({ params, searchParams }: Props) {
     <ModoEdicionProvider>
       <PaginaMarcaVista pagina={pagina} estado={estado} query={query} total={total} cotizar={cotizar} />
       <Suspense fallback={null}>
-        <EdicionMarcaSiAdmin slug={pagina.slug} publicada={pagina.publicada} />
+        <EdicionMarcaSiAdmin slug={pagina.slug} publicada={pagina.publicada} bloques={ordenBloques(pagina)} />
       </Suspense>
     </ModoEdicionProvider>
   );

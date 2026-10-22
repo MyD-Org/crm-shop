@@ -5,6 +5,7 @@ import {
   temaDe,
   claveDeMarca,
   contenidoInicial,
+  ordenBloques,
   esSlugMarca,
   ordenarPaginas,
   sanearPaginaMarca,
@@ -245,5 +246,22 @@ describe("estilo de fotos de Los más elegidos", () => {
       sanearPaginaMarca({ ...pagina({ nivel: "oficial" }), bloques: { elegidos: { ...elegidos, estiloFotos } } })?.bloques.elegidos;
     expect(con("estudio-claro")?.estiloFotos).toBe("estudio-claro");
     expect(con("neon")?.estiloFotos).toBeUndefined();
+  });
+});
+
+describe("orden de los bloques de una página de marca", () => {
+  it("sin orden guardado: el de su nivel", () => {
+    expect(ordenBloques(pagina({ nivel: "oficial" }))).toEqual([...BLOQUES_POR_NIVEL.oficial]);
+    expect(ordenBloques(pagina({ nivel: "marca" }))).toEqual([...BLOQUES_POR_NIVEL.marca]);
+  });
+
+  it("respeta el guardado y completa lo que falte; ignora bloques de otro nivel", () => {
+    const p = pagina({ nivel: "marca", bloquesOrden: ["productos", "obras", "hero"] as never });
+    expect(ordenBloques(p)).toEqual(["productos", "hero", "lineas"]);
+  });
+
+  it("sanear conserva un orden válido y descarta lo ajeno al nivel", () => {
+    const p = sanearPaginaMarca({ ...pagina({ nivel: "marca" }), bloquesOrden: ["productos", "obras", 3, "hero"] });
+    expect(p?.bloquesOrden).toEqual(["productos", "hero"]);
   });
 });

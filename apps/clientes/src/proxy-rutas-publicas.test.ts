@@ -91,6 +91,15 @@ describe("proxy: RUTAS_PUBLICAS", () => {
       expect(clerk).not.toHaveBeenCalled();
     });
 
+    it("la redirección del QR a Instagram no recibe la cortina", async () => {
+      process.env.SITE_AUTH_USER = "equipo";
+      process.env.SITE_AUTH_PASSWORD = "clave-de-prueba";
+      const { proxy } = await import("./proxy");
+      const r = await proxy(new NextRequest("https://tienda.example/ig/tienda.ejemplo?utm_source=qr"), {} as never);
+      expect(r.headers.get("x-middleware-next")).toBe("1");
+      expect(clerk).not.toHaveBeenCalled();
+    });
+
     it("control: otra API sin cookie sí recibe la cortina", async () => {
       process.env.SITE_AUTH_USER = "equipo";
       process.env.SITE_AUTH_PASSWORD = "clave-de-prueba";

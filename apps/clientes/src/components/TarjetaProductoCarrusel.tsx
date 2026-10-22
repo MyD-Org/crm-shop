@@ -86,6 +86,8 @@ export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
         variant="soft"
         priceSize={medio ? "sm" : "md"}
         className="h-full overflow-hidden"
+        // Gancho del estilo "estudio" de las fotos (globals.css, `[data-estudio]`).
+        data-card-producto=""
         name={nombreParaMostrar}
         brand={marca}
         stock={p.stock}

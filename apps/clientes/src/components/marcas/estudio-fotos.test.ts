@@ -23,6 +23,15 @@ describe("estilo estudio de las cards", () => {
     expect(css).not.toMatch(/\[data-estudio="claro"\][^{]*img\s*\{[^}]*box-reflect/);
   });
 
+  it("el CSS no depende de data-layout (las cards del carrusel no lo llevan): usa data-card-producto", () => {
+    const css = readFileSync(join(__dirname, "..", "..", "app", "globals.css"), "utf8");
+    const reglas = css.slice(css.indexOf("[data-estudio]"));
+    expect(reglas).not.toMatch(/\[data-layout\]/);
+    expect(reglas).toMatch(/\[data-estudio\] \[data-card-producto\] > div:first-child/);
+    const tarjeta = readFileSync(join(__dirname, "..", "TarjetaProductoCarrusel.tsx"), "utf8");
+    expect(tarjeta).toMatch(/data-card-producto=""/);
+  });
+
   it("Los más elegidos y el bloque de la home aplican el atributo", () => {
     const bloque = readFileSync(join(__dirname, "bloques", "ProductosMarca.tsx"), "utf8");
     const home = readFileSync(join(__dirname, "..", "home", "TiendaOficialHome.tsx"), "utf8");

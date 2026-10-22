@@ -10,6 +10,8 @@ import { flagsPublicos } from "@/lib/flags-publicos";
 import {
   KEY_LEGAL,
   KEY_OCULTAS,
+  KEY_ORDEN,
+  ORDEN_HOME,
   SECCIONES_HOME,
   VISIBILIDADES,
   combinarContenidoHome,
@@ -20,6 +22,7 @@ import {
   type SeccionHome,
 } from "@/data/home-defaults";
 import { KEY_FOOTER, validarDatosFooter } from "@/data/footer";
+import { errorOrden } from "@/lib/orden-secciones";
 import { borrarSeccionHome, guardarSeccionHome, leerSeccionHome } from "@/lib/home-guardar";
 import { getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
 import { shopTenantId } from "@/lib/tenant";
@@ -129,6 +132,24 @@ export async function restablecerSeccion(seccion: string): Promise<ResultadoGuar
     return { ok: true, updatedAt: null };
   } catch (err) {
     console.error(`[home-acciones] no se pudo restablecer ${seccion}:`, err);
+    return { ok: false, errores: [ERROR_GUARDAR] };
+  }
+}
+
+/**
+ * Orden de las secciones del cuerpo de la home ("Ordenar secciones" de la barra de edición): una
+ * permutación exacta de `ORDEN_HOME`, en su propia fila (`orden`). Nunca lanza.
+ */
+export async function guardarOrdenHome(orden: unknown): Promise<ResultadoGuardar> {
+  if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO] };
+  const error = errorOrden(orden, ORDEN_HOME);
+  if (error) return { ok: false, errores: [error] };
+  try {
+    const { updatedAt } = await guardarSeccionHome(KEY_ORDEN, { secciones: orden });
+    updateTag(TAG_HOME);
+    return { ok: true, updatedAt: updatedAt?.toISOString() ?? null };
+  } catch (err) {
+    console.error("[home-acciones] no se pudo guardar el orden:", err);
     return { ok: false, errores: [ERROR_GUARDAR] };
   }
 }

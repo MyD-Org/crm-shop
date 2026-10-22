@@ -52,6 +52,7 @@ import {
   type Faceta,
   type Facetas,
   type FiltrosCatalogo,
+  type FiltrosSinTexto,
   type PaginaCatalogo,
 } from "./catalog";
 import { conRespaldoSinCache } from "./cache-respaldo";
@@ -147,6 +148,15 @@ export function paginaCatalogoPublica(args: ArgsPaginaPublica): Promise<PaginaCa
   return filtrosCacheables(args.filtros)
     ? conRespaldoSinCache("catalogo-pagina", () => paginaCacheada(args), directa)
     : directa();
+}
+
+/**
+ * Una página del catálogo para una página de marca (`/marcas/<slug>`): los mismos filtros y caché
+ * que `paginaCatalogoPublica`, pero SIN texto (el tipo no lo admite). El texto de una búsqueda lo
+ * arma sólo el motor (`busqueda-v2/motor.ts`); una página de marca nunca busca.
+ */
+export function paginaMarcaPublica(args: Omit<ArgsPaginaPublica, "filtros"> & { filtros: FiltrosSinTexto }): Promise<PaginaCatalogo> {
+  return paginaCatalogoPublica(args);
 }
 
 function leerFacetas(
@@ -425,6 +435,11 @@ interface ArgsDestacados {
   destacado?: MedioPrecio | null;
   /** Cuotas sin interés de las cards (flag `cuotas-cobro`). */
   cuotas?: MedioCuotas[] | null;
+  /**
+   * Con qué se completa después de los curados. Ausente: Iluminación (la home). Las páginas de
+   * marca pasan sus filtros (`marcasPropias`), así "Los más elegidos" no trae productos ajenos.
+   */
+  base?: FiltrosCatalogo;
 }
 
 export function destacadosHome(args: ArgsDestacados): Promise<Product[]> {
@@ -457,7 +472,7 @@ async function leerDestacados(args: ArgsDestacados): Promise<{ productos: Produc
   // Los curados se piden por código: buscarlos en una tanda del catálogo
   // dejaba afuera, sin aviso, a casi todos los productos.
   const [iluminacion, curados] = await Promise.all([
-    getPaginaCatalogo({ filtros: { categorias: [CATEGORIA_DESTACADOS] }, orden: "destacados", pagina: 1, soloVisibles, ...agrupado, disp, mediosPrecio }).catch(
+    getPaginaCatalogo({ filtros: args.base ?? { categorias: [CATEGORIA_DESTACADOS] }, orden: "destacados", pagina: 1, soloVisibles, ...agrupado, disp, mediosPrecio }).catch(
       (err: unknown): { productos: Product[] } => {
         registrar(err);
         return { productos: [] };

@@ -346,3 +346,131 @@ body {
     font-size: 16px !important;
   }
 }
+
+/*
+ * Tienda oficial de una marca (`/marcas/<slug>` nivel "oficial", spec
+ * 2026-10-20-marcas-tienda-oficial §6): negro con acento propio de la marca
+ * (`--acento-marca`, editable y validado ≥4,5:1 sobre #0c0c0c; por defecto el
+ * dorado #c0a15a). Solo pisa los tokens DENTRO del contenido de la página:
+ * header, footer y carrito siguen siendo los de la tienda.
+ */
+[data-tema-marca="oficial"] {
+  --color-bg: #0c0c0c;
+  --color-surface: #141418;
+  --color-elevated: #1b1b20;
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-text: #f2f2f0;
+  --color-muted: #a9adb3;
+  --color-subtle: #a9adb3;
+  --color-accent: var(--acento-marca, #c0a15a);
+  --color-accent-strong: var(--acento-marca, #c0a15a);
+  --color-accent-soft: rgba(192, 161, 90, 0.12);
+  --color-ring: var(--acento-marca, #c0a15a);
+  --color-primary: var(--acento-marca, #c0a15a);
+  --color-primary-hover: #f2f2f0;
+  --color-on-primary: #0c0c0c;
+  --color-highlight: var(--acento-marca, #c0a15a);
+  /* Roles de estado del set oscuro del DS (tokens.css): las cards de producto
+     pintan stock y cuotas con ellos y los claros no llegan a AA sobre negro. */
+  --color-primary-soft: #27272a;
+  --color-border-strong: rgba(255, 255, 255, 0.26);
+  --color-success: #3fbf6f;
+  --color-success-soft: #10281a;
+  --color-danger: #f87171;
+  --color-danger-soft: #341717;
+  --color-warning: #d9a441;
+  --color-warning-soft: #33280f;
+  --color-info: #38bdf8;
+  --color-info-soft: #0c2a3f;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/*
+ * Tienda oficial en tema claro (`data-tono="claro"`, elegido en "Datos de la
+ * página"): crema con el acento de la marca, por defecto un dorado oscuro
+ * (#7d6328) que llega a AA sobre el fondo, la superficie y el gris de las fotos.
+ * Los roles de estado son los claros del DS (stock y cuotas de las cards).
+ */
+[data-tema-marca="oficial"][data-tono="claro"] {
+  --color-bg: #faf9f6;
+  --color-surface: #ffffff;
+  --color-elevated: #f1efe9;
+  --color-border: rgba(20, 20, 20, 0.1);
+  --color-border-strong: rgba(20, 20, 20, 0.22);
+  --color-text: #141414;
+  --color-muted: #5c5f66;
+  --color-subtle: #5c5f66;
+  --color-accent: var(--acento-marca, #7d6328);
+  --color-accent-strong: var(--acento-marca, #7d6328);
+  --color-accent-soft: rgba(125, 99, 40, 0.1);
+  --color-ring: var(--acento-marca, #7d6328);
+  --color-primary: var(--acento-marca, #7d6328);
+  --color-primary-hover: #141414;
+  --color-primary-soft: #f1efe9;
+  --color-on-primary: #ffffff;
+  --color-highlight: var(--acento-marca, #7d6328);
+  --color-success: #15803d;
+  --color-success-soft: #ecfdf3;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fef2f2;
+  --color-warning: #b45309;
+  --color-warning-soft: #fffbeb;
+  --color-info: #0369a1;
+  --color-info-soft: #f0f9ff;
+}
+
+/*
+ * Aire alrededor de la foto en las cards de las páginas de marca y del bloque
+ * Tienda oficial de la home: las fotos sin fondo vienen recortadas al ras del
+ * producto y, sin esto, llenan el recuadro. Sólo grilla (no la vista lista).
+ * Va antes del estilo estudio, que define su propio padding y gana.
+ */
+[data-fotos-con-aire] [data-card-producto]:not([data-layout="list"]) > div:first-child img {
+  padding: 13% !important;
+}
+
+/*
+ * Fotos "estudio" en las cards de producto (bloque Los más elegidos de una
+ * página de marca y bloque Tienda oficial de la home; se elige en el editor del
+ * bloque). Pensado para fotos SIN fondo (PNG con alfa) RECORTADAS al contenido:
+ * el producto se apoya en una línea fija abajo del recuadro, con una sombra de
+ * contacto debajo (sin reflejo: se pidió sólo sombra). Con fotos de
+ * fondo blanco el efecto no tiene sentido (se ve el recuadro blanco).
+ * Apunta al recuadro de la foto de `ProductCard` (primer hijo de la card, que
+ * `TarjetaProductoCarrusel` marca con `data-card-producto`), sin tocar el DS. No
+ * usar `[data-layout]`: la variante "soft" sólo lo pone si recibe `layout`.
+ */
+[data-estudio] [data-card-producto] > div:first-child {
+  isolation: isolate;
+  container-type: inline-size;
+}
+[data-estudio] [data-card-producto] > div:first-child img {
+  z-index: 1;
+  object-position: 50% 100%;
+  padding: 14% 18% 24% !important;
+}
+[data-estudio] [data-card-producto] > div:first-child::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  left: 24%;
+  right: 24%;
+  bottom: calc(24% - 3.5cqw);
+  height: 7cqw;
+  border-radius: 50%;
+  filter: blur(7px);
+}
+[data-estudio="oscuro"] [data-card-producto] > div:first-child {
+  background: radial-gradient(ellipse 90% 80% at 50% 42%, #2c2c32 0%, #17171b 55%, #08080a 100%);
+}
+[data-estudio="oscuro"] [data-card-producto] > div:first-child::after {
+  background: rgba(0, 0, 0, 0.8);
+}
+[data-estudio="claro"] [data-card-producto] > div:first-child {
+  background: radial-gradient(ellipse 90% 80% at 50% 42%, #f6f5f2 0%, #e9e7e2 55%, #d6d4cf 100%);
+}
+[data-estudio="claro"] [data-card-producto] > div:first-child::after {
+  background: rgba(0, 0, 0, 0.45);
+}

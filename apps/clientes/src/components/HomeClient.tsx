@@ -11,7 +11,7 @@ import {
 import { Reveal } from "@/components/Reveal";
 import { linkNext } from "@/components/catalogo/link-next";
 import { imagenNext } from "@/components/catalogo/imagen-next";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import {
   aVisibleOn,
   clasesVisibilidad,
@@ -23,6 +23,7 @@ import {
   visibilidadDe,
   type HomeContent,
   type SeccionHome,
+  type SeccionOrdenable,
   type SoloEn,
   type TextosSeccion,
   type TileContent,
@@ -153,6 +154,7 @@ function TituloSeccion({ textos, linkTodos }: { textos: TextosSeccion; linkTodos
 export function HomeClient({
   contenido,
   destacados,
+  tiendaOficial = null,
   busquedaAsistida = null,
 }: {
   contenido: HomeContent;
@@ -161,6 +163,11 @@ export function HomeClient({
    * (precio, stock, cuotas y flags). Lo arma app/page.tsx.
    */
   destacados: ReactNode;
+  /**
+   * Bloque "Tienda oficial" (página de marca destacada): hueco por request con su `<Suspense>`,
+   * armado en app/page.tsx. `null` si la sección no tiene una página publicada para mostrar.
+   */
+  tiendaOficial?: ReactNode;
   /**
    * "Cuéntenos qué necesita" (flag `busqueda-ia`): hueco por request con su
    * `<Suspense fallback={null}>`, armado en app/page.tsx. Va debajo de la
@@ -186,50 +193,52 @@ export function HomeClient({
   // con srcset/sizes del optimizador).
   const imagenHero = isStudioImage(hero.imagen) ? STUDIO_IMAGE : hero.imagen;
 
-  return (
-    <main className="flex-1">
-      <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
-        <div className="pt-[clamp(20px,3vw,36px)]">
-          <Reveal>
-            <SeccionEditable seccion="hero" visibilidad={vis("hero")}>
-              <InteractiveHero enabled={isStudioImage(hero.imagen)}>
-              <Hero
-                className="[&_em]:not-italic [&_h1]:font-bold [&_a.rounded-full:first-of-type]:bg-accent [&_a.rounded-full:first-of-type:hover]:bg-primary"
-                eyebrow={hero.eyebrow}
-                eyebrowVisibleOn={textoVisibleOn(hero, "eyebrow")}
-                title={hero.titulo}
-                titleMobile={hero.tituloMobile}
-                titleVisibleOn={textoVisibleOn(hero, "titulo")}
-                lead={hero.bajada}
-                leadMobile={hero.bajadaMobile}
-                leadVisibleOn={textoVisibleOn(hero, "bajada")}
-                imageSrc={imagenHero}
-                imageAlt={hero.imagenAlt}
-                renderImage={imagenNext}
-                renderLink={linkNext}
-                ctas={sinItemsOcultos(hero.ctas).map((c) => ({
-                  label: c.label,
-                  href: c.href,
-                  visibleOn: aVisibleOn(c.visibilidad),
-                }))}
-                usps={hero.usps
-                  .map((u, i) => {
-                    // El ícono va por la posición original: ocultar uno no le
-                    // cambia el ícono a los de al lado.
-                    const Icon = ICONOS_USP[i % ICONOS_USP.length];
-                    // El USP de WhatsApp lleva al mismo número que el CTA de abajo.
-                    const href = /whatsapp/i.test(u.label) ? whatsapp.href : undefined;
-                    return { label: u.label, icon: <Icon />, href, visibilidad: u.visibilidad };
-                  })
-                  .filter((u) => u.visibilidad !== "nunca")
-                  .map(({ visibilidad, ...u }) => ({ ...u, visibleOn: aVisibleOn(visibilidad) }))}
-              />
-              </InteractiveHero>
-            </SeccionEditable>
-          </Reveal>
-        </div>
-      </div>
-
+  // Cada sección con su propio contenedor, así se pueden dibujar en cualquier orden
+  // ("Ordenar secciones" de la barra de edición, `contenido.orden`). La cinta de marcas va a todo
+  // el ancho; el resto, dentro del ancho del contenido.
+  const secciones: Record<SeccionOrdenable, ReactNode> = {
+    hero: (
+      <Contenido className="pt-[clamp(20px,3vw,36px)]">
+        <Reveal>
+          <SeccionEditable seccion="hero" visibilidad={vis("hero")}>
+            <InteractiveHero enabled={isStudioImage(hero.imagen)}>
+            <Hero
+              className="[&_em]:not-italic [&_h1]:font-bold [&_a.rounded-full:first-of-type]:bg-accent [&_a.rounded-full:first-of-type:hover]:bg-primary"
+              eyebrow={hero.eyebrow}
+              eyebrowVisibleOn={textoVisibleOn(hero, "eyebrow")}
+              title={hero.titulo}
+              titleMobile={hero.tituloMobile}
+              titleVisibleOn={textoVisibleOn(hero, "titulo")}
+              lead={hero.bajada}
+              leadMobile={hero.bajadaMobile}
+              leadVisibleOn={textoVisibleOn(hero, "bajada")}
+              imageSrc={imagenHero}
+              imageAlt={hero.imagenAlt}
+              renderImage={imagenNext}
+              renderLink={linkNext}
+              ctas={sinItemsOcultos(hero.ctas).map((c) => ({
+                label: c.label,
+                href: c.href,
+                visibleOn: aVisibleOn(c.visibilidad),
+              }))}
+              usps={hero.usps
+                .map((u, i) => {
+                  // El ícono va por la posición original: ocultar uno no le
+                  // cambia el ícono a los de al lado.
+                  const Icon = ICONOS_USP[i % ICONOS_USP.length];
+                  // El USP de WhatsApp lleva al mismo número que el CTA de abajo.
+                  const href = /whatsapp/i.test(u.label) ? whatsapp.href : undefined;
+                  return { label: u.label, icon: <Icon />, href, visibilidad: u.visibilidad };
+                })
+                .filter((u) => u.visibilidad !== "nunca")
+                .map(({ visibilidad, ...u }) => ({ ...u, visibleOn: aVisibleOn(visibilidad) }))}
+            />
+            </InteractiveHero>
+          </SeccionEditable>
+        </Reveal>
+      </Contenido>
+    ),
+    marquee: (
       <SeccionEditable seccion="marquee" visibilidad={vis("marquee")} botonTop="top-[calc(clamp(28px,4vw,48px)+0.5rem)]">
         <PorTamano items={marquee.items}>
           {(items) => (
@@ -241,11 +250,10 @@ export function HomeClient({
           )}
         </PorTamano>
       </SeccionEditable>
-
-      <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
-        {busquedaAsistida}
-
-        {/* Ambientes */}
+    ),
+    busquedaAsistida: busquedaAsistida ? <Contenido>{busquedaAsistida}</Contenido> : null,
+    ambientes: (
+      <Contenido>
         <Reveal>
           <SeccionEditable seccion="ambientes" titulo={ambientes.titulo} visibilidad={vis("ambientes")} botonTop="top-[calc(clamp(56px,7vw,96px)-2.5rem)]">
             <section className="pt-[clamp(56px,7vw,96px)]">
@@ -258,8 +266,10 @@ export function HomeClient({
             </section>
           </SeccionEditable>
         </Reveal>
-
-        {/* Destacados: productos reales del catálogo (precio y cuotas vivos). */}
+      </Contenido>
+    ),
+    destacados: (
+      <Contenido>
         <Reveal>
           <SeccionEditable seccion="destacados" titulo={secDestacados.titulo} visibilidad={vis("destacados")} botonTop="top-[calc(clamp(56px,7vw,96px)-2.5rem)]">
             <section className="pt-[clamp(56px,7vw,96px)]">
@@ -268,8 +278,19 @@ export function HomeClient({
             </section>
           </SeccionEditable>
         </Reveal>
-
-        {/* Banner decorativo */}
+      </Contenido>
+    ),
+    tiendaOficial: (
+      <Contenido>
+        <Reveal>
+          <SeccionEditable seccion="tiendaOficial" visibilidad={vis("tiendaOficial")} botonTop="top-[calc(clamp(56px,7vw,96px)+0.5rem)]">
+            {tiendaOficial}
+          </SeccionEditable>
+        </Reveal>
+      </Contenido>
+    ),
+    bannerDeco: (
+      <Contenido>
         <Reveal>
           <SeccionEditable seccion="bannerDeco" visibilidad={vis("bannerDeco")} botonTop="top-[calc(clamp(56px,7vw,96px)+0.5rem)]">
             <PromoBanner
@@ -293,8 +314,10 @@ export function HomeClient({
             />
           </SeccionEditable>
         </Reveal>
-
-        {/* Deco grid */}
+      </Contenido>
+    ),
+    decoGrid: (
+      <Contenido>
         <Reveal>
           <SeccionEditable seccion="decoGrid" titulo={decoGrid.titulo} visibilidad={vis("decoGrid")} botonTop="top-[calc(clamp(56px,7vw,96px)-2.5rem)]">
             <section className="pt-[clamp(56px,7vw,96px)]">
@@ -311,8 +334,10 @@ export function HomeClient({
             </section>
           </SeccionEditable>
         </Reveal>
-
-        {/* Servicios */}
+      </Contenido>
+    ),
+    servicios: (
+      <Contenido>
         <Reveal>
           <SeccionEditable seccion="servicios" visibilidad={vis("servicios")} botonTop="top-[calc(clamp(56px,7vw,96px)+0.5rem)]">
             <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
@@ -333,8 +358,10 @@ export function HomeClient({
             </section>
           </SeccionEditable>
         </Reveal>
-
-        {/* WhatsApp CTA (conversión, se preserva del diseño anterior) */}
+      </Contenido>
+    ),
+    whatsapp: (
+      <Contenido>
         <SeccionEditable seccion="whatsapp" visibilidad={vis("whatsapp")}>
           <div className="pb-[clamp(56px,7vw,96px)]">
             <CtaBanner
@@ -347,7 +374,24 @@ export function HomeClient({
             />
           </div>
         </SeccionEditable>
-      </div>
+      </Contenido>
+    ),
+  };
+
+  return (
+    <main className="flex-1">
+      {contenido.orden.map((s) => (
+        <Fragment key={s}>{secciones[s]}</Fragment>
+      ))}
     </main>
+  );
+}
+
+/** El ancho del contenido de la home (todas las secciones menos la cinta de marcas). */
+function Contenido({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
+      {className ? <div className={className}>{children}</div> : children}
+    </div>
   );
 }

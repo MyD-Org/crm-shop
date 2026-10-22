@@ -20,6 +20,7 @@ import {
   borrarSeccionHome,
   guardarSeccionHome,
   leerSeccionesHome,
+  leerSeccionesHomePorPrefijo,
   leerSeccionHome,
 } from "./home-guardar";
 import { getContenidoHome } from "./home-datos";
@@ -53,6 +54,17 @@ describe("home_content filtra por shopTenantId()", () => {
     const [c] = grabadora.consultas;
     expect(tenantFiltrado(c.sql, c.params)).toBe(TENANT);
     expect(c.sql).toMatch(/"home_content"\."key" in \(/);
+  });
+
+  it("leerSeccionesHomePorPrefijo escapa el prefijo para el like", async () => {
+    await leerSeccionesHomePorPrefijo("pagina-marca:");
+    const [c] = grabadora.consultas;
+    expect(tenantFiltrado(c.sql, c.params)).toBe(TENANT);
+    expect(c.sql).toMatch(/"home_content"\."key" like \$/);
+    expect(c.params).toContain("pagina-marca:%");
+    grabadora = dbGrabadora();
+    await leerSeccionesHomePorPrefijo("a_b%");
+    expect(grabadora.consultas[0].params).toContain("a\\_b\\%%");
   });
 
   it("borrarSeccionHome", async () => {

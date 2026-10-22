@@ -2,6 +2,7 @@ import type { VisibleOn } from "@myd-org/ui";
 import { hostsDeMedios } from "../lib/catalogo-medios";
 import { cuitValido, formatearCuit } from "../lib/facturacion";
 import type { Marca } from "../lib/marca-base";
+import { completarOrden } from "../lib/orden-secciones";
 
 /**
  * Contenido por defecto de la home, editable desde la home por un usuario
@@ -120,12 +121,30 @@ export type BusquedaAsistidaContent = TextosSeccion & {
   ejemplos: ItemEjemplo[];
 };
 
+/**
+ * Bloque "Tienda oficial" de la home (spec 2026-10-20-marcas-tienda-oficial §9): destaca una
+ * página de marca de nivel "oficial". Logo, nombre y bajada salen de esa página; si no existe o
+ * no está publicada, el bloque no se dibuja. `slug` ausente: no destaca ninguna.
+ */
+export type TiendaOficialContent = {
+  slug?: string;
+  /** Vacío: la bajada de la página de marca. */
+  titulo?: string;
+  cta: string;
+  /** Productos que se muestran (hasta 3); el resto se completa con la marca. */
+  skus: string[];
+  /** Foto del panel izquierdo (con velo). Vacía: la foto de fondo del encabezado de la página de marca. */
+  imagen?: string;
+  imagenAlt?: string;
+};
+
 export type HomeContent = {
   anuncio: { texto?: string };
   hero: HeroContent;
   marquee: MarqueeContent;
   ambientes: SeccionTilesContent;
   destacados: DestacadosContent;
+  tiendaOficial: TiendaOficialContent;
   bannerDeco: BannerDecoContent;
   decoGrid: DecoGridContent;
   servicios: ServiciosContent;
@@ -137,6 +156,8 @@ export type HomeContent = {
    *  que no figuran se ven siempre). Se guarda en su propia fila de
    *  home_content (`ocultas`), así no pisa el contenido de la sección. */
   visibilidad: MapaVisibilidad;
+  /** Orden de las secciones del cuerpo (fila `orden`, "Ordenar secciones"). Ver `ORDEN_HOME`. */
+  orden: SeccionOrdenable[];
 };
 
 /** Dónde se ve algo de la home. El corte es `md` (768px), el mismo de las
@@ -154,6 +175,7 @@ export const SECCIONES_HOME = [
   "marquee",
   "ambientes",
   "destacados",
+  "tiendaOficial",
   "bannerDeco",
   "decoGrid",
   "servicios",
@@ -163,6 +185,26 @@ export const SECCIONES_HOME = [
 ] as const;
 
 export type SeccionHome = (typeof SECCIONES_HOME)[number];
+
+/**
+ * Secciones del cuerpo de la home que se pueden ordenar, en su orden por defecto (el diseño
+ * aprobado). El anuncio y el badge del menú no están: no van en el cuerpo. El orden elegido se
+ * guarda en su propia fila (`orden`), como la visibilidad.
+ */
+export const ORDEN_HOME = [
+  "hero",
+  "marquee",
+  "busquedaAsistida",
+  "ambientes",
+  "destacados",
+  "tiendaOficial",
+  "bannerDeco",
+  "decoGrid",
+  "servicios",
+  "whatsapp",
+] as const satisfies readonly SeccionHome[];
+export type SeccionOrdenable = (typeof ORDEN_HOME)[number];
+export const KEY_ORDEN = "orden";
 
 const CATALOGO_ILUMINACION = "/catalogo?categoria=ILUMINACION";
 
@@ -223,6 +265,11 @@ export const DEFAULTS_HOME: HomeContent = {
       "/images/prod-string-warm.webp",
     ],
   },
+  tiendaOficial: {
+    slug: "led-premium",
+    cta: "Entrar a la tienda oficial",
+    skus: [],
+  },
   bannerDeco: {
     eyebrow: "Línea decorativa · Nuevo",
     titulo: "Ambientá tus noches con *luz cálida*",
@@ -279,6 +326,7 @@ export const DEFAULTS_HOME: HomeContent = {
   // El anuncio en mobile ocupa varias filas: arranca solo en desktop hasta que
   // sea un carrusel de mensajes. El admin lo puede cambiar desde el editor.
   visibilidad: { anuncio: "desktop" },
+  orden: [...ORDEN_HOME],
 };
 
 /**
@@ -331,6 +379,7 @@ export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent 
       ],
     },
     navBadge: null,
+    tiendaOficial: { cta: DEFAULTS_HOME.tiendaOficial.cta, skus: [] },
     whatsapp: DEFAULTS_HOME.whatsapp,
     busquedaAsistida: DEFAULTS_HOME.busquedaAsistida,
     visibilidad: {
@@ -339,7 +388,9 @@ export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent 
       ambientes: "nunca",
       bannerDeco: "nunca",
       decoGrid: "nunca",
+      tiendaOficial: "nunca",
     },
+    orden: [...ORDEN_HOME],
   };
 }
 
@@ -564,6 +615,16 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
         errores.push(`visibilidadTextos debe indicar desktop, mobile o nunca para ${CAMPOS_WHATSAPP.join(", ")}`);
       if (!esHref(o.href)) errores.push("href debe ser una ruta interna (/) o una URL https");
       break;
+    case "tiendaOficial":
+      if (o.slug !== undefined && (typeof o.slug !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(o.slug)))
+        errores.push("slug debe ser la dirección de una página de marca (minúsculas, números y guiones)");
+      texto("titulo", true);
+      texto("cta");
+      lista("skus", esTexto, "códigos de producto");
+      if (Array.isArray(o.skus) && o.skus.length > 3) errores.push("skus admite hasta 3 productos");
+      if (o.imagen !== undefined) imagen("imagen", o.imagen);
+      texto("imagenAlt", true);
+      break;
     case "busquedaAsistida":
       texto("eyebrow", true);
       textosTitulo();
@@ -680,6 +741,7 @@ export function resolverSeccion(key: string, payload: unknown): unknown {
 /** Key de home_content con la visibilidad de las secciones. Se llama así
  *  porque antes guardaba sólo la lista de secciones ocultas. */
 export const KEY_OCULTAS = "ocultas";
+
 
 /**
  * Datos legales del comercio (páginas legales + footer). Viven en home_content
@@ -843,6 +905,10 @@ export function combinarContenidoHome(
     } else if (key === "navBadge") {
       resultado.navBadge = null;
     }
+  }
+  if (porKey.has(KEY_ORDEN)) {
+    const fila = porKey.get(KEY_ORDEN) as { secciones?: unknown } | null;
+    resultado.orden = completarOrden(fila?.secciones, ORDEN_HOME);
   }
   if (porKey.has(KEY_OCULTAS)) {
     resultado.visibilidad = { ...defaults.visibilidad, ...resolverVisibilidad(porKey.get(KEY_OCULTAS)) };

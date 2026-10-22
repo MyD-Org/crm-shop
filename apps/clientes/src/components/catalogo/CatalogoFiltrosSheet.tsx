@@ -41,6 +41,7 @@ export function CatalogoFiltrosSheet({
   estado,
   navegar,
   navegando = false,
+  sinMarcas = false,
 }: {
   facetas: Facetas;
   /** Estado vigente (la URL). */
@@ -49,6 +50,8 @@ export function CatalogoFiltrosSheet({
   navegar: (href: string) => void;
   /** Hay una navegación en curso (la categoría recién elegida está cargando). */
   navegando?: boolean;
+  /** Sin el grupo "Marcas" (ver `CatalogoFiltros`). */
+  sinMarcas?: boolean;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [borrador, setBorrador] = useState(estado);
@@ -142,6 +145,7 @@ export function CatalogoFiltrosSheet({
             estado={borrador}
             ir={(cambios) => setBorrador((b) => cambiarBorrador(b, cambios))}
             alElegirCategoria={alElegirCategoria}
+            sinMarcas={sinMarcas}
           />
         </div>
       </Dialog>

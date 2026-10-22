@@ -39,6 +39,7 @@ const CON_CACHE = [
   "app/opengraph-image.tsx",
   "lib/home-datos.ts",
   "lib/institucional/datos.ts",
+  "lib/marcas/marcas-datos.ts",
   "lib/marca.ts",
   "lib/tema-tenant-datos.ts",
   "components/SiteFooter.tsx",

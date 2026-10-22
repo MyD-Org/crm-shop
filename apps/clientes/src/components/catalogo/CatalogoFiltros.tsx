@@ -53,6 +53,7 @@ export function CatalogoFiltros({
   ir,
   dentroDeSheet = false,
   alElegirCategoria,
+  sinMarcas = false,
 }: {
   facetas: Facetas;
   estado: EstadoCatalogo;
@@ -63,6 +64,8 @@ export function CatalogoFiltros({
    * La hoja de mobile lo usa, con las facetas por tipo, para aplicar la categoría en el acto.
    */
   alElegirCategoria?: (categorias: string[]) => void;
+  /** Sin el grupo "Marcas": en una página de marca la marca la fija la página. */
+  sinMarcas?: boolean;
 }) {
   // useId: el panel se monta dos veces (aside y hoja de mobile).
   const idDisponibilidad = useId();
@@ -134,26 +137,30 @@ export function CatalogoFiltros({
         }}
         emptyText="Sin categorías para estos filtros"
       />
-      <Divider />
-      <FacetGroup
-        title="Marcas"
-        items={itemsVisibles(
-          itemsDeFaceta(facetas.marcas, estado.marcas).map((m) => ({
-            value: m.label,
-            label: formatMarca(m.label),
-            count: m.count,
-            checked: m.checked,
-          })),
-        )}
-        onToggle={(valor, tildado) => ir({ marcas: alternar(estado.marcas, valor, tildado) })}
-        searchable
-        searchPlaceholder="Buscar marca…"
-        initialVisible={6}
-        moreLabel="Ver todas las marcas ({n})"
-        lessLabel="Ver menos"
-        emptyText="Sin marcas para estos filtros"
-        searchEmptyText="No hay marcas que coincidan con su búsqueda."
-      />
+      {sinMarcas ? null : (
+        <>
+        <Divider />
+        <FacetGroup
+          title="Marcas"
+          items={itemsVisibles(
+            itemsDeFaceta(facetas.marcas, estado.marcas).map((m) => ({
+              value: m.label,
+              label: formatMarca(m.label),
+              count: m.count,
+              checked: m.checked,
+            })),
+          )}
+          onToggle={(valor, tildado) => ir({ marcas: alternar(estado.marcas, valor, tildado) })}
+          searchable
+          searchPlaceholder="Buscar marca…"
+          initialVisible={6}
+          moreLabel="Ver todas las marcas ({n})"
+          lessLabel="Ver menos"
+          emptyText="Sin marcas para estos filtros"
+          searchEmptyText="No hay marcas que coincidan con su búsqueda."
+        />
+        </>
+      )}
       {/* Disponibilidad va debajo de Marcas: es lo primero que se ajusta, y lo técnico (que depende de
           la categoría) queda abajo, junto al precio. */}
       <Divider />

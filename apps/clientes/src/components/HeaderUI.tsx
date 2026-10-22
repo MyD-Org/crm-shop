@@ -9,8 +9,8 @@ import type { NavBadgeContent } from "@/data/home-defaults";
 import { SearchAutocomplete } from "./SearchAutocomplete";
 import { destinoSeguro } from "@/lib/ingreso";
 import { useHidratado } from "@/lib/hidratado";
-import { conBadgeNav, itemsNavHome } from "@/lib/nav-badge";
-import type { ItemMenuMarca } from "@/lib/marcas/pagina-marca";
+import { MAX_CATEGORIAS_NAV, conBadgeNav } from "@/lib/nav-badge";
+import { formatRubro } from "@/lib/formato-rubro";
 import { CartPreview } from "./CartPreview";
 import { linkNext } from "./catalogo/link-next";
 import { MenuUsuario } from "./MenuUsuario";
@@ -55,8 +55,6 @@ interface PropsHeader {
   navBadge?: NavBadgeContent | null;
   /** El badge sólo en mobile o en desktop (visibilidad del editor). */
   navBadgeVisibleOn?: VisibleOn;
-  /** Desplegable "Marcas" (páginas de marca publicadas). Vacío o ausente: la barra de siempre. */
-  menuMarcas?: ItemMenuMarca[];
   /**
    * Flag `busqueda-ia`: el buscador rota ejemplos y muestra la guía al
    * enfocarlo. Lo resuelve el hueco del header; en el shell, apagado.
@@ -93,7 +91,6 @@ function HeaderVista({
   categorias,
   navBadge = null,
   navBadgeVisibleOn,
-  menuMarcas = [],
   busquedaIa = false,
   ubicacion,
   ubicacionEnLinea,
@@ -119,7 +116,14 @@ function HeaderVista({
   // en todas las páginas.
   const nav =
     pathname === "/" && categorias
-      ? conBadgeNav(itemsNavHome(categorias, menuMarcas), navBadge, navBadgeVisibleOn)
+      ? conBadgeNav(
+          categorias.slice(0, MAX_CATEGORIAS_NAV).map((cat) => ({
+            label: formatRubro(cat),
+            href: `/catalogo?categoria=${encodeURIComponent(cat)}`,
+          })),
+          navBadge,
+          navBadgeVisibleOn,
+        )
       : [];
 
   // Sin <Show> de Clerk: mientras cierra sesión deja la sesión "en

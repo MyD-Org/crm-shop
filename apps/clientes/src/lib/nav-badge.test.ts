@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SiteNavItem } from "@myd-org/ui";
-import { conBadgeNav, itemsNavHome, maxCategoriasNav, normalizarCategoria } from "./nav-badge";
+import { conBadgeNav, normalizarCategoria } from "./nav-badge";
 
 function itemsNav(): SiteNavItem[] {
   return [
@@ -63,31 +63,5 @@ describe("normalizarCategoria", () => {
     expect(normalizarCategoria("Iluminación")).toBe("ILUMINACION");
     expect(normalizarCategoria("  Seguridad ")).toBe("SEGURIDAD");
     expect(normalizarCategoria("ILUMINACION")).toBe("ILUMINACION");
-  });
-});
-
-describe("Marcas en el menú (spec 2026-10-20-marcas-tienda-oficial §8)", () => {
-  const menu = [
-    { label: "Acme", href: "/marcas/acme", destacado: true, descripcion: "Fábrica" },
-    { label: "Ver todas las marcas", href: "/marcas" },
-  ];
-  const categorias = ["A", "B", "C", "D", "E", "F", "G", "H", "I"];
-
-  it("con marcas entran 7 categorías; sin marcas, 8", () => {
-    expect(maxCategoriasNav(true)).toBe(7);
-    expect(maxCategoriasNav(false)).toBe(8);
-  });
-
-  it("sin páginas publicadas el menú queda como siempre", () => {
-    const items = itemsNavHome(categorias, []);
-    expect(items).toHaveLength(8);
-    expect(items.some((i) => i.label === "Marcas")).toBe(false);
-  });
-
-  it("con páginas: 7 categorías y Marcas al final con su menú", () => {
-    const items = itemsNavHome(categorias, menu);
-    expect(items).toHaveLength(8);
-    expect(items.at(-1)).toEqual({ label: "Marcas", href: "/marcas", menu });
-    expect(items[0]).toEqual({ label: "A", href: "/catalogo?categoria=A" });
   });
 });

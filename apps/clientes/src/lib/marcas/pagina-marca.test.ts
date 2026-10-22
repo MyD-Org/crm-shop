@@ -6,7 +6,6 @@ import {
   claveDeMarca,
   contenidoInicial,
   esSlugMarca,
-  itemsMenuMarcas,
   ordenarPaginas,
   sanearPaginaMarca,
   slugDeNombre,
@@ -143,24 +142,13 @@ describe("contenido inicial y visibilidad", () => {
   });
 });
 
-describe("orden y menú", () => {
+describe("orden", () => {
   const marca = pagina({ slug: "macro", nombre: "Macro", orden: 1 });
   const oficial = pagina({ slug: "acme", nombre: "Acme", nivel: "oficial", orden: 5, bajada: "Fábrica" });
   const oculta = pagina({ slug: "oculta", nombre: "Oculta", publicada: false, orden: 0 });
 
   it("la oficial va primero y después por orden", () => {
     expect(ordenarPaginas([marca, oculta, oficial]).map((p) => p.slug)).toEqual(["acme", "oculta", "macro"]);
-  });
-  it("el menú lista solo publicadas, la oficial destacada y cierra con Ver todas", () => {
-    expect(itemsMenuMarcas([marca, oficial, oculta])).toEqual([
-      { label: "Acme", href: "/marcas/acme", destacado: true, descripcion: "Fábrica" },
-      { label: "Macro", href: "/marcas/macro" },
-      { label: "Ver todas las marcas", href: "/marcas" },
-    ]);
-  });
-  it("sin páginas publicadas el menú queda vacío", () => {
-    expect(itemsMenuMarcas([])).toEqual([]);
-    expect(itemsMenuMarcas([oculta])).toEqual([]);
   });
 });
 

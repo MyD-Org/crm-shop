@@ -64,10 +64,9 @@ export function hrefLinea(slug: string, linea?: string): string {
   return linea ? `${hrefMarca(slug)}?linea=${encodeURIComponent(linea)}#productos` : `${hrefMarca(slug)}#productos`;
 }
 
-/** Rutas de marca para el sitemap: nada si no hay publicadas. */
+/** Rutas de marca para el sitemap: cada página publicada (no hay índice `/marcas`). */
 export function rutasSitemapMarcas(ps: readonly PaginaMarca[]): string[] {
-  const publicadas = ps.filter((p) => p.publicada);
-  return publicadas.length ? ["/marcas", ...publicadas.map((p) => hrefMarca(p.slug))] : [];
+  return ps.filter((p) => p.publicada).map((p) => hrefMarca(p.slug));
 }
 
 /**

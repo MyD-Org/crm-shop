@@ -83,7 +83,7 @@ export function PaginaMarcaVista({
   const migas = (
     <div className="mx-auto w-full max-w-contenido px-[clamp(18px,4vw,48px)] py-3">
       <Breadcrumb
-        items={[{ label: "Inicio", href: "/" }, { label: "Marcas", href: "/marcas" }, { label: pagina.nombre }]}
+        items={[{ label: "Inicio", href: "/" }, { label: pagina.nombre }]}
         renderLink={linkNext}
       />
     </div>

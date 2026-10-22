@@ -9,8 +9,6 @@ import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag"
 import { identidadActual } from "@/lib/auth"
 import { getContenidoHome } from "@/lib/home-datos"
 import { visibilidadDe, type NavBadgeContent } from "@/data/home-defaults"
-import { getPaginasMarca } from "@/lib/marcas/marcas-datos"
-import { itemsMenuMarcas, type ItemMenuMarca } from "@/lib/marcas/pagina-marca"
 import { HeaderSinRuta, HeaderUI } from "./HeaderUI"
 import { UbicacionHeader } from "./ubicacion/UbicacionHeader"
 
@@ -24,22 +22,16 @@ import { UbicacionHeader } from "./ubicacion/UbicacionHeader"
 export async function Header() {
   // Badge administrable del nav (config de home, mismo contrato que el resto
   // del contenido). Cacheado: el layout ya lo lee para el anuncio.
-  // "Marcas ▾" (spec 2026-10-20-marcas-tienda-oficial §8): cacheado con el tag de la home; si no
-  // hay páginas publicadas (o la lectura falla) la barra queda como siempre. Las dos lecturas en
-  // paralelo: una caché esperada DESPUÉS de otra llega tarde al shell y Next la toma como dinámica
-  // ("Uncached data accessed outside of <Suspense>").
-  const [{ navBadge: badge, visibilidad }, paginasMarca] = await Promise.all([getContenidoHome(), getPaginasMarca()])
+  const { navBadge: badge, visibilidad } = await getContenidoHome()
   const vBadge = visibilidadDe(visibilidad, "navBadge")
   const navBadge = vBadge === "nunca" ? null : badge
   const navBadgeVisibleOn = vBadge === "mobile" || vBadge === "desktop" ? vBadge : undefined
-  const menuMarcas: ItemMenuMarca[] = itemsMenuMarcas(paginasMarca)
 
   const pendiente = {
     cuenta: { estado: "pendiente" } as const,
     categorias: null,
     navBadge,
     navBadgeVisibleOn,
-    menuMarcas,
     // "Enviar a" (desktop en las acciones, mobile bajo el buscador); cada uno trae su propio hueco
     // por request y comparten la lectura (`ubicacionDelVisitante` está cacheada por request).
     ubicacion: <UbicacionHeader />,
@@ -60,7 +52,6 @@ export async function Header() {
       <HeaderDinamico
         navBadge={navBadge}
         navBadgeVisibleOn={navBadgeVisibleOn}
-        menuMarcas={menuMarcas}
         ubicacion={pendiente.ubicacion}
         ubicacionEnLinea={pendiente.ubicacionEnLinea}
       />
@@ -72,13 +63,11 @@ export async function Header() {
 async function HeaderDinamico({
   navBadge,
   navBadgeVisibleOn,
-  menuMarcas,
   ubicacion,
   ubicacionEnLinea,
 }: {
   navBadge: NavBadgeContent | null
   navBadgeVisibleOn?: VisibleOn
-  menuMarcas: ItemMenuMarca[]
   ubicacion: ReactNode
   ubicacionEnLinea: ReactNode
 }) {
@@ -129,7 +118,6 @@ async function HeaderDinamico({
       categorias={categorias}
       navBadge={navBadge}
       navBadgeVisibleOn={navBadgeVisibleOn}
-      menuMarcas={menuMarcas}
       busquedaIa={busquedaIa}
       ubicacion={ubicacion}
       ubicacionEnLinea={ubicacionEnLinea}

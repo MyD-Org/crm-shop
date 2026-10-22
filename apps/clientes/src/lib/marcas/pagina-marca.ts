@@ -112,9 +112,6 @@ export type PaginaMarca = {
   visibilidad: Partial<Record<BloqueMarca, Visibilidad>>;
 };
 
-/** Lo que el header manda al menú "Marcas" (mismo contrato que `SiteNavItem.menu` del DS). */
-export type ItemMenuMarca = { label: string; href: string; destacado?: boolean; descripcion?: string };
-
 export const PREFIJO_CLAVE_MARCA = "pagina-marca:";
 
 /**
@@ -229,20 +226,6 @@ export function ordenarPaginas(ps: readonly PaginaMarca[]): PaginaMarca[] {
 
 export function hrefMarca(slug: string): string {
   return `/marcas/${slug}`;
-}
-
-/** Ítems del menú "Marcas": solo publicadas, la oficial destacada, y "Ver todas" al final. */
-export function itemsMenuMarcas(ps: readonly PaginaMarca[]): ItemMenuMarca[] {
-  const publicadas = ordenarPaginas(ps.filter((p) => p.publicada));
-  if (publicadas.length === 0) return [];
-  return [
-    ...publicadas.map((p): ItemMenuMarca =>
-      p.nivel === "oficial"
-        ? { label: p.nombre, href: hrefMarca(p.slug), destacado: true, descripcion: p.bajada }
-        : { label: p.nombre, href: hrefMarca(p.slug) },
-    ),
-    { label: "Ver todas las marcas", href: "/marcas" },
-  ];
 }
 
 // ---------------------------------------------------------------------------

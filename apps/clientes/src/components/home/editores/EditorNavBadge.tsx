@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { Field, Input, Select, Switch } from "@myd-org/ui";
 import type { NavBadgeContent } from "@/data/home-defaults";
 import { formatRubro } from "@/lib/formato-rubro";
-import { maxCategoriasNav, normalizarCategoria } from "@/lib/nav-badge";
-import { leerPaginasMarcaParaEditor } from "@/lib/marcas/marcas-acciones";
+import { MAX_CATEGORIAS_NAV, normalizarCategoria } from "@/lib/nav-badge";
 import type { EditorProps } from "./index";
 
 const DEFAULT_BADGE: NavBadgeContent = { categoria: "ILUMINACION", texto: "Nuevo" };
@@ -20,7 +19,7 @@ const DEFAULT_BADGE: NavBadgeContent = { categoria: "ILUMINACION", texto: "Nuevo
  * catálogo ("ILUMINACION"), y cualquier otra forma —la que se ve en el menú—
  * se guardaba sin error y el badge no aparecía. Las opciones son las mismas
  * que muestra el header (`/api/shop/categorias`, primeras
- * `maxCategoriasNav`: una menos si hay "Marcas"), así que no se puede elegir una que no esté.
+ * `MAX_CATEGORIAS_NAV`), así que no se puede elegir una que no esté.
  */
 export function EditorNavBadge({ valor, onChange }: EditorProps<NavBadgeContent | null>) {
   const [ultimo, setUltimo] = useState<NavBadgeContent>(valor ?? DEFAULT_BADGE);
@@ -29,16 +28,10 @@ export function EditorNavBadge({ valor, onChange }: EditorProps<NavBadgeContent 
 
   useEffect(() => {
     let vigente = true;
-    // Con "Marcas" en la barra entra una categoría menos: un badge en la que queda afuera no se ve.
-    const conMarcas = leerPaginasMarcaParaEditor().then(
-      (r) => r.ok && r.paginas.some((p) => p.publicada),
-      () => false,
-    );
     fetch("/api/shop/categorias")
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then(async (d: { categorias: string[] }) => {
-        const max = maxCategoriasNav(await conMarcas);
-        if (vigente) setCategorias(d.categorias.slice(0, max));
+      .then((d: { categorias: string[] }) => {
+        if (vigente) setCategorias(d.categorias.slice(0, MAX_CATEGORIAS_NAV));
       })
       .catch(() => {
         if (vigente) setErrorCategorias(true);

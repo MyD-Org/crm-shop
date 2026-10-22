@@ -94,10 +94,10 @@ describe("hrefs", () => {
 });
 
 describe("rutasSitemapMarcas", () => {
-  it("sin publicadas no agrega nada; con publicadas, el índice y cada una", () => {
+  it("sin publicadas no agrega nada; con publicadas, cada una (no hay índice /marcas)", () => {
     expect(rutasSitemapMarcas([])).toEqual([]);
     expect(rutasSitemapMarcas([pagina({ publicada: false })])).toEqual([]);
-    expect(rutasSitemapMarcas([pagina()])).toEqual(["/marcas", "/marcas/led-premium"]);
+    expect(rutasSitemapMarcas([pagina()])).toEqual(["/marcas/led-premium"]);
   });
 });
 

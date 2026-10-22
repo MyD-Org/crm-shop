@@ -48,6 +48,7 @@ export const TITULOS_SECCION: Record<SeccionHome, string> = {
   marquee: "Cinta de mensajes",
   ambientes: "Ambientes",
   destacados: "Destacados",
+  tiendaOficial: "Tienda oficial",
   bannerDeco: "Banner decorativo",
   decoGrid: "Grilla decorativa",
   servicios: "Servicios",
@@ -163,6 +164,10 @@ export function normalizarPayload(seccion: SeccionHome, borrador: unknown): unkn
       o.skus = (o.skus as string[]).filter(esTextoNoVacio);
       if ((o.skus as string[]).length === 0) delete o.skus;
     }
+  }
+
+  if (seccion === "tiendaOficial") {
+    o.skus = Array.isArray(o.skus) ? (o.skus as string[]).filter(esTextoNoVacio).slice(0, 3) : [];
   }
 
   if (seccion === "marquee" && Array.isArray(o.items)) {

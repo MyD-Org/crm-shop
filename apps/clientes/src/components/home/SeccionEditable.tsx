@@ -44,7 +44,7 @@ const MARCA: Record<Visibilidad, string | null> = {
   nunca: "Oculta en la tienda",
 };
 
-function ComoVisitante({ visibilidad, children }: { visibilidad: Visibilidad; children: ReactNode }) {
+export function ComoVisitante({ visibilidad, children }: { visibilidad: Visibilidad; children: ReactNode }) {
   if (visibilidad === "nunca") return null;
   if (visibilidad === "siempre") return <>{children}</>;
   // `contents`: el envoltorio no altera el layout de la sección.

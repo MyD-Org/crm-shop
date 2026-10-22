@@ -191,6 +191,18 @@ describe("destacadosHome", () => {
     expect(cacheLifeMock.mock.calls).toEqual([["catalogo"]]);
   });
 
+  it("con `base` completa con esos filtros en vez de Iluminación (páginas de marca)", async () => {
+    cat.getPaginaCatalogo.mockResolvedValue({ productos: [prod("1", "A")] });
+    cat.getProductosPorSkus.mockResolvedValue([]);
+    await destacadosHome({ skus: [], cantidad: 3, soloVisibles: true, base: { marcasPropias: ["ACME"] } });
+    expect(cat.getPaginaCatalogo).toHaveBeenCalledWith({
+      filtros: { marcasPropias: ["ACME"] },
+      orden: "destacados",
+      pagina: 1,
+      soloVisibles: true,
+    });
+  });
+
   it("sin SKUs curados no consulta por código", async () => {
     cat.getPaginaCatalogo.mockResolvedValue({ productos: [prod("1", "A")] });
     await destacadosHome({ skus: [], cantidad: 4, soloVisibles: false });

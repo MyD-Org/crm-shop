@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, like, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { homeContent } from "@/db/schema";
 import { shopTenantId } from "@/lib/tenant";
@@ -60,5 +60,19 @@ export async function leerSeccionesHome(keys: readonly string[]): Promise<Map<st
     .select({ key: homeContent.key, payload: homeContent.payload })
     .from(homeContent)
     .where(and(eq(homeContent.tenantId, shopTenantId()), inArray(homeContent.key, [...keys])));
+  return new Map(filas.map((f) => [f.key, f.payload]));
+}
+
+/**
+ * Payload crudo de todas las filas cuya clave empieza con `prefijo` (por
+ * ejemplo `pagina-marca:`). El prefijo se escapa para el `like` (`\`, `%` y
+ * `_` son literales), así una clave no puede abrir la consulta a otras filas.
+ */
+export async function leerSeccionesHomePorPrefijo(prefijo: string): Promise<Map<string, unknown>> {
+  const patron = `${prefijo.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const filas = await getDb()
+    .select({ key: homeContent.key, payload: homeContent.payload })
+    .from(homeContent)
+    .where(and(eq(homeContent.tenantId, shopTenantId()), like(homeContent.key, patron)));
   return new Map(filas.map((f) => [f.key, f.payload]));
 }

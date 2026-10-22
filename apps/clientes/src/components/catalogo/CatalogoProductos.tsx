@@ -113,6 +113,8 @@ export function CatalogoProductos({
           priceSize={medio ? "sm" : "md"}
           layout={vista === "lista" ? "list" : "grid"}
           className="h-full"
+          // Gancho de las páginas de marca (globals.css, `[data-fotos-con-aire]`).
+          data-card-producto=""
           href={`/producto/${p.id}`}
           renderLink={linkNext}
           brand={marca}

@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { Button, Switch } from "@myd-org/ui";
-import { visibilidadDe, type DatosLegales, type MapaVisibilidad, type Visibilidad } from "@/data/home-defaults";
+import { visibilidadDe, type DatosLegales, type MapaVisibilidad, type SeccionOrdenable, type Visibilidad } from "@/data/home-defaults";
+import { guardarOrdenHome } from "@/lib/home-acciones";
+import { TITULOS_SECCION } from "@/lib/home-editor";
+import { DialogoOrden } from "./DialogoOrden";
 import type { DatosFooter } from "@/data/footer";
 import { DialogoDatosLegales } from "@/components/legales/DialogoDatosLegales";
 import { DialogoFooter } from "@/components/footer/DialogoFooter";
@@ -27,10 +30,12 @@ const SUFIJO: Record<Visibilidad, string> = {
 };
 export function BarraEdicion({
   visibilidad,
+  orden,
   legal,
   footer,
 }: {
   visibilidad: MapaVisibilidad;
+  orden: SeccionOrdenable[];
   legal: DatosLegales;
   footer: DatosFooter;
 }) {
@@ -39,12 +44,14 @@ export function BarraEdicion({
   const [abrirNavBadge, setAbrirNavBadge] = useState(false);
   const [abrirLegal, setAbrirLegal] = useState(false);
   const [abrirFooter, setAbrirFooter] = useState(false);
+  const [abrirOrden, setAbrirOrden] = useState(false);
   // Al salir de la home los editores se cierran: al volver no reaparecen abiertos.
   useAlOcultar(() => {
     setAbrirAnuncio(false);
     setAbrirNavBadge(false);
     setAbrirLegal(false);
     setAbrirFooter(false);
+    setAbrirOrden(false);
   });
   const vAnuncio = visibilidadDe(visibilidad, "anuncio");
   const vNavBadge = visibilidadDe(visibilidad, "navBadge");
@@ -55,6 +62,9 @@ export function BarraEdicion({
       className="fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-border bg-surface px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-lg"
     >
       <Switch label="Modo edición" checked={activo} onCheckedChange={setActivo} />
+      <Button variant="outline" size="sm" onClick={() => setAbrirOrden(true)}>
+        Ordenar secciones
+      </Button>
       <Button variant="outline" size="sm" onClick={() => setAbrirAnuncio(true)}>
         {`Anuncio${SUFIJO[vAnuncio]}`}
       </Button>
@@ -71,6 +81,12 @@ export function BarraEdicion({
       <DialogoSeccion seccion="navBadge" visibilidad={vNavBadge} open={abrirNavBadge} onOpenChange={setAbrirNavBadge} />
       <DialogoDatosLegales inicial={legal} open={abrirLegal} onOpenChange={setAbrirLegal} />
       <DialogoFooter inicial={footer} open={abrirFooter} onOpenChange={setAbrirFooter} />
+      <DialogoOrden
+        items={orden.map((s) => ({ id: s, label: TITULOS_SECCION[s] }))}
+        open={abrirOrden}
+        onOpenChange={setAbrirOrden}
+        onGuardar={guardarOrdenHome}
+      />
     </div>
   );
 }

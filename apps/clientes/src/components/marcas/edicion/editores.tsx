@@ -170,7 +170,7 @@ function EditorElegidos({ valor, onChange }: EditorProps<ElegidosMarca>) {
       <Field label="Título">
         <Input value={valor.titulo} onChange={(e) => onChange({ ...valor, titulo: e.target.value })} />
       </Field>
-      <Field label="Estilo de fotos" hint="Estudio: fondo, sombra y reflejo dibujados detrás de la foto. Pensado para fotos sin fondo.">
+      <Field label="Estilo de fotos" hint="Estudio: fondo y sombra dibujados detrás de la foto. Pensado para fotos sin fondo.">
         <SegmentedControl
           size="sm"
           ariaLabel="Estilo de fotos"

@@ -435,7 +435,7 @@ body {
  * página de marca y bloque Tienda oficial de la home; se elige en el editor del
  * bloque). Pensado para fotos SIN fondo (PNG con alfa) RECORTADAS al contenido:
  * el producto se apoya en una línea fija abajo del recuadro, con una sombra de
- * contacto debajo y, en el oscuro, un reflejo tenue en el piso. Con fotos de
+ * contacto debajo (sin reflejo: se pidió sólo sombra). Con fotos de
  * fondo blanco el efecto no tiene sentido (se ve el recuadro blanco).
  * Apunta al recuadro de la foto de `ProductCard` (primer hijo de la card, que
  * `TarjetaProductoCarrusel` marca con `data-card-producto`), sin tocar el DS. No
@@ -467,11 +467,6 @@ body {
 }
 [data-estudio="oscuro"] [data-card-producto] > div:first-child::after {
   background: rgba(0, 0, 0, 0.8);
-}
-/* Reflejo: el reflejo de la caja arranca en su borde de abajo; se lo sube dos
-   veces el padding inferior (24%) para que nazca en la base del producto. */
-[data-estudio="oscuro"] [data-card-producto] > div:first-child img {
-  -webkit-box-reflect: below -48cqw linear-gradient(transparent 52%, rgba(0, 0, 0, 0.16) 76%);
 }
 [data-estudio="claro"] [data-card-producto] > div:first-child {
   background: radial-gradient(ellipse 90% 80% at 50% 42%, #f6f5f2 0%, #e9e7e2 55%, #d6d4cf 100%);

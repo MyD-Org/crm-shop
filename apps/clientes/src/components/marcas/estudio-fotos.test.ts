@@ -15,12 +15,11 @@ describe("estilo estudio de las cards", () => {
     expect(atributoEstudio("estudio-claro")).toEqual({ "data-estudio": "claro" });
   });
 
-  it("globals.css tiene los dos estudios con fondo y sombra, y el reflejo sólo en el oscuro", () => {
+  it("globals.css tiene los dos estudios con fondo y sombra, sin reflejo (Emanuel: \"solo sombra\")", () => {
     const css = readFileSync(join(__dirname, "..", "..", "app", "globals.css"), "utf8");
     expect(css).toMatch(/\[data-estudio="oscuro"\][^{]*\{[^}]*#2c2c32/);
     expect(css).toMatch(/\[data-estudio="claro"\][^{]*\{[^}]*#f6f5f2/);
-    expect(css).toMatch(/\[data-estudio="oscuro"\][^{]*img\s*\{[^}]*box-reflect/);
-    expect(css).not.toMatch(/\[data-estudio="claro"\][^{]*img\s*\{[^}]*box-reflect/);
+    expect(css).not.toMatch(/box-reflect/);
   });
 
   it("el CSS no depende de data-layout (las cards del carrusel no lo llevan): usa data-card-producto", () => {

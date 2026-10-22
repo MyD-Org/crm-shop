@@ -132,6 +132,9 @@ export type TiendaOficialContent = {
   cta: string;
   /** Productos que se muestran (hasta 3); el resto se completa con la marca. */
   skus: string[];
+  /** Foto del panel izquierdo (con velo). Vacía: la foto de fondo del encabezado de la página de marca. */
+  imagen?: string;
+  imagenAlt?: string;
 };
 
 export type HomeContent = {
@@ -594,6 +597,8 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       texto("cta");
       lista("skus", esTexto, "códigos de producto");
       if (Array.isArray(o.skus) && o.skus.length > 3) errores.push("skus admite hasta 3 productos");
+      if (o.imagen !== undefined) imagen("imagen", o.imagen);
+      texto("imagenAlt", true);
       break;
     case "busquedaAsistida":
       texto("eyebrow", true);

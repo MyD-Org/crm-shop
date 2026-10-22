@@ -566,6 +566,12 @@ describe("tiendaOficial (spec 2026-10-20-marcas-tienda-oficial §9)", () => {
     expect(erroresSeccion("tiendaOficial", { slug: "led-premium", skus: [] }).length).toBeGreaterThan(0);
   });
 
+  it("acepta una imagen propia (ruta interna o host habilitado) y rechaza otras", () => {
+    const base = { slug: "led-premium", cta: "Entrar", skus: [] };
+    expect(erroresSeccion("tiendaOficial", { ...base, imagen: "/images/x.webp", imagenAlt: "Obra" })).toEqual([]);
+    expect(erroresSeccion("tiendaOficial", { ...base, imagen: "http://otro.example/x.webp" }).length).toBeGreaterThan(0);
+  });
+
   it("la tienda genérica lo arranca oculto y sin marca", () => {
     const generica = defaultsHomeGenerica({ nombre: "Otra tienda" });
     expect(generica.visibilidad.tiendaOficial).toBe("nunca");

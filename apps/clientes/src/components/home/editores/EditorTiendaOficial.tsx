@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Alert, Field, Input, Select } from "@myd-org/ui";
 import type { TiendaOficialContent } from "@/data/home-defaults";
 import { leerPaginasMarcaParaEditor } from "@/lib/marcas/marcas-acciones";
+import { CampoImagen } from "./CampoImagen";
 import { SelectorSkusDestacados } from "./SelectorSkusDestacados";
 import type { EditorProps } from "./index";
 
@@ -53,6 +54,14 @@ export function EditorTiendaOficial({ valor, onChange }: EditorProps<TiendaOfici
           aria-label="Tienda oficial que se destaca"
         />
       </Field>
+      <CampoImagen
+        label="Imagen"
+        hint="Foto del panel izquierdo, con un velo oscuro para que se lea el texto. Vacía: la foto de fondo del encabezado de la página de la marca."
+        valor={valor.imagen ?? ""}
+        onChange={(imagen) => onChange({ ...valor, imagen: imagen || undefined })}
+        alt={valor.imagenAlt ?? ""}
+        onAltChange={(imagenAlt) => onChange({ ...valor, imagenAlt })}
+      />
       <Field label="Título" hint="Vacío: la bajada de la página de marca.">
         <Input value={valor.titulo ?? ""} onChange={(e) => onChange({ ...valor, titulo: e.target.value })} />
       </Field>

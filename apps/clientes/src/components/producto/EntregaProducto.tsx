@@ -105,6 +105,7 @@ export function EntregaProducto({
   ubicacionConocida = true,
   localElegido = null,
   envioElegido = null,
+  consultaWhatsapp,
 }: {
   configEnvio: ConfigEnvio;
   provincia?: string | null;
@@ -124,6 +125,8 @@ export function EntregaProducto({
   localElegido?: string | null;
   /** Destino del envío elegido en "Enviar a" ("Calle 123" o la localidad). Se muestra primero. */
   envioElegido?: string | null;
+  /** Ficha: mensaje precargado del WhatsApp de los locales (qué producto se consulta). */
+  consultaWhatsapp?: string;
 }) {
   const retiro = disponibilidad?.producto.retiro;
   // Primero el local elegido y, después, el que mejor sirve: lo primero que se lee es lo que importa.
@@ -137,7 +140,7 @@ export function EntregaProducto({
 
   const estadoDe = (l: LocalDisponibilidad) => estadoRetiroLocal(retiro![l.slug]);
   const verLocal = (l: LocalDisponibilidad) =>
-    hayDatosDeLocal(l) ? <VerLocal local={l} productos={detallePorLocal?.[l.slug]} /> : null;
+    hayDatosDeLocal(l) ? <VerLocal local={l} productos={detallePorLocal?.[l.slug]} textoWhatsapp={consultaWhatsapp} /> : null;
 
   // Ficha sin local elegido (estilo "Ver sucursales"): sólo el mejor estado entre los locales y el
   // detalle de cada uno en un popup. Con un solo local, su "Ver local" de siempre.
@@ -146,7 +149,7 @@ export function EntregaProducto({
   const retiroResumido = mejor && estadoMejor && (
     <div className="mt-1.5 flex items-baseline justify-between gap-3" data-retiro-resumido>
       <span className={`font-semibold ${CLASE_TONO[estadoMejor.tono]}`}>{estadoMejor.texto}</span>
-      {locales.length > 1 ? <VerLocales locales={locales.map((l) => ({ local: l, estado: estadoDe(l) }))} /> : verLocal(mejor)}
+      {locales.length > 1 ? <VerLocales locales={locales.map((l) => ({ local: l, estado: estadoDe(l) }))} textoWhatsapp={consultaWhatsapp} /> : verLocal(mejor)}
     </div>
   );
 

@@ -5,6 +5,7 @@ import {
   enlaceWhatsapp,
   mensajePorDefecto,
   plazoTexto,
+  textoConsultaProducto,
 } from "./contacto-pedido";
 
 // Números ficticios: nunca datos reales en un repo público.
@@ -20,6 +21,28 @@ describe("enlaceWhatsapp", () => {
       "https://wa.me/5491155550100?text=Hola%2C%20pedido%20PED-1%20%26%20m%C3%A1s",
     );
   });
+  it("agrega el 549 si falta (por las dudas)", () => {
+    expect(digitosWhatsapp("0376 455-0100")).toBe("5493764550100");
+    expect(digitosWhatsapp("223 555-0100")).toBe("5492235550100");
+    expect(digitosWhatsapp("011 15 5555-0100")).toBe("5491155550100");
+    expect(digitosWhatsapp("0223 15 555-0100")).toBe("5492235550100");
+    expect(digitosWhatsapp("+54 11 5555-0100")).toBe("5491155550100");
+    expect(digitosWhatsapp("+54 9 11 5555-0100")).toBe("5491155550100");
+  });
+
+  it("un número que no es argentino nacional queda como vino", () => {
+    expect(digitosWhatsapp("+1 202 555 0100")).toBe("12025550100");
+  });
+
+  it("mensaje de consulta por un producto, con código si lo hay", () => {
+    expect(textoConsultaProducto("Taladro de ejemplo", "COD-1")).toBe(
+      "Hola, quisiera consultar por el producto Taladro de ejemplo (código COD-1).",
+    );
+    expect(textoConsultaProducto("Taladro de ejemplo", null)).toBe(
+      "Hola, quisiera consultar por el producto Taladro de ejemplo.",
+    );
+  });
+
   it("sin número o con algo que no es un teléfono: null", () => {
     expect(enlaceWhatsapp("")).toBeNull();
     expect(enlaceWhatsapp(null)).toBeNull();

@@ -41,11 +41,11 @@ const enlaceExterno = ({ href, className, children }: { href: string; className?
   </a>
 );
 
-function Local({ local, estado, hoy }: LocalConEstado & { hoy: string }) {
+function Local({ local, estado, hoy, textoWhatsapp }: LocalConEstado & { hoy: string; textoWhatsapp?: string }) {
   const direccion = [local.direccion, local.ciudad].filter(Boolean).join(", ");
   const horario = horarioParaMostrar(local, hoy).semanal;
   const lineas = horario ? horario.split(" · ").map(partirLineaHorario) : [];
-  const whatsapp = enlaceWhatsapp(local.whatsapp);
+  const whatsapp = enlaceWhatsapp(local.whatsapp, textoWhatsapp);
 
   return (
     <li className="py-5 first:pt-0 last:pb-0">
@@ -114,7 +114,14 @@ function Local({ local, estado, hoy }: LocalConEstado & { hoy: string }) {
  * "Retiro gratis en el local" con el mejor estado, y el detalle por local vive en este popup, cada
  * uno con su estado, dirección, horario y cómo llegar. `locales` llega ya ordenado por conveniencia.
  */
-export function VerLocales({ locales }: { locales: LocalConEstado[] }) {
+export function VerLocales({
+  locales,
+  textoWhatsapp,
+}: {
+  locales: LocalConEstado[];
+  /** Mensaje precargado del WhatsApp de cada local (el producto que se consulta). */
+  textoWhatsapp?: string;
+}) {
   const [abierto, setAbierto] = useState(false);
   // "Hoy" se calcula al abrir, en el cliente (mismo criterio que VerLocal: sin desfasaje de hidratación).
   const [hoy, setHoy] = useState("");
@@ -142,7 +149,7 @@ export function VerLocales({ locales }: { locales: LocalConEstado[] }) {
       >
         <ul className="divide-y divide-border">
           {locales.map((l) => (
-            <Local key={l.local.slug} {...l} hoy={hoy} />
+            <Local key={l.local.slug} {...l} hoy={hoy} textoWhatsapp={textoWhatsapp} />
           ))}
         </ul>
       </Dialog>

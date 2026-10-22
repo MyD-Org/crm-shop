@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { textoConsultaProducto } from "@/lib/contacto-pedido";
 import { Button, QuantityStepper, Skeleton, VariantSelector, type PaymentLogo } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
@@ -416,6 +417,7 @@ export function ProductoClient({
               }
               localElegido={localElegido}
               envioElegido={envioElegido}
+              consultaWhatsapp={textoConsultaProducto(nombreParaMostrar, producto.sku)}
             />
 
             {/* Preguntas sugeridas al asesor: sólo con el chat montado. */}

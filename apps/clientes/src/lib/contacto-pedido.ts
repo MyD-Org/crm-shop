@@ -15,9 +15,32 @@ export interface ContactoPedidoVista {
   whatsapp: { visible: string; url: string } | null;
 }
 
-/** Sólo los dígitos: lo que va después de `wa.me/`. */
+/**
+ * Los dígitos que van después de `wa.me/`, en formato internacional de celular argentino (549 +
+ * característica + número). WhatsApp exige ese formato y en el admin se cargan como se dictan
+ * ("0376 455-0100", "223 555-0100", "011 15 5555-0100"), así que por las dudas:
+ * - con 549 adelante, queda igual;
+ * - con 54 sin el 9 (12 dígitos), se agrega el 9;
+ * - número nacional: sin el 0 de la característica y sin el 15; si quedan 10 dígitos, 549 adelante.
+ * Cualquier otra forma (número de otro país, incompleto) se deja como vino.
+ */
 export function digitosWhatsapp(numero: string | null | undefined): string {
-  return (numero ?? "").replace(/\D/g, "");
+  const d = (numero ?? "").replace(/\D/g, "");
+  if (d.startsWith("549")) return d;
+  if (d.startsWith("54") && d.length === 12) return `549${d.slice(2)}`;
+  let nacional = d.replace(/^0/, "");
+  if (nacional.length === 12) {
+    // El 15 va después de la característica (2 a 4 dígitos).
+    const area = [2, 3, 4].find((n) => nacional.slice(n, n + 2) === "15");
+    if (area) nacional = nacional.slice(0, area) + nacional.slice(area + 2);
+  }
+  return nacional.length === 10 ? `549${nacional}` : d;
+}
+
+/** Mensaje precargado del WhatsApp de un local desde la ficha: qué producto se consulta. */
+export function textoConsultaProducto(nombre: string, codigo?: string | null): string {
+  const cod = codigo?.trim();
+  return `Hola, quisiera consultar por el producto ${nombre.trim()}${cod ? ` (código ${cod})` : ""}.`;
 }
 
 /**

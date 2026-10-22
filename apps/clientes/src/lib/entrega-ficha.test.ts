@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { disponibleAntesEn, localPrincipalDeRetiro, retiroDeFicha } from "./entrega-eleccion";
+import { disponibleAntesEn, retiroDeFicha } from "./entrega-eleccion";
 import type { DisponibilidadRetiro } from "./sucursales-disponibilidad";
 
 const ls = [
@@ -35,18 +35,5 @@ describe("disponibleAntesEn", () => {
     const ret = retiro(r("sin_stock"), r("sin_stock"));
     const { elegido, otros } = retiroDeFicha(ls, ret, "a");
     expect(disponibleAntesEn(elegido!, otros, ret)).toBeNull();
-  });
-});
-
-describe("localPrincipalDeRetiro", () => {
-  it("el más pronto primero y el resto después", () => {
-    const ret = retiro(r("con_demora", 4), r("disponible"));
-    const { principal, resto } = localPrincipalDeRetiro(ls, ret);
-    expect(principal?.slug).toBe("b");
-    expect(resto.map((l) => l.slug)).toEqual(["a"]);
-  });
-
-  it("sin locales con retiro, sin principal", () => {
-    expect(localPrincipalDeRetiro([], {})).toEqual({ principal: null, resto: [] });
   });
 });

@@ -91,14 +91,14 @@ export function PaginaMarcaVista({
 
   if (pagina.nivel === "marca") {
     return (
-      <main className="flex-1">
+      <main className="flex-1" data-fotos-con-aire="">
         {migas}
         {orden.map((n) => render[n]())}
       </main>
     );
   }
   return (
-    <main className="flex-1" data-pagina-marca={hrefMarca(pagina.slug)}>
+    <main className="flex-1" data-pagina-marca={hrefMarca(pagina.slug)} data-fotos-con-aire="">
       <div {...propsTemaOficial(pagina)}>
         {migas}
         {deMarca.map((n) => render[n]())}

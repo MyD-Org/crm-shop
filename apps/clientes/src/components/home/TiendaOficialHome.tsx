@@ -67,6 +67,7 @@ export async function TiendaOficialHome({ contenido }: { contenido: TiendaOficia
         {productos.length > 0 ? (
           <ul
             {...atributoEstudio(pagina.bloques.elegidos?.estiloFotos)}
+            data-fotos-con-aire=""
             className="grid grid-cols-2 gap-3 bg-surface p-[clamp(12px,2vw,24px)] sm:grid-cols-3"
           >
             {productos.slice(0, 3).map((p, i) => (

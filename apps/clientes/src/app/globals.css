@@ -421,6 +421,16 @@ body {
 }
 
 /*
+ * Aire alrededor de la foto en las cards de las páginas de marca y del bloque
+ * Tienda oficial de la home: las fotos sin fondo vienen recortadas al ras del
+ * producto y, sin esto, llenan el recuadro. Sólo grilla (no la vista lista).
+ * Va antes del estilo estudio, que define su propio padding y gana.
+ */
+[data-fotos-con-aire] [data-card-producto]:not([data-layout="list"]) > div:first-child img {
+  padding: 13% !important;
+}
+
+/*
  * Fotos "estudio" en las cards de producto (bloque Los más elegidos de una
  * página de marca y bloque Tienda oficial de la home; se elige en el editor del
  * bloque). Pensado para fotos SIN fondo (PNG con alfa) RECORTADAS al contenido:

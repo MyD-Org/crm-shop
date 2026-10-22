@@ -261,6 +261,7 @@ export const TEXTOS_UBICACION = {
   verLocales: "Ver locales",
   tituloLocales: "Retiro gratis en el local",
   disponibleHoyEnLocales: (n: number) => (n === 1 ? "Disponible hoy en 1 local" : `Disponible hoy en ${n} locales`),
-  verMapa: "Ver mapa",
+  comoLlegar: "Cómo llegar",
+  escribirWhatsapp: "WhatsApp",
   sinStockEn: (local: string) => `No disponible en ${local}`,
 } as const;

@@ -26,16 +26,3 @@ export function CambiarRetiro({ sucursal }: { sucursal: string }) {
     </Button>
   );
 }
-
-/** "Ver otros locales": despliega el resto de los locales (contenido ya resuelto en el servidor). */
-export function OtrosLocales({ children }: { children: React.ReactNode }) {
-  const [abierto, setAbierto] = useState(false);
-  return (
-    <div className="mt-2">
-      <Button variant="link" size="inline" aria-expanded={abierto} onClick={() => setAbierto((v) => !v)}>
-        {abierto ? TEXTOS_UBICACION.ocultarOtrosLocales : TEXTOS_UBICACION.verOtrosLocales}
-      </Button>
-      {abierto && children}
-    </div>
-  );
-}

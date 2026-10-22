@@ -257,7 +257,10 @@ export const TEXTOS_UBICACION = {
   oRetirelo: "O retírelo gratis en el local",
   disponibleEn: (estado: string, local: string) => `${estado} en ${local}`,
   cambiarLocal: "Cambiar",
-  verOtrosLocales: "Ver otros locales",
-  ocultarOtrosLocales: "Ocultar otros locales",
+  // Ficha: retiro estilo "Ver sucursales" (un solo estado y el detalle en un popup).
+  verLocales: "Ver locales",
+  tituloLocales: "Retiro gratis en el local",
+  disponibleHoyEnLocales: (n: number) => (n === 1 ? "Disponible hoy en 1 local" : `Disponible hoy en ${n} locales`),
+  verMapa: "Ver mapa",
   sinStockEn: (local: string) => `No disponible en ${local}`,
 } as const;

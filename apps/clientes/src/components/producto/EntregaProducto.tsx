@@ -2,10 +2,11 @@ import { Divider } from "@myd-org/ui";
 import { textoEnvioFicha, type ConfigEnvio } from "@/lib/envio";
 import { TEXTOS_UBICACION } from "@/lib/ubicacion";
 import { tieneHorario } from "@/lib/horario-agrupado";
-import { disponibleAntesEn, localPrincipalDeRetiro, retiroDeFicha } from "@/lib/entrega-eleccion";
+import { disponibleAntesEn, retiroDeFicha } from "@/lib/entrega-eleccion";
 import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
 import { VerLocal } from "@/components/producto/VerLocal";
-import { CambiarRetiro, OtrosLocales } from "@/components/producto/EntregaAcciones";
+import { CambiarRetiro } from "@/components/producto/EntregaAcciones";
+import { VerLocales } from "@/components/producto/VerLocales";
 import {
   estadoEnvio,
   estadoRetiroLocal,
@@ -90,7 +91,9 @@ const hayDatosDeLocal = (l: LocalDisponibilidad) => Boolean(l.direccion) || tien
  * Con una elección de "Enviar a" (sólo en la ficha), lo elegido va primero y la otra opción queda
  * debajo, atenuada:
  * - Retiro: "Retiro gratis en {local}" con su estado y, si otro local lo tiene antes, "Cambiar".
- * - Envío: "Envío a {destino}" con su costo y despacho, y el local de retiro que mejor sirve.
+ * - Envío: "Envío a {destino}" con su costo y despacho y, atenuado, el retiro resumido.
+ * Sin local elegido, la ficha no nombra locales: el mejor estado y "Ver locales" (popup con cada
+ * uno). El carrito sigue listando cada local con su estado.
  */
 export function EntregaProducto({
   configEnvio,
@@ -136,6 +139,17 @@ export function EntregaProducto({
   const verLocal = (l: LocalDisponibilidad) =>
     hayDatosDeLocal(l) ? <VerLocal local={l} productos={detallePorLocal?.[l.slug]} /> : null;
 
+  // Ficha sin local elegido (estilo "Ver sucursales"): sólo el mejor estado entre los locales y el
+  // detalle de cada uno en un popup. Con un solo local, su "Ver local" de siempre.
+  const mejor = locales[0];
+  const estadoMejor = mejor && retiro ? estadoDe(mejor) : null;
+  const retiroResumido = mejor && estadoMejor && (
+    <div className="mt-1.5 flex items-baseline justify-between gap-3" data-retiro-resumido>
+      <span className={`font-semibold ${CLASE_TONO[estadoMejor.tono]}`}>{estadoMejor.texto}</span>
+      {locales.length > 1 ? <VerLocales locales={locales.map((l) => ({ local: l, estado: estadoDe(l) }))} /> : verLocal(mejor)}
+    </div>
+  );
+
   // Retiro elegido: el local primero y el envío a domicilio como alternativa atenuada.
   if (enFicha && elegido && retiro) {
     const estado = estadoDe(elegido);
@@ -164,22 +178,8 @@ export function EntregaProducto({
     );
   }
 
-  // Envío elegido: el envío primero y el local que mejor sirve como alternativa atenuada.
+  // Envío elegido: el envío primero y el retiro como alternativa atenuada (mejor estado + Ver locales).
   if (enFicha && envioElegido && textoEnvio && retiro && locales.length > 0) {
-    const { principal, resto } = localPrincipalDeRetiro(disponibilidad?.locales ?? [], retiro);
-    const linea = (l: LocalDisponibilidad) => {
-      const estado = estadoDe(l);
-      return (
-        <div className="flex items-baseline justify-between gap-3">
-          <span>
-            <span className="text-text">{l.nombre}</span>
-            {" · "}
-            <span className={`font-semibold ${CLASE_TONO[estado.tono]}`}>{estado.texto}</span>
-          </span>
-          {verLocal(l)}
-        </div>
-      );
-    };
     return (
       <ul className="space-y-4 border-t border-border pt-5" data-entrega="envio">
         <Fila icono={<IconoEnvio />} titulo={TEXTOS_UBICACION.envioA(envioElegido)}>
@@ -196,16 +196,7 @@ export function EntregaProducto({
         </Fila>
         <Separador />
         <Fila icono={<IconoLocal />} titulo={TEXTOS_UBICACION.oRetirelo} secundaria>
-          <div className="mt-1.5">{principal && linea(principal)}</div>
-          {resto.length > 0 && (
-            <OtrosLocales>
-              <div className="mt-1.5 space-y-1.5">
-                {resto.map((l) => (
-                  <div key={l.slug}>{linea(l)}</div>
-                ))}
-              </div>
-            </OtrosLocales>
-          )}
+          {retiroResumido}
         </Fila>
       </ul>
     );
@@ -217,6 +208,8 @@ export function EntregaProducto({
       <Fila icono={<IconoLocal />} titulo="Retiro gratis en el local">
         {locales.length === 0 ? (
           <span className="text-muted">Sin cargo, en nuestros locales.</span>
+        ) : enFicha ? (
+          retiroResumido
         ) : (
           <ul className="mt-1.5 space-y-1.5">
             {locales.map((l) => {

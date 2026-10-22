@@ -15,6 +15,7 @@ import { temaDe } from "@/lib/marcas/pagina-marca";
 import { hrefLinea } from "@/lib/marcas/vista-marca";
 import { ImagenMarca } from "../ImagenMarca";
 import { VideoMarca } from "../VideoMarca";
+import { LogoMarca } from "../logo-marca";
 
 /**
  * Bloques estáticos de una página de marca (spec 2026-10-20 §3 y §4). Server
@@ -44,18 +45,9 @@ export function TituloBloque({ children, bajada }: { children: ReactNode; bajada
   );
 }
 
-function Logo({ pagina, claro }: { pagina: PaginaMarca; claro: boolean }) {
+function Logo({ pagina, fondoOscuro }: { pagina: PaginaMarca; fondoOscuro: boolean }) {
   if (!pagina.logo) return null;
-  return (
-    <div
-      className={cn(
-        "relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl p-3 sm:h-28 sm:w-28",
-        claro ? "bg-white" : "border border-border bg-surface",
-      )}
-    >
-      <ImagenMarca src={pagina.logo} alt={`Logo de ${pagina.nombre}`} sizes="112px" fit="logo" className="h-auto max-h-full w-full object-contain" />
-    </div>
-  );
+  return <LogoMarca src={pagina.logo} nombre={pagina.nombre} fondoOscuro={fondoOscuro} className="h-24 sm:h-32" />;
 }
 
 /** Encabezado. Oficial: oscuro, con foto de obra velada y sello. Marca: claro y simple. */
@@ -74,7 +66,7 @@ export function HeroMarcaBloque({
     return (
       <section className="border-b border-border bg-surface">
         <div className={cn(ANCHO, "flex flex-col gap-5 py-[clamp(28px,4vw,48px)] sm:flex-row sm:items-center")}>
-          <Logo pagina={pagina} claro />
+          <Logo pagina={pagina} fondoOscuro={false} />
           <div className="flex-1">
             <h1 className="font-display text-[clamp(30px,4vw,48px)] font-medium tracking-tight text-text">{pagina.nombre}</h1>
             {pagina.bajada ? <p className="mt-2 max-w-2xl text-base text-muted">{pagina.bajada}</p> : null}
@@ -120,7 +112,7 @@ export function HeroMarcaBloque({
         )}
       />
       <div className={cn(ANCHO, "flex min-h-[clamp(320px,42vw,520px)] flex-col justify-end gap-6 py-[clamp(32px,5vw,64px)] sm:flex-row sm:items-end")}>
-        <Logo pagina={pagina} claro />
+        <Logo pagina={pagina} fondoOscuro={!claro} />
         <div className="flex-1">
           {hero?.sello ? (
             <span className={cn(ETIQUETA, "mb-3 inline-block rounded-full border border-accent px-3 py-1 text-accent")}>

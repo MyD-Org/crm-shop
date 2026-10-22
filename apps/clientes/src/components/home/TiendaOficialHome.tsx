@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import type { TiendaOficialContent } from "@/data/home-defaults";
 import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
 import { ImagenMarca } from "@/components/marcas/ImagenMarca";
+import { LogoMarca } from "@/components/marcas/logo-marca";
 import { propsTemaOficial } from "@/components/marcas/tema-oficial";
 import { atributoEstudio } from "@/components/marcas/estudio-fotos";
 import { destacadosHome } from "@/lib/catalogo-publico";
@@ -64,9 +65,7 @@ export async function TiendaOficialHome({ contenido }: { contenido: TiendaOficia
             Tienda oficial
           </span>
           {pagina.logo ? (
-            <span className="relative block h-16 w-40 rounded-lg bg-white p-2">
-              <ImagenMarca src={pagina.logo} alt={`Logo de ${pagina.nombre}`} sizes="160px" fit="logo" className="h-full w-full object-contain" />
-            </span>
+            <LogoMarca src={pagina.logo} nombre={pagina.nombre} fondoOscuro={temaDe(pagina) !== "claro"} className="h-20" />
           ) : (
             <span className="font-display text-2xl font-semibold tracking-[0.12em] text-text">{pagina.nombre}</span>
           )}

@@ -59,6 +59,15 @@ function esWebhookDePago(pathname: string): boolean {
 }
 
 /**
+ * Redirección de los QR impresos a Instagram (`/ig/<cuenta>`, ver src/lib/redireccion-instagram.ts).
+ * La escanea cualquier persona, sin cookie de gate: con la cortina puesta vería "Próximamente" en
+ * vez del perfil. Sólo redirige a instagram.com, así que abrirla no expone nada de la tienda.
+ */
+function esRedireccionInstagram(pathname: string): boolean {
+  return /^\/ig\/[A-Za-z0-9._]{1,30}$/.test(pathname);
+}
+
+/**
  * Next 16 admite UNA sola función proxy por proyecto, así que el gate del sitio
  * y Clerk no pueden vivir cada uno en su archivo: se componen acá.
  *
@@ -82,7 +91,11 @@ function safeEqual(a: string, b: string) {
 export async function proxy(request: NextRequest, event: NextFetchEvent) {
   // Antes que nada, y antes del gate: estas rutas las llama un servidor externo
   // que no tiene cookies ni sesión. Ver RUTAS_PUBLICAS.
-  if (RUTAS_PUBLICAS.includes(request.nextUrl.pathname) || esWebhookDePago(request.nextUrl.pathname)) {
+  if (
+    RUTAS_PUBLICAS.includes(request.nextUrl.pathname) ||
+    esWebhookDePago(request.nextUrl.pathname) ||
+    esRedireccionInstagram(request.nextUrl.pathname)
+  ) {
     return NextResponse.next();
   }
 

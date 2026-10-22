@@ -71,7 +71,8 @@ export function preguntasSugeridas(producto: ProductoParaPreguntas): string[] {
   const candidatas: string[] = [];
   if (atributos.has("apto-exterior")) candidatas.push(PREGUNTAS.exterior);
   if (esTira && !esFuente) candidatas.push(PREGUNTAS.fuenteTira);
-  else if (bajaTension && !esFuente) candidatas.push(PREGUNTAS.transformador);
+  // Sólo algo que da luz pide transformador: una herramienta o un equipo a batería de 12 V no.
+  else if (bajaTension && esLuz) candidatas.push(PREGUNTAS.transformador);
   if (esLuz) candidatas.push(PREGUNTAS.potencia);
   if (grupos.has("zocalo")) candidatas.push(PREGUNTAS.portalamparas);
   if (esLuz && !grupos.has("tono")) candidatas.push(PREGUNTAS.tono);

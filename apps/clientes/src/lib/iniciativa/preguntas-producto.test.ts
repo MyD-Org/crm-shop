@@ -36,6 +36,17 @@ describe("preguntas sugeridas de la ficha", () => {
     expect(preguntasSugeridas(productos[2])).toContain(PREGUNTAS.potencia);
   });
 
+  it("una herramienta a batería de 12 V no pregunta por el transformador", () => {
+    const p = preguntasSugeridas({
+      name: "TALADRO ATORNILLADOR INALAMBRICO 1500 RPM",
+      description: "Taladro atornillador inalámbrico.\n- Voltaje: 12 V\n- Batería: 1,5 Ah",
+      category: "HERRAMIENTAS",
+    });
+    expect(p).not.toContain(PREGUNTAS.transformador);
+    expect(p).not.toContain(PREGUNTAS.potencia);
+    expect(p).toContain(PREGUNTAS.complementan);
+  });
+
   it("tira led → la fuente; baja tensión que no es tira → el transformador", () => {
     expect(preguntasSugeridas(productos[1])[0]).toBe(PREGUNTAS.fuenteTira);
     expect(preguntasSugeridas({ name: "DICROICA LED 5W MR16 12V" })[0]).toBe(PREGUNTAS.transformador);

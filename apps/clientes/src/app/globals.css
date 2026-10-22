@@ -419,3 +419,52 @@ body {
   --color-info: #0369a1;
   --color-info-soft: #f0f9ff;
 }
+
+/*
+ * Fotos "estudio" en las cards de producto (bloque Los más elegidos de una
+ * página de marca y bloque Tienda oficial de la home; se elige en el editor del
+ * bloque). Pensado para fotos SIN fondo (PNG con alfa) RECORTADAS al contenido:
+ * el producto se apoya en una línea fija abajo del recuadro, con una sombra de
+ * contacto debajo y, en el oscuro, un reflejo tenue en el piso. Con fotos de
+ * fondo blanco el efecto no tiene sentido (se ve el recuadro blanco).
+ * Apunta al recuadro de la foto de `ProductCard` (primer hijo de la card,
+ * `[data-layout]`), sin tocar el DS.
+ */
+[data-estudio] [data-layout] > div:first-child {
+  isolation: isolate;
+  container-type: inline-size;
+}
+[data-estudio] [data-layout] > div:first-child img {
+  z-index: 1;
+  object-position: 50% 100%;
+  padding: 14% 18% 24% !important;
+}
+[data-estudio] [data-layout] > div:first-child::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  left: 24%;
+  right: 24%;
+  bottom: calc(24% - 3.5cqw);
+  height: 7cqw;
+  border-radius: 50%;
+  filter: blur(7px);
+}
+[data-estudio="oscuro"] [data-layout] > div:first-child {
+  background: radial-gradient(ellipse 90% 80% at 50% 42%, #2c2c32 0%, #17171b 55%, #08080a 100%);
+}
+[data-estudio="oscuro"] [data-layout] > div:first-child::after {
+  background: rgba(0, 0, 0, 0.8);
+}
+/* Reflejo: el reflejo de la caja arranca en su borde de abajo; se lo sube dos
+   veces el padding inferior (24%) para que nazca en la base del producto. */
+[data-estudio="oscuro"] [data-layout] > div:first-child img {
+  -webkit-box-reflect: below -48cqw linear-gradient(transparent 52%, rgba(0, 0, 0, 0.16) 76%);
+}
+[data-estudio="claro"] [data-layout] > div:first-child {
+  background: radial-gradient(ellipse 90% 80% at 50% 42%, #f6f5f2 0%, #e9e7e2 55%, #d6d4cf 100%);
+}
+[data-estudio="claro"] [data-layout] > div:first-child::after {
+  background: rgba(0, 0, 0, 0.45);
+}

@@ -4,6 +4,7 @@ import type { TiendaOficialContent } from "@/data/home-defaults";
 import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
 import { ImagenMarca } from "@/components/marcas/ImagenMarca";
 import { propsTemaOficial } from "@/components/marcas/tema-oficial";
+import { atributoEstudio } from "@/components/marcas/estudio-fotos";
 import { destacadosHome } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { getPaginaMarca } from "@/lib/marcas/marcas-datos";
@@ -64,7 +65,10 @@ export async function TiendaOficialHome({ contenido }: { contenido: TiendaOficia
           </Link>
         </div>
         {productos.length > 0 ? (
-          <ul className="grid grid-cols-2 gap-3 bg-surface p-[clamp(12px,2vw,24px)] sm:grid-cols-3">
+          <ul
+            {...atributoEstudio(pagina.bloques.elegidos?.estiloFotos)}
+            className="grid grid-cols-2 gap-3 bg-surface p-[clamp(12px,2vw,24px)] sm:grid-cols-3"
+          >
             {productos.slice(0, 3).map((p, i) => (
               <li key={p.id} className={i === 2 ? "max-sm:hidden" : undefined}>
                 <TarjetaProductoCarrusel producto={p} />

@@ -12,6 +12,7 @@ import type { ElegidosMarca, PaginaMarca } from "@/lib/marcas/pagina-marca";
 import { filtrosDeMarca } from "@/lib/marcas/vista-marca";
 import { dispCatalogo } from "@/lib/zona-servidor";
 import { ProductosMarcaClient } from "../ProductosMarcaClient";
+import { atributoEstudio } from "../estudio-fotos";
 import { SeccionMarca, TituloBloque } from "./BloquesMarca";
 
 /**
@@ -54,11 +55,13 @@ export async function ElegidosMarcaBloque({ pagina, elegidos }: { pagina: Pagina
   return (
     <SeccionMarca>
       <TituloBloque>{elegidos.titulo}</TituloBloque>
-      <ProductosCarrusel label={elegidos.titulo}>
-        {productos.map((p) => (
-          <TarjetaProductoCarrusel key={p.id} producto={p} />
-        ))}
-      </ProductosCarrusel>
+      <div {...atributoEstudio(elegidos.estiloFotos)}>
+        <ProductosCarrusel label={elegidos.titulo}>
+          {productos.map((p) => (
+            <TarjetaProductoCarrusel key={p.id} producto={p} />
+          ))}
+        </ProductosCarrusel>
+      </div>
     </SeccionMarca>
   );
 }

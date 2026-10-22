@@ -47,7 +47,9 @@ export type ItemConfianza = { valor: string; texto: string };
 export type ConfianzaMarca = { items: ItemConfianza[] };
 export type LineaMarca = { slug: string; titulo: string; imagen?: string; categorias: string[]; skus: string[] };
 export type LineasMarca = { titulo?: string; items: LineaMarca[] };
-export type ElegidosMarca = { titulo: string; skus: string[]; cantidad: number };
+/** Cómo se dibujan las fotos de las cards: ausente = normal; estudio = fondo, sombra y reflejo en CSS. */
+export type EstiloFotos = "estudio-oscuro" | "estudio-claro";
+export type ElegidosMarca = { titulo: string; skus: string[]; cantidad: number; estiloFotos?: EstiloFotos };
 export type ComponentesMarca = { titulo: string; bajada?: string; chips: string[] };
 export type FotoObra = { imagen: string; alt: string; epigrafe?: string };
 export type ObrasMarca = { titulo: string; fotos: FotoObra[] };
@@ -311,6 +313,7 @@ const SANEAR: { [B in BloqueMarca]: (raw: Record<string, unknown>) => ContenidoB
       typeof r.cantidad === "number" && Number.isInteger(r.cantidad)
         ? Math.min(Math.max(r.cantidad, 1), MAX_MARCA.cantidadElegidos)
         : 8,
+    estiloFotos: r.estiloFotos === "estudio-oscuro" || r.estiloFotos === "estudio-claro" ? (r.estiloFotos as EstiloFotos) : undefined,
   }),
   componentes: (r) => ({
     titulo: texto(r.titulo),
@@ -521,6 +524,9 @@ export function validarBloqueMarca(bloque: BloqueMarca, raw: unknown, hosts: rea
         errores.push(`La cantidad debe estar entre 1 y ${MAX_MARCA.cantidadElegidos}.`);
       }
       if (!Array.isArray(raw.skus)) errores.push("La lista de productos no es válida.");
+      if (raw.estiloFotos !== undefined && raw.estiloFotos !== "estudio-oscuro" && raw.estiloFotos !== "estudio-claro") {
+        errores.push("Elija un estilo de fotos válido.");
+      }
       break;
     case "componentes":
       if (textoVacio(raw.titulo)) errores.push("Ingrese el título del bloque.");

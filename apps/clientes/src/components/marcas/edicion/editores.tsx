@@ -14,6 +14,7 @@ import {
   type ConfianzaMarca,
   type CotizacionMarca,
   type ElegidosMarca,
+  type EstiloFotos,
   type EmpresaMarca,
   type MediaEmpresa,
   type NivelMarca,
@@ -157,11 +158,26 @@ function EditorLineas({ valor, onChange }: EditorProps<LineasMarca>) {
   );
 }
 
+const ESTILOS_FOTOS = [
+  { value: "normal", label: "Normal" },
+  { value: "estudio-oscuro", label: "Estudio oscuro" },
+  { value: "estudio-claro", label: "Estudio claro" },
+];
+
 function EditorElegidos({ valor, onChange }: EditorProps<ElegidosMarca>) {
   return (
     <div className="flex flex-col gap-4">
       <Field label="Título">
         <Input value={valor.titulo} onChange={(e) => onChange({ ...valor, titulo: e.target.value })} />
+      </Field>
+      <Field label="Estilo de fotos" hint="Estudio: fondo, sombra y reflejo dibujados detrás de la foto. Pensado para fotos sin fondo.">
+        <SegmentedControl
+          size="sm"
+          ariaLabel="Estilo de fotos"
+          options={ESTILOS_FOTOS}
+          value={valor.estiloFotos ?? "normal"}
+          onValueChange={(v) => onChange({ ...valor, estiloFotos: v === "normal" ? undefined : (v as EstiloFotos) })}
+        />
       </Field>
       <Field label="Cantidad" hint="Entre 1 y 12 productos">
         <Input

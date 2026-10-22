@@ -243,3 +243,19 @@ describe("tema claro u oscuro de la tienda oficial", () => {
     expect(validarPaginaMarca({ ...pagina({ nivel: "oficial" }), tema: "rosa" }, HOSTS).length).toBeGreaterThan(0);
   });
 });
+
+describe("estilo de fotos de Los más elegidos", () => {
+  const elegidos = { titulo: "Los más elegidos", skus: [], cantidad: 8 };
+  it("acepta normal (sin dato), estudio oscuro y estudio claro", () => {
+    expect(validarBloqueMarca("elegidos", elegidos, HOSTS)).toEqual([]);
+    expect(validarBloqueMarca("elegidos", { ...elegidos, estiloFotos: "estudio-oscuro" }, HOSTS)).toEqual([]);
+    expect(validarBloqueMarca("elegidos", { ...elegidos, estiloFotos: "estudio-claro" }, HOSTS)).toEqual([]);
+    expect(validarBloqueMarca("elegidos", { ...elegidos, estiloFotos: "neon" }, HOSTS).length).toBeGreaterThan(0);
+  });
+  it("sanear conserva el estilo válido y descarta otro", () => {
+    const con = (estiloFotos: unknown) =>
+      sanearPaginaMarca({ ...pagina({ nivel: "oficial" }), bloques: { elegidos: { ...elegidos, estiloFotos } } })?.bloques.elegidos;
+    expect(con("estudio-claro")?.estiloFotos).toBe("estudio-claro");
+    expect(con("neon")?.estiloFotos).toBeUndefined();
+  });
+});

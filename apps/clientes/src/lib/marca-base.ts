@@ -82,6 +82,27 @@ export const NOMBRE_GENERICO = "Tienda online";
 /** Alt de los logos de Central (los de código). */
 export const ALT_LOGO_CENTRAL = "Central Led";
 
+/**
+ * Íconos de Central (los genera `npm run web` del kit de marca). `svg`: `src/app/icon.svg`
+ * (convención de Next); `ico`: `public/favicon.ico`, respaldo para los navegadores sin favicon SVG
+ * (Safari); los PNG, en public/images/central-led/. `apple`: el de la pantalla de inicio de iOS
+ * (cuadrado lleno, iOS redondea). `maskable`: fondo lleno y el badge dentro de la zona segura de
+ * Android.
+ */
+export const ICONOS_CENTRAL = {
+  svg: "/icon.svg",
+  ico: "/favicon.ico",
+  apple: "/images/central-led/apple-icon.png",
+  pwa192: "/images/central-led/icon-192.png",
+  pwa512: "/images/central-led/icon-512.png",
+  maskable: "/images/central-led/icon-maskable-512.png",
+} as const;
+
+/** La tienda de Central con su nombre (no otra marca sobre la base de Central): lleva sus logos. */
+export function esMarcaCentral(marca: Pick<Marca, "base" | "nombre">): boolean {
+  return marca.base === "central" && marca.nombre === MARCA_POR_DEFECTO.nombre;
+}
+
 export const NOMBRE_MAX = 60;
 export const TITULO_MAX = 80;
 export const DESCRIPCION_MAX = 200;

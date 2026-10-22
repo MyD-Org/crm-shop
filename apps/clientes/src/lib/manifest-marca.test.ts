@@ -14,7 +14,12 @@ describe("manifestDeMarca — Central sin cambios", () => {
       display: "browser",
       background_color: "#f8f8f6",
       theme_color: "#16283f",
-      icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
+      icons: [
+        { src: "/icon.svg", sizes: "any", type: "image/svg+xml" },
+        { src: "/images/central-led/icon-192.png", sizes: "192x192", type: "image/png" },
+        { src: "/images/central-led/icon-512.png", sizes: "512x512", type: "image/png" },
+        { src: "/images/central-led/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      ],
     });
   });
 });
@@ -25,6 +30,7 @@ describe("manifestDeMarca — marca propia", () => {
     expect(m.name).toBe("Tienda Uno — Tienda Online");
     expect(m.short_name).toBe("Tienda Uno");
     expect(JSON.stringify(m)).not.toMatch(/central|iguaz/i);
+    expect(m.icons).toEqual([{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }]);
   });
 
   it("con ícono propio lo usa", () => {

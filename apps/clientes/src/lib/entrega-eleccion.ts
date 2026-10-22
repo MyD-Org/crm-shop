@@ -61,12 +61,3 @@ export function disponibleAntesEn(
   if (peso >= pesoRetiro(retiro[elegido.slug]) || peso >= PESO_NO_DISPONIBLE) return null;
   return { local: mejor, texto: estadoRetiroLocal(retiro[mejor.slug]).texto };
 }
-
-/** Envío elegido: el local de retiro que mejor sirve (principal) y los demás, sin ocultar ninguno. */
-export function localPrincipalDeRetiro(
-  locales: LocalDisponibilidad[],
-  retiro: Record<string, DisponibilidadRetiro>,
-): { principal: LocalDisponibilidad | null; resto: LocalDisponibilidad[] } {
-  const [principal = null, ...resto] = localesPorConveniencia(locales, retiro);
-  return { principal, resto };
-}

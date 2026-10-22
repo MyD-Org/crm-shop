@@ -29,15 +29,49 @@ const render = (props: Record<string, unknown>) =>
   renderToStaticMarkup(createElement(EntregaProducto, { configEnvio: CONFIG_ENVIO_DEFAULT, ...props }));
 
 describe("EntregaProducto: sin elección", () => {
-  it("título y orden de siempre (por conveniencia), ambos locales y envío a domicilio", () => {
+  it("retiro resumido: el mejor estado y Ver locales, sin nombrar locales; envío a domicilio", () => {
     const h = render({
       disponibilidad: { producto: producto({ estado: "sin_stock" }, { estado: "disponible" }), locales },
     });
     const t = texto(h);
-    expect(t).toContain("Retiro gratis en el local");
-    expect(t.indexOf("Local B")).toBeLessThan(t.indexOf("Local A"));
+    expect(t).toContain("Retiro gratis en el local Disponible hoy Ver locales");
+    expect(t).not.toContain("Local A");
+    expect(t).not.toContain("Local B");
     expect(t).toContain("Envío a domicilio");
     expect(h).not.toContain("data-entrega");
+  });
+
+  it("si ningún local lo tiene hoy, el plazo más corto", () => {
+    const t = texto(
+      render({
+        disponibilidad: {
+          producto: producto({ estado: "con_demora", demoraDias: 7 }, { estado: "con_demora", demoraDias: 3 }),
+          locales,
+        },
+      }),
+    );
+    expect(t).toContain("Disponible en 3 días");
+    expect(t).not.toContain("7 días");
+  });
+
+  it("con un solo local, su Ver local de siempre", () => {
+    const t = texto(
+      render({
+        disponibilidad: { producto: producto({ estado: "disponible" }, { estado: "disponible" }), locales: [locales[0]] },
+      }),
+    );
+    expect(t).toContain("Ver local");
+    expect(t).not.toContain("Ver locales");
+  });
+
+  it("en el carrito sigue la lista por local", () => {
+    const t = texto(
+      render({
+        disponibilidad: { producto: producto({ estado: "sin_stock" }, { estado: "disponible" }), locales },
+        detallePorLocal: {},
+      }),
+    );
+    expect(t.indexOf("Local B")).toBeLessThan(t.indexOf("Local A"));
   });
 });
 
@@ -92,20 +126,21 @@ describe("EntregaProducto: envío elegido", () => {
     envioElegido: "Calle Ejemplo 123",
   };
 
-  it("'Envío a {destino}' primero y el local más pronto como alternativa", () => {
+  it("'Envío a {destino}' primero y el retiro resumido como alternativa", () => {
     const h = render(props);
     const t = texto(h);
     expect(h).toContain('data-entrega="envio"');
     expect(t).toContain("Envío a Calle Ejemplo 123");
     expect(t).toContain("O retírelo gratis en el local");
     expect(t.indexOf("Envío a Calle Ejemplo 123")).toBeLessThan(t.indexOf("O retírelo"));
-    expect(t).toContain("Local B · Disponible hoy");
+    expect(t).toContain("O retírelo gratis en el local Disponible hoy Ver locales");
   });
 
-  it("los demás locales quedan detrás de 'Ver otros locales'", () => {
+  it("no nombra ningún local en la ficha (el detalle va en Ver locales)", () => {
     const t = texto(render(props));
-    expect(t).toContain("Ver otros locales");
     expect(t).not.toContain("Local A");
+    expect(t).not.toContain("Local B");
+    expect(t).not.toContain("Ver otros locales");
   });
 
   it("en el carrito (con detalle por local) no cambia el formato", () => {

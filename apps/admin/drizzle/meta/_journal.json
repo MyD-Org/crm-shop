@@ -631,6 +631,13 @@
       "when": 1793380000000,
       "tag": "0092_admin_users_canales_permitidos",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1793380010000,
+      "tag": "0093_despacho_configurable",
+      "breakpoints": true
     }
   ]
 }

@@ -5,9 +5,12 @@
  * Una línea por local y una de envío, sin que el visitante elija nada:
  *   "Retiro en <local>: disponible hoy | disponible en N días | no disponible"
  *   "Envío a domicilio: despacho dentro de las 24 h hábiles | despacho dentro de N días hábiles | no disponible"
- * Los días salen de "Días de demora al traer de otra sucursal" (reglas de venta del CRM); 0 se dice
- * "a coordinar" (sin plazo numérico). El envío promete el DESPACHO, no la llegada: la demora del
- * flete no se conoce. Si hay que traerlo de otra sucursal, es la demora más el día del despacho.
+ * Los días de traslado salen de "Días de demora al traer de otra sucursal" (reglas de venta del
+ * CRM); 0 se dice "a coordinar" (sin plazo numérico). El envío promete el DESPACHO, no la llegada:
+ * la demora del flete no se conoce. El plazo de despacho se configura en Envíos del CRM
+ * (`DisponibilidadEnvio.despachoDias`; 1 día = "24 h hábiles"); si hay que traerlo de otra
+ * sucursal, es la demora más ese plazo. Con el plazo oculto, el envío dice "disponible" (o, si hay
+ * que traerlo, "disponible en N días" con la demora del traslado).
  */
 import type { ExcepcionHorario, HorarioSemanal } from "./horario-agrupado";
 import type {
@@ -38,13 +41,20 @@ const plazo = (dias: number | null): string =>
     ? "a coordinar"
     : `disponible en ${dias} ${dias === 1 ? "día" : "días"}`;
 
-/** Plazo del envío: lo que se compromete es el despacho, no cuándo llega el flete. */
-const despacho = (d: DisponibilidadEnvio): string =>
-  d.estado === "disponible"
-    ? "despacho dentro de las 24 h hábiles"
-    : d.demoraDias === null || d.demoraDias <= 0
-      ? "a coordinar"
-      : `despacho dentro de ${d.demoraDias + 1} días hábiles`;
+/** "dentro de las 24 h hábiles" (1 día) o "dentro de N días hábiles". Misma frase que el CRM. */
+const dentroDe = (dias: number): string =>
+  dias <= 1 ? "dentro de las 24 h hábiles" : `dentro de ${dias} días hábiles`;
+
+/**
+ * Plazo del envío: lo que se compromete es el despacho, no cuándo llega el flete. `despachoDias`
+ * null = el comercio no muestra el plazo; ausente = 1 día (lo de antes de que fuera configurable).
+ */
+const despacho = (d: DisponibilidadEnvio): string => {
+  const dias = d.despachoDias === undefined ? 1 : d.despachoDias;
+  if (d.estado === "disponible") return dias === null ? "disponible" : `despacho ${dentroDe(dias)}`;
+  if (d.demoraDias === null || d.demoraDias <= 0) return "a coordinar";
+  return dias === null ? plazo(d.demoraDias) : `despacho ${dentroDe(d.demoraDias + dias)}`;
+};
 
 export function textoEnvio(d: DisponibilidadEnvio): string {
   switch (d.estado) {

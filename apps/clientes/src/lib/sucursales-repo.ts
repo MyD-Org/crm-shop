@@ -8,7 +8,13 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmReglasVenta, crmSucursales, crmZonas } from "@/db/crm";
 import { shopTenantId } from "./tenant";
-import type { ReglasVenta, SucursalDato, ZonaDato } from "./sucursales";
+import {
+  CONFIG_DESPACHO_DEFAULT,
+  type ConfigDespacho,
+  type ReglasVenta,
+  type SucursalDato,
+  type ZonaDato,
+} from "./sucursales";
 import { CONFIG_ENVIO_DEFAULT, type ConfigEnvio } from "./envio";
 import {
   normalizarExcepciones,
@@ -113,6 +119,7 @@ export const REGLAS_VENTA_DEFAULT: ReglasVentaTenant = {
   avisoSinContactarHoras: 24,
   contactoHorasHabiles: 24,
   envio: CONFIG_ENVIO_DEFAULT,
+  despacho: CONFIG_DESPACHO_DEFAULT,
 };
 
 /**
@@ -202,5 +209,32 @@ export async function leerConfigEnvio(db?: Ejecutor): Promise<ConfigEnvio> {
   } catch (err) {
     console.error("[sucursales-repo] no se pudo leer la configuración de envío:", err);
     return CONFIG_ENVIO_DEFAULT;
+  }
+}
+
+/**
+ * Plazo de despacho del tenant (`reglas_venta.despacho_*`, migración 0093 del CRM). Sólo para
+ * MOSTRAR (ficha, carrito, checkout): ningún pedido depende de él.
+ *
+ * Consulta propia, como `leerConfigEnvio`: si la migración del CRM todavía no está aplicada (o la
+ * base falla) devuelve el default, que es lo que el Shop mostraba antes. Un valor fuera de rango
+ * (el CHECK del CRM lo impide) también cae al default.
+ */
+export async function leerConfigDespacho(db?: Ejecutor): Promise<ConfigDespacho> {
+  try {
+    const [fila] = await (db ?? getDb())
+      .select({
+        visible: crmReglasVenta.despachoVisible,
+        diasHabiles: crmReglasVenta.despachoDiasHabiles,
+      })
+      .from(crmReglasVenta)
+      .where(eq(crmReglasVenta.tenantId, shopTenantId()))
+      .limit(1);
+    if (!fila) return CONFIG_DESPACHO_DEFAULT;
+    const dias = Number.isInteger(fila.diasHabiles) && fila.diasHabiles >= 1 ? fila.diasHabiles : CONFIG_DESPACHO_DEFAULT.diasHabiles;
+    return { visible: fila.visible, diasHabiles: dias };
+  } catch (err) {
+    console.error("[sucursales-repo] no se pudo leer el plazo de despacho:", err);
+    return CONFIG_DESPACHO_DEFAULT;
   }
 }

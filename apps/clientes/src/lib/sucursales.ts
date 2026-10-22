@@ -181,7 +181,20 @@ export interface ReglasVenta {
    * demora; `bloquear` = no se ofrece. Ausente = `ofrecer`.
    */
   retiroSinStock?: "bloquear" | "ofrecer";
+  /** Plazo de despacho que se MUESTRA para el envío a domicilio. Ausente = `CONFIG_DESPACHO_DEFAULT`. */
+  despacho?: ConfigDespacho;
 }
+
+/** Plazo de despacho del envío a domicilio (`reglas_venta.despacho_*`, migración 0093 del CRM). */
+export interface ConfigDespacho {
+  /** ¿Se muestra el plazo? */
+  visible: boolean;
+  /** Días hábiles desde la compra (1..30); 1 se dice "24 h hábiles". */
+  diasHabiles: number;
+}
+
+/** Los defaults de la migración 0093: lo que el Shop mostraba antes de que fuera configurable. */
+export const CONFIG_DESPACHO_DEFAULT: ConfigDespacho = { visible: true, diasHabiles: 1 };
 
 /** ¿Vale traer de otra sucursal lo que falta en la preferida? (según la modalidad y las reglas). */
 export function permiteRespaldo(modalidad: "envio" | "retiro", reglas: ReglasVenta | undefined): boolean {

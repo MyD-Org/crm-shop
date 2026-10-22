@@ -18,14 +18,23 @@ const MARCA: Record<TonoDisponibilidad, string> = { ok: "✓", demora: "•", no
  * "Ver local": popup con dirección, horario, WhatsApp y mapa del local (embed de Google Maps sin
  * clave). En el carrito suma cómo está cada producto del pedido en ese local.
  */
-export function VerLocal({ local, productos }: { local: LocalDisponibilidad; productos?: EstadoProductoLocal[] }) {
+export function VerLocal({
+  local,
+  productos,
+  textoWhatsapp,
+}: {
+  local: LocalDisponibilidad;
+  productos?: EstadoProductoLocal[];
+  /** Mensaje precargado del WhatsApp (en la ficha: el producto que se consulta). */
+  textoWhatsapp?: string;
+}) {
   const [abierto, setAbierto] = useState(false);
   // "Hoy" se calcula al abrir (en el cliente, con fecha de Buenos Aires): ni en el render del
   // servidor ni en una caché, así no hay desfasaje de hidratación ni excepciones vencidas.
   const [hoy, setHoy] = useState("");
   const horario = horarioParaMostrar(local, hoy);
   const direccion = [local.direccion, local.ciudad].filter(Boolean).join(", ");
-  const whatsapp = enlaceWhatsapp(local.whatsapp);
+  const whatsapp = enlaceWhatsapp(local.whatsapp, textoWhatsapp);
   const consulta = encodeURIComponent(direccion);
 
   return (

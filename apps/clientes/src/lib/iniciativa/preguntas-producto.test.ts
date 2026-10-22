@@ -36,6 +36,34 @@ describe("preguntas sugeridas de la ficha", () => {
     expect(preguntasSugeridas(productos[2])).toContain(PREGUNTAS.potencia);
   });
 
+  it("una herramienta a batería de 12 V no pregunta por el transformador", () => {
+    const p = preguntasSugeridas({
+      name: "TALADRO ATORNILLADOR INALAMBRICO 1500 RPM",
+      description: "Taladro atornillador inalámbrico.\n- Voltaje: 12 V\n- Batería: 1,5 Ah",
+      category: "HERRAMIENTAS",
+    });
+    expect(p).not.toContain(PREGUNTAS.transformador);
+    expect(p).not.toContain(PREGUNTAS.potencia);
+    expect(p).not.toContain(PREGUNTAS.cargador);
+    expect(p).toContain(PREGUNTAS.complementan);
+  });
+
+  it("si viene sin cargador, primero «¿Qué cargador necesito?»", () => {
+    const p = preguntasSugeridas({
+      name: "TALADRO ATORNILLADOR INALAMBRICO 1500 RPM",
+      description: "- Voltaje: 12 V\n- Carga: USB tipo C (cargador no incluido)",
+      category: "HERRAMIENTAS",
+    });
+    expect(p[0]).toBe(PREGUNTAS.cargador);
+    expect(p).not.toContain(PREGUNTAS.transformador);
+  });
+
+  it("otras formas de decir que no trae cargador", () => {
+    for (const d of ["Sin cargador.", "No incluye cargador", "Cargador se vende por separado", "Charger sold separately"]) {
+      expect(preguntasSugeridas({ name: "AMOLADORA INALAMBRICA", description: d })[0]).toBe(PREGUNTAS.cargador);
+    }
+  });
+
   it("tira led → la fuente; baja tensión que no es tira → el transformador", () => {
     expect(preguntasSugeridas(productos[1])[0]).toBe(PREGUNTAS.fuenteTira);
     expect(preguntasSugeridas({ name: "DICROICA LED 5W MR16 12V" })[0]).toBe(PREGUNTAS.transformador);

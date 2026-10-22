@@ -20,6 +20,7 @@ export const PREGUNTAS = {
   potencia: "¿Qué potencia necesito para mi espacio?",
   fuenteTira: "¿Qué fuente necesito para esta tira?",
   transformador: "¿Qué transformador necesito?",
+  cargador: "¿Qué cargador necesito?",
   portalamparas: "¿Es compatible con mi portalámparas?",
   tono: "¿Qué tono de luz me conviene?",
   seccionCable: "¿Qué sección de cable necesito?",
@@ -47,6 +48,9 @@ const TIRA = palabra("tira|tiras|cinta|cintas|manguera|mangueras");
 const ELECTRICO = palabra(
   "cable|cables|llave|llaves|toma|tomas|tomacorriente|tomacorrientes|interruptor|interruptores|disyuntor|disyuntores|termica|termicas|termomagnetica|termomagneticas|zapatilla|zapatillas|prolongador|prolongadores|borne|bornes",
 );
+/** Viene sin cargador (herramientas y equipos a batería): se le pregunta cuál necesita. */
+const SIN_CARGADOR =
+  /cargador(es)? no (esta |viene )?incluido|sin cargador|no incluye (el )?cargador|cargador (se vende )?por separado|charger (is )?sold separately/;
 /** Ya es una fuente o un transformador: no se le pregunta cuál necesita. */
 const FUENTE = palabra("fuente|fuentes|transformador|transformadores|driver|drivers");
 
@@ -69,6 +73,7 @@ export function preguntasSugeridas(producto: ProductoParaPreguntas): string[] {
   const bajaTension = atributos.has("tension-12v") || atributos.has("tension-24v");
 
   const candidatas: string[] = [];
+  if (SIN_CARGADOR.test(texto)) candidatas.push(PREGUNTAS.cargador);
   if (atributos.has("apto-exterior")) candidatas.push(PREGUNTAS.exterior);
   if (esTira && !esFuente) candidatas.push(PREGUNTAS.fuenteTira);
   // Sólo algo que da luz pide transformador: una herramienta o un equipo a batería de 12 V no.

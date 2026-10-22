@@ -7,7 +7,6 @@ import type { SucursalDto } from "@/lib/sucursales-repo"
 import {
   DESCRIPCION_CUENTA_ALEGRA,
   HINT_SUCURSAL_QUE_FACTURA,
-  LEYENDA_COBRO_ZONAS,
 } from "@/lib/sucursales-texto"
 import { SucursalesTab } from "./SucursalesTab"
 
@@ -42,7 +41,6 @@ const render = (sucursales: SucursalDto[]) =>
       null,
       createElement(SucursalesTab, {
         initialSucursales: sucursales,
-        initialZonas: [],
         initialCuentas: { cuentas: [], asignaciones: {} },
         initialReceiptsEmail: "",
       }),
@@ -51,9 +49,6 @@ const render = (sucursales: SucursalDto[]) =>
 
 describe("textos de cobro en Sucursales", () => {
   it("textos exactos de la spec", () => {
-    expect(LEYENDA_COBRO_ZONAS).toBe(
-      " La misma regla decide con qué cuenta de Mercado Pago y de Payway cobra la tienda: la del CUIT de la sucursal que factura.",
-    )
     expect(HINT_SUCURSAL_QUE_FACTURA).toBe(
       "Solo si factura una cuenta distinta de la que despacha. Esa misma cuenta es la que cobra en Mercado Pago y Payway.",
     )
@@ -62,18 +57,16 @@ describe("textos de cobro en Sucursales", () => {
     )
   })
 
-  it("Card «Zonas de venta» termina con la leyenda, con y sin sucursal predeterminada", () => {
-    const con = render([sucursal({ predeterminada: true })])
-    expect(con).toContain(
-      "Las provincias sin zona se asignan a Iguazú (predeterminada)." + LEYENDA_COBRO_ZONAS,
-    )
-    const sin = render([sucursal({ predeterminada: false })])
-    expect(sin).toContain("Las provincias sin zona se asignan a la sucursal predeterminada." + LEYENDA_COBRO_ZONAS)
+  it("Sucursales ya no muestra las zonas: viven en Envíos", () => {
+    const html = render([sucursal({ predeterminada: true })])
+    expect(html).not.toContain("Zonas de venta")
+    expect(html).toContain("se configura en Datos, Envíos")
   })
 
   it("el hint de «Sucursal que factura» y la descripción del diálogo de la cuenta usan los textos", () => {
     const fuente = readFileSync(new URL("./SucursalesTab.tsx", import.meta.url), "utf8")
-    expect(fuente).toContain("hint={HINT_SUCURSAL_QUE_FACTURA}")
+    const envios = readFileSync(new URL("./EnviosSucursalesCard.tsx", import.meta.url), "utf8")
+    expect(envios).toContain("{HINT_SUCURSAL_QUE_FACTURA}")
     expect(fuente).toContain("description={DESCRIPCION_CUENTA_ALEGRA}")
     // El copy viejo sin la mención al cobro ya no está.
     expect(fuente).not.toContain("Solo si factura una cuenta distinta de la que despacha.\"")

@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import type { TiendaOficialContent } from "@/data/home-defaults";
 import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
 import { ImagenMarca } from "@/components/marcas/ImagenMarca";
+import { LogoMarca } from "@/components/marcas/logo-marca";
 import { propsTemaOficial } from "@/components/marcas/tema-oficial";
 import { atributoEstudio } from "@/components/marcas/estudio-fotos";
 import { destacadosHome } from "@/lib/catalogo-publico";
@@ -46,7 +47,9 @@ export async function TiendaOficialHome({ contenido }: { contenido: TiendaOficia
         {...propsTemaOficial(pagina)}
         className="grid overflow-hidden rounded-2xl lg:grid-cols-[1.1fr_1.6fr]"
       >
-        <div className="relative isolate flex min-h-[280px] flex-col justify-center gap-4 overflow-hidden p-[clamp(24px,3vw,40px)]">
+        {/* Panel izquierdo: arriba el chip y el logo, abajo el título y el botón; el centro queda
+            libre para la foto. El velo oscurece arriba y abajo (donde va el texto), no el medio. */}
+        <div className="relative isolate flex min-h-[320px] flex-col justify-between gap-8 overflow-hidden p-[clamp(20px,2.6vw,36px)]">
           {foto ? (
             <>
               <ImagenMarca src={foto} alt={fotoAlt} sizes="(max-width: 1024px) 100vw, 40vw" fit="cover" className="-z-10 object-cover" />
@@ -54,31 +57,33 @@ export async function TiendaOficialHome({ contenido }: { contenido: TiendaOficia
                 aria-hidden
                 className={
                   temaDe(pagina) === "claro"
-                    ? "absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(250,249,246,0.95)_0%,rgba(250,249,246,0.75)_60%,rgba(250,249,246,0.45)_100%)]"
-                    : "absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(10,10,12,0.92)_0%,rgba(10,10,12,0.7)_60%,rgba(10,10,12,0.4)_100%)]"
+                    ? "absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgba(250,249,246,0.92)_0%,rgba(250,249,246,0.35)_38%,rgba(250,249,246,0.35)_58%,rgba(250,249,246,0.94)_100%)]"
+                    : "absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgba(10,10,12,0.88)_0%,rgba(10,10,12,0.3)_38%,rgba(10,10,12,0.3)_58%,rgba(10,10,12,0.92)_100%)]"
                 }
               />
             </>
           ) : null}
-          <span className="self-start rounded-full border border-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
-            Tienda oficial
-          </span>
-          {pagina.logo ? (
-            <span className="relative block h-16 w-40 rounded-lg bg-white p-2">
-              <ImagenMarca src={pagina.logo} alt={`Logo de ${pagina.nombre}`} sizes="160px" fit="logo" className="h-full w-full object-contain" />
+          <div className="flex flex-col items-start gap-3">
+            <span className="rounded-full border border-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
+              Tienda oficial
             </span>
-          ) : (
-            <span className="font-display text-2xl font-semibold tracking-[0.12em] text-text">{pagina.nombre}</span>
-          )}
-          {titulo ? (
-            <p className="font-display text-[clamp(22px,2.4vw,30px)] font-light leading-snug text-text">{titulo}</p>
-          ) : null}
-          <Link
-            href={hrefMarca(pagina.slug)}
-            className="inline-flex items-center justify-center self-start rounded-md bg-accent px-5 py-3 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
-          >
-            {contenido.cta} →
-          </Link>
+            {pagina.logo ? (
+              <LogoMarca src={pagina.logo} nombre={pagina.nombre} fondoOscuro={temaDe(pagina) !== "claro"} className="h-16" />
+            ) : (
+              <span className="font-display text-2xl font-semibold tracking-[0.12em] text-text">{pagina.nombre}</span>
+            )}
+          </div>
+          <div className="flex flex-col items-start gap-4">
+            {titulo ? (
+              <p className="max-w-md font-display text-[clamp(20px,2.2vw,28px)] font-light leading-snug text-text">{titulo}</p>
+            ) : null}
+            <Link
+              href={hrefMarca(pagina.slug)}
+              className="inline-flex items-center justify-center rounded-md bg-accent px-5 py-3 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
+            >
+              {contenido.cta} →
+            </Link>
+          </div>
         </div>
         {productos.length > 0 ? (
           <ul

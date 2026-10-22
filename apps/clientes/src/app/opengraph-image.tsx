@@ -4,7 +4,7 @@ import { cacheLife } from "next/cache";
 import { ImageResponse } from "next/og";
 import { sora, type Fuente } from "@/lib/fuente-sora";
 import { getMarca } from "@/lib/marca";
-import { MARCA_POR_DEFECTO, PARTES_NOMBRE_CENTRAL, type Marca } from "@/lib/marca-base";
+import { MARCA_POR_DEFECTO, type Marca } from "@/lib/marca-base";
 import { coloresPwaDeTema } from "@/lib/tema-tenant";
 import { getTemaTenant } from "@/lib/tema-tenant-datos";
 
@@ -13,8 +13,9 @@ import { getTemaTenant } from "@/lib/tema-tenant-datos";
  * página que no defina la suya: la ficha de producto usa la foto del producto
  * (src/lib/producto-metadata.ts).
  *
- * Misma identidad que el header: la marca en texto ("Central" + "Led" en el
- * acento, Sora) con la bajada del header, sobre la paleta del tema
+ * Misma identidad que el header: el logo de Central (wordmark con el pin,
+ * src/assets/central-led-logo-og.png, el PNG del mismo dibujo que
+ * src/assets/central-led-logo.svg: Satori no lee SVG) con la bajada del header, sobre la paleta del tema
  * `calido-azul` (el de por defecto, src/app/globals.css), y a la derecha la
  * foto del hero (STUDIO_IMAGE, public/images/central-led/studio-bell-bamboo-v3.webp)
  * con todas las luces prendidas, pasada a JPG de 1200 px en
@@ -48,7 +49,12 @@ const COLOR_CENTRAL = {
  */
 async function recursos(conFoto: boolean, nombre: string, textos: string) {
   "use cache";
-  const foto = conFoto ? await readFile(join(process.cwd(), "src/assets/og-fondo.jpg"), "base64") : null;
+  const [foto, logo] = conFoto
+    ? await Promise.all([
+        readFile(join(process.cwd(), "src/assets/og-fondo.jpg"), "base64"),
+        readFile(join(process.cwd(), "src/assets/central-led-logo-og.png"), "base64"),
+      ])
+    : [null, null];
   let fuentes: Fuente[] = [];
   try {
     fuentes = await Promise.all([sora(700, nombre), sora(400, textos)]);
@@ -56,10 +62,14 @@ async function recursos(conFoto: boolean, nombre: string, textos: string) {
     console.error("[opengraph-image] no se pudo cargar Sora:", err);
     cacheLife("degradado");
   }
-  return { foto: foto ? `data:image/jpeg;base64,${foto}` : null, fuentes };
+  return {
+    foto: foto ? `data:image/jpeg;base64,${foto}` : null,
+    logo: logo ? `data:image/png;base64,${logo}` : null,
+    fuentes,
+  };
 }
 
-/** La imagen de Central: la foto del hero a la derecha y "Central" + "Led" en el acento. */
+/** La imagen de Central: la foto del hero a la derecha y su logo. */
 function esCentral(marca: Marca): boolean {
   return marca.base === "central" && marca.nombre === MARCA_POR_DEFECTO.nombre;
 }
@@ -81,9 +91,9 @@ export default async function OpengraphImage() {
     : COLOR_CENTRAL;
   const propia = central ? null : imagenPropia(marca);
   const textos = marca.ogTextos;
-  const { foto, fuentes } = await recursos(
+  const { foto, logo, fuentes } = await recursos(
     central,
-    central ? PARTES_NOMBRE_CENTRAL.join("") : marca.nombre,
+    marca.nombre,
     Object.values(textos).join(""),
   );
 
@@ -109,26 +119,24 @@ export default async function OpengraphImage() {
           }}
         >
           {textos.eyebrow ? <div style={{ fontSize: 22, letterSpacing: 4, color: COLOR.suave }}>{textos.eyebrow}</div> : null}
-          <div
-            style={{
-              display: "flex",
-              marginTop: 18,
-              fontSize: central || marca.nombre.length <= 14 ? 84 : 60,
-              fontWeight: 700,
-              letterSpacing: -2,
-              lineHeight: 1,
-              color: COLOR.tinta,
-            }}
-          >
-            {central ? (
-              <>
-                {PARTES_NOMBRE_CENTRAL[0]}
-                <span style={{ marginLeft: 18, color: COLOR.acento }}>{PARTES_NOMBRE_CENTRAL[1]}</span>
-              </>
-            ) : (
-              marca.nombre
-            )}
-          </div>
+          {logo ? (
+            // Logo de Central: 1911×264 (el wordmark con el pin), al ancho de la columna.
+            <img src={logo} alt="" width={496} height={69} style={{ marginTop: 22 }} />
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                marginTop: 18,
+                fontSize: marca.nombre.length <= 14 ? 84 : 60,
+                fontWeight: 700,
+                letterSpacing: -2,
+                lineHeight: 1,
+                color: COLOR.tinta,
+              }}
+            >
+              {marca.nombre}
+            </div>
+          )}
           <div style={{ width: 72, height: 4, marginTop: 40, background: COLOR.acento }} />
           {textos.bajada ? (
             <div style={{ marginTop: 36, fontSize: 34, lineHeight: 1.3, color: COLOR.tinta }}>{textos.bajada}</div>

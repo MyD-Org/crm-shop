@@ -11,7 +11,13 @@
  * Todavía sin consumidores: el lote 2 lo cablea a catálogo, ficha y carrito, detrás del flag
  * `disponibilidad-sucursal`.
  */
-import { origenDeLinea, permiteRespaldo, type ReglasVenta, type SucursalDato } from "./sucursales";
+import {
+  CONFIG_DESPACHO_DEFAULT,
+  origenDeLinea,
+  permiteRespaldo,
+  type ReglasVenta,
+  type SucursalDato,
+} from "./sucursales";
 
 /** Por producto: stock por sucursal; `null` en el producto = no inventariable. */
 export type StockPorSucursal = Record<string, Record<string, number> | null>;
@@ -42,6 +48,11 @@ export interface DisponibilidadEnvio {
   origen: string | null;
   /** Demora de traslado si es `a_traer`; 0 = "a coordinar"; null si no hay traslado. */
   demoraDias: number | null;
+  /**
+   * Plazo de despacho a MOSTRAR, en días hábiles (reglas de venta del CRM); null = no se muestra.
+   * Ausente = 1 ("24 h hábiles"), lo de antes de que fuera configurable.
+   */
+  despachoDias?: number | null;
 }
 
 export interface DisponibilidadRetiro {
@@ -90,6 +101,8 @@ export function disponibilidadPorSucursal(entrada: EntradaDisponibilidad): Resul
 
   const productos: Record<string, DisponibilidadProducto> = {};
   const lineasATraer: string[] = [];
+  const despacho = reglas.despacho ?? CONFIG_DESPACHO_DEFAULT;
+  const despachoDias = despacho.visible ? despacho.diasHabiles : null;
 
   for (const id of [...ids].sort()) {
     const linea = { id, qty: entrada.cantidades?.[id] ?? 1, ocultoEn: entrada.ocultoEn[id] ?? [] };
@@ -103,10 +116,10 @@ export function disponibilidadPorSucursal(entrada: EntradaDisponibilidad): Resul
       if ("error" in r) {
         envio = { estado: r.error, origen: null, demoraDias: null };
       } else if (r.aTraer) {
-        envio = { estado: "a_traer", origen: r.origen, demoraDias: reglas.trasladoDias };
+        envio = { estado: "a_traer", origen: r.origen, demoraDias: reglas.trasladoDias, despachoDias };
         lineasATraer.push(id);
       } else {
-        envio = { estado: "disponible", origen: r.origen, demoraDias: null };
+        envio = { estado: "disponible", origen: r.origen, demoraDias: null, despachoDias };
       }
     }
 

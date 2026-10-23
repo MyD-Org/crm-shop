@@ -202,6 +202,8 @@
     "envio_gratis_provincias": "text[]",
     "envio_gratis_minimo_modo": "text",
     "envio_gratis_minimo": "numeric(12, 2)",
+    "despacho_visible": "boolean",
+    "despacho_dias_habiles": "integer",
     "created_at": "timestamp with time zone",
     "updated_at": "timestamp with time zone"
   },

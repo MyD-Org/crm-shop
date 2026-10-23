@@ -135,6 +135,35 @@ describe("estados sin prefijo (lista de locales de la ficha)", () => {
   });
 });
 
+describe("plazo de despacho configurable (reglas de venta del CRM)", () => {
+  it("con días configurados: el plazo con stock y, si hay que traerlo, la demora más el plazo", async () => {
+    const { estadoEnvio } = await import("./disponibilidad-textos");
+    expect(textoEnvio({ estado: "disponible", origen: "a", demoraDias: null, despachoDias: 1 })).toBe(
+      "Envío a domicilio: despacho dentro de las 24 h hábiles",
+    );
+    expect(estadoEnvio({ estado: "disponible", origen: "a", demoraDias: null, despachoDias: 3 })).toEqual({
+      texto: "Despacho dentro de 3 días hábiles",
+      tono: "ok",
+    });
+    expect(textoEnvio({ estado: "a_traer", origen: "b", demoraDias: 7, despachoDias: 3 })).toBe(
+      "Envío a domicilio: despacho dentro de 10 días hábiles",
+    );
+    expect(textoEnvio({ estado: "a_traer", origen: "b", demoraDias: 0, despachoDias: 3 })).toBe("Envío a domicilio: a coordinar");
+  });
+
+  it("oculto: sin plazo de despacho; si hay que traerlo, sólo la demora del traslado", async () => {
+    const { estadoEnvio } = await import("./disponibilidad-textos");
+    expect(textoEnvio({ estado: "disponible", origen: "a", demoraDias: null, despachoDias: null })).toBe("Envío a domicilio: disponible");
+    expect(estadoEnvio({ estado: "disponible", origen: "a", demoraDias: null, despachoDias: null })).toEqual({ texto: "Disponible", tono: "ok" });
+    expect(estadoEnvio({ estado: "a_traer", origen: "b", demoraDias: 7, despachoDias: null })).toEqual({
+      texto: "Disponible en 7 días",
+      tono: "demora",
+    });
+    expect(textoEnvio({ estado: "a_traer", origen: "b", demoraDias: 0, despachoDias: null })).toBe("Envío a domicilio: a coordinar");
+    expect(textoEnvio({ estado: "sin_stock", origen: null, demoraDias: null, despachoDias: null })).toBe("Envío a domicilio: no disponible");
+  });
+});
+
 describe("resumen del carrito", () => {
   const locales = [{ slug: "a", nombre: "A" }, { slug: "b", nombre: "B" }];
   const hoy = { estado: "disponible" as const, desde: null, demoraDias: null };

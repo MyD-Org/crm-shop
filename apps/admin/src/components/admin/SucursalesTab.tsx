@@ -2,18 +2,19 @@
 
 import { useState } from "react"
 import { Badge, Button, Card, Checkbox, Dialog, Field, Input, Select, Table, useToast } from "@myd-org/ui"
-import type { SucursalDto, ZonaDto } from "@/lib/sucursales-repo"
+import type { SucursalDto } from "@/lib/sucursales-repo"
 import type { CuentaDto, CuentasYAsignaciones } from "@/lib/alegra-cuentas-repo"
 import { formatearCuit, validarCuentaEntrada, type ModoCuenta } from "@/lib/alegra-cuentas-validacion"
 import { normalizarIdentificador } from "@/lib/identificador"
-import { PROVINCIAS, claveProvincia } from "@/lib/provincias"
+import { PROVINCIAS } from "@/lib/provincias"
 import { ReglasVentaCard } from "./ReglasVentaCard"
 import { ReceiptsEmailForm } from "./ReceiptsEmailForm"
-import { DESCRIPCION_CUENTA_ALEGRA, HINT_SUCURSAL_QUE_FACTURA, LEYENDA_COBRO_ZONAS } from "@/lib/sucursales-texto"
-import { validarSucursalCambios, validarSucursalNueva, validarZona } from "@/lib/sucursales-validacion"
+import { DESCRIPCION_CUENTA_ALEGRA } from "@/lib/sucursales-texto"
+import { validarSucursalCambios, validarSucursalNueva } from "@/lib/sucursales-validacion"
 
-// Sucursales (parte A): ABM de sucursales y de zonas (provincia ->
-// sucursal). La sucursal es la unidad comercial (retiro, envío, zona); la cuenta de Alegra que
+// Sucursales (parte A): ABM de sucursales. Las zonas (provincia -> sucursal) se editan en
+// Envíos, junto con el envío a domicilio (EnviosSucursalesCard). La sucursal es la unidad
+// comercial (retiro, envío, zona); la cuenta de Alegra que
 // factura se asigna en otra etapa. Los cambios rigen para los pedidos nuevos y no alteran los ya
 // creados. Cada guardado avisa al Shop; si el aviso no llegó (`propagado: false`) el cambio igual
 // quedó guardado y el Shop lo toma en su próximo ciclo.
@@ -24,7 +25,6 @@ import { validarSucursalCambios, validarSucursalNueva, validarZona } from "@/lib
 // devuelve; solo informa si está configurado y sus últimos 4 caracteres).
 interface Props {
   initialSucursales: SucursalDto[]
-  initialZonas: ZonaDto[]
   initialCuentas: CuentasYAsignaciones
   /** Email de empresa que recibe los avisos de comprobantes (`tenants.receipts_email`). */
   initialReceiptsEmail: string
@@ -50,8 +50,6 @@ type SucursalForm = {
   maestra: boolean
 }
 
-type ZonaForm = { provincia: string; sucursal: string; facturaSucursal: string }
-
 type CuentaForm = {
   sucursal: SucursalDto
   modo: ModoCuenta
@@ -73,7 +71,6 @@ const MODOS_CUENTA = [
 ]
 
 const SIN_PROVINCIA = "__sin_provincia"
-const SIN_FACTURA = "__sin_factura"
 
 const sucursalVacia = (orden: number): SucursalForm => ({
   slug: "",
@@ -151,17 +148,14 @@ function CheckboxLabel(props: { id: string; checked: boolean; onChange: (v: bool
 
 const porOrden = (a: SucursalDto, b: SucursalDto) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)
 
-export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas, initialReceiptsEmail }: Props) {
+export function SucursalesTab({ initialSucursales, initialCuentas, initialReceiptsEmail }: Props) {
   const [sucursales, setSucursales] = useState(initialSucursales)
-  const [zonas, setZonas] = useState(initialZonas)
   const [cuentas, setCuentas] = useState(initialCuentas)
   const [cuentaForm, setCuentaForm] = useState<CuentaForm | null>(null)
   const [prueba, setPrueba] = useState<Prueba | null>(null)
   const [probando, setProbando] = useState(false)
   const [sucursalForm, setSucursalForm] = useState<SucursalForm | null>(null)
-  const [zonaForm, setZonaForm] = useState<ZonaForm | null>(null)
   const [borrarSucursal, setBorrarSucursal] = useState<SucursalDto | null>(null)
-  const [borrarZona, setBorrarZona] = useState<ZonaDto | null>(null)
   const [errores, setErrores] = useState<Errores>({})
   const [guardando, setGuardando] = useState(false)
   const { toast } = useToast()
@@ -252,9 +246,6 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
     }
   }
 
-  const nombreDe = (slug: string | null) => (slug ? sucursales.find((s) => s.slug === slug)?.nombre ?? slug : "")
-  const predeterminada = sucursales.find((s) => s.predeterminada)
-  const zonasOrdenadas = [...zonas].sort((a, b) => a.provincia.localeCompare(b.provincia))
 
   function avisarGuardado(titulo: string, propagado: unknown) {
     if (propagado === true) toast({ title: titulo, tone: "success" })
@@ -340,72 +331,19 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
     }
   }
 
-  async function guardarZona() {
-    if (!zonaForm) return
-    setErrores({})
-    const cuerpo = {
-      provincia: zonaForm.provincia,
-      sucursal: zonaForm.sucursal,
-      facturaSucursal: zonaForm.facturaSucursal || null,
-    }
-    const v = validarZona(cuerpo)
-    if (!v.ok) return setErrores({ [v.campo === "body" ? "general" : v.campo]: v.error })
-
-    setGuardando(true)
-    try {
-      const { res, json } = await enviar("/api/admin/sucursales/zonas", "PUT", cuerpo)
-      if (!res.ok || !json) return manejarError(res, json)
-      const zona = json.zona as ZonaDto
-      setZonas((prev) => [...prev.filter((z) => z.provinciaClave !== zona.provinciaClave), zona])
-      setZonaForm(null)
-      avisarGuardado("Zona guardada", json.propagado)
-    } catch {
-      setErrores({ general: "Error de conexión. Inténtelo nuevamente." })
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  async function confirmarBorrarZona() {
-    if (!borrarZona) return
-    setGuardando(true)
-    try {
-      const { res, json } = await enviar(`/api/admin/sucursales/zonas/${borrarZona.provinciaClave}`, "DELETE")
-      if (!res.ok && res.status !== 404) {
-        toast({ title: json?.error ?? "No pudimos quitar la zona.", tone: "danger" })
-        setBorrarZona(null)
-        return
-      }
-      setZonas((prev) => prev.filter((z) => z.provinciaClave !== borrarZona.provinciaClave))
-      setBorrarZona(null)
-      if (res.ok) avisarGuardado("Zona quitada", json?.propagado)
-    } catch {
-      toast({ title: "Error de conexión. Inténtelo nuevamente.", tone: "danger" })
-    } finally {
-      setGuardando(false)
-    }
-  }
-
   const setS = (patch: Partial<SucursalForm>) => setSucursalForm((f) => (f ? { ...f, ...patch } : f))
-  const setZ = (patch: Partial<ZonaForm>) => setZonaForm((f) => (f ? { ...f, ...patch } : f))
   const abrirSucursal = (f: SucursalForm) => {
     setErrores({})
     setSucursalForm(f)
   }
-  const abrirZona = (f: ZonaForm) => {
-    setErrores({})
-    setZonaForm(f)
-  }
 
-  const opcionesSucursal = sucursales.filter((s) => s.activa).map((s) => ({ value: s.slug, label: s.nombre }))
   const opcionesProvincia = PROVINCIAS.map((p) => ({ value: p, label: p }))
-  const provinciasConZona = new Set(zonas.map((z) => z.provinciaClave))
 
   return (
     <div className="flex flex-col gap-4">
       <Card
         title="Sucursales"
-        description="Cada sucursal define un local de retiro. Desde dónde sale el envío se configura en Datos, Envíos. Los cambios rigen para los pedidos nuevos; los pedidos ya creados conservan su sucursal."
+        description="Cada sucursal define un local de retiro. Qué provincias atiende cada sucursal y a dónde envía se configura en Datos, Envíos. Los cambios rigen para los pedidos nuevos; los pedidos ya creados conservan su sucursal."
       >
         <div className="flex flex-col gap-3">
           <Table<SucursalDto>
@@ -501,65 +439,6 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
         <ReceiptsEmailForm initialReceiptsEmail={initialReceiptsEmail} />
       </Card>
 
-      <Card
-        title="Zonas de venta"
-        description={
-          predeterminada
-            ? `Cada provincia se asigna a una sucursal. Las provincias sin zona se asignan a ${predeterminada.nombre} (predeterminada).${LEYENDA_COBRO_ZONAS}`
-            : `Cada provincia se asigna a una sucursal. Las provincias sin zona se asignan a la sucursal predeterminada.${LEYENDA_COBRO_ZONAS}`
-        }
-      >
-        <div className="flex flex-col gap-3">
-          <Table<ZonaDto>
-            rows={zonasOrdenadas}
-            rowKey={(z) => z.provinciaClave}
-            empty={
-              <p className="text-sm py-4" style={{ color: "var(--ink-soft)" }}>
-                Todavía no hay zonas: todas las provincias se asignan a la sucursal predeterminada.
-              </p>
-            }
-            columns={[
-              { key: "provincia", header: "Provincia", render: (z) => z.provincia },
-              { key: "sucursal", header: "Sucursal", render: (z) => nombreDe(z.sucursal) },
-              {
-                key: "factura",
-                header: "Factura",
-                render: (z) => (z.facturaSucursal ? nombreDe(z.facturaSucursal) : "La que despacha"),
-                hideBelow: "md",
-              },
-              {
-                key: "acciones",
-                header: "",
-                align: "right",
-                render: (z) => (
-                  <div className="flex gap-1 justify-end">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => abrirZona({ provincia: z.provincia, sucursal: z.sucursal, facturaSucursal: z.facturaSucursal ?? "" })}
-                    >
-                      Editar
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setBorrarZona(z)}>
-                      Quitar
-                    </Button>
-                  </div>
-                ),
-              },
-            ]}
-          />
-          <div>
-            <Button
-              variant="secondary"
-              disabled={sucursales.length === 0}
-              onClick={() => abrirZona({ provincia: "", sucursal: "", facturaSucursal: "" })}
-            >
-              Agregar zona
-            </Button>
-          </div>
-        </div>
-      </Card>
-
       <ReglasVentaCard />
 
       <Dialog
@@ -639,7 +518,7 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
               checked={sucursalForm.predeterminada}
               onChange={(predeterminada) => setS({ predeterminada })}
               label="Predeterminada"
-              hint="Recibe las provincias sin zona. Si ya hay otra, la marca se transfiere a esta."
+              hint="Atiende las provincias sin sucursal asignada (se configuran en Envíos). Si ya hay otra, la marca se transfiere a esta."
             />
             <CheckboxLabel
               id="suc-principal"
@@ -651,65 +530,6 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
             {(errores.predeterminada || errores.activa) && (
               <p className="text-sm" style={{ color: "var(--red)" }}>{errores.predeterminada ?? errores.activa}</p>
             )}
-            {errores.general && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.general}</p>}
-          </div>
-        )}
-      </Dialog>
-
-      <Dialog
-        dismissible={false}
-        open={zonaForm !== null}
-        onOpenChange={(open) => {
-          if (!open) setZonaForm(null)
-        }}
-        title="Zona de venta"
-        description="Los pedidos nuevos de esta provincia se asignan a la sucursal elegida."
-        footer={
-          <div className="flex gap-2 justify-end">
-            <Button variant="ghost" onClick={() => setZonaForm(null)}>Cancelar</Button>
-            <Button loading={guardando} disabled={guardando} onClick={guardarZona}>Guardar</Button>
-          </div>
-        }
-      >
-        {zonaForm && (
-          <div className="flex flex-col gap-3">
-            <Field
-              label="Provincia"
-              hint={zonaForm.provincia && provinciasConZona.has(claveProvincia(zonaForm.provincia)) ? "Esta provincia ya tiene zona: al guardar se reemplaza." : undefined}
-              error={errores.provincia}
-            >
-              <Select
-                options={opcionesProvincia}
-                value={zonaForm.provincia}
-                onValueChange={(provincia) => setZ({ provincia })}
-                placeholder="Seleccione una provincia"
-                aria-label="Provincia"
-                aria-invalid={Boolean(errores.provincia)}
-              />
-            </Field>
-            <Field label="Sucursal" error={errores.sucursal}>
-              <Select
-                options={opcionesSucursal}
-                value={zonaForm.sucursal}
-                onValueChange={(sucursal) => setZ({ sucursal })}
-                placeholder="Seleccione una sucursal"
-                aria-label="Sucursal"
-                aria-invalid={Boolean(errores.sucursal)}
-              />
-            </Field>
-            <Field
-              label="Sucursal que factura"
-              hint={HINT_SUCURSAL_QUE_FACTURA}
-              error={errores.facturaSucursal}
-            >
-              <Select
-                options={[{ value: SIN_FACTURA, label: "La que despacha" }, ...opcionesSucursal]}
-                value={zonaForm.facturaSucursal || SIN_FACTURA}
-                onValueChange={(v) => setZ({ facturaSucursal: v === SIN_FACTURA ? "" : v })}
-                aria-label="Sucursal que factura"
-                aria-invalid={Boolean(errores.facturaSucursal)}
-              />
-            </Field>
             {errores.general && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.general}</p>}
           </div>
         )}
@@ -821,23 +641,6 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
         {borrarSucursal && <p className="text-sm" style={{ color: "var(--ink)" }}>¿Eliminar la sucursal &quot;{borrarSucursal.nombre}&quot;?</p>}
       </Dialog>
 
-      <Dialog
-        open={borrarZona !== null}
-        onOpenChange={(open) => {
-          if (!open) setBorrarZona(null)
-        }}
-        title="Quitar zona"
-        description="Desde ese momento, los pedidos nuevos de esa provincia se asignan a la sucursal predeterminada."
-        headerBorder={false}
-        footer={
-          <div className="flex gap-2 justify-end">
-            <Button variant="ghost" onClick={() => setBorrarZona(null)}>Cancelar</Button>
-            <Button variant="danger" loading={guardando} onClick={confirmarBorrarZona}>Quitar</Button>
-          </div>
-        }
-      >
-        {borrarZona && <p className="text-sm" style={{ color: "var(--ink)" }}>¿Quitar la zona de {borrarZona.provincia}?</p>}
-      </Dialog>
     </div>
   )
 }

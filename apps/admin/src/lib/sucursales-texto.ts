@@ -7,11 +7,9 @@ import type { ReglaAplicada } from "@/lib/sucursales-zona"
 
 export const SIN_SUCURSAL = "Sin sucursal"
 
-// Leyendas de la pestaña Sucursales: la regla que decide la cuenta de Alegra que factura decide
+// Leyendas de Sucursales y de Zonas y envíos: la regla que decide la cuenta de Alegra que factura decide
 // también con qué cuenta de Mercado Pago y de Payway cobra la tienda (change
 // `cuentas-procesador-por-sucursal`). Se agregan al copy existente, que no se reescribe.
-export const LEYENDA_COBRO_ZONAS =
-  " La misma regla decide con qué cuenta de Mercado Pago y de Payway cobra la tienda: la del CUIT de la sucursal que factura."
 export const HINT_SUCURSAL_QUE_FACTURA =
   "Solo si factura una cuenta distinta de la que despacha. Esa misma cuenta es la que cobra en Mercado Pago y Payway."
 export const DESCRIPCION_CUENTA_ALEGRA =

@@ -16,11 +16,13 @@ const DEBOUNCE_MS = 300
 
 export function CiudadesEnvioSelector({
   label = "Ciudades de envío",
+  hint = "Busque y agregue las localidades. Sin ninguna = toda la zona de la sucursal.",
   value,
   onChange,
   error,
 }: {
   label?: string
+  hint?: string
   value: string[]
   onChange: (ciudades: string[]) => void
   error?: string
@@ -116,7 +118,7 @@ export function CiudadesEnvioSelector({
         </ul>
       )}
       <div className="relative">
-        <Field label={label} hint="Busque y agregue las localidades. Sin ninguna = toda la zona de la sucursal." error={error}>
+        <Field label={label} hint={hint} error={error}>
           <Input
             role="combobox"
             aria-expanded={mostrarLista}

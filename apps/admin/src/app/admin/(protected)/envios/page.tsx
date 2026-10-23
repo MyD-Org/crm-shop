@@ -20,7 +20,7 @@ export default async function EnviosPage() {
       <div className="mb-6 pl-10 md:pl-0">
         <h1 className="text-lg font-semibold" style={{ color: "var(--ink)" }}>Envíos</h1>
         <p className="text-sm mt-0.5" style={{ color: "var(--ink-soft)" }}>
-          Envío a domicilio, envío gratis, plazo de despacho y desde dónde sale el envío
+          Envío a domicilio, envío gratis, plazo de despacho y qué provincias atiende cada sucursal
         </p>
       </div>
       <div className="flex flex-col gap-4">

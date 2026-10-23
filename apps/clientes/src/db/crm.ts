@@ -490,6 +490,13 @@ export const crmReglasVenta = publico.table("reglas_venta", {
   envioGratisMinimoModo: text("envio_gratis_minimo_modo").$type<"sin_minimo" | "desde">(),
   /** Sin impuestos; sólo con modo `desde`. */
   envioGratisMinimo: numeric("envio_gratis_minimo", { precision: 12, scale: 2 }),
+  /**
+   * Plazo de despacho del envío a domicilio (migración 0093 del CRM): si se muestra y en cuántos
+   * días hábiles sale el pedido (1..30, CHECK en el CRM). Como las de envío, NO se leen junto con
+   * el resto de las reglas (ver `leerConfigDespacho` en sucursales-repo.ts).
+   */
+  despachoVisible: boolean("despacho_visible").notNull(),
+  despachoDiasHabiles: integer("despacho_dias_habiles").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

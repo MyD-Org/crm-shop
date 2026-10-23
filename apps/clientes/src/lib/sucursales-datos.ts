@@ -15,6 +15,7 @@ import { conRespaldoSinCache } from "./cache-respaldo";
 import { TAG_SUCURSALES } from "./cache-tags";
 import {
   REGLAS_VENTA_DEFAULT,
+  leerConfigDespacho,
   leerConfigEnvio,
   leerReglasVenta,
   leerSucursalesYZonas,
@@ -53,8 +54,8 @@ async function sucursalesDeCache(): Promise<DatosSucursales> {
  */
 export function reglasVentaCacheadas(): Promise<ReglasVentaTenant> {
   return conRespaldoSinCache("reglas-venta", reglasVentaDeCache, () =>
-    Promise.all([leerReglasVenta(), leerConfigEnvio()])
-      .then(([reglas, envio]) => ({ ...reglas, envio }))
+    Promise.all([leerReglasVenta(), leerConfigEnvio(), leerConfigDespacho()])
+      .then(([reglas, envio, despacho]) => ({ ...reglas, envio, despacho }))
       .catch(() => REGLAS_VENTA_DEFAULT),
   );
 }
@@ -63,9 +64,9 @@ async function reglasVentaDeCache(): Promise<ReglasVentaTenant> {
   "use cache: remote";
   cacheTag(TAG_SUCURSALES);
   try {
-    const [reglas, envio] = await Promise.all([leerReglasVenta(), leerConfigEnvio()]);
+    const [reglas, envio, despacho] = await Promise.all([leerReglasVenta(), leerConfigEnvio(), leerConfigDespacho()]);
     cacheLife("sucursales");
-    return { ...reglas, envio };
+    return { ...reglas, envio, despacho };
   } catch (err) {
     console.error("[sucursales-datos] no se pudieron leer las reglas de venta:", err);
     cacheLife("degradado");

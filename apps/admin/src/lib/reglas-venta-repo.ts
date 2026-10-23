@@ -16,6 +16,12 @@ import {
   type Invalido as InvalidoEnvio,
   type ModoMinimoEnvio,
 } from "@/lib/envios-validacion"
+import {
+  DESPACHO_DEFAULT,
+  validarDespacho,
+  type ConfigDespacho,
+  type Invalido as InvalidoDespacho,
+} from "@/lib/despacho-validacion"
 
 // Acceso a datos de las reglas de venta (change `sucursales-igz-mdp`, rebanada B). Una fila por
 // tenant; si falta (tenant nuevo) se devuelven los defaults y el primer guardado la crea. TODO
@@ -91,4 +97,33 @@ export async function guardarEnvio(tenantId: string, body: unknown): Promise<Res
     .onConflictDoUpdate({ target: reglasVenta.tenantId, set: { ...columnas, updatedAt: new Date() } })
     .returning()
   return { kind: "ok", envio: toEnvioDto(fila) }
+}
+
+// Plazo de despacho (migración 0093). Misma fila, lectura y guardado propios, como el envío.
+
+export const toDespachoDto = (r: Fila): ConfigDespacho => ({
+  visible: r.despachoVisible,
+  diasHabiles: r.despachoDiasHabiles,
+})
+
+export async function leerDespacho(tenantId: string): Promise<ConfigDespacho> {
+  const [fila] = await getDb().select().from(reglasVenta).where(eq(reglasVenta.tenantId, tenantId))
+  return fila ? toDespachoDto(fila) : { ...DESPACHO_DEFAULT }
+}
+
+export type ResultadoDespacho =
+  | { kind: "ok"; despacho: ConfigDespacho }
+  | ({ kind: "invalid" } & Omit<InvalidoDespacho, "ok">)
+
+/** Upsert del plazo de despacho: no pisa las demás reglas de la fila. */
+export async function guardarDespacho(tenantId: string, body: unknown): Promise<ResultadoDespacho> {
+  const v = validarDespacho(body)
+  if (!v.ok) return { kind: "invalid", campo: v.campo, error: v.error }
+  const columnas = { despachoVisible: v.despacho.visible, despachoDiasHabiles: v.despacho.diasHabiles }
+  const [fila] = await getDb()
+    .insert(reglasVenta)
+    .values({ tenantId, ...columnas })
+    .onConflictDoUpdate({ target: reglasVenta.tenantId, set: { ...columnas, updatedAt: new Date() } })
+    .returning()
+  return { kind: "ok", despacho: toDespachoDto(fila) }
 }

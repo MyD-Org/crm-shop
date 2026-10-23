@@ -1213,6 +1213,10 @@ export const reglasVenta = pgTable("reglas_venta", {
   envioGratisMinimoModo: text("envio_gratis_minimo_modo"),
   // Sin impuestos; sólo con modo 'desde'.
   envioGratisMinimo: numeric("envio_gratis_minimo", { precision: 12, scale: 2 }),
+  // Plazo de despacho del envío a domicilio que muestra el Shop (migración 0093). Visible por
+  // defecto; días hábiles desde la compra (1 = "24 h hábiles"). El CHECK 1..30 vive sólo en SQL.
+  despachoVisible: boolean("despacho_visible").notNull().default(true),
+  despachoDiasHabiles: integer("despacho_dias_habiles").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })

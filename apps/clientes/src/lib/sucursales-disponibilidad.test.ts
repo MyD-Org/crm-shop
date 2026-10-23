@@ -30,17 +30,35 @@ describe("disponibleNeto", () => {
 });
 
 describe("disponibilidadPorSucursal: envío", () => {
+  it("el plazo de despacho sale de las reglas: días configurados, null si está oculto", () => {
+    const stockPorSucursal = { P: { "sede-a": 2 }, Q: { "sede-b": 1 } };
+    const r = disponibilidadPorSucursal({
+      ...base,
+      reglas: { ...reglas, despacho: { visible: true, diasHabiles: 3 } },
+      stockPorSucursal,
+    });
+    expect(r.productos.P.envio?.despachoDias).toBe(3);
+    expect(r.productos.Q.envio?.despachoDias).toBe(3);
+    const oculto = disponibilidadPorSucursal({
+      ...base,
+      reglas: { ...reglas, despacho: { visible: false, diasHabiles: 3 } },
+      stockPorSucursal,
+    });
+    expect(oculto.productos.P.envio?.despachoDias).toBeNull();
+    expect(oculto.productos.Q.envio).toMatchObject({ estado: "a_traer", demoraDias: 7, despachoDias: null });
+  });
+
   it("sin stock en la zona el producto sigue visible: sale de la otra sucursal, a traer", () => {
     const r = disponibilidadPorSucursal({ ...base, stockPorSucursal: { P: { "sede-a": 0, "sede-b": 4 } } });
     expect(r.productos.P.servible).toBe(true);
-    expect(r.productos.P.envio).toEqual({ estado: "a_traer", origen: "sede-b", demoraDias: 7 });
+    expect(r.productos.P.envio).toEqual({ estado: "a_traer", origen: "sede-b", demoraDias: 7, despachoDias: 1 });
     expect(r.productos.P.retiro).toBeNull();
     expect(r.lineasATraer).toEqual(["P"]);
   });
 
   it("con stock en el origen: disponible, sin traslado", () => {
     const r = disponibilidadPorSucursal({ ...base, stockPorSucursal: { P: { "sede-a": 2 } } });
-    expect(r.productos.P.envio).toEqual({ estado: "disponible", origen: "sede-a", demoraDias: null });
+    expect(r.productos.P.envio).toEqual({ estado: "disponible", origen: "sede-a", demoraDias: null, despachoDias: 1 });
     expect(r.lineasATraer).toEqual([]);
   });
 
@@ -50,7 +68,7 @@ describe("disponibilidadPorSucursal: envío", () => {
       stockPorSucursal: { P: { "sede-a": 3, "sede-b": 1 } },
       reservadoPorSucursal: { P: { "sede-a": 3 } },
     });
-    expect(r.productos.P.envio).toEqual({ estado: "a_traer", origen: "sede-b", demoraDias: 7 });
+    expect(r.productos.P.envio).toEqual({ estado: "a_traer", origen: "sede-b", demoraDias: 7, despachoDias: 1 });
   });
 
   it("sin stock en ninguna sucursal: sin_stock, pero servible (no se oculta)", () => {
@@ -68,7 +86,7 @@ describe("disponibilidadPorSucursal: envío", () => {
       stockPorSucursal: { P: { "sede-a": 5, "sede-b": 5 } },
       ocultoEn: { P: ["sede-a"] },
     });
-    expect(r.productos.P.envio).toEqual({ estado: "a_traer", origen: "sede-b", demoraDias: 7 });
+    expect(r.productos.P.envio).toEqual({ estado: "a_traer", origen: "sede-b", demoraDias: 7, despachoDias: 1 });
   });
 
   it("oculto en todas: no servible, aunque haya stock", () => {
@@ -83,7 +101,7 @@ describe("disponibilidadPorSucursal: envío", () => {
 
   it("no inventariable (null): siempre disponible en el origen", () => {
     const r = disponibilidadPorSucursal({ ...base, stockPorSucursal: { N: null } });
-    expect(r.productos.N.envio).toEqual({ estado: "disponible", origen: "sede-a", demoraDias: null });
+    expect(r.productos.N.envio).toEqual({ estado: "disponible", origen: "sede-a", demoraDias: null, despachoDias: 1 });
   });
 
   it("demora 0 se informa como 0 (a coordinar), no como null", () => {
@@ -101,7 +119,7 @@ describe("disponibilidadPorSucursal: envío", () => {
       stockPorSucursal: { P: { "sede-a": 2, "sede-b": 5 } },
       cantidades: { P: 3 },
     });
-    expect(r.productos.P.envio).toEqual({ estado: "a_traer", origen: "sede-b", demoraDias: 7 });
+    expect(r.productos.P.envio).toEqual({ estado: "a_traer", origen: "sede-b", demoraDias: 7, despachoDias: 1 });
   });
 
   it("es determinista y no muta la entrada", () => {

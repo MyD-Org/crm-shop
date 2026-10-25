@@ -10,16 +10,19 @@
  *   MÁS GRANDE que figura en el overlay; no todas las fotos tienen las tres
  *   (hay cargas con sólo 320 y 800), así que nunca se pide una más grande que
  *   esa. Dentro de ese tope, la más chica que cubra el ancho del srcset.
- * - Cualquier otra URL (imágenes de la home, logos, archivos de public/) se
+ * - Cualquier otra URL (imágenes de la home y logos de marca en `home/`, que
+ *   tienen una sola variante de 1600; archivos de public/) se
  *   sirve tal cual.
  *
  * Módulo PURO y sin alias `@/`: lo carga next/image en cliente y en server.
  */
+// Sólo fotos de productos: las de la home y las marcas (`home/...`) tienen UNA variante (1600).
+const FOTO_PRODUCTO = /\/productos\/.+-(320|800|1600)\.webp$/;
 const VARIANTE = /-(320|800|1600)\.webp$/;
 const ANCHOS = [320, 800, 1600] as const;
 
 export default function cargadorImagen({ src, width }: { src: string; width: number; quality?: number }): string {
-  const m = VARIANTE.exec(src);
+  const m = FOTO_PRODUCTO.exec(src);
   if (!m) return src;
   const tope = Number(m[1]);
   const disponibles = ANCHOS.filter((a) => a <= tope);

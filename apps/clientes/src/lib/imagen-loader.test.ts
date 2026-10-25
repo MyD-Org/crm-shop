@@ -8,11 +8,18 @@ describe("cargadorImagen", () => {
     expect(cargadorImagen({ src: foto(1600), width: 256 })).toBe(foto(320));
     expect(cargadorImagen({ src: foto(1600), width: 320 })).toBe(foto(320));
     expect(cargadorImagen({ src: foto(1600), width: 640 })).toBe(foto(800));
-    expect(cargadorImagen({ src: foto(320), width: 1080 })).toBe(foto(1600));
+    expect(cargadorImagen({ src: foto(1600), width: 1080 })).toBe(foto(1600));
   });
 
   it("por encima de 1600 se queda con la de 1600", () => {
-    expect(cargadorImagen({ src: foto(800), width: 3840 })).toBe(foto(1600));
+    expect(cargadorImagen({ src: foto(1600), width: 3840 })).toBe(foto(1600));
+  });
+
+  it("nunca pide una variante más grande que la que llega (puede no existir)", () => {
+    expect(cargadorImagen({ src: foto(800), width: 1080 })).toBe(foto(800));
+    expect(cargadorImagen({ src: foto(800), width: 640 })).toBe(foto(800));
+    expect(cargadorImagen({ src: foto(800), width: 256 })).toBe(foto(320));
+    expect(cargadorImagen({ src: foto(320), width: 1600 })).toBe(foto(320));
   });
 
   it("otras URLs van tal cual (nunca por el optimizador)", () => {

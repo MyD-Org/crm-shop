@@ -25,5 +25,7 @@ describe("cargadorImagen", () => {
   it("otras URLs van tal cual (nunca por el optimizador)", () => {
     expect(cargadorImagen({ src: "/images/hero-neutral.webp", width: 828 })).toBe("/images/hero-neutral.webp");
     expect(cargadorImagen({ src: "https://medios.example/home/hero.jpg", width: 828 })).toBe("https://medios.example/home/hero.jpg");
+    const logo = "https://medios.example/home/central-led/48d9ae91-da35-476b-9aaa-c8306efd9b49-1600.webp";
+    expect(cargadorImagen({ src: logo, width: 320 })).toBe(logo);
   });
 });

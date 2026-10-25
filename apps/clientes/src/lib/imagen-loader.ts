@@ -5,10 +5,11 @@
  * mensual se agota y a partir de ahí toda imagen que no esté en caché responde
  * 402 y la card queda rota.
  *
- * - Fotos del catálogo (overlay del CRM en R2): el admin ya sube cada foto en
- *   los anchos de ANCHOS_FOTO (`<uuid>-320.webp`, `-800.webp`, `-1600.webp`;
- *   las tres existen siempre, aunque la original sea más chica). Se pide la
- *   más chica que cubra el ancho del srcset.
+ * - Fotos del catálogo (overlay del CRM en R2): cada foto se guarda en anchos
+ *   de 320/800/1600 (`<uuid>-320.webp`, ...). La URL que llega es la variante
+ *   MÁS GRANDE que figura en el overlay; no todas las fotos tienen las tres
+ *   (hay cargas con sólo 320 y 800), así que nunca se pide una más grande que
+ *   esa. Dentro de ese tope, la más chica que cubra el ancho del srcset.
  * - Cualquier otra URL (imágenes de la home, logos, archivos de public/) se
  *   sirve tal cual.
  *
@@ -18,7 +19,10 @@ const VARIANTE = /-(320|800|1600)\.webp$/;
 const ANCHOS = [320, 800, 1600] as const;
 
 export default function cargadorImagen({ src, width }: { src: string; width: number; quality?: number }): string {
-  if (!VARIANTE.test(src)) return src;
-  const ancho = ANCHOS.find((a) => a >= width) ?? ANCHOS[ANCHOS.length - 1];
+  const m = VARIANTE.exec(src);
+  if (!m) return src;
+  const tope = Number(m[1]);
+  const disponibles = ANCHOS.filter((a) => a <= tope);
+  const ancho = disponibles.find((a) => a >= width) ?? tope;
   return src.replace(VARIANTE, `-${ancho}.webp`);
 }

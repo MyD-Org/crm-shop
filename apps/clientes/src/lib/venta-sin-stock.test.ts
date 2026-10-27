@@ -55,6 +55,15 @@ describe("venta sin stock (módulo puro)", () => {
     expect(pedidoAConfirmarPorModalidad("transferencia", [{ ventaSinStock: s }])).toBe(false);
   });
 
+  it("pedidoAConfirmarPorModalidad: la misma regla sobre las líneas de la cotización (pantalla de éxito)", () => {
+    // Líneas de `LineaCotizada` (VentaSinStock sin nombre), como las del pedido recién creado.
+    expect(pedidoAConfirmarPorModalidad("a_coordinar", [{ ventaSinStock: C }, {}])).toBe(true);
+    expect(pedidoAConfirmarPorModalidad("a_coordinar", [{ ventaSinStock: M }, {}])).toBe(false);
+    // Cuenta corriente con su medio activo: no es "a confirmar por modalidad" (sigue con su texto).
+    expect(pedidoAConfirmarPorModalidad("efectivo-cheque", [{ ventaSinStock: C }])).toBe(false);
+    expect(pedidoAConfirmarPorModalidad("a_coordinar", [])).toBe(false);
+  });
+
   it("aVentaSinStock quita el nombre; modalidadPorId busca por id", () => {
     const v = aVentaSinStock({ ...M, nombre: "Interna" });
     expect(v).toEqual(M);

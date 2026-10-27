@@ -107,7 +107,9 @@ describe("CheckoutClient: pedido a confirmar por modalidad", () => {
   });
 
   it('éxito: "Pedido recibido" con el texto sin cobro y el bloque de contacto', () => {
-    expect(fuente).toContain('aConfirmar: !esCuentaCorriente && json.cotizacion?.flujo === "a_confirmar",');
+    // La misma regla que el mail y Mi cuenta (`pedidoAConfirmarPorModalidad`), sobre el medio enviado
+    // y las líneas de la cotización del pedido.
+    expect(fuente).toContain("aConfirmar: pedidoAConfirmarPorModalidad(pagoParaEnviar, json.cotizacion?.lineas ?? []),");
     expect(fuente).toContain(") : confirmado.aConfirmar ? (\n              <>{TEXTO_PEDIDO_A_CONFIRMAR}</>");
     // Antes que la rama de "sin medio" (a confirmar puede tener un medio elegido de antes).
     expect(fuente.indexOf("confirmado.aConfirmar ? (")).toBeLessThan(fuente.indexOf(") : !medioSel ? ("));

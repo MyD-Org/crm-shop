@@ -60,7 +60,12 @@ import { provinciaCanonica } from "@/lib/provincias";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import { pagoAEnviar, pasosCheckout, trasGuardarFacturacion, type PasoCheckout } from "@/lib/checkout-flujo";
-import { TEXTO_CARRITO_A_CONFIRMAR, TEXTO_PEDIDO_A_CONFIRMAR, type FlujoPedido } from "@/lib/venta-sin-stock";
+import {
+  TEXTO_CARRITO_A_CONFIRMAR,
+  TEXTO_PEDIDO_A_CONFIRMAR,
+  pedidoAConfirmarPorModalidad,
+  type FlujoPedido,
+} from "@/lib/venta-sin-stock";
 import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
 import { CardOpcionPago } from "@/components/checkout/CardOpcionPago";
 import { textoBannerDelMedio, textoDeAhorro, type ChipMedio } from "@/lib/medios-pago-chips";
@@ -1150,8 +1155,10 @@ export function CheckoutClient({
         ...(typeof json.mpCuenta === "string" ? { mpCuenta: json.mpCuenta } : {}),
         contacto: json.contacto ?? null,
         cuentaPago: json.cuentaPago ?? null,
-        // El flujo que resolvió el servidor al crear el pedido. Cuenta corriente sigue con su medio.
-        aConfirmar: !esCuentaCorriente && json.cotizacion?.flujo === "a_confirmar",
+        // A confirmar por modalidad con la misma regla que el mail y Mi cuenta: salió "a_coordinar" con
+        // una línea a pedido a confirmar (también cuenta corriente sin su medio activo). Con su medio,
+        // cuenta corriente sigue con su texto.
+        aConfirmar: pedidoAConfirmarPorModalidad(pagoParaEnviar, json.cotizacion?.lineas ?? []),
       });
       // Conversión: al crear el pedido, también con Mercado Pago todavía impago.
       track({

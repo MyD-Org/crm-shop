@@ -97,9 +97,14 @@ export function textoPlazoHabil(plazoDias: number | null): string {
   return plazoDias === 1 ? "1 día hábil" : `${plazoDias} días hábiles`;
 }
 
+/**
+ * Pedido a confirmar por modalidad: salió "a_coordinar" con alguna línea a pedido de flujo
+ * `a_confirmar`. La MISMA regla para la pantalla de éxito del checkout (líneas de la cotización del
+ * pedido), el mail y Mi cuenta (snapshots de `order_items`); sólo mira el `flujo` de cada línea.
+ */
 export function pedidoAConfirmarPorModalidad(
   pagoMetodo: string,
-  items: readonly { ventaSinStock?: SnapshotVentaSinStock | null }[],
+  items: readonly { ventaSinStock?: Pick<VentaSinStock, "flujo"> | null }[],
 ): boolean {
   return pagoMetodo === "a_coordinar" && items.some((i) => i.ventaSinStock?.flujo === "a_confirmar");
 }

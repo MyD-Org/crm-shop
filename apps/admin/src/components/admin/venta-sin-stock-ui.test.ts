@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { validarModalidad, type ModalidadSinStock } from "@/lib/modalidades-sin-stock-validacion"
-import { bodyDesdeForm, formDesdeModalidad, resumenModalidad } from "./venta-sin-stock-ui"
+import { bodyDesdeForm, formDesdeModalidad, opcionesModalidad, resumenModalidad } from "./venta-sin-stock-ui"
 
 const m: ModalidadSinStock = { id: "m1", nombre: "Modalidad 48 h", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea", activa: true }
 
@@ -15,6 +15,14 @@ describe("venta-sin-stock-ui", () => {
     }))
   it("con plazo manda el texto del plazo", () =>
     expect(bodyDesdeForm({ nombre: "A", texto: "B", plazo: " 7 ", aCoordinar: false, flujo: "en_linea", activa: false })).toMatchObject({ plazoDias: "7", activa: false }))
+  it("opciones: Ninguna primero e inactivas marcadas", () => {
+    const inactiva: ModalidadSinStock = { ...m, id: "m2", nombre: "A pedido", activa: false }
+    expect(opcionesModalidad([m, inactiva])).toEqual([
+      { value: "ninguna", label: "Ninguna" },
+      { value: "m1", label: "Modalidad 48 h" },
+      { value: "m2", label: "A pedido (inactiva)" },
+    ])
+  })
   it("formulario vacío: pago en línea, activa, sin plazo", () =>
     expect(formDesdeModalidad()).toEqual({ nombre: "", texto: "", plazo: "", aCoordinar: false, flujo: "en_linea", activa: true }))
   it("ida y vuelta form ↔ modalidad", () => {

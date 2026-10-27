@@ -56,11 +56,13 @@ import {
   type Seleccion,
   type TagDto,
 } from "./tipos"
+import type { ModalidadSinStock } from "@/lib/modalidades-sin-stock-validacion"
 import { FILTROS_INICIALES, conInactivos, verInactivos } from "./inactivos"
 
 interface Props {
   categorias: CategoriaDto[]
   tags: TagDto[]
+  modalidades: ModalidadSinStock[]
   /** Cuentas de Alegra del tenant; con más de una aparece el filtro "Cuenta". */
   cuentas: CuentaOrigenDto[]
   /** Sucursales del tenant; con más de una aparecen el filtro "Visible en" y el badge "Oculto en …". */
@@ -139,7 +141,7 @@ function ConAyuda({ titulo, texto }: { titulo: string; texto: string }) {
   )
 }
 
-export function ProductosPanel({ categorias, tags, cuentas, sucursales, busquedaInicial, onTagCreado, onCambio }: Props) {
+export function ProductosPanel({ categorias, tags, modalidades, cuentas, sucursales, busquedaInicial, onTagCreado, onCambio }: Props) {
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_INICIALES)
   const [busqueda, setBusqueda] = useState(busquedaInicial ?? "")
   const [start, setStart] = useState(0)
@@ -872,6 +874,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
           producto={abierto}
           categorias={categorias}
           tags={tags}
+          modalidades={modalidades}
           sucursales={sucursales}
           sincronizacion={datos?.sincronizacion ?? { alegra: null, avisoShop: { ultimoOkAt: null, ultimoIntentoAt: null } }}
           onCerrar={() => setAbierto(null)}

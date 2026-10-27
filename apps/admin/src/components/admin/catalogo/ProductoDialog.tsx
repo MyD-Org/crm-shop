@@ -19,7 +19,9 @@ import {
   type SucursalOpcionDto,
   type TagDto,
 } from "./tipos"
+import type { ModalidadSinStock } from "@/lib/modalidades-sin-stock-validacion"
 import { AyudaTooltip } from "../AyudaTooltip"
+import { opcionesModalidad } from "../venta-sin-stock-ui"
 import { AYUDA_VISIBLE_EN } from "./ayudas"
 import { estadoAlegraTexto } from "./inactivos"
 import { FotosProducto } from "./FotosProducto"
@@ -33,6 +35,8 @@ interface Props {
   producto: ProductoDto
   categorias: CategoriaDto[]
   tags: TagDto[]
+  /** Modalidades de venta sin stock del tenant, para el selector "Venta sin stock". */
+  modalidades: ModalidadSinStock[]
   /** Sucursales del tenant, para "Visible en" (el campo aparece solo con más de una). */
   sucursales: SucursalOpcionDto[]
   sincronizacion: Sincronizacion
@@ -56,8 +60,9 @@ export function caminoCategoria(categorias: CategoriaDto[], id: string): string 
 
 /** Radix reserva el string vacío en Select: con `""` la opción no se muestra. */
 const SIN_CATEGORIA = "sin-categoria"
+const SIN_MODALIDAD = "ninguna"
 
-export function ProductoDialog({ producto, categorias, tags, sucursales, sincronizacion, onCerrar, onGuardado, onTagCreado }: Props) {
+export function ProductoDialog({ producto, categorias, tags, modalidades, sucursales, sincronizacion, onCerrar, onGuardado, onTagCreado }: Props) {
   const [nombre, setNombre] = useState(producto.nombre ?? "")
   const [descripcion, setDescripcion] = useState(producto.descripcion ?? "")
   const [categoriaId, setCategoriaId] = useState(producto.categoriaId ?? SIN_CATEGORIA)
@@ -65,6 +70,7 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
   const [visible, setVisible] = useState(producto.visible)
   const [ocultoEn, setOcultoEn] = useState<string[]>(producto.ocultoEnSucursales)
   const [mostrarMarca, setMostrarMarca] = useState(producto.mostrarMarca)
+  const [modalidadId, setModalidadId] = useState(producto.modalidadSinStockId ?? SIN_MODALIDAD)
   const formularioInicial = formularioDeOrden(producto.orden)
   const [destacado, setDestacado] = useState(formularioInicial.destacado)
   const [posicion, setPosicion] = useState(formularioInicial.posicion)
@@ -106,6 +112,10 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
             visible,
             mostrarMarca,
             tagIds,
+            // Solo se manda si cambió: así guardar otro dato no revalida una modalidad ya borrada.
+            ...(modalidadId !== (producto.modalidadSinStockId ?? SIN_MODALIDAD)
+              ? { modalidadSinStockId: modalidadId === SIN_MODALIDAD ? null : modalidadId }
+              : {}),
             ...(cambioDestacado && orden.ok ? { orden: orden.orden } : {}),
             // Solo se manda si el campo se mostró: con una sola sucursal no hay nada que elegir.
             ...(sucursales.length > 1 ? { ocultoEnSucursales: ocultoEn } : {}),
@@ -308,6 +318,10 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
               <Checkbox checked={mostrarMarca} onCheckedChange={setMostrarMarca} aria-label="Mostrar la marca en la tienda" />
               Mostrar la marca en la tienda
             </label>
+
+            <Field label="Venta sin stock" hint="Sólo se aplica cuando el producto no tiene stock disponible.">
+              <Select options={opcionesModalidad(modalidades)} value={modalidadId} onValueChange={setModalidadId} />
+            </Field>
 
             <div className="flex flex-col gap-2">
               <label className="flex items-center gap-2 text-sm" style={{ color: "var(--ink)" }}>

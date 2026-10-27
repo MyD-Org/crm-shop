@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterAll, vi } from "vitest"
 import { and, eq } from "drizzle-orm"
 import { NextRequest } from "next/server"
 import { getDb } from "@/db"
-import { catalogOverlay, catalogProducts, shopCategories, shopTags } from "@/db/schema"
+import { catalogOverlay, catalogProducts, modalidadesSinStock, shopCategories, shopTags } from "@/db/schema"
 import { crearCategoria, guardarOverlay } from "@/lib/catalogo-overlay-repo"
 import { crearSucursal } from "@/lib/sucursales-repo"
 import { seedOperator, seedTenant, truncateAll } from "./helpers"
@@ -181,6 +181,36 @@ describe("API del panel de catálogo — productos", () => {
 
       const [fila] = await getDb().select().from(catalogOverlay).where(eq(catalogOverlay.alegraId, "1"))
       expect(fila?.categoriaId ?? null).toBeNull()
+    })
+
+    it("modalidad sin stock: una de otro tenant o inexistente se rechaza; una propia se guarda y viaja en el detalle", async () => {
+      await seedProducto(TENANT_A, "1")
+      const [ajena, propia] = await getDb()
+        .insert(modalidadesSinStock)
+        .values([
+          { tenantId: TENANT_B, nombre: "Ajena", texto: "A pedido", flujo: "a_confirmar" },
+          { tenantId: TENANT_A, nombre: "Modalidad 48 h", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea" },
+        ])
+        .returning()
+      const patch = (modalidadSinStockId: string | null) =>
+        producto.PATCH(req("/api/admin/catalogo/productos/1", { method: "PATCH", body: { modalidadSinStockId } }), params("1"))
+
+      for (const id of [ajena.id, "3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b"]) {
+        const res = await patch(id)
+        expect(res.status).toBe(422)
+        expect((await res.json()).campo).toBe("modalidadSinStockId")
+      }
+      const [sinFila] = await getDb().select().from(catalogOverlay).where(eq(catalogOverlay.alegraId, "1"))
+      expect(sinFila?.modalidadSinStockId ?? null).toBeNull()
+
+      const ok = await patch(propia.id)
+      expect(ok.status).toBe(200)
+      expect((await ok.json()).producto.modalidadSinStockId).toBe(propia.id)
+      const detalle = await producto.GET(req("/api/admin/catalogo/productos/1"), params("1"))
+      expect((await detalle.json()).producto.modalidadSinStockId).toBe(propia.id)
+
+      const quitada = await patch(null)
+      expect((await quitada.json()).producto.modalidadSinStockId).toBeNull()
     })
 
     it("una etiqueta de otro tenant no se asigna", async () => {

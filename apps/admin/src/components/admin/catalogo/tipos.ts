@@ -55,6 +55,7 @@ export interface ProductoDto {
   ocultoEnSucursales: string[]
   /** false = el Shop no exhibe la marca. */
   mostrarMarca: boolean
+  modalidadSinStockId: string | null
   actualizadoEn: string | null
   motivos: MotivoNoPublicado[]
   /** Cuenta de Alegra de origen cuando NO es la principal (producto solo de esa cuenta). null = principal. */

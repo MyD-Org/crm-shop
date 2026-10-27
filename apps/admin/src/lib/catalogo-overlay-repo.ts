@@ -519,6 +519,8 @@ export interface CamposOverlay {
   ocultoEnSucursales?: string[]
   /** false = el Shop no exhibe la marca del producto. */
   mostrarMarca?: boolean
+  /** Modalidad de venta sin stock; null = ninguna. */
+  modalidadSinStockId?: string | null
 }
 
 /**
@@ -543,6 +545,7 @@ export async function guardarOverlay(
   if (campos.fichaTecnica !== undefined) set.fichaTecnica = campos.fichaTecnica
   if (campos.ocultoEnSucursales !== undefined) set.ocultoEnSucursales = campos.ocultoEnSucursales
   if (campos.mostrarMarca !== undefined) set.mostrarMarca = campos.mostrarMarca
+  if (campos.modalidadSinStockId !== undefined) set.modalidadSinStockId = campos.modalidadSinStockId
 
   const [row] = await ejecutor
     .insert(catalogOverlay)
@@ -1020,6 +1023,8 @@ export interface ProductoAdmin {
   ocultoEnSucursales: string[]
   /** false = el Shop no exhibe la marca. Sin overlay, true. */
   mostrarMarca: boolean
+  /** Modalidad de venta sin stock asignada (null = ninguna). */
+  modalidadSinStockId: string | null
   actualizadoEn: string | null
   motivos: MotivoNoPublicado[]
   /**
@@ -1094,6 +1099,7 @@ interface FilaListadoCruda {
   ficha_tecnica: FichaTecnicaOverlay | null
   oculto_en_sucursales: string[] | null
   mostrar_marca: boolean | null
+  modalidad_sin_stock_id: string | null
   updated_at: Date | string | null
   nombre_efectivo: string
   sku: string
@@ -1155,6 +1161,7 @@ function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
     fichaTecnica: f.ficha_tecnica ?? null,
     ocultoEnSucursales: f.oculto_en_sucursales ?? [],
     mostrarMarca: f.mostrar_marca ?? true,
+    modalidadSinStockId: f.modalidad_sin_stock_id ?? null,
     actualizadoEn: iso(f.updated_at),
     // Orientativo: el Shop vuelve a evaluar la regla sobre SU copia y su evaluación es la que manda.
     motivos: motivoNoPublicado({ visible, status: f.status, alegraStatus: f.alegra_status, prices: f.prices }),
@@ -1199,7 +1206,7 @@ async function stockPorSucursal(
 /** Las columnas del listado y de la ficha son las mismas: una sola definición, un solo orden. */
 const columnasListado = sql`
   p.alegra_id, p.code, p.name, p.description, p.status, p.alegra_status, p.prices, p.stock, p.synced_at,
-  o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, o.oculto_en_sucursales, o.mostrar_marca, o.updated_at,
+  o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, o.oculto_en_sucursales, o.mostrar_marca, o.modalidad_sin_stock_id, o.updated_at,
   c.nombre AS categoria_nombre,
   ac.slug AS cuenta_slug, ac.nombre AS cuenta_nombre,
   p.tipo, p.grupo_id, p.etiqueta, (p.tipo = 'padre' OR p.grupo_id = p.alegra_id) AS es_ancla,

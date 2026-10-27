@@ -32,6 +32,14 @@ export function bodyDesdeForm(f: FormModalidad): unknown {
   }
 }
 
+/** Opciones del selector del producto. "ninguna" (Radix no admite "") se traduce a null al guardar. */
+export function opcionesModalidad(modalidades: ModalidadSinStock[]): { value: string; label: string }[] {
+  return [
+    { value: "ninguna", label: "Ninguna" },
+    ...modalidades.map((m) => ({ value: m.id, label: m.activa ? m.nombre : `${m.nombre} (inactiva)` })),
+  ]
+}
+
 export function resumenModalidad(m: ModalidadSinStock): string {
   return [m.texto, textoPlazo(m.plazoDias), ETIQUETA_FLUJO[m.flujo]].join(" · ")
 }

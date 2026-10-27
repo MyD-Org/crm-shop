@@ -7,17 +7,20 @@ import { fmtPrecio } from "./format";
 
 /**
  * Subtítulo de una línea: "Cód. X · 2 u." en la card y, en el detalle,
- * también el unitario ("… · $ 538 c/u"). Si el código repite el nombre (el
- * ítem ya no está en el espejo y sólo queda el snapshot), no se repite.
+ * también el unitario ("… · $ 538 c/u"); una línea a pedido suma al final el texto de su
+ * modalidad. Si el código repite el nombre (el ítem ya no está en el espejo y sólo queda el
+ * snapshot), no se repite.
  */
 export function subtituloLinea(
-  item: Pick<OrderItem, "codigo" | "nombreVisible" | "qty" | "price">,
+  item: Pick<OrderItem, "codigo" | "nombreVisible" | "qty" | "price" | "aPedido">,
   { detalle = false }: { detalle?: boolean } = {},
 ): string {
   const partes: string[] = [];
   if (item.codigo !== item.nombreVisible) partes.push(`Cód. ${item.codigo}`);
   partes.push(`${item.qty} u.`);
   if (detalle) partes.push(`${fmtPrecio(item.price)} c/u`);
+  // Línea a pedido (venta sin stock): el texto de su modalidad, al final.
+  if (item.aPedido) partes.push(item.aPedido);
   return partes.join(" · ");
 }
 

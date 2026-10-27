@@ -52,7 +52,13 @@ import { leerReglasVenta, leerSucursalesYZonas, type ReglasVentaTenant } from ".
 import { decidirSucursalDePedido } from "./sucursales-pedido";
 import { disponibleNeto } from "./sucursales-disponibilidad";
 import { leerDisponibilidadBruta } from "./stock-sucursal";
-import { snapshotLinea, VentaSinStockCambioError, type SnapshotVentaSinStock } from "./venta-sin-stock";
+import {
+  leerSnapshot,
+  pedidoAConfirmarPorModalidad,
+  snapshotLinea,
+  VentaSinStockCambioError,
+  type SnapshotVentaSinStock,
+} from "./venta-sin-stock";
 import { leerModalidadesActivas } from "./venta-sin-stock-repo";
 import {
   armarSnapshotCuenta,
@@ -632,9 +638,17 @@ export function armarOrder(
     ...(fila.facturaNumero ? { facturaNumero: fila.facturaNumero } : {}),
     ...(comprobanteInformado ? { comprobanteInformado: true } : {}),
     ...(pagoEnProceso ? { pagoEnProceso: true } : {}),
+    ...(pedidoAConfirmarPorModalidad(
+      fila.pagoMetodo,
+      items.map((i) => ({ ventaSinStock: leerSnapshot(i.ventaSinStock) })),
+    )
+      ? { aConfirmar: true }
+      : {}),
     items: items.map((i): OrderItem => {
       const producto = productos.get(i.alegraItemId);
       const imagen = producto?.images?.[0];
+      // Del snapshot: un pedido sigue mostrando el texto aunque la modalidad se haya borrado.
+      const aPedido = leerSnapshot(i.ventaSinStock)?.texto;
       return {
         id: i.alegraItemId,
         name: i.name,
@@ -646,6 +660,7 @@ export function armarOrder(
         nombreVisible: (producto && nombreDeLinea(producto)) || i.name,
         codigo: i.code || producto?.sku || i.name,
         ...(imagen ? { imagen } : {}),
+        ...(aPedido ? { aPedido } : {}),
       };
     }),
   };

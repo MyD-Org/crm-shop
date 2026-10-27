@@ -283,3 +283,51 @@ describe("armarMailPedidoOperador", () => {
     expect(infracciones(m.text, REGISTRO)).toEqual([]);
   });
 });
+
+describe("venta sin stock: pedido a confirmar y texto por línea", () => {
+  const BASE = base;
+
+  it("mail recibido a confirmar: sin cobro y con el texto por línea", () => {
+    const m = armarMailPedido({ ...BASE, aviso: "recibido", aConfirmar: true, lineas: [{ nombre: "Panel", cantidad: 2, aPedido: "A pedido" }] });
+    expect(m.text).toContain("no se realizó ningún cobro");
+    expect(m.text).toContain(
+      "Registramos su pedido. Quedó a confirmar y no se realizó ningún cobro: nos comunicaremos con usted para confirmarlo. Le avisaremos por este medio cada vez que avance.",
+    );
+    expect(m.text).toContain("- Panel × 2 (A pedido)");
+    expect(m.html).toContain("A pedido");
+    expect(infracciones(m.text, REGISTRO)).toEqual([]);
+  });
+
+  it("mail sin modalidad: igual que hoy (snapshot del texto)", () => {
+    const datos = { ...BASE, aviso: "recibido" as const, lineas: [{ nombre: "Panel", cantidad: 2 }], total: 100, pago: "A coordinar" };
+    const hoy = armarMailPedido(datos);
+    expect(armarMailPedido({ ...datos, aConfirmar: false })).toEqual(hoy);
+    expect(hoy.text).toContain("Registramos su pedido. Le avisaremos por este medio cada vez que avance.");
+    expect(hoy.text).toContain("- Panel × 2\n");
+    expect(hoy.text).not.toContain("ningún cobro");
+  });
+
+  it("el texto de la línea va escapado en el HTML, bajo el nombre", () => {
+    const m = armarMailPedido({ ...BASE, aviso: "recibido", lineas: [{ nombre: "Panel", cantidad: 1, aPedido: "Modalidad <48 h>" }] });
+    expect(m.html).toContain("Modalidad &lt;48 h&gt;");
+    expect(m.html).not.toContain("<48 h>");
+    expect(m.html.indexOf("Panel")).toBeLessThan(m.html.indexOf("Modalidad &lt;48 h&gt;"));
+  });
+
+  it("al local: la línea a pedido lleva su texto", () => {
+    const m = armarMailPedidoOperador({
+      numero: "PED-00000042",
+      comercio: "Tienda Demo",
+      contactoNombre: "Ana",
+      contactoTelefono: "3757 400000",
+      lineas: [
+        { nombre: "Panel", cantidad: 2, aPedido: "A pedido" },
+        { nombre: "Lámpara", cantidad: 1 },
+      ],
+      total: 100,
+    });
+    expect(m.text).toContain("- Panel × 2 (A pedido)");
+    expect(m.text).toContain("- Lámpara × 1\n");
+    expect(m.html).toContain("A pedido");
+  });
+});

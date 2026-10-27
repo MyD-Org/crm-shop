@@ -59,6 +59,8 @@ import {
 import { provinciaCanonica } from "@/lib/provincias";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
+import { pagoAEnviar, pasosCheckout, type PasoCheckout } from "@/lib/checkout-flujo";
+import { TEXTO_CARRITO_A_CONFIRMAR, TEXTO_PEDIDO_A_CONFIRMAR, type FlujoPedido } from "@/lib/venta-sin-stock";
 import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
 import { CardOpcionPago } from "@/components/checkout/CardOpcionPago";
 import { textoBannerDelMedio, textoDeAhorro, type ChipMedio } from "@/lib/medios-pago-chips";
@@ -119,10 +121,6 @@ function AlertIcon() {
     </svg>
   );
 }
-
-type PasoCheckout = "datos" | "entrega" | "pago";
-
-const PASOS_CHECKOUT: PasoCheckout[] = ["datos", "entrega", "pago"];
 
 /** Facturación ya cargada, en lectura, dentro del paso "Sus datos". */
 function ResumenFacturacion({ datos }: { datos: DatosDelContactoPublico["datos"] }) {
@@ -593,6 +591,8 @@ export function CheckoutClient({
     contacto?: ContactoPedidoVista | null;
     /** Cuenta congelada en el pedido (transferencia); null = sin cuenta aplicable. */
     cuentaPago?: CuentaPagoSnapshot | null;
+    /** Pedido a confirmar por modalidad (venta sin stock): no se cobró nada, se confirma por contacto. */
+    aConfirmar?: boolean;
   } | null>(null);
   const [pagado, setPagado] = useState(false);
   /** Pedido pendiente al que se le está cambiando el medio de pago: "Confirmar" lo actualiza en vez de crear otro. */
@@ -785,6 +785,19 @@ export function CheckoutClient({
   // de retiro a envío), se corrige DERIVÁNDOLO en el render, sin efecto: sin un frame con una opción
   // que el servidor rechazaría.
   const opcionesMedios = { esCuentaCorriente };
+  // Venta sin stock: el flujo del pedido lo resuelve el servidor al cotizar (`cotizacion.flujo`, más
+  // abajo). Se guarda el último visto para no parpadear entre cotizaciones; un 409
+  // `pedido_a_confirmar` lo cambia antes de recotizar. A confirmar (sin cuenta corriente) no hay paso
+  // Pago y el pedido sale "a_coordinar".
+  const [flujoVisto, setFlujoVisto] = useState<FlujoPedido>("normal");
+  // Al cambiarle el medio a un pedido que ya existe no aplica: su propia reserva puede hacer leer "a
+  // pedido" una línea que no lo era, y eso no le cambia el flujo (ver `cotizarConMedio`).
+  const flujoCheckout: FlujoPedido = pedidoACambiar ? "normal" : flujoVisto;
+  const pasos = pasosCheckout({ flujo: flujoCheckout, esCuentaCorriente });
+  const pasoFinal = pasos[pasos.length - 1];
+  const sinPasoPago = !pasos.includes("pago");
+  // El flujo cambió estando en un paso que ya no existe (Pago): se vuelve al último.
+  if (!pasos.includes(pasoActual)) setPasoActual(pasoFinal);
   const mediosParaElegir = mediosParaModalidad(mediosPago, entrega, opcionesMedios);
   /** Formas de pago (crédito, débito, cuenta de Mercado Pago) que el admin habilitó para el medio del procesador. */
   const opcionesCobroDe = (procesador: string | null | undefined) =>
@@ -793,7 +806,7 @@ export function CheckoutClient({
   const opcionesPago = esCuentaCorriente ? [] : opcionesDePago(mediosParaElegir);
   const opcionSel = opcionElegida(opcionesPago, opcionClave);
   const medioSel = medioElegido(mediosPago, entrega, opcionSel?.slug ?? "", opcionesMedios);
-  const pagoParaEnviar: string = medioSel?.slug ?? "a_coordinar";
+  const pagoParaEnviar: string = pagoAEnviar({ flujo: flujoCheckout, esCuentaCorriente, medioSlug: medioSel?.slug ?? null });
   const pagaEnLinea = esPagoEnLinea(pagoParaEnviar);
   // Cuotas sin interés: el medio de cobro en línea con condiciones las pide al servidor, que sólo
   // devuelve opciones con el flag `cuotas-cobro` prendido. Sin opciones no hay selector ni cuotas.
@@ -823,6 +836,7 @@ export function CheckoutClient({
     provincia: aDomicilio && provinciaEntrega ? provinciaEntrega : undefined,
     // Con Transferencia también pide la cuenta; cambiar el local de retiro la recalcula.
     conCuenta,
+    // El local de retiro viaja siempre (el mismo que el pedido): decide qué líneas van a pedido.
     sucursalRetiro: localParaCuenta,
     // El precio depende del medio (lista de precios enlazada): cambiar a un medio con otra lista
     // recotiza; entre medios sin lista o con la misma lista no se pide nada.
@@ -842,6 +856,9 @@ export function CheckoutClient({
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
+
+  const flujoCotizado = cotizacion?.flujo;
+  if (flujoCotizado && flujoCotizado !== flujoVisto) setFlujoVisto(flujoCotizado);
 
   const opcionesCuotas = pideCuotas ? (cotizacion?.cuotasOpciones ?? ultimasCuotasOpciones ?? []) : [];
   // Totales de las cards: no dependen de la card elegida, así que se conservan mientras se recotiza.
@@ -930,7 +947,7 @@ export function CheckoutClient({
     // Al cambiarle el medio a un pedido que ya existe, el servidor usa sus datos y su entrega: sólo
     // cuentan el medio y las cuotas (ver `lib/cambiar-medio-pago.ts`).
     (pedidoACambiar !== null || (datosCompletos && facturacionCompleta && (!aDomicilio || envioDisponible))) &&
-    pasoActual === "pago" &&
+    pasoActual === pasoFinal &&
     !enviando;
 
   /** El pedido ya existe: se le cambia el medio (y cuotas) y sigue el flujo normal con ese mismo número. */
@@ -1031,6 +1048,7 @@ export function CheckoutClient({
           entregaDireccion: aDomicilio ? direccionEntrega : undefined,
           pagoMetodo: pagoParaEnviar,
           // Sólo si el servidor ofreció cuotas: la cantidad elegida (1 = un pago). El monto no viaja.
+          // Con "a_coordinar" (pedido a confirmar) el servidor no usa ni cuotas ni forma.
           cuotas: pideCuotas && opcionesCuotas.length > 0 ? 1 : undefined,
           ...(formaDelPedido ? { forma: formaDelPedido } : {}),
           notas,
@@ -1062,6 +1080,17 @@ export function CheckoutClient({
       }
       if (res.status === 409 && json?.motivo === "facturacion_no_disponible") {
         setErrorEnvio(json.error);
+        return;
+      }
+      if (res.status === 409 && json?.motivo === "pedido_a_confirmar") {
+        // Con el checkout abierto el pedido pasó a confirmarse por contacto (venta sin stock): cambia
+        // el flujo y se vuelve a Entrega. La cotización del 409 está a la lista del medio rechazado:
+        // el total se vuelve a pedir a /api/carrito/cotizar (lista a confirmar) y ése es el
+        // `totalVisto` del reintento. Nunca se usa el total del 409.
+        setFlujoVisto("a_confirmar");
+        setErrorEnvio(json.error ?? "Su pedido incluye productos que se confirman por contacto. Revise el pedido para continuar.");
+        recotizar();
+        irAPaso("entrega");
         return;
       }
       if (res.status === 409) {
@@ -1100,6 +1129,8 @@ export function CheckoutClient({
         ...(typeof json.mpCuenta === "string" ? { mpCuenta: json.mpCuenta } : {}),
         contacto: json.contacto ?? null,
         cuentaPago: json.cuentaPago ?? null,
+        // El flujo que resolvió el servidor al crear el pedido. Cuenta corriente sigue con su medio.
+        aConfirmar: !esCuentaCorriente && json.cotizacion?.flujo === "a_confirmar",
       });
       // Conversión: al crear el pedido, también con Mercado Pago todavía impago.
       track({
@@ -1468,6 +1499,8 @@ export function CheckoutClient({
                 Ya cobramos su pedido. Nos comunicaremos con usted para coordinar el{" "}
                 {entrega === "envio" ? "envío" : "retiro"}.
               </>
+            ) : confirmado.aConfirmar ? (
+              <>{TEXTO_PEDIDO_A_CONFIRMAR}</>
             ) : medioSel && esCuentaCorriente ? (
               <>
                 Su pedido quedó a confirmar; todavía no se realizó ningún cobro. {textoPagaConMedio(medioSel.nombre)}
@@ -1481,7 +1514,7 @@ export function CheckoutClient({
             ) : null}
             {emailCliente && (
               <>
-                {(pagado || esCuentaCorriente || !medioSel) && " "}Le enviamos el detalle a {emailCliente}.
+                {(pagado || confirmado.aConfirmar || esCuentaCorriente || !medioSel) && " "}Le enviamos el detalle a {emailCliente}.
               </>
             )}
           </p>
@@ -1559,8 +1592,8 @@ export function CheckoutClient({
       <Stepper
         ariaLabel="Pasos del pedido"
         size="sm"
-        steps={PASOS_CHECKOUT.map((p, i) => {
-          const actual = PASOS_CHECKOUT.indexOf(pasoActual);
+        steps={pasos.map((p, i) => {
+          const actual = pasos.indexOf(pasoActual);
           return {
             label: etiquetaPaso[p],
             state: i < actual ? "done" : i === actual ? "current" : "pending",
@@ -1727,7 +1760,7 @@ export function CheckoutClient({
                 ? "Inicie sesión para confirmar el pedido."
                 : !facturacionCompleta
                 ? "Cargue sus datos de facturación para continuar."
-                : pasoActual !== "pago"
+                : pasoActual !== pasoFinal
                   ? "Complete los pasos para confirmar el pedido."
                 : cotizacion?.hayProblemas
                   ? "Revise los productos marcados en rojo."
@@ -1737,7 +1770,38 @@ export function CheckoutClient({
                       ? "Elija retiro en el local: el envío no está disponible."
                       : "Confirmando precios y stock…"
       : null;
-  const pieConfirmar = conCuenta ? PIE_TRANSFERENCIA : opcionSel?.forma === "cuenta_mp" ? PIE_CUENTA_MP : pieDelMedio(medioSel);
+  // A confirmar (venta sin stock): no se cobra, el pie no habla de ningún medio.
+  const pieConfirmar = sinPasoPago ? TEXTO_CARRITO_A_CONFIRMAR : conCuenta ? PIE_TRANSFERENCIA : opcionSel?.forma === "cuenta_mp" ? PIE_CUENTA_MP : pieDelMedio(medioSel);
+
+  /**
+   * Pedido a confirmar (venta sin stock): el paso Entrega es el último y termina en "Confirmar
+   * pedido", con el aviso de que no se cobra encima del botón.
+   */
+  function confirmarSinPago() {
+    if (validarEntrega()) void confirmar();
+  }
+  const bloqueConfirmarSinPago = (
+    <div className="mt-5">
+      {/* El error del paso ya lo muestra `bloqueEntrega`. */}
+      {errorEnvio && estado !== "no_auth" && (
+        <p className="mb-3 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>
+      )}
+      <p className="mb-3 text-sm text-text">{TEXTO_CARRITO_A_CONFIRMAR}</p>
+      <div className="flex items-center gap-3">
+        {/* Con la sección de facturación, "Volver" es el del formulario. */}
+        {!seccionFacturacion && (
+          <Button variant="ghost" onClick={() => irAPaso("datos")}>
+            Volver
+          </Button>
+        )}
+        <Button className="ml-auto" disabled={!puedeConfirmar} onClick={confirmarSinPago}>
+          {textoBotonConfirmar}
+          <IconoFlechaConfirmar />
+        </Button>
+      </div>
+      {motivoNoConfirmar && <p className="mt-2 text-right text-xs text-muted">{motivoNoConfirmar}</p>}
+    </div>
+  );
   const nombreOpcionSel = opcionSel ? tituloEnFrase(opcionSel, medioSel?.nombre ?? "") : null;
 
   return (
@@ -1872,10 +1936,12 @@ export function CheckoutClient({
                   if (d.telefono) setTelefono(d.telefono);
                   setFaltantes409(null);
                   setErrorEnvio(null);
-                  irAPaso("pago");
+                  // A confirmar no hay paso Pago: se confirma desde el bloque de abajo.
+                  irAPaso(sinPasoPago ? "entrega" : "pago");
                   router.refresh();
                 }}
               />
+              {sinPasoPago && pasoActual === "entrega" && bloqueConfirmarSinPago}
             </section>
           )}
 
@@ -1918,10 +1984,14 @@ export function CheckoutClient({
             {cabeceraPasos}
             <h2 className="mb-4 font-display text-2xl font-medium text-text">Entrega</h2>
             {bloqueEntrega}
-            <NavPaso
-              onVolver={() => irAPaso("datos")}
-              onContinuar={continuarDesdeEntrega}
-            />
+            {sinPasoPago ? (
+              bloqueConfirmarSinPago
+            ) : (
+              <NavPaso
+                onVolver={() => irAPaso("datos")}
+                onContinuar={continuarDesdeEntrega}
+              />
+            )}
           </section>
           )}
 
@@ -2110,8 +2180,8 @@ export function CheckoutClient({
             </p>
           </div>
 
-          {/* En el paso Pago el botón va al pie de la sección (y en el celular, en la barra fija). */}
-          {pasoActual !== "pago" && (
+          {/* En el último paso el botón va al pie de la sección (en el paso Pago, en el celular, en la barra fija). */}
+          {pasoActual !== pasoFinal && (
             <>
               {errorEnvio && estado !== "no_auth" && (
                 <p className="mt-4 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>

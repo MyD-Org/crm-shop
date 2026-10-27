@@ -47,6 +47,11 @@ export interface OrderItem {
   codigo: string;
   /** Portada del overlay, si hay y su host está permitido. */
   imagen?: ProductImage;
+  /**
+   * Línea a pedido (venta sin stock): el texto de su modalidad, del snapshot congelado en el pedido
+   * (`order_items.venta_sin_stock`), así se sigue viendo aunque la modalidad se borre.
+   */
+  aPedido?: string;
 }
 
 export interface Order {
@@ -98,6 +103,11 @@ export interface Order {
    * pendiente con referencia): se muestra "Pago en proceso" en vez de "Pago pendiente".
    */
   pagoEnProceso?: boolean;
+  /**
+   * true si el pedido quedó a confirmar por modalidad (venta sin stock): sin cobro, se confirma por
+   * contacto. undefined = no (incluye cuenta corriente, que sigue con su medio).
+   */
+  aConfirmar?: boolean;
 }
 
 export interface OrderSummary {

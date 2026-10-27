@@ -44,3 +44,16 @@ describe("InformarPago con pedido", () => {
     expect(informar).toContain("Adjunte el comprobante de su transferencia");
   });
 });
+
+describe("PedidoDetalle: pedido a confirmar por modalidad", () => {
+  it("PedidoDetalle a confirmar muestra el aviso sin cobro", () => {
+    expect(detalle).toContain("pedido.aConfirmar");
+    expect(detalle).toContain(
+      "A confirmar: no se realizó ningún cobro. Nos comunicaremos con usted para confirmar el pedido.",
+    );
+    expect(detalle).toContain("<PedidoContacto");
+    const pagina = readFileSync(join(__dirname, "..", "..", "app", "mi-cuenta", "pedidos", "[id]", "page.tsx"), "utf8");
+    expect(pagina).toContain("contactoDelPedido(pedido.id, pedido.numero)");
+    expect(pagina).toContain("pedido.aConfirmar");
+  });
+});

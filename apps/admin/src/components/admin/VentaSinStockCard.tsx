@@ -32,6 +32,8 @@ export function VentaSinStockCard() {
   const [form, setForm] = useState<FormModalidad>(formDesdeModalidad())
   const [errores, setErrores] = useState<Errores>({})
   const [guardando, setGuardando] = useState(false)
+  // Ids con un PUT/DELETE en vuelo: se deshabilitan los controles de esa fila.
+  const [pendientes, setPendientes] = useState<ReadonlySet<string>>(new Set())
   const { toast } = useToast()
 
   useEffect(() => {
@@ -48,6 +50,14 @@ export function VentaSinStockCard() {
       vivo = false
     }
   }, [])
+
+  const marcar = (id: string, pendiente: boolean) =>
+    setPendientes((p) => {
+      const n = new Set(p)
+      if (pendiente) n.add(id)
+      else n.delete(id)
+      return n
+    })
 
   const avisarGuardado = (titulo: string, propagado?: boolean) => {
     if (propagado === true) toast({ title: titulo, tone: "success" })
@@ -112,6 +122,8 @@ export function VentaSinStockCard() {
 
   // Interruptor "Activa" de la fila: PUT de la modalidad completa.
   async function alternarActiva(m: ModalidadSinStock, activa: boolean) {
+    if (pendientes.has(m.id)) return
+    marcar(m.id, true)
     try {
       const res = await fetch(`${API}/${m.id}`, {
         method: "PUT",
@@ -125,14 +137,20 @@ export function VentaSinStockCard() {
       }
       const guardada = json.modalidad
       setModalidades((lista) => (lista ?? []).map((x) => (x.id === guardada.id ? guardada : x)))
+      // Si la fila está abierta en el formulario, que guardar no revierta el interruptor.
+      if (editando === guardada.id) setForm((f) => ({ ...f, activa: guardada.activa }))
       avisarGuardado("Modalidad guardada", json.propagado)
     } catch {
       toast({ title: "Error de conexión. Inténtelo nuevamente.", tone: "danger" })
+    } finally {
+      marcar(m.id, false)
     }
   }
 
   async function borrar(m: ModalidadSinStock) {
+    if (pendientes.has(m.id)) return
     if (!window.confirm(`¿Borrar la modalidad «${m.nombre}»? Los productos asignados quedarán sin modalidad.`)) return
+    marcar(m.id, true)
     try {
       const res = await fetch(`${API}/${m.id}`, { method: "DELETE" })
       const json = (await res.json().catch(() => null)) as Respuesta | null
@@ -145,6 +163,8 @@ export function VentaSinStockCard() {
       avisarGuardado("Modalidad borrada", json?.propagado)
     } catch {
       toast({ title: "Error de conexión. Inténtelo nuevamente.", tone: "danger" })
+    } finally {
+      marcar(m.id, false)
     }
   }
 
@@ -192,13 +212,14 @@ export function VentaSinStockCard() {
                   {!m.activa && <Badge>Inactiva</Badge>}
                   <Switch
                     checked={m.activa}
+                    disabled={pendientes.has(m.id)}
                     onCheckedChange={(v) => void alternarActiva(m, v)}
                     aria-label={`Activa: ${m.nombre}`}
                   />
-                  <Button variant="secondary" size="sm" onClick={() => abrir(m)}>
+                  <Button variant="secondary" size="sm" disabled={pendientes.has(m.id)} onClick={() => abrir(m)}>
                     Editar
                   </Button>
-                  <Button variant="secondary" size="sm" onClick={() => void borrar(m)}>
+                  <Button variant="secondary" size="sm" disabled={pendientes.has(m.id)} onClick={() => void borrar(m)}>
                     Borrar
                   </Button>
                 </li>

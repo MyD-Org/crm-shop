@@ -3,17 +3,19 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { AccentText, cn } from "@myd-org/ui";
+import { AccentText } from "@myd-org/ui";
 import { clasesVisibilidad, type PromocionesContent } from "@/data/home-defaults";
 import type { Product } from "@/data/products";
 import { AddToCartButton } from "@/components/AddToCartButton";
-import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
+import { BotonFavorito } from "@/components/BotonFavorito";
+import { AhorroPesos, EtiquetaMasBarato, UnidadesPromo } from "@/components/promociones/piezas";
 import { VideoMarca } from "@/components/marcas/VideoMarca";
 import { CuentaRegresiva } from "@/components/promociones/CuentaRegresiva";
 import { fmtPrecioCorto } from "@/lib/format";
+import { nombreConMarca } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 import {
   ahorroPesos,
-  esUltimas,
   fechaCortaAR,
   porcentajeAhorro,
   precioPrincipal,
@@ -39,64 +41,18 @@ type Props = {
 /*
  * Diseño (spec 2026-10-26-promociones-home §5, segunda versión): la sección es una banda navy de la
  * marca que se despega de la home crema, con una cinta de lanzamiento y la cuenta regresiva en
- * cajas como elemento protagonista. La oferta se lee SOBRE la foto: sello rojo de descuento y
- * píldora de unidades. Junto al precio, el ahorro en pesos (más claro que el porcentaje solo).
+ * cajas como elemento protagonista. La oferta se lee SOBRE la foto: etiqueta "X % más barato que en
+ * otras tiendas" y, en las ofertas, el ahorro en pesos. Las unidades van en casilleros (ver piezas.tsx).
  * El rojo de oferta es `danger` del DS; el celeste del acento es el del logo.
  */
 const CELESTE = "text-[#58C8F9]";
 
-/** Sello rojo circular con el porcentaje de ahorro, sobre la foto. */
-function SelloDescuento({ pct, grande = false }: { pct: number; grande?: boolean }) {
-  return (
-    <span
-      data-sello="descuento"
-      className={cn(
-        "flex -rotate-6 flex-col items-center justify-center rounded-full bg-danger text-white shadow-lg ring-4 ring-white/90",
-        grande ? "h-24 w-24 md:h-28 md:w-28" : "h-16 w-16",
-      )}
-    >
-      <span className={cn("font-display font-extrabold leading-none tabular-nums", grande ? "text-[30px] md:text-[34px]" : "text-xl")}>
-        −{pct} %
-      </span>
-      <span className={cn("mt-0.5 leading-tight", grande ? "text-[11px]" : "text-[9px]")}>vs. otras tiendas</span>
-    </span>
-  );
-}
-
-/** "Ahorre $X frente a otras tiendas ($Y)": nada si la referencia no ahorra. */
-function Ahorro({ etiqueta, precio, referencia }: { etiqueta: string; precio: number; referencia?: number }) {
-  const pesos = ahorroPesos(precio, referencia);
-  if (!pesos || !referencia) return null;
-  return (
-    <div className="flex flex-col gap-0.5">
-      <p className="text-[15px] font-bold text-danger">Ahorre {fmtPrecioCorto(pesos)}</p>
-      <p className="text-xs text-muted">
-        {etiqueta} {fmtPrecioCorto(referencia)}
-      </p>
-    </div>
-  );
-}
-
-function Unidades({ quedan, total }: { quedan: number; total: number }) {
-  const ultimas = esUltimas(quedan);
-  return (
-    <div className="flex flex-col gap-1.5">
-      <p className={cn("text-sm", ultimas ? "font-semibold text-danger" : "text-text")}>
-        {ultimas ? "¡Últimas unidades! " : ""}
-        Quedan <strong>{quedan} de {total}</strong> a precio de apertura
-      </p>
-      <div className="h-2 overflow-hidden rounded-full bg-black/10" aria-hidden>
-        <div className="h-full rounded-full bg-danger" style={{ width: `${(quedan / total) * 100}%` }} />
-      </div>
-    </div>
-  );
-}
-
-/** El producto estrella: foto con sellos encima a la izquierda, panel de precio a la derecha. */
+/** El producto estrella: foto con la etiqueta de descuento a la izquierda, panel de precio a la derecha. */
 function Estrella({ contenido, producto, quedan, edicion }: { contenido: PromocionesContent } & NonNullable<Props["estrella"]> & { edicion: boolean }) {
   const e = contenido.estrella!;
   const { monto, esTransferencia } = precioPrincipal(producto);
   const pct = porcentajeAhorro(monto, e.precioReferencia);
+  const pesos = ahorroPesos(monto, e.precioReferencia);
   const agotada = quedan === 0 || producto.stock === "out";
   const conContador = !agotada && quedan !== null && quedan > 0 && !!e.unidadesPromo;
   const foto = producto.images?.[0]?.url;
@@ -104,40 +60,32 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
   const titulo = e.titulo || producto.name;
 
   return (
-    <article className="grid overflow-hidden rounded-2xl bg-white text-text shadow-2xl ring-1 ring-white/20 md:grid-cols-[1.2fr_1fr]">
-      <div className="relative aspect-[4/3] bg-elevated md:aspect-auto md:min-h-[420px]">
+    <article className="grid overflow-hidden rounded-2xl bg-white text-text shadow-2xl md:grid-cols-[1.2fr_1fr]">
+      <div className="relative aspect-[4/3] bg-elevated md:aspect-auto md:min-h-[440px]">
         {e.video ? (
           <VideoMarca url={e.video} titulo={titulo} />
         ) : foto ? (
-          <Image src={foto} alt={titulo} fill sizes="(max-width: 768px) 100vw, 55vw" className="object-contain p-8" />
+          <Image src={foto} alt={titulo} fill sizes="(max-width: 768px) 100vw, 55vw" className="object-contain p-10" />
         ) : null}
-        {/* Sellos sobre la foto: no tapan el botón de play del video (van en las esquinas) y no capturan clics. */}
+        {/* Etiquetas en las esquinas: no tapan el producto ni el botón de play, y no capturan clics. */}
         <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2 md:inset-x-5 md:top-5">
           <span className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white shadow-md">{contenido.etiquetaBadge}</span>
-          {pct && !agotada ? <SelloDescuento pct={pct} grande /> : null}
+          {pct && !agotada ? <EtiquetaMasBarato pct={pct} grande /> : null}
         </div>
-        {conContador || agotada ? (
-          <div className="pointer-events-none absolute bottom-3 left-3 md:bottom-5 md:left-5">
-            <span
-              data-sello="unidades"
-              className={cn(
-                "rounded-full px-3 py-1.5 text-xs font-bold shadow-md",
-                agotada ? "bg-text text-white" : esUltimas(quedan) ? "animate-pulse bg-danger text-white" : "bg-white text-danger ring-2 ring-danger",
-              )}
-            >
-              {agotada ? "Agotado a precio de apertura" : esUltimas(quedan) ? "¡Últimas unidades!" : `Solo ${e.unidadesPromo} unidades`}
-            </span>
+        {agotada ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-text/85 px-4 py-2.5 text-center text-sm font-bold text-white">
+            Agotado a precio de apertura
           </div>
         ) : null}
       </div>
 
-      <div className="flex flex-col justify-between gap-6 border-black/5 p-[clamp(20px,2.6vw,36px)] md:border-l">
-        <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-5 border-black/5 p-[clamp(20px,2.6vw,36px)] md:border-l">
+        <div className="flex flex-col gap-2">
           <h3 className="font-display text-[clamp(20px,2.2vw,28px)] font-semibold leading-tight text-text">{titulo}</h3>
           {e.bajada ? <p className="max-w-prose text-sm text-muted">{e.bajada}</p> : null}
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           <div>
             <p className="text-xs font-bold text-danger">Precio de apertura</p>
             <p className="flex flex-wrap items-baseline gap-x-2">
@@ -145,13 +93,14 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
               {esTransferencia ? <span className="text-sm text-muted">por transferencia</span> : null}
             </p>
           </div>
-          <Ahorro etiqueta={contenido.etiquetaReferencia} precio={monto} referencia={e.precioReferencia} />
-          {conContador ? <Unidades quedan={quedan!} total={e.unidadesPromo!} /> : null}
-          {agotada ? <p className="text-sm font-semibold text-text">Agotadas las unidades a precio de apertura</p> : null}
-          {agotada && edicion ? <p className="rounded-md bg-warning/90 px-3 py-2 text-xs font-medium text-black">{AVISO_AJUSTE_CRM}</p> : null}
+          {pesos && e.precioReferencia ? <AhorroPesos pesos={pesos} referencia={e.precioReferencia} etiqueta={contenido.etiquetaReferencia} /> : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        {conContador ? <UnidadesPromo quedan={quedan!} total={e.unidadesPromo!} /> : null}
+        {agotada ? <p className="text-sm font-semibold text-text">Agotadas las unidades a precio de apertura</p> : null}
+        {agotada && edicion ? <p className="rounded-md bg-warning/90 px-3 py-2 text-xs font-medium text-black">{AVISO_AJUSTE_CRM}</p> : null}
+
+        <div className="mt-auto flex flex-wrap items-center gap-3">
           {agotada ? null : (
             <div className="min-w-[200px] flex-1">
               <AddToCartButton product={producto} />
@@ -166,25 +115,58 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
   );
 }
 
-/** Una oferta: la card del catálogo con el sello de descuento encima y el ahorro debajo. */
+/**
+ * Una oferta: card propia de la promo (todas de la misma altura, botón abajo). Sobre la foto, la
+ * etiqueta de descuento y el ahorro en pesos; sin referencia, la foto queda limpia. El precio
+ * principal es el de transferencia: es el de la promo.
+ */
 function Oferta({ contenido, producto }: { contenido: PromocionesContent; producto: Product }) {
   const ref = contenido.items.find((i) => i.sku.trim().toUpperCase() === (producto.sku ?? "").toUpperCase())?.precioReferencia;
-  const { monto } = precioPrincipal(producto);
+  const { monto, esTransferencia } = precioPrincipal(producto);
   const pct = porcentajeAhorro(monto, ref);
+  const pesos = ahorroPesos(monto, ref);
+  const marca = producto.brand ? formatMarca(producto.brand) : undefined;
+  const { nombre } = nombreConMarca(producto.name, marca);
+  const foto = producto.images?.[0]?.url;
+  const href = `/producto/${producto.id}`;
+
   return (
-    <div className="flex flex-col gap-2">
-      <div className="relative">
-        <TarjetaProductoCarrusel producto={producto} sinBadge />
-        <div data-sello-item={producto.sku} className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col items-start gap-1">
-          {/* En mobile la card es angosta: sólo el sello de %, así no tapa el corazón de favoritos. */}
-          <span className="hidden rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white shadow sm:inline">{contenido.etiquetaBadge}</span>
-          {pct ? <span className="rounded-md bg-danger px-2 py-0.5 text-sm font-extrabold tabular-nums text-white shadow">−{pct} %</span> : null}
+    <article className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-white text-text shadow-lg">
+      <Link href={href} className="relative block aspect-square bg-elevated" aria-label={nombre}>
+        {foto ? <Image src={foto} alt={nombre} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-contain p-6" /> : null}
+        <div data-sello-item={producto.sku} className="pointer-events-none absolute left-2.5 top-2.5 flex flex-col items-start gap-1.5">
+          <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white shadow">{contenido.etiquetaBadge}</span>
         </div>
+        {pesos && ref ? (
+          <div className="pointer-events-none absolute inset-x-2.5 bottom-2.5">
+            <AhorroPesos pesos={pesos} referencia={ref} etiqueta={contenido.etiquetaReferencia} pct={pct} enFoto />
+          </div>
+        ) : null}
+      </Link>
+      <div className="absolute right-2.5 top-2.5">
+        <BotonFavorito productId={producto.id} />
       </div>
-      <div className="rounded-lg bg-white/95 px-3 py-2">
-        <Ahorro etiqueta={contenido.etiquetaReferencia} precio={monto} referencia={ref} />
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <div className="flex flex-col gap-1">
+          {marca ? <p className="text-xs text-muted">{marca}</p> : null}
+          <Link href={href} className="line-clamp-2 min-h-[2.6em] text-sm font-medium leading-snug hover:text-primary">
+            {nombre}
+          </Link>
+        </div>
+        <div className="mt-auto">
+          <p className="text-[11px] font-bold text-danger">Precio de apertura</p>
+          <p className="font-display text-[clamp(20px,2vw,26px)] font-extrabold leading-tight tabular-nums text-primary">{fmtPrecioCorto(monto)}</p>
+          {esTransferencia ? <p className="text-xs text-muted">por transferencia</p> : null}
+        </div>
+        {producto.grupo ? (
+          <Link href={href} className="rounded-lg bg-primary-soft py-2 text-center text-sm font-semibold text-primary">
+            Ver opciones
+          </Link>
+        ) : (
+          <AddToCartButton product={producto} />
+        )}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -255,7 +237,7 @@ export function PromocionesVista({ contenido, estrella, items, estado, noResuelt
         <div className="relative mt-[clamp(20px,3vw,32px)] flex flex-col gap-4">
           {estrella ? <Estrella contenido={contenido} {...estrella} edicion={edicion} /> : null}
           {items.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            <div className="grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
               {items.map((p) => (
                 <Oferta key={p.id} contenido={contenido} producto={p} />
               ))}

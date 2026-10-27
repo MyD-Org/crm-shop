@@ -596,6 +596,11 @@ describe("promociones (spec 2026-10-26-promociones-home §1)", () => {
     items: [{ sku: "A1", precioReferencia: 67000 }],
   };
 
+  it("los textos por defecto presentan el lanzamiento", () => {
+    expect(DEFAULTS_HOME.promociones.titulo).toBe("Promoción de *lanzamiento*");
+    expect(DEFAULTS_HOME.promociones.eyebrow).toBe("Abrimos la tienda online");
+  });
+
   it("va después del hero en el orden por defecto", () => {
     expect(ORDEN_HOME[1]).toBe("promociones");
   });

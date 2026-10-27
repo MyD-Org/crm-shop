@@ -35,7 +35,7 @@ describe("PromoFicha", () => {
     const t = texto(renderToStaticMarkup(<PromoFicha producto={producto} quedan={3} />));
     expect(t).toContain("Precio de apertura");
     expect(t).toContain("En otras tiendas desde");
-    expect(t).toContain("−26 %");
+    expect(t).toContain("26 % más barato que en otras tiendas");
     expect(t).toContain("Termina el 13/11");
     expect(t).toContain("Quedan 3 de 5");
     expect(t).toContain("Promoción válida del 3/11 al 13/11");
@@ -43,7 +43,7 @@ describe("PromoFicha", () => {
 
   it("quedan 2: últimas unidades", () => {
     info.valor = vigente;
-    expect(texto(renderToStaticMarkup(<PromoFicha producto={producto} quedan={2} />))).toContain("¡Últimas unidades!");
+    expect(texto(renderToStaticMarkup(<PromoFicha producto={producto} quedan={2} />))).toContain("¡Últimas 2 unidades!");
   });
 
   it("sin stock: no muestra el contador", () => {
@@ -65,8 +65,8 @@ describe("PromoFicha", () => {
       ],
     } as unknown as Product;
     const t = texto(renderToStaticMarkup(<PromoFicha producto={enFicha} quedan={3} slugDestacado="transferencia" />));
-    expect(t).toContain("−26 %");
-    expect(t).not.toContain("−20 %");
+    expect(t).toContain("26 % más barato que en otras tiendas");
+    expect(t).not.toContain("20 % más barato");
   });
 
   it("con listas por forma del destacado: la línea sin forma, si no la más barata", () => {
@@ -79,7 +79,7 @@ describe("PromoFicha", () => {
         { slug: "mp", nombre: "MP", price: 1, precioFinal: 112500, forma: "debito" },
       ],
     } as unknown as Product;
-    expect(texto(renderToStaticMarkup(<PromoFicha producto={conFormas} quedan={3} slugDestacado="mp" />))).toContain("−25 %");
+    expect(texto(renderToStaticMarkup(<PromoFicha producto={conFormas} quedan={3} slugDestacado="mp" />))).toContain("25 % más barato");
   });
 
   it("el destacado no está en la ficha: ahorro contra el precio de lista, nunca contra otro medio", () => {
@@ -91,8 +91,8 @@ describe("PromoFicha", () => {
       preciosMedios: [{ slug: "cuotas", nombre: "Cuotas", price: 99173, precioFinal: 120000 }],
     } as unknown as Product;
     const t = texto(renderToStaticMarkup(<PromoFicha producto={sinDestacado} quedan={3} slugDestacado="transferencia" />));
-    expect(t).toContain("−10 %");
-    expect(t).not.toContain("−20 %");
+    expect(t).toContain("10 % más barato");
+    expect(t).not.toContain("20 % más barato");
   });
 
   it("sin promo: nada", () => {

@@ -1,9 +1,8 @@
 "use client";
 
-import { Badge } from "@myd-org/ui";
 import type { PrecioMedio, Product } from "@/data/products";
-import { fmtPrecioCorto } from "@/lib/format";
-import { esUltimas, fechaCortaAR, porcentajeAhorro, precioPrincipal, textoLegales } from "@/lib/promociones/promo";
+import { ahorroPesos, fechaCortaAR, porcentajeAhorro, precioPrincipal, textoLegales } from "@/lib/promociones/promo";
+import { AhorroPesos, EtiquetaMasBarato, UnidadesPromo } from "./piezas";
 import { CuentaRegresiva } from "./CuentaRegresiva";
 import { usePromoProducto } from "./PromoProvider";
 
@@ -40,24 +39,22 @@ export function PromoFicha({
   // Sin stock en la tienda manda el stock: nunca "quedan N" sobre algo que no se puede comprar.
   const quedanVista = producto.stock === "out" ? 0 : quedan;
 
+  const pesos = ahorroPesos(monto, info.referencia);
   return (
-    <div className="mt-4 flex flex-col gap-2 rounded-lg border border-danger/30 bg-danger-soft p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge tone="danger">{info.etiquetaBadge}</Badge>
+    <div className="mt-4 flex flex-col gap-3 rounded-xl border border-danger/25 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">{info.etiquetaBadge}</span>
         <span className="text-sm text-text">Termina el {fechaCortaAR(info.fin)}</span>
       </div>
-      {pct && info.referencia ? (
-        <p className="flex flex-wrap items-center gap-2 text-sm text-muted">
-          {info.etiquetaReferencia} {fmtPrecioCorto(info.referencia)}
-          <span className="rounded-full bg-danger px-2 py-0.5 text-xs font-bold text-white">−{pct} %</span>
-        </p>
+      {pct && pesos && info.referencia ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <EtiquetaMasBarato pct={pct} />
+          <AhorroPesos pesos={pesos} referencia={info.referencia} etiqueta={info.etiquetaReferencia} />
+        </div>
       ) : null}
       {conContador ? (
         quedanVista! > 0 ? (
-          <p className={esUltimas(quedanVista!) ? "text-sm font-semibold text-danger" : "text-sm text-text"}>
-            {esUltimas(quedanVista!) ? "¡Últimas unidades! " : ""}
-            Quedan <strong>{quedanVista} de {info.unidadesPromo}</strong> a precio de apertura
-          </p>
+          <UnidadesPromo quedan={quedanVista!} total={info.unidadesPromo!} />
         ) : (
           <p className="text-sm font-semibold text-text">Agotadas las unidades a precio de apertura</p>
         )

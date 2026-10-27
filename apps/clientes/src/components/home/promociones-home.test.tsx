@@ -6,6 +6,7 @@ import { DEFAULTS_HOME, type PromocionesContent } from "@/data/home-defaults";
 vi.mock("@/components/TarjetaProductoCarrusel", () => ({
   TarjetaProductoCarrusel: ({ producto }: { producto: Product }) => <div data-card={producto.sku}>{producto.name}</div>,
 }));
+vi.mock("@/components/BotonFavorito", () => ({ BotonFavorito: () => null }));
 vi.mock("@/components/AddToCartButton", () => ({
   AddToCartButton: () => <button type="button">Agregar</button>,
 }));
@@ -52,7 +53,7 @@ describe("PromocionesVista", () => {
     const t = texto(vista());
     expect(t).toContain("Quedan 3 de 5");
     expect(t).toContain("En otras tiendas desde");
-    expect(t).toContain("−26 %");
+    expect(t).toContain("26 % más barato");
     expect(t).toContain("Agregar");
     expect(t).toContain("Kit Candle");
   });
@@ -64,16 +65,37 @@ describe("PromocionesVista", () => {
     for (const unidad of ["días", "horas", "min", "seg"]) expect(t).toContain(unidad);
   });
 
-  it("la oferta se entiende: sello de descuento y escasez sobre la foto, y ahorro en pesos", () => {
-    const html = vista();
-    expect(html).toContain('data-sello="descuento"');
-    expect(html).toContain('data-sello="unidades"');
-    expect(texto(html)).toContain("Solo 5 unidades");
-    expect(texto(html)).toContain("Ahorre $ 40.001");
+  it("la oferta se entiende: etiqueta que dice contra qué es el descuento y ahorro en pesos", () => {
+    const t = texto(vista());
+    expect(vista()).toContain('data-sello="descuento"');
+    expect(t).toContain("26 % más barato");
+    expect(t).toContain("que en otras tiendas");
+    expect(t).toContain("$ 40.001 menos que en otras tiendas");
+    expect(t).not.toContain("Ahorre");
   });
 
-  it("cada oferta lleva su sello de descuento", () => {
-    expect(vista()).toContain('data-sello-item="A1"');
+  it("unidades en casilleros: uno por unidad, libres y vendidas", () => {
+    const html = vista();
+    expect(html).toContain('data-sello="unidades"');
+    expect(html.match(/data-unidad="libre"/g)).toHaveLength(3);
+    expect(html.match(/data-unidad="vendida"/g)).toHaveLength(2);
+    expect(texto(html)).toContain("Quedan 3 de 5 unidades a precio de apertura");
+    expect(texto(html)).toContain("Después vuelve a su precio normal");
+  });
+
+  it("cada oferta lleva sobre la foto su ahorro; sin referencia no queda un hueco", () => {
+    const sinRef = { id: "3", sku: "B2", name: "Panel", brand: "Macroled", price: 5, stock: "in" } as Product;
+    const html = vista({ items: [item, sinRef], contenido: { ...contenido, items: [...contenido.items, { sku: "B2" }] } });
+    expect(html).toContain('data-sello-item="A1"');
+    expect(html.match(/data-ahorro=/g)).toHaveLength(2); // la estrella y A1, no B2
+    expect(texto(html)).toContain("$ 66.999 menos que en otras tiendas");
+  });
+
+  it("las ofertas muestran como precio principal el de transferencia", () => {
+    const conMedio = { ...item, precioFinal: 1210, precioMedio: { slug: "transferencia", nombre: "Transferencia", price: 800, precioFinal: 968 } } as Product;
+    const t = texto(vista({ items: [conMedio] }));
+    expect(t).toContain("$ 968");
+    expect(t).not.toContain("1.210");
   });
 
   it("no muestra el precio de lista en la estrella", () => {
@@ -83,18 +105,18 @@ describe("PromocionesVista", () => {
   });
 
   it("quedan 2: últimas unidades", () => {
-    expect(texto(vista({ estrella: { producto: estrellaProd, quedan: 2 } }))).toContain("¡Últimas unidades!");
+    expect(texto(vista({ estrella: { producto: estrellaProd, quedan: 2 } }))).toContain("¡Últimas 2 unidades!");
   });
 
   it("quedan 0: agotada, sin agregar y con enlace a la ficha", () => {
-    const html = vista({ estrella: { producto: estrellaProd, quedan: 0 } });
+    const html = vista({ estrella: { producto: estrellaProd, quedan: 0 }, items: [] });
     expect(texto(html)).toContain("Agotadas las unidades a precio de apertura");
     expect(texto(html)).not.toContain("Agregar");
     expect(html).toContain('href="/producto/22596"');
   });
 
   it("sin stock en la tienda: agotada aunque el contador diga que quedan", () => {
-    const t = texto(vista({ estrella: { producto: { ...estrellaProd, stock: "out" } as Product, quedan: 3 } }));
+    const t = texto(vista({ estrella: { producto: { ...estrellaProd, stock: "out" } as Product, quedan: 3 }, items: [] }));
     expect(t).toContain("Agotadas las unidades a precio de apertura");
     expect(t).not.toContain("Quedan 3 de 5");
     expect(t).not.toContain("Agregar");

@@ -285,9 +285,9 @@ export const DEFAULTS_HOME: HomeContent = {
   },
   // Sin productos ni fechas: la sección no se dibuja hasta que el admin carga la promo.
   promociones: {
-    eyebrow: "Lanzamiento de la tienda online",
-    titulo: "Precios de *apertura*",
-    bajada: "Ofertas por tiempo limitado y con unidades contadas, para estrenar la tienda online.",
+    eyebrow: "Abrimos la tienda online",
+    titulo: "Promoción de *lanzamiento*",
+    bajada: "Precios de apertura por tiempo limitado y con unidades contadas.",
     items: [],
     etiquetaBadge: ETIQUETA_BADGE_DEFAULT,
     etiquetaReferencia: ETIQUETA_REFERENCIA_DEFAULT,

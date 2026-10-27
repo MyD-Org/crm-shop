@@ -1,35 +1,84 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Alert, Field, Input, Select, Textarea } from "@myd-org/ui";
-import type { EstrellaPromo, ItemPromo, PromocionesContent } from "@/data/home-defaults";
+import { Alert, Button, Field, Input, Select, Textarea } from "@myd-org/ui";
+import type { EstrellaPromo, ItemPromo, PromocionesContent, Referencia } from "@/data/home-defaults";
 import { productosParaPromo, sucursalesParaPromo, type ProductoPromoEditor } from "@/lib/home-acciones";
 import { fmtPrecioCorto } from "@/lib/format";
-import { aIsoArgentina, deIsoArgentina, MAX_ITEMS_PROMO, porcentajeAhorro } from "@/lib/promociones/promo";
+import {
+  aIsoArgentina,
+  deIsoArgentina,
+  descuentoPropio,
+  ETIQUETAS_REFERENCIA_SUGERIDAS,
+  MAX_ITEMS_PROMO,
+  MAX_REFERENCIAS,
+} from "@/lib/promociones/promo";
 import type { SucursalPromo } from "@/lib/promociones/stock";
 import { CamposTitulo } from "./CamposTitulo";
 import { SelectorSkusDestacados } from "./SelectorSkusDestacados";
-import { aplicarUnidades, cambiarEstrella, enteroPesos, necesitaStockBase } from "./promociones-editor";
+import { aplicarUnidades, cambiarEstrella, completarHabituales, enteroPesos, necesitaStockBase } from "./promociones-editor";
 import type { EditorProps } from "./index";
 
 const clave = (sku: string) => sku.trim().toUpperCase();
 
-/** Precio actual del producto y ahorro contra la referencia: para ver si ya se cargó el ajuste en el CRM. */
-export function ResumenPrecio({ precio, esTransferencia, referencia }: { precio: number; esTransferencia: boolean; referencia?: number }) {
-  const pct = porcentajeAhorro(precio, referencia);
+/** Precio de hoy y descuento contra el habitual: confirma si el ajuste de promo del CRM ya está cargado. */
+export function ResumenPrecio({ precio, esTransferencia, habitual }: { precio: number; esTransferencia: boolean; habitual?: number }) {
+  const d = descuentoPropio(precio, habitual);
   return (
     <p className="text-xs text-muted">
       Hoy: {fmtPrecioCorto(precio)} {esTransferencia ? "por transferencia" : "de lista"}
-      {pct ? <span className="ml-2 font-semibold text-danger">−{pct} %</span> : null}
+      {d ? (
+        <span className="ml-2 font-semibold text-success">{d.pct} % de descuento</span>
+      ) : habitual ? (
+        <span className="ml-2">· Todavía sin descuento: cargue el ajuste en Precios online del CRM.</span>
+      ) : null}
     </p>
   );
 }
 
-function CampoReferencia({ valor, onChange }: { valor?: number; onChange: (v: number | undefined) => void }) {
+const LISTA_SUGERENCIAS = "promo-referencias-sugeridas";
+
+/** Precio habitual (el que se tacha) y hasta 3 referencias de otros canales para la escalera. */
+function CamposPrecios({ item, onChange }: { item: ItemPromo; onChange: (cambios: Partial<ItemPromo>) => void }) {
+  const refs = item.referencias ?? [];
+  const setRef = (n: number, cambios: Partial<Referencia>) =>
+    onChange({ referencias: refs.map((r, i) => (i === n ? { ...r, ...cambios } : r)) });
   return (
-    <Field label="Precio en otras tiendas (con IVA)" hint="Vacío: sin línea de referencia ni porcentaje de ahorro.">
-      <Input inputMode="numeric" value={valor ? String(valor) : ""} onChange={(e) => onChange(enteroPesos(e.target.value))} placeholder="150000" />
-    </Field>
+    <div className="flex flex-col gap-3">
+      <Field label="Precio habitual por transferencia (con IVA)" hint="Es el que se tacha. Se completa solo con el precio de hoy al agregar el producto.">
+        <Input inputMode="numeric" value={item.precioHabitual ? String(item.precioHabitual) : ""} onChange={(e) => onChange({ precioHabitual: enteroPesos(e.target.value) })} />
+      </Field>
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium">Precios en otros canales (para la comparación)</p>
+        {refs.map((r, n) => (
+          <div key={n} className="grid grid-cols-[1fr_140px_auto] items-end gap-2">
+            <Field label={n === 0 ? "Dónde" : undefined}>
+              <Input list={LISTA_SUGERENCIAS} value={r.etiqueta} onChange={(e) => setRef(n, { etiqueta: e.target.value })} placeholder="Tiendas online" />
+            </Field>
+            <Field label={n === 0 ? "Precio (con IVA)" : undefined}>
+              <Input inputMode="numeric" value={r.precio ? String(r.precio) : ""} onChange={(e) => setRef(n, { precio: enteroPesos(e.target.value) ?? 0 })} placeholder="165000" />
+            </Field>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onChange({ referencias: refs.filter((_, i) => i !== n).length ? refs.filter((_, i) => i !== n) : undefined })}
+            >
+              Quitar
+            </Button>
+          </div>
+        ))}
+        {refs.length < MAX_REFERENCIAS ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="self-start"
+            onClick={() => onChange({ referencias: [...refs, { etiqueta: ETIQUETAS_REFERENCIA_SUGERIDAS[refs.length] ?? "", precio: 0 }] })}
+          >
+            Agregar precio de otro canal
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -75,6 +124,13 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
     };
   }, [skusClave, sucursal]);
 
+  // El precio habitual (el que se tacha) se completa con el precio de hoy al agregar el producto.
+  useEffect(() => {
+    const precios = Object.fromEntries(Object.entries(productos).map(([k, p]) => [k, p.precio]));
+    const completo = completarHabituales(valor, precios);
+    if (completo !== valor) onChange(completo);
+  }, [productos, valor, onChange]);
+
   // Al cambiar estrella, sucursal o unidades se vuelve a tomar el stock base del contador.
   useEffect(() => {
     if (productosEn !== sucursal) return;
@@ -93,9 +149,9 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
   };
   const setItem = (n: number, cambios: Partial<ItemPromo>) =>
     onChange({ ...valor, items: valor.items.map((it, i) => (i === n ? { ...it, ...cambios } : it)) });
-  const resumen = (sku: string, referencia?: number) => {
+  const resumen = (sku: string, habitual?: number) => {
     const p = productos[clave(sku)];
-    return p ? <ResumenPrecio precio={p.precio} esTransferencia={p.esTransferencia} referencia={referencia} /> : null;
+    return p ? <ResumenPrecio precio={p.precio} esTransferencia={p.esTransferencia} habitual={habitual} /> : null;
   };
 
   return (
@@ -125,8 +181,8 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
         <SelectorSkusDestacados skus={e?.sku ? [e.sku] : []} onChange={(s) => (s[0] ? setEstrella({ sku: s.at(-1)! }) : setEstrella(null))} />
         {e?.sku ? (
           <>
-            {resumen(e.sku, e.precioReferencia)}
-            <CampoReferencia valor={e.precioReferencia} onChange={(precioReferencia) => setEstrella({ precioReferencia })} />
+            {resumen(e.sku, e.precioHabitual)}
+            <CamposPrecios item={e} onChange={(cambios) => setEstrella(cambios)} />
             <Field label="Video (YouTube o Vimeo)" hint="Un Short no listado sirve. Vacío: la foto del producto.">
               <Input value={e.video ?? ""} onChange={(ev) => setEstrella({ video: ev.target.value.trim() || undefined })} placeholder="https://www.youtube.com/shorts/…" />
             </Field>
@@ -172,8 +228,8 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
         {valor.items.map((it, n) => (
           <div key={it.sku} className="flex flex-col gap-1 border-t border-black/5 pt-3">
             <p className="text-sm font-medium">{productos[clave(it.sku)]?.nombre ?? it.sku}</p>
-            {resumen(it.sku, it.precioReferencia)}
-            <CampoReferencia valor={it.precioReferencia} onChange={(precioReferencia) => setItem(n, { precioReferencia })} />
+            {resumen(it.sku, it.precioHabitual)}
+            <CamposPrecios item={it} onChange={(cambios) => setItem(n, cambios)} />
           </div>
         ))}
       </fieldset>
@@ -182,10 +238,18 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
         <Field label="Etiqueta de las ofertas">
           <Input value={valor.etiquetaBadge} onChange={(ev) => onChange({ ...valor, etiquetaBadge: ev.target.value })} />
         </Field>
-        <Field label="Texto de la referencia">
-          <Input value={valor.etiquetaReferencia} onChange={(ev) => onChange({ ...valor, etiquetaReferencia: ev.target.value })} />
+        <Field label="Título de la comparación" hint="Va sobre la escalera de precios de la estrella y de la ficha.">
+          <Input value={valor.tituloComparador} onChange={(ev) => onChange({ ...valor, tituloComparador: ev.target.value })} />
         </Field>
       </div>
+      <Field label="Día del relevamiento de precios" hint="Se muestra como «Precios relevados el …». Guarde capturas de esos precios.">
+        <Input type="date" value={valor.fechaRelevamiento ?? ""} onChange={(ev) => onChange({ ...valor, fechaRelevamiento: ev.target.value || undefined })} />
+      </Field>
+      <datalist id={LISTA_SUGERENCIAS}>
+        {ETIQUETAS_REFERENCIA_SUGERIDAS.map((e) => (
+          <option key={e} value={e} />
+        ))}
+      </datalist>
       <Field label="Legales" hint="Use {inicio}, {fin} y {unidades}: se reemplazan solos.">
         <Textarea value={valor.legales ?? ""} onChange={(ev) => onChange({ ...valor, legales: ev.target.value || undefined })} />
       </Field>

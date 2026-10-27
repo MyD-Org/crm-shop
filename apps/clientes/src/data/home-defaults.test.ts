@@ -590,10 +590,18 @@ describe("promociones (spec 2026-10-26-promociones-home §1)", () => {
   const FIN = "2026-11-13T23:59:00-03:00";
   const base = {
     etiquetaBadge: "Precio de apertura",
-    etiquetaReferencia: "En otras tiendas desde",
+    tituloComparador: "Nosotros comparamos. Usted ahorra.",
+    fechaRelevamiento: "2026-10-26",
     fin: FIN,
-    estrella: { sku: "NK-1", precioReferencia: 150000, unidadesPromo: 5, stockBase: 10, sucursal: "mdp" },
-    items: [{ sku: "A1", precioReferencia: 67000 }],
+    estrella: {
+      sku: "NK-1",
+      precioHabitual: 132172,
+      referencias: [{ etiqueta: "Tiendas online", precio: 165000 }],
+      unidadesPromo: 5,
+      stockBase: 10,
+      sucursal: "mdp",
+    },
+    items: [{ sku: "A1", precioHabitual: 61984, referencias: [{ etiqueta: "Casas de iluminación", precio: 76000 }] }],
   };
 
   it("los textos por defecto presentan el lanzamiento", () => {
@@ -624,8 +632,26 @@ describe("promociones (spec 2026-10-26-promociones-home §1)", () => {
     expect(erroresSeccion("promociones", { ...base, items: [{ sku: "nk-1 " }] }).length).toBeGreaterThan(0);
   });
 
-  it.each([-1, 1.5, 0])("rechaza precioReferencia %s", (precioReferencia) => {
-    expect(erroresSeccion("promociones", { ...base, items: [{ sku: "A1", precioReferencia }] }).length).toBeGreaterThan(0);
+  it.each([-1, 1.5, 0])("rechaza precioHabitual %s", (precioHabitual) => {
+    expect(erroresSeccion("promociones", { ...base, items: [{ sku: "A1", precioHabitual }] }).length).toBeGreaterThan(0);
+  });
+
+  it.each([-1, 1.5, 0])("rechaza el precio %s de una referencia", (precio) => {
+    expect(erroresSeccion("promociones", { ...base, items: [{ sku: "A1", referencias: [{ etiqueta: "Tiendas online", precio }] }] }).length).toBeGreaterThan(0);
+  });
+
+  it("rechaza más de 3 referencias o una sin nombre", () => {
+    const r = { etiqueta: "Tiendas online", precio: 100 };
+    expect(erroresSeccion("promociones", { ...base, items: [{ sku: "A1", referencias: [r, r, r, r] }] }).length).toBeGreaterThan(0);
+    expect(erroresSeccion("promociones", { ...base, items: [{ sku: "A1", referencias: [{ etiqueta: " ", precio: 100 }] }] }).length).toBeGreaterThan(0);
+  });
+
+  it("la fecha del relevamiento es un día YYYY-MM-DD", () => {
+    expect(erroresSeccion("promociones", { ...base, fechaRelevamiento: "26/10" }).length).toBeGreaterThan(0);
+  });
+
+  it("exige el título de la comparación", () => {
+    expect(erroresSeccion("promociones", { ...base, tituloComparador: "" }).length).toBeGreaterThan(0);
   });
 
   it("rechaza un video que no es YouTube/Vimeo", () => {

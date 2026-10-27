@@ -48,3 +48,22 @@ export function enteroPesos(v: string): number | undefined {
   const n = Math.round(Number(`${entero || "0"}.${decimales || "0"}`));
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
+
+/**
+ * Completa el precio habitual (el que se tacha) con el precio de hoy en los productos que no lo
+ * tienen. Se usa al agregar productos, ANTES de cargar el ajuste de promo en el CRM: después la
+ * tienda ya sólo ve el precio rebajado. Sin cambios devuelve el mismo objeto.
+ */
+export function completarHabituales(c: PromocionesContent, precios: Record<string, number>): PromocionesContent {
+  const clave = (sku: string) => sku.trim().toUpperCase();
+  let cambio = false;
+  const completar = <T extends { sku: string; precioHabitual?: number }>(i: T): T => {
+    const hoy = precios[clave(i.sku)];
+    if (i.precioHabitual !== undefined || !hoy) return i;
+    cambio = true;
+    return { ...i, precioHabitual: Math.round(hoy) };
+  };
+  const estrella = c.estrella ? completar(c.estrella) : undefined;
+  const items = c.items.map(completar);
+  return cambio ? { ...c, estrella, items } : c;
+}

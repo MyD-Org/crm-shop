@@ -8,16 +8,14 @@ import { clasesVisibilidad, type PromocionesContent } from "@/data/home-defaults
 import type { Product } from "@/data/products";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
-import { AhorroPesos, EtiquetaMasBarato, UnidadesPromo } from "@/components/promociones/piezas";
+import { EscaleraPrecios, PrecioPromo, UnidadesPromo } from "@/components/promociones/piezas";
+import { useMarca } from "@/components/MarcaProvider";
 import { VideoMarca } from "@/components/marcas/VideoMarca";
 import { CuentaRegresiva } from "@/components/promociones/CuentaRegresiva";
-import { fmtPrecioCorto } from "@/lib/format";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import {
-  ahorroPesos,
   fechaCortaAR,
-  porcentajeAhorro,
   precioPrincipal,
   textoLegales,
   type EstadoPromo,
@@ -47,12 +45,17 @@ type Props = {
  */
 const CELESTE = "text-[#58C8F9]";
 
-/** El producto estrella: foto con la etiqueta de descuento a la izquierda, panel de precio a la derecha. */
+/** Precio habitual y referencias de un SKU de la promo (estrella o item), por SKU normalizado. */
+function datosDe(contenido: PromocionesContent, sku: string | undefined) {
+  const k = (sku ?? "").trim().toUpperCase();
+  return [contenido.estrella, ...contenido.items].find((i) => i && i.sku.trim().toUpperCase() === k);
+}
+
+/** El producto estrella: foto limpia a la izquierda, panel de precio y comparación a la derecha. */
 function Estrella({ contenido, producto, quedan, edicion }: { contenido: PromocionesContent } & NonNullable<Props["estrella"]> & { edicion: boolean }) {
   const e = contenido.estrella!;
+  const { nombre: tienda } = useMarca();
   const { monto, esTransferencia } = precioPrincipal(producto);
-  const pct = porcentajeAhorro(monto, e.precioReferencia);
-  const pesos = ahorroPesos(monto, e.precioReferencia);
   const agotada = quedan === 0 || producto.stock === "out";
   const conContador = !agotada && quedan !== null && quedan > 0 && !!e.unidadesPromo;
   const foto = producto.images?.[0]?.url;
@@ -60,18 +63,16 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
   const titulo = e.titulo || producto.name;
 
   return (
-    <article className="grid overflow-hidden rounded-2xl bg-white text-text shadow-2xl md:grid-cols-[1.2fr_1fr]">
-      <div className="relative aspect-[4/3] bg-elevated md:aspect-auto md:min-h-[440px]">
+    <article className="grid overflow-hidden rounded-2xl bg-white text-text shadow-2xl md:grid-cols-[1.1fr_1fr]">
+      <div className="relative aspect-[4/3] bg-elevated md:aspect-auto md:min-h-[460px]">
         {e.video ? (
           <VideoMarca url={e.video} titulo={titulo} />
         ) : foto ? (
           <Image src={foto} alt={titulo} fill sizes="(max-width: 768px) 100vw, 55vw" className="object-contain p-10" />
         ) : null}
-        {/* Etiquetas en las esquinas: no tapan el producto ni el botón de play, y no capturan clics. */}
-        <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2 md:inset-x-5 md:top-5">
-          <span className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white shadow-md">{contenido.etiquetaBadge}</span>
-          {pct && !agotada ? <EtiquetaMasBarato pct={pct} grande /> : null}
-        </div>
+        <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white shadow-md md:left-5 md:top-5">
+          {contenido.etiquetaBadge}
+        </span>
         {agotada ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-text/85 px-4 py-2.5 text-center text-sm font-bold text-white">
             Agotado a precio de apertura
@@ -85,16 +86,14 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
           {e.bajada ? <p className="max-w-prose text-sm text-muted">{e.bajada}</p> : null}
         </div>
 
-        <div className="flex flex-col gap-3">
-          <div>
-            <p className="text-xs font-bold text-danger">Precio de apertura</p>
-            <p className="flex flex-wrap items-baseline gap-x-2">
-              <span className="font-display text-[clamp(38px,5vw,60px)] font-extrabold leading-none tabular-nums text-primary">{fmtPrecioCorto(monto)}</span>
-              {esTransferencia ? <span className="text-sm text-muted">por transferencia</span> : null}
-            </p>
-          </div>
-          {pesos && e.precioReferencia ? <AhorroPesos pesos={pesos} referencia={e.precioReferencia} etiqueta={contenido.etiquetaReferencia} /> : null}
-        </div>
+        <PrecioPromo precio={monto} habitual={e.precioHabitual} esTransferencia={esTransferencia} />
+        <EscaleraPrecios
+          precio={monto}
+          referencias={e.referencias}
+          tienda={tienda}
+          titulo={contenido.tituloComparador}
+          fecha={contenido.fechaRelevamiento}
+        />
 
         {conContador ? <UnidadesPromo quedan={quedan!} total={e.unidadesPromo!} /> : null}
         {agotada ? <p className="text-sm font-semibold text-text">Agotadas las unidades a precio de apertura</p> : null}
@@ -116,56 +115,51 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
 }
 
 /**
- * Una oferta: card propia de la promo (todas de la misma altura, botón abajo). Sobre la foto, la
- * etiqueta de descuento y el ahorro en pesos; sin referencia, la foto queda limpia. El precio
- * principal es el de transferencia: es el de la promo.
+ * Una oferta. Escritorio: card vertical de altura pareja (foto, nombre, antes/ahora, escalera
+ * compacta, botón). Mobile: fila horizontal con la foto chica a la izquierda, sin nada encima de
+ * la foto ni escalera (no entran sin tapar el producto). El precio principal es el de transferencia.
  */
 function Oferta({ contenido, producto }: { contenido: PromocionesContent; producto: Product }) {
-  const ref = contenido.items.find((i) => i.sku.trim().toUpperCase() === (producto.sku ?? "").toUpperCase())?.precioReferencia;
+  const datos = datosDe(contenido, producto.sku);
+  const { nombre: tienda } = useMarca();
   const { monto, esTransferencia } = precioPrincipal(producto);
-  const pct = porcentajeAhorro(monto, ref);
-  const pesos = ahorroPesos(monto, ref);
   const marca = producto.brand ? formatMarca(producto.brand) : undefined;
   const { nombre } = nombreConMarca(producto.name, marca);
   const foto = producto.images?.[0]?.url;
   const href = `/producto/${producto.id}`;
 
   return (
-    <article className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-white text-text shadow-lg">
-      <Link href={href} className="relative block aspect-square bg-elevated" aria-label={nombre}>
-        {foto ? <Image src={foto} alt={nombre} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-contain p-6" /> : null}
-        <div data-sello-item={producto.sku} className="pointer-events-none absolute left-2.5 top-2.5 flex flex-col items-start gap-1.5">
-          {/* En mobile no entra al lado del corazón de favoritos: la franja de ahorro ya dice que es promo. */}
-          <span className="hidden rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white shadow sm:inline">{contenido.etiquetaBadge}</span>
-        </div>
-        {pesos && ref ? (
-          <div className="pointer-events-none absolute inset-x-2.5 bottom-2.5">
-            <AhorroPesos pesos={pesos} referencia={ref} etiqueta={contenido.etiquetaReferencia} pct={pct} enFoto />
-          </div>
-        ) : null}
+    <article className="relative flex h-full flex-row gap-3 overflow-hidden rounded-2xl bg-white p-2.5 text-text shadow-lg sm:flex-col sm:gap-0 sm:p-0">
+      <Link href={href} className="relative block aspect-square w-28 shrink-0 self-start overflow-hidden rounded-xl bg-elevated sm:w-full sm:self-auto sm:rounded-none" aria-label={nombre}>
+        {foto ? <Image src={foto} alt={nombre} fill sizes="(max-width: 640px) 112px, 25vw" className="object-contain p-3 sm:p-6" /> : null}
+        <span
+          data-sello-item={producto.sku}
+          className="pointer-events-none absolute left-2.5 top-2.5 hidden rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white shadow sm:inline"
+        >
+          {contenido.etiquetaBadge}
+        </span>
       </Link>
-      <div className="absolute right-2.5 top-2.5">
+      <div className="absolute right-2 top-2 sm:right-2.5 sm:top-2.5">
         <BotonFavorito productId={producto.id} />
       </div>
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        <div className="flex flex-col gap-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-2 pr-9 sm:gap-3 sm:p-4">
+        <div className="flex flex-col gap-0.5">
           {marca ? <p className="text-xs text-muted">{marca}</p> : null}
-          <Link href={href} className="line-clamp-2 min-h-[2.6em] text-sm font-medium leading-snug hover:text-primary">
+          <Link href={href} className="line-clamp-2 text-sm font-medium leading-snug hover:text-primary sm:min-h-[2.6em]">
             {nombre}
           </Link>
         </div>
+        <PrecioPromo precio={monto} habitual={datos?.precioHabitual} esTransferencia={esTransferencia} tamano="chico" />
+        <EscaleraPrecios precio={monto} referencias={datos?.referencias} tienda={tienda} compacta className="hidden sm:flex" />
         <div className="mt-auto">
-          <p className="text-[11px] font-bold text-danger">Precio de apertura</p>
-          <p className="font-display text-[clamp(20px,2vw,26px)] font-extrabold leading-tight tabular-nums text-primary">{fmtPrecioCorto(monto)}</p>
-          {esTransferencia ? <p className="text-xs text-muted">por transferencia</p> : null}
+          {producto.grupo ? (
+            <Link href={href} className="block rounded-lg bg-primary-soft py-2 text-center text-sm font-semibold text-primary">
+              Ver opciones
+            </Link>
+          ) : (
+            <AddToCartButton product={producto} />
+          )}
         </div>
-        {producto.grupo ? (
-          <Link href={href} className="rounded-lg bg-primary-soft py-2 text-center text-sm font-semibold text-primary">
-            Ver opciones
-          </Link>
-        ) : (
-          <AddToCartButton product={producto} />
-        )}
       </div>
     </article>
   );
@@ -238,7 +232,7 @@ export function PromocionesVista({ contenido, estrella, items, estado, noResuelt
         <div className="relative mt-[clamp(20px,3vw,32px)] flex flex-col gap-4">
           {estrella ? <Estrella contenido={contenido} {...estrella} edicion={edicion} /> : null}
           {items.length > 0 ? (
-            <div className="grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:auto-rows-fr sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               {items.map((p) => (
                 <Oferta key={p.id} contenido={contenido} producto={p} />
               ))}

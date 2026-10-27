@@ -10,7 +10,7 @@ vi.mock("@/lib/home-acciones", () => ({
 }));
 
 import { EditorPromociones, ResumenPrecio } from "./EditorPromociones";
-import { aplicarUnidades, cambiarEstrella, enteroPesos, necesitaStockBase } from "./promociones-editor";
+import { aplicarUnidades, cambiarEstrella, completarHabituales, enteroPesos, necesitaStockBase } from "./promociones-editor";
 
 const base: PromocionesContent = { ...DEFAULTS_HOME.promociones, fin: "2026-11-13T23:59:00-03:00" };
 
@@ -48,15 +48,29 @@ describe("necesitaStockBase", () => {
 
 describe("ResumenPrecio", () => {
   const texto = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-  it("precio por transferencia y ahorro contra la referencia", () => {
-    const t = texto(renderToStaticMarkup(<ResumenPrecio precio={109999} esTransferencia referencia={150000} />));
+  it("precio de hoy y descuento contra el habitual: confirma que el ajuste del CRM ya está", () => {
+    const t = texto(renderToStaticMarkup(<ResumenPrecio precio={109999} esTransferencia habitual={132172} />));
     expect(t).toContain("por transferencia");
     expect(t).toContain("109.999");
-    expect(t).toContain("−26 %");
+    expect(t).toContain("16 % de descuento");
   });
-  it("sin ahorro no muestra porcentaje", () => {
-    const t = texto(renderToStaticMarkup(<ResumenPrecio precio={160000} esTransferencia={false} referencia={150000} />));
-    expect(t).not.toContain("%");
+  it("sin rebaja todavía, lo avisa", () => {
+    const t = texto(renderToStaticMarkup(<ResumenPrecio precio={132172} esTransferencia habitual={132172} />));
+    expect(t).not.toContain("% de descuento");
+    expect(t).toContain("Todavía sin descuento");
+  });
+});
+
+describe("completarHabituales", () => {
+  it("completa con el precio de hoy sólo los productos que no tienen habitual", () => {
+    const c = { ...base, estrella: { sku: "nk-1" }, items: [{ sku: "A1", precioHabitual: 50000 }, { sku: "B2" }] };
+    const r = completarHabituales(c, { "NK-1": 132172.4, A1: 1, B2: 26800 });
+    expect(r.estrella?.precioHabitual).toBe(132172);
+    expect(r.items.map((i) => i.precioHabitual)).toEqual([50000, 26800]);
+  });
+  it("sin nada que completar devuelve el mismo objeto (no dispara un guardado)", () => {
+    const c = { ...base, items: [{ sku: "A1", precioHabitual: 50000 }] };
+    expect(completarHabituales(c, { A1: 1 })).toBe(c);
   });
 });
 
@@ -69,12 +83,21 @@ describe("EditorPromociones", () => {
 });
 
 describe("cambiarEstrella", () => {
-  const antes = { sku: "NK-1", precioReferencia: 150000, video: "https://youtu.be/x", titulo: "Noak", unidadesPromo: 5, stockBase: 10, sucursal: "mdp" };
+  const antes = {
+    sku: "NK-1",
+    precioHabitual: 132172,
+    referencias: [{ etiqueta: "Tiendas online", precio: 165000 }],
+    video: "https://youtu.be/x",
+    titulo: "Noak",
+    unidadesPromo: 5,
+    stockBase: 10,
+    sucursal: "mdp",
+  };
   it("al cambiar de producto no arrastra referencia, video, textos ni contador (sí la sucursal)", () => {
     expect(cambiarEstrella(antes, { sku: "OTRO" })).toEqual({ sku: "OTRO", sucursal: "mdp" });
   });
   it("otros cambios se aplican sobre la estrella actual", () => {
-    expect(cambiarEstrella(antes, { precioReferencia: 140000 })).toMatchObject({ sku: "NK-1", precioReferencia: 140000, video: antes.video });
+    expect(cambiarEstrella(antes, { precioHabitual: 140000 })).toMatchObject({ sku: "NK-1", precioHabitual: 140000, video: antes.video });
   });
   it("cambiar unidades o sucursal invalida el stock base", () => {
     expect(cambiarEstrella(antes, { unidadesPromo: 3 }).stockBase).toBeUndefined();

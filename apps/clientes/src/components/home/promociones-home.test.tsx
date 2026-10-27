@@ -25,14 +25,24 @@ const estrellaProd = {
   stock: "in",
   images: [{ url: "/v.webp", w: 800 }],
 } as unknown as Product;
-const item = { id: "2", sku: "A1", name: "Kit Candle", brand: "Macroled", price: 1, stock: "in" } as Product;
+const item = { id: "2", sku: "A1", name: "Kit Candle", brand: "Macroled", price: 42803, precioFinal: 51792, stock: "in" } as Product;
 
 const contenido: PromocionesContent = {
   ...DEFAULTS_HOME.promociones,
   inicio: "2026-11-03T00:00:00-03:00",
   fin: FIN,
-  estrella: { sku: "NK-1", precioReferencia: 150000, unidadesPromo: 5, stockBase: 10 },
-  items: [{ sku: "A1", precioReferencia: 67000 }],
+  fechaRelevamiento: "2026-10-26",
+  estrella: {
+    sku: "NK-1",
+    precioHabitual: 132172,
+    referencias: [
+      { etiqueta: "Casas de iluminación", precio: 165000 },
+      { etiqueta: "Tiendas online", precio: 184000 },
+    ],
+    unidadesPromo: 5,
+    stockBase: 10,
+  },
+  items: [{ sku: "A1", precioHabitual: 62150, referencias: [{ etiqueta: "Tiendas online", precio: 67000 }] }],
 };
 
 const texto = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
@@ -49,11 +59,9 @@ const vista = (props: Partial<Parameters<typeof PromocionesVista>[0]> = {}) =>
   );
 
 describe("PromocionesVista", () => {
-  it("vigente: unidades, referencia, ahorro y botón de agregar", () => {
+  it("vigente: unidades y botón de agregar", () => {
     const t = texto(vista());
     expect(t).toContain("Quedan 3 de 5");
-    expect(t).toContain("En otras tiendas desde");
-    expect(t).toContain("26 % más barato");
     expect(t).toContain("Agregar");
     expect(t).toContain("Kit Candle");
   });
@@ -65,13 +73,29 @@ describe("PromocionesVista", () => {
     for (const unidad of ["días", "horas", "min", "seg"]) expect(t).toContain(unidad);
   });
 
-  it("la oferta se entiende: etiqueta que dice contra qué es el descuento y ahorro en pesos", () => {
+  it("antes y ahora: nuestro precio habitual tachado y el % de descuento propio", () => {
+    const html = vista();
+    expect(html).toMatch(/line-through[^>]*>[\s\S]{0,80}\$\s132\.172/);
+    expect(texto(html)).toContain("16 % de descuento");
+    expect(texto(html)).not.toContain("más barato");
+    expect(texto(html)).not.toContain("Ahorre");
+  });
+
+  it("la estrella compara en escalera: título, referencias de mayor a menor, la tienda y el ahorro", () => {
     const t = texto(vista());
-    expect(vista()).toContain('data-sello="descuento"');
-    expect(t).toContain("26 % más barato");
-    expect(t).toContain("que en otras tiendas");
-    expect(t).toContain("$ 40.001 menos que en otras tiendas");
-    expect(t).not.toContain("Ahorre");
+    expect(t).toContain("Nosotros comparamos. Usted ahorra.");
+    expect(t.indexOf("$ 184.000")).toBeLessThan(t.indexOf("$ 165.000"));
+    expect(t).toContain("Tiendas online");
+    expect(t).toContain("Casas de iluminación");
+    expect(t).toContain("Central LED");
+    expect(t).toContain("Ahorra hasta $ 74.001");
+    expect(t).toContain("Precios relevados el 26/10");
+  });
+
+  it("las ofertas llevan una escalera compacta, sin título", () => {
+    const html = vista();
+    expect(html.match(/data-escalera=/g)).toHaveLength(2);
+    expect(texto(html).split("Nosotros comparamos").length - 1).toBe(1);
   });
 
   it("unidades en casilleros: uno por unidad, libres y vendidas", () => {
@@ -83,12 +107,12 @@ describe("PromocionesVista", () => {
     expect(texto(html)).toContain("Después vuelve a su precio normal");
   });
 
-  it("cada oferta lleva sobre la foto su ahorro; sin referencia no queda un hueco", () => {
-    const sinRef = { id: "3", sku: "B2", name: "Panel", brand: "Macroled", price: 5, stock: "in" } as Product;
-    const html = vista({ items: [item, sinRef], contenido: { ...contenido, items: [...contenido.items, { sku: "B2" }] } });
+  it("sin precio habitual no hay tachado ni descuento; sin referencias, no hay escalera", () => {
+    const sinDatos = { id: "3", sku: "B2", name: "Panel", brand: "Macroled", price: 5, stock: "in" } as Product;
+    const html = vista({ items: [item, sinDatos], contenido: { ...contenido, items: [...contenido.items, { sku: "B2" }] } });
     expect(html).toContain('data-sello-item="A1"');
-    expect(html.match(/data-ahorro=/g)).toHaveLength(2); // la estrella y A1, no B2
-    expect(texto(html)).toContain("$ 66.999 menos que en otras tiendas");
+    expect(html.match(/data-descuento=/g)).toHaveLength(2); // la estrella y A1, no B2
+    expect(html.match(/data-escalera=/g)).toHaveLength(2);
   });
 
   it("las ofertas muestran como precio principal el de transferencia", () => {

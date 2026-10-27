@@ -6,13 +6,14 @@ import { completarOrden } from "../lib/orden-secciones";
 import { videoEmbebible } from "../lib/marcas/video";
 import {
   ETIQUETA_BADGE_DEFAULT,
-  ETIQUETA_REFERENCIA_DEFAULT,
   LEGALES_DEFAULT,
   MAX_ITEMS_PROMO,
+  MAX_REFERENCIAS,
+  TITULO_COMPARADOR_DEFAULT,
 } from "../lib/promociones/promo";
 import type { PromocionesContent } from "../lib/promociones/tipos";
 
-export type { EstrellaPromo, ItemPromo, PromocionesContent } from "../lib/promociones/tipos";
+export type { EstrellaPromo, ItemPromo, PromocionesContent, Referencia } from "../lib/promociones/tipos";
 
 /**
  * Contenido por defecto de la home, editable desde la home por un usuario
@@ -290,7 +291,7 @@ export const DEFAULTS_HOME: HomeContent = {
     bajada: "Precios de apertura por tiempo limitado y con unidades contadas.",
     items: [],
     etiquetaBadge: ETIQUETA_BADGE_DEFAULT,
-    etiquetaReferencia: ETIQUETA_REFERENCIA_DEFAULT,
+    tituloComparador: TITULO_COMPARADOR_DEFAULT,
     legales: LEGALES_DEFAULT,
   },
   bannerDeco: {
@@ -962,18 +963,32 @@ function erroresPromociones(
   texto("eyebrow", true);
   textosTitulo();
   texto("etiquetaBadge");
-  texto("etiquetaReferencia");
+  texto("tituloComparador");
+  if (o.fechaRelevamiento !== undefined && !(typeof o.fechaRelevamiento === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.fechaRelevamiento)))
+    errores.push("fechaRelevamiento debe ser un día AAAA-MM-DD");
   texto("legales", true);
   linkOpcional("linkTodos");
 
   const skus: string[] = [];
   const item = (v: unknown, campo: string) => {
-    if (!v || typeof v !== "object") return errores.push(`${campo} debe ser un objeto { sku, precioReferencia? }`);
+    if (!v || typeof v !== "object") return errores.push(`${campo} debe ser un objeto { sku, precioHabitual?, referencias? }`);
     const i = v as Record<string, unknown>;
     if (!esTexto(i.sku)) errores.push(`${campo}.sku debe ser un texto no vacío`);
     else skus.push(i.sku.trim().toUpperCase());
-    if (i.precioReferencia !== undefined && !esEnteroPositivo(i.precioReferencia))
-      errores.push(`${campo}.precioReferencia debe ser un entero positivo`);
+    if (i.precioHabitual !== undefined && !esEnteroPositivo(i.precioHabitual))
+      errores.push(`${campo}.precioHabitual debe ser un entero positivo`);
+    if (i.referencias !== undefined) {
+      const refs = i.referencias;
+      if (!Array.isArray(refs) || refs.length > MAX_REFERENCIAS)
+        errores.push(`${campo}.referencias admite hasta ${MAX_REFERENCIAS} precios`);
+      else
+        refs.forEach((r, n) => {
+          const ref = r as Record<string, unknown> | null;
+          if (!ref || !esTexto(ref.etiqueta) || (ref.etiqueta as string).length > 40)
+            errores.push(`${campo}.referencias[${n}].etiqueta debe ser un texto de hasta 40 caracteres`);
+          if (!ref || !esEnteroPositivo(ref.precio)) errores.push(`${campo}.referencias[${n}].precio debe ser un entero positivo`);
+        });
+    }
   };
 
   const e = o.estrella as Record<string, unknown> | undefined;

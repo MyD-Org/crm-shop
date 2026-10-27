@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   LEGALES_DEFAULT,
   aIsoArgentina,
+  descuentoPropio,
+  escaleraPrecios,
+  fechaRelevamientoAR,
   ahorroPesos,
   datosPromoCliente,
   infoPromoDe,
@@ -159,10 +162,11 @@ describe("restante", () => {
 describe("datosPromoCliente / infoPromoDe", () => {
   const contenido = {
     etiquetaBadge: "Precio de apertura",
-    etiquetaReferencia: "En otras tiendas desde",
+    tituloComparador: "Nosotros comparamos. Usted ahorra.",
+    fechaRelevamiento: "2026-10-26",
     legales: LEGALES_DEFAULT,
     fin: FIN,
-    estrella: { sku: "nk-1", precioReferencia: 150000, unidadesPromo: 5, stockBase: 10 },
+    estrella: { sku: "nk-1", precioHabitual: 132172, referencias: [{ etiqueta: "Tiendas online", precio: 165000 }], unidadesPromo: 5, stockBase: 10 },
     items: [{ sku: "A1" }],
   };
   const durante = Date.parse("2026-11-05T12:00:00-03:00");
@@ -171,15 +175,25 @@ describe("datosPromoCliente / infoPromoDe", () => {
     expect(datosPromoCliente({ ...contenido, fin: undefined })).toBeNull();
   });
 
-  it("referencias por SKU normalizado", () => {
+  it("datos por SKU normalizado", () => {
     const d = datosPromoCliente(contenido)!;
-    expect(d.refs).toEqual({ "NK-1": 150000, A1: undefined });
+    expect(d.productos).toEqual({
+      "NK-1": { habitual: 132172, referencias: [{ etiqueta: "Tiendas online", precio: 165000 }] },
+      A1: { habitual: undefined, referencias: undefined },
+    });
     expect(d.estrellaSku).toBe("NK-1");
   });
 
   it("info del producto en promo vigente", () => {
     const d = datosPromoCliente(contenido)!;
-    expect(infoPromoDe(d, "NK-1", durante)).toMatchObject({ etiquetaBadge: "Precio de apertura", referencia: 150000, esEstrella: true, fin: FIN });
+    expect(infoPromoDe(d, "NK-1", durante)).toMatchObject({
+      etiquetaBadge: "Precio de apertura",
+      tituloComparador: "Nosotros comparamos. Usted ahorra.",
+      fechaRelevamiento: "2026-10-26",
+      habitual: 132172,
+      esEstrella: true,
+      fin: FIN,
+    });
     expect(infoPromoDe(d, "a1", durante)).toMatchObject({ esEstrella: false });
   });
 
@@ -190,9 +204,47 @@ describe("datosPromoCliente / infoPromoDe", () => {
     expect(infoPromoDe(null, "NK-1", durante)).toBeNull();
   });
 
-  it("sólo por SKU exacto: un nombre igual al SKU no cuenta", () => {
+  it("sólo por SKU exacto", () => {
     const d = datosPromoCliente(contenido)!;
     expect(infoPromoDe(d, "NK-10", durante)).toBeNull();
+  });
+});
+
+describe("descuentoPropio (contra nuestro precio habitual)", () => {
+  it("porcentaje hacia abajo y pesos", () => {
+    expect(descuentoPropio(109999, 132172)).toEqual({ pct: 16, pesos: 22173 });
+  });
+  it("sin habitual o sin rebaja real, null", () => {
+    expect(descuentoPropio(109999)).toBeNull();
+    expect(descuentoPropio(132172, 132172)).toBeNull();
+    expect(descuentoPropio(140000, 132172)).toBeNull();
+  });
+});
+
+describe("escaleraPrecios", () => {
+  it("referencias más caras ordenadas de mayor a menor, con ancho relativo y el ahorro máximo", () => {
+    const e = escaleraPrecios(110000, [
+      { etiqueta: "Casas de iluminación", precio: 165000 },
+      { etiqueta: "Tiendas online", precio: 220000 },
+    ])!;
+    expect(e.filas).toEqual([
+      { etiqueta: "Tiendas online", precio: 220000, ancho: 1 },
+      { etiqueta: "Casas de iluminación", precio: 165000, ancho: 0.75 },
+    ]);
+    expect(e.ancho).toBe(0.5);
+    expect(e.ahorroMax).toBe(110000);
+  });
+  it("descarta las referencias que no son más caras; sin ninguna, null", () => {
+    expect(escaleraPrecios(110000, [{ etiqueta: "X", precio: 100000 }])).toBeNull();
+    expect(escaleraPrecios(110000, [])).toBeNull();
+    expect(escaleraPrecios(110000)).toBeNull();
+  });
+});
+
+describe("fechaRelevamientoAR", () => {
+  it("día/mes sin corrimiento de zona", () => {
+    expect(fechaRelevamientoAR("2026-10-26")).toBe("26/10");
+    expect(fechaRelevamientoAR("2026-11-01")).toBe("1/11");
   });
 });
 

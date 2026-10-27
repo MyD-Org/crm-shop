@@ -251,3 +251,27 @@ hoy (aviso del CRM o 15 minutos). Si es un archivo nuevo con `'use cache'`, suma
 - Si la línea de referencia aparece también en las cards del catálogo.
 - Cuándo cargar el iframe del video (al tocar o al entrar en viewport).
 - Formato exacto de fechas en legales ("del 3/11 al 13/11").
+
+## Revisión de diseño con Emanuel (2026-10-27)
+
+Tras ver la sección en el navegador, se cambió la forma de comunicar la oferta (reemplaza lo que
+diga en contrario §1, §4 y §5):
+
+- **Título por defecto** "Promoción de *lanzamiento*", cinta "Abrimos la tienda online". La sección
+  es una banda navy con la cuenta regresiva en cajas.
+- **Antes / ahora contra NUESTRO precio**: cada producto lleva `precioHabitual` (transferencia, con
+  IVA), que se tacha, y el "N % de descuento" en verde se calcula sólo contra él. El editor lo
+  completa con el precio del día al agregar el producto, antes de cargar el ajuste en el CRM (después
+  la tienda ya no lo ve). Sin rebaja real, no hay tachado ni %.
+- **Comparación con otros canales en escalera** (`referencias`: hasta 3 `{etiqueta, precio}` por
+  producto; reemplaza `precioReferencia` y `etiquetaReferencia`): barras grises de mayor a menor y
+  al pie la tienda en verde, en pesos y sin porcentaje. En la estrella y en la ficha lleva título
+  (`tituloComparador`, default "Nosotros comparamos. Usted ahorra."), "Ahorra hasta $X" y "Precios
+  relevados el …" (`fechaRelevamiento`); en las cards de ofertas va compacta, sin título.
+  Etiquetas sugeridas: "Tiendas online", "Casas de iluminación", "Cadenas de electro". No se nombra a
+  ningún competidor (publicidad comparativa: objetiva y verificable; guardar capturas fechadas).
+- **Color**: navy = precio, verde = ahorro, rojo = sólo urgencia (unidades, cuenta regresiva).
+- **Unidades en casilleros** (uno por unidad) con "¡Últimas N unidades!" y "Después vuelve a su
+  precio normal".
+- **Mobile**: las ofertas son filas horizontales (foto chica a la izquierda), sin nada encima de la
+  foto y sin escalera.

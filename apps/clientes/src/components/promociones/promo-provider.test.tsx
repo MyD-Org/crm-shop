@@ -6,11 +6,11 @@ const datos = {
   inicio: undefined,
   fin: "2999-01-01T00:00:00-03:00",
   etiquetaBadge: "Precio de apertura",
-  etiquetaReferencia: "En otras tiendas desde",
+  tituloComparador: "Nosotros comparamos. Usted ahorra.",
   legales: undefined,
   estrellaSku: "NK-1",
   unidadesPromo: 5,
-  refs: { "NK-1": 150000 },
+  productos: { "NK-1": { habitual: 132172 } },
 };
 
 function Sonda({ sku }: { sku: string }) {

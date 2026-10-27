@@ -1,65 +1,116 @@
 import { cn } from "@myd-org/ui";
+import type { Referencia } from "@/data/home-defaults";
 import { fmtPrecioCorto } from "@/lib/format";
-import { esUltimas } from "@/lib/promociones/promo";
+import { descuentoPropio, escaleraPrecios, esUltimas, fechaRelevamientoAR } from "@/lib/promociones/promo";
 
 /*
- * Piezas visuales de la promo, compartidas por la home y la ficha para que digan lo mismo. Regla de
- * copy: el descuento SIEMPRE dice contra qué es ("más barato que en otras tiendas"); un "−19 %" solo
- * se lee como rebaja de nuestro propio precio. Sin verbos en segunda persona ("ahorre"/"ahorrás"): el
- * sitio habla de usted y el ahorro se dice como dato ("$X menos que en otras tiendas").
+ * Piezas visuales de la promo, compartidas por la home y la ficha para que digan lo mismo.
+ * Lenguaje de color: navy = precio, verde = ahorro, rojo = urgencia (unidades, cuenta regresiva).
+ * El % se calcula SOLO contra nuestro precio habitual (es exacto y real). La comparación con otros
+ * canales va en la escalera, en pesos y sin porcentaje.
  */
 
-/** Etiqueta roja rectangular: "19 % más barato" / "que en otras tiendas". */
-export function EtiquetaMasBarato({ pct, grande = false, className }: { pct: number; grande?: boolean; className?: string }) {
+/**
+ * Antes y ahora: nuestro precio habitual tachado, el precio de apertura y la pastilla verde del
+ * descuento propio. Sin habitual (o sin rebaja real), sólo el precio.
+ */
+export function PrecioPromo({
+  precio,
+  habitual,
+  esTransferencia,
+  tamano = "grande",
+}: {
+  precio: number;
+  habitual?: number;
+  esTransferencia: boolean;
+  tamano?: "grande" | "chico";
+}) {
+  const d = descuentoPropio(precio, habitual);
+  const grande = tamano === "grande";
   return (
-    <span
-      data-sello="descuento"
-      className={cn("inline-flex flex-col rounded-lg bg-danger text-white shadow-md", grande ? "px-3.5 py-2" : "px-2.5 py-1.5", className)}
-    >
-      <span className={cn("font-display font-extrabold leading-none tabular-nums", grande ? "text-[22px] md:text-[26px]" : "text-[15px]")}>
-        {pct} % más barato
-      </span>
-      <span className={cn("leading-tight text-white/90", grande ? "mt-1 text-xs" : "mt-0.5 text-[10px]")}>que en otras tiendas</span>
-    </span>
+    <div className="flex flex-col items-start">
+      {d && habitual ? (
+        <p className={cn("tabular-nums text-muted line-through", grande ? "text-base" : "text-xs")}>
+          <span className="sr-only">Antes: </span>
+          {fmtPrecioCorto(habitual)}
+        </p>
+      ) : null}
+      <p className="flex flex-wrap items-baseline gap-x-2">
+        <span
+          className={cn(
+            "font-display font-extrabold leading-none tabular-nums text-primary",
+            grande ? "text-[clamp(38px,5vw,60px)]" : "text-[clamp(20px,2vw,26px)]",
+          )}
+        >
+          {fmtPrecioCorto(precio)}
+        </span>
+        {esTransferencia ? <span className={cn("text-muted", grande ? "text-sm" : "text-xs")}>por transferencia</span> : null}
+      </p>
+      {d ? (
+        <span
+          data-descuento=""
+          className={cn("mt-2 rounded-md bg-success-soft font-bold text-success", grande ? "px-2.5 py-1 text-sm" : "px-2 py-0.5 text-xs")}
+        >
+          {d.pct} % de descuento
+        </span>
+      ) : null}
+    </div>
   );
 }
 
-/** "$X menos que en otras tiendas": franja sobre el pie de la foto (o línea, en la ficha). */
-export function AhorroPesos({
-  pesos,
-  referencia,
-  etiqueta,
-  pct,
-  enFoto = false,
-}: {
-  pesos: number;
-  referencia: number;
-  etiqueta: string;
-  /** En la foto de una oferta, el % va en la misma franja (una sola pieza, no dos que repiten). */
-  pct?: number | null;
-  enFoto?: boolean;
-}) {
-  if (enFoto) {
-    return (
-      <div data-ahorro="" className="rounded-lg bg-white/95 px-2 py-1.5 shadow-md ring-1 ring-black/5 backdrop-blur sm:rounded-xl sm:px-3 sm:py-2">
-        <p className="text-[11px] leading-tight text-danger sm:text-[13px]">
-          <span className="font-extrabold">{fmtPrecioCorto(pesos)} menos</span>{" "}
-          <span className="font-semibold">que en otras tiendas</span>
-        </p>
-        {/* En mobile la card es angosta: sólo la primera línea, para no tapar el producto. */}
-        <p className="mt-0.5 hidden text-[11px] leading-tight text-muted sm:block">
-          {pct ? <span className="font-semibold text-text">{pct} % más barato · </span> : null}
-          {etiqueta} {fmtPrecioCorto(referencia)}
-        </p>
-      </div>
-    );
-  }
+function Fila({ etiqueta, precio, ancho, propia, compacta }: { etiqueta: string; precio: number; ancho: number; propia?: boolean; compacta?: boolean }) {
   return (
-    <div data-ahorro="" className="flex flex-col gap-0.5">
-      <p className="text-[15px] font-bold text-danger">{fmtPrecioCorto(pesos)} menos que en otras tiendas</p>
-      <p className="text-xs text-muted">
-        {etiqueta} {fmtPrecioCorto(referencia)}
-      </p>
+    <div>
+      <div className={cn("flex items-baseline justify-between gap-3", compacta ? "text-[11px]" : "text-[13px]", propia ? "font-bold text-success" : "text-muted")}>
+        <span className="truncate">{etiqueta}</span>
+        <span className="shrink-0 tabular-nums">{fmtPrecioCorto(precio)}</span>
+      </div>
+      <div className={cn("mt-1 overflow-hidden rounded-full", compacta ? "h-1.5" : "h-2.5")} aria-hidden>
+        <div className={cn("h-full rounded-full", propia ? "bg-success" : "bg-black/15")} style={{ width: `${Math.max(ancho * 100, 4)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Escalera de comparación: los precios de otros canales de mayor a menor, en barras grises, y al pie
+ * el nuestro en verde (la barra más corta). Con título (estrella y ficha) cierra con el ahorro máximo
+ * y la fecha del relevamiento; compacta (cards de ofertas) son sólo las barras.
+ */
+export function EscaleraPrecios({
+  precio,
+  referencias,
+  tienda,
+  titulo,
+  fecha,
+  compacta = false,
+  className,
+}: {
+  precio: number;
+  referencias?: Referencia[];
+  /** Nombre de la tienda en la última fila ("Central Led"). */
+  tienda: string;
+  titulo?: string;
+  /** Día del relevamiento (YYYY-MM-DD). */
+  fecha?: string;
+  compacta?: boolean;
+  className?: string;
+}) {
+  const e = escaleraPrecios(precio, referencias);
+  if (!e) return null;
+  return (
+    <div data-escalera="" className={cn("flex flex-col", compacta ? "gap-1.5" : "gap-2.5 rounded-xl bg-elevated px-4 py-3.5", className)}>
+      {titulo && !compacta ? <p className="font-display text-[15px] font-bold leading-snug text-text">{titulo}</p> : null}
+      {e.filas.map((f) => (
+        <Fila key={`${f.etiqueta}-${f.precio}`} etiqueta={f.etiqueta} precio={f.precio} ancho={f.ancho} compacta={compacta} />
+      ))}
+      <Fila etiqueta={tienda} precio={precio} ancho={e.ancho} propia compacta={compacta} />
+      {!compacta ? (
+        <div className="flex flex-wrap items-baseline justify-between gap-2 pt-0.5">
+          <p className="text-sm font-bold text-success">Ahorra hasta {fmtPrecioCorto(e.ahorroMax)}</p>
+          {fecha ? <p className="text-[11px] text-muted">Precios relevados el {fechaRelevamientoAR(fecha)}</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

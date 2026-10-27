@@ -4,7 +4,7 @@
  * sin caché y sin reloj propio: quien llama pasa `ahora`.
  */
 import type { Product } from "@/data/products";
-import type { EstrellaPromo, PromocionesContent } from "./tipos";
+import type { EstrellaPromo, PromocionesContent, Referencia } from "./tipos";
 
 export const ZONA_AR = "America/Argentina/Buenos_Aires";
 /** Argentina no tiene horario de verano: el offset es fijo. */
@@ -12,7 +12,11 @@ const OFFSET_AR = "-03:00";
 const OFFSET_AR_MS = -3 * 3600 * 1000;
 
 export const ETIQUETA_BADGE_DEFAULT = "Precio de apertura";
-export const ETIQUETA_REFERENCIA_DEFAULT = "En otras tiendas desde";
+export const TITULO_COMPARADOR_DEFAULT = "Nosotros comparamos. Usted ahorra.";
+/** Máximo de referencias por producto en la escalera. */
+export const MAX_REFERENCIAS = 3;
+/** Nombres sugeridos para las filas de la escalera (el admin puede escribir otro). */
+export const ETIQUETAS_REFERENCIA_SUGERIDAS = ["Tiendas online", "Casas de iluminación", "Cadenas de electro"] as const;
 export const LEGALES_DEFAULT =
   "Promoción válida del {inicio} al {fin} o hasta agotar {unidades} unidades del producto estrella. Precios finales con IVA para pago por transferencia. Stock sujeto a disponibilidad.";
 export const MAX_ITEMS_PROMO = 6;
@@ -66,6 +70,40 @@ export function ahorroPesos(precio: number, referencia?: number): number | null 
   if (!referencia || referencia <= precio) return null;
   const pesos = Math.round(referencia - precio);
   return pesos > 0 ? pesos : null;
+}
+
+/** Descuento contra NUESTRO precio habitual (el tachado): % hacia abajo y pesos; null sin rebaja real. */
+export function descuentoPropio(precio: number, habitual?: number): { pct: number; pesos: number } | null {
+  const pct = porcentajeAhorro(precio, habitual);
+  const pesos = ahorroPesos(precio, habitual);
+  return pct && pesos ? { pct, pesos } : null;
+}
+
+export type Escalera = {
+  /** Las referencias más caras que nuestro precio, de mayor a menor; `ancho` relativo a la mayor (0..1]. */
+  filas: (Referencia & { ancho: number })[];
+  /** Ancho de nuestra barra. */
+  ancho: number;
+  /** Diferencia contra la referencia más cara (pesos enteros). */
+  ahorroMax: number;
+};
+
+/** La escalera de comparación; null si ninguna referencia es más cara que nuestro precio. */
+export function escaleraPrecios(precio: number, referencias?: Referencia[]): Escalera | null {
+  const mayores = (referencias ?? []).filter((r) => r.precio > precio).sort((a, b) => b.precio - a.precio);
+  if (mayores.length === 0) return null;
+  const max = mayores[0].precio;
+  return {
+    filas: mayores.map((r) => ({ ...r, ancho: r.precio / max })),
+    ancho: precio / max,
+    ahorroMax: Math.round(max - precio),
+  };
+}
+
+/** "2026-10-26" → "26/10" (sin pasar por Date: una fecha sin hora no tiene zona). */
+export function fechaRelevamientoAR(dia: string): string {
+  const [, mes, d] = dia.split("-");
+  return `${Number(d)}/${Number(mes)}`;
 }
 
 /** El precio que la promo muestra grande: el del medio destacado (transferencia) con IVA. */
@@ -153,39 +191,42 @@ export type DatosPromoCliente = {
   inicio?: string;
   fin: string;
   etiquetaBadge: string;
-  etiquetaReferencia: string;
+  tituloComparador: string;
+  fechaRelevamiento?: string;
   legales?: string;
   estrellaSku?: string;
   unidadesPromo?: number;
-  /** SKU normalizado → precio de referencia (undefined = sin referencia). */
-  refs: Record<string, number | undefined>;
+  /** SKU normalizado → precio habitual y referencias (ausentes = sin tachado / sin comparación). */
+  productos: Record<string, { habitual?: number; referencias?: Referencia[] }>;
 };
 
 export function datosPromoCliente(p: PromocionesContent): DatosPromoCliente | null {
   const skus = skusPromo(p);
   if (!p.fin || skus.length === 0) return null;
-  const refs: Record<string, number | undefined> = {};
-  if (p.estrella?.sku) refs[normalizar(p.estrella.sku)] = p.estrella.precioReferencia;
-  for (const i of p.items ?? []) {
-    const k = normalizar(i.sku);
-    if (k && !(k in refs)) refs[k] = i.precioReferencia;
+  const productos: DatosPromoCliente["productos"] = {};
+  for (const i of [p.estrella, ...(p.items ?? [])]) {
+    const k = i?.sku ? normalizar(i.sku) : "";
+    if (k && !(k in productos)) productos[k] = { habitual: i!.precioHabitual, referencias: i!.referencias };
   }
   return {
     inicio: p.inicio,
     fin: p.fin,
     etiquetaBadge: p.etiquetaBadge,
-    etiquetaReferencia: p.etiquetaReferencia,
+    tituloComparador: p.tituloComparador,
+    fechaRelevamiento: p.fechaRelevamiento,
     legales: p.legales,
     estrellaSku: p.estrella?.sku ? normalizar(p.estrella.sku) : undefined,
     unidadesPromo: p.estrella?.unidadesPromo,
-    refs,
+    productos,
   };
 }
 
 export type InfoPromoProducto = {
   etiquetaBadge: string;
-  etiquetaReferencia: string;
-  referencia?: number;
+  tituloComparador: string;
+  fechaRelevamiento?: string;
+  habitual?: number;
+  referencias?: Referencia[];
   inicio?: string;
   fin: string;
   legales?: string;
@@ -207,11 +248,14 @@ export function infoPromoDe(datos: DatosPromoCliente | null, sku: string | undef
 export function infoPromoSku(datos: DatosPromoCliente | null, sku: string | undefined): InfoPromoProducto | null {
   if (!datos || !sku) return null;
   const k = normalizar(sku);
-  if (!(k in datos.refs)) return null;
+  const producto = datos.productos[k];
+  if (!producto) return null;
   return {
     etiquetaBadge: datos.etiquetaBadge,
-    etiquetaReferencia: datos.etiquetaReferencia,
-    referencia: datos.refs[k],
+    tituloComparador: datos.tituloComparador,
+    fechaRelevamiento: datos.fechaRelevamiento,
+    habitual: producto.habitual,
+    referencias: producto.referencias,
     inicio: datos.inicio,
     fin: datos.fin,
     legales: datos.legales,

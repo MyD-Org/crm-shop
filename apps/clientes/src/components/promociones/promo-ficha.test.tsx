@@ -20,8 +20,10 @@ const producto = {
 const texto = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 const vigente = {
   etiquetaBadge: "Precio de apertura",
-  etiquetaReferencia: "En otras tiendas desde",
-  referencia: 150000,
+  tituloComparador: "Nosotros comparamos. Usted ahorra.",
+  fechaRelevamiento: "2026-10-26",
+  habitual: 132172,
+  referencias: [{ etiqueta: "Tiendas online", precio: 150000 }],
   fin: "2026-11-13T23:59:00-03:00",
   inicio: "2026-11-03T00:00:00-03:00",
   legales: LEGALES_DEFAULT,
@@ -30,12 +32,16 @@ const vigente = {
 };
 
 describe("PromoFicha", () => {
-  it("con promo: etiqueta, referencia con ahorro, fin y legales", () => {
+  it("con promo: etiqueta, antes/ahora, escalera con título, fin y legales", () => {
     info.valor = vigente;
     const t = texto(renderToStaticMarkup(<PromoFicha producto={producto} quedan={3} />));
     expect(t).toContain("Precio de apertura");
-    expect(t).toContain("En otras tiendas desde");
-    expect(t).toContain("26 % más barato que en otras tiendas");
+    expect(t).toContain("Precio habitual $ 132.172");
+    expect(t).toContain("16 % de descuento");
+    expect(t).toContain("Nosotros comparamos. Usted ahorra.");
+    expect(t).toContain("Tiendas online");
+    expect(t).toContain("Ahorra hasta $ 40.001");
+    expect(t).toContain("Precios relevados el 26/10");
     expect(t).toContain("Termina el 13/11");
     expect(t).toContain("Quedan 3 de 5");
     expect(t).toContain("Promoción válida del 3/11 al 13/11");
@@ -65,8 +71,8 @@ describe("PromoFicha", () => {
       ],
     } as unknown as Product;
     const t = texto(renderToStaticMarkup(<PromoFicha producto={enFicha} quedan={3} slugDestacado="transferencia" />));
-    expect(t).toContain("26 % más barato que en otras tiendas");
-    expect(t).not.toContain("20 % más barato");
+    expect(t).toContain("16 % de descuento");
+    expect(t).not.toContain("9 % de descuento");
   });
 
   it("con listas por forma del destacado: la línea sin forma, si no la más barata", () => {
@@ -79,7 +85,7 @@ describe("PromoFicha", () => {
         { slug: "mp", nombre: "MP", price: 1, precioFinal: 112500, forma: "debito" },
       ],
     } as unknown as Product;
-    expect(texto(renderToStaticMarkup(<PromoFicha producto={conFormas} quedan={3} slugDestacado="mp" />))).toContain("25 % más barato");
+    expect(texto(renderToStaticMarkup(<PromoFicha producto={conFormas} quedan={3} slugDestacado="mp" />))).toContain("14 % de descuento");
   });
 
   it("el destacado no está en la ficha: ahorro contra el precio de lista, nunca contra otro medio", () => {
@@ -91,8 +97,8 @@ describe("PromoFicha", () => {
       preciosMedios: [{ slug: "cuotas", nombre: "Cuotas", price: 99173, precioFinal: 120000 }],
     } as unknown as Product;
     const t = texto(renderToStaticMarkup(<PromoFicha producto={sinDestacado} quedan={3} slugDestacado="transferencia" />));
-    expect(t).toContain("10 % más barato");
-    expect(t).not.toContain("20 % más barato");
+    expect(t).not.toContain("de descuento"); // $ 135.000 de lista no es rebaja contra $ 132.172
+    expect(t).not.toContain("9 % de descuento");
   });
 
   it("sin promo: nada", () => {

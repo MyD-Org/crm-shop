@@ -92,11 +92,11 @@ describe("home-editable B1: whatsapp sale del contrato, no de literales", () => 
   });
 });
 
-describe("home-editable B2: las 9 secciones de HomeClient están envueltas en SeccionEditable", () => {
-  it("HomeClient.tsx tiene 9 <SeccionEditable (con tiendaOficial)", () => {
+describe("home-editable B2: las 10 secciones de HomeClient están envueltas en SeccionEditable", () => {
+  it("HomeClient.tsx tiene 10 <SeccionEditable (con tiendaOficial y promociones)", () => {
     const texto = readFileSync(HOME_CLIENT, "utf8");
     const ocurrencias = texto.match(/<SeccionEditable/g) ?? [];
-    expect(ocurrencias).toHaveLength(9);
+    expect(ocurrencias).toHaveLength(10);
   });
 });
 

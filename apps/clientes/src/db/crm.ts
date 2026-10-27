@@ -103,6 +103,8 @@ export const crmOverlay = publico.table("catalog_overlay", {
    * muestra ni se vende en la tienda. Migración 0087 del CRM.
    */
   ocultaEnTienda: boolean("oculta_en_tienda").notNull(),
+  // migración 0094 del CRM; sólo se nombra en SQL con modalidades activas (lectura tolerante)
+  modalidadSinStockId: uuid("modalidad_sin_stock_id"),
 });
 
 // ---------------------------------------------------------------------------
@@ -604,4 +606,19 @@ export const crmAtributos = publico.table("catalog_atributos", {
   clave: text("clave").notNull(),
   valorNum: numeric("valor_num"),
   valorTexto: text("valor_texto"),
+});
+
+/**
+ * Modalidades de venta sin stock (`public.modalidades_sin_stock`, migración 0094 del CRM; SELECT
+ * para `shop_app`). La migración puede no estar aplicada: `venta-sin-stock-repo.ts` lee con
+ * tolerancia y, sin ella, el Shop se comporta como siempre. `plazoDias` null = "a coordinar".
+ */
+export const crmModalidadesSinStock = publico.table("modalidades_sin_stock", {
+  id: uuid("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  nombre: text("nombre").notNull(),
+  texto: text("texto").notNull(),
+  plazoDias: integer("plazo_dias"),
+  flujo: text("flujo").notNull(),
+  activa: boolean("activa").notNull(),
 });

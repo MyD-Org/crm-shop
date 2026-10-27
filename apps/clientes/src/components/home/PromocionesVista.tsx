@@ -94,7 +94,7 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
             {esTransferencia ? <span className="text-sm text-white/75">por transferencia</span> : null}
           </p>
           <Referencia etiqueta={contenido.etiquetaReferencia} precio={monto} referencia={e.precioReferencia} oscuro />
-          {quedan !== null && quedan > 0 && e.unidadesPromo ? <Unidades quedan={quedan} total={e.unidadesPromo} /> : null}
+          {!agotada && quedan !== null && quedan > 0 && e.unidadesPromo ? <Unidades quedan={quedan} total={e.unidadesPromo} /> : null}
           {agotada ? <p className="text-sm font-semibold text-white">Agotadas las unidades a precio de apertura</p> : null}
           {agotada && edicion ? <p className="rounded-md bg-warning/90 px-3 py-2 text-xs font-medium text-black">{AVISO_AJUSTE_CRM}</p> : null}
           {contenido.fin ? <CuentaRegresiva fin={contenido.fin} className="text-sm text-white/85" /> : null}

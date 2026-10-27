@@ -46,6 +46,13 @@ describe("PromoFicha", () => {
     expect(texto(renderToStaticMarkup(<PromoFicha producto={producto} quedan={2} />))).toContain("¡Últimas unidades!");
   });
 
+  it("sin stock: no muestra el contador", () => {
+    info.valor = vigente;
+    const t = texto(renderToStaticMarkup(<PromoFicha producto={{ ...producto, stock: "out" } as Product} quedan={3} />));
+    expect(t).not.toContain("Quedan 3 de 5");
+    expect(t).toContain("Agotadas las unidades a precio de apertura");
+  });
+
   it("sin promo: nada", () => {
     info.valor = null;
     expect(renderToStaticMarkup(<PromoFicha producto={producto} quedan={3} />)).toBe("");

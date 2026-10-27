@@ -74,6 +74,13 @@ describe("PromocionesVista", () => {
     expect(html).toContain('href="/producto/22596"');
   });
 
+  it("sin stock en la tienda: agotada aunque el contador diga que quedan", () => {
+    const t = texto(vista({ estrella: { producto: { ...estrellaProd, stock: "out" } as Product, quedan: 3 } }));
+    expect(t).toContain("Agotadas las unidades a precio de apertura");
+    expect(t).not.toContain("Quedan 3 de 5");
+    expect(t).not.toContain("Agregar");
+  });
+
   it("quedan 0 en edición: avisa que hay que quitar el ajuste en el CRM", () => {
     expect(texto(vista({ estrella: { producto: estrellaProd, quedan: 0 }, edicion: true }))).toContain(
       "Quite el ajuste de precio del producto en Precios online del CRM.",

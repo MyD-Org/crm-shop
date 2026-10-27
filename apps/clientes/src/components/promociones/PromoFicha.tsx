@@ -17,6 +17,8 @@ export function PromoFicha({ producto, quedan }: { producto: Product; quedan?: n
   const { monto } = precioPrincipal({ ...producto, precioMedio: producto.precioMedio ?? producto.preciosMedios?.[0] });
   const pct = porcentajeAhorro(monto, info.referencia);
   const conContador = info.esEstrella && info.unidadesPromo && quedan != null;
+  // Sin stock en la tienda manda el stock: nunca "quedan N" sobre algo que no se puede comprar.
+  const quedanVista = producto.stock === "out" ? 0 : quedan;
 
   return (
     <div className="mt-4 flex flex-col gap-2 rounded-lg border border-danger/30 bg-danger-soft p-4">
@@ -31,10 +33,10 @@ export function PromoFicha({ producto, quedan }: { producto: Product; quedan?: n
         </p>
       ) : null}
       {conContador ? (
-        quedan! > 0 ? (
-          <p className={esUltimas(quedan!) ? "text-sm font-semibold text-danger" : "text-sm text-text"}>
-            {esUltimas(quedan!) ? "¡Últimas unidades! " : ""}
-            Quedan <strong>{quedan} de {info.unidadesPromo}</strong> a precio de apertura
+        quedanVista! > 0 ? (
+          <p className={esUltimas(quedanVista!) ? "text-sm font-semibold text-danger" : "text-sm text-text"}>
+            {esUltimas(quedanVista!) ? "¡Últimas unidades! " : ""}
+            Quedan <strong>{quedanVista} de {info.unidadesPromo}</strong> a precio de apertura
           </p>
         ) : (
           <p className="text-sm font-semibold text-text">Agotadas las unidades a precio de apertura</p>

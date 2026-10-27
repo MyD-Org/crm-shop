@@ -55,8 +55,10 @@ import {
   guardarOrdenHome,
   guardarSeccion,
   leerSeccionParaEditar,
+  productosParaPromo,
   resolverProductosHome,
   restablecerFooter,
+  sucursalesParaPromo,
   restablecerSeccion,
 } from "./home-acciones";
 import { DEFAULTS_HOME } from "@/data/home-defaults";
@@ -613,5 +615,29 @@ describe("guardarOrdenHome", () => {
     esAdminMock.mockResolvedValue(false);
     expect((await guardarOrdenHome([])).ok).toBe(false);
     expect(guardarMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("acciones del editor de promociones", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    esAdminMock.mockResolvedValue(true);
+  });
+
+  it("No-admin: productosParaPromo no consulta el catálogo", async () => {
+    esAdminMock.mockResolvedValue(false);
+    const r = await productosParaPromo(["A-1"], "mdp");
+    expect(r).toEqual({ ok: false, errores: ["No tiene permisos para editar la página de inicio."] });
+    expect(porSkusMock).not.toHaveBeenCalled();
+  });
+
+  it("No-admin: sucursalesParaPromo devuelve vacío", async () => {
+    esAdminMock.mockResolvedValue(false);
+    expect(await sucursalesParaPromo()).toEqual([]);
+  });
+
+  it("Sin códigos: productosParaPromo no consulta", async () => {
+    expect(await productosParaPromo([], "mdp")).toEqual({ ok: true, productos: [] });
+    expect(porSkusMock).not.toHaveBeenCalled();
   });
 });

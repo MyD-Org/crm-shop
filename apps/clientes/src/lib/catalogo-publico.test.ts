@@ -34,6 +34,7 @@ import {
   idsProductosPublicos,
   paginaCatalogoPublica,
   productoPublico,
+  productosPromo,
 } from "./catalogo-publico";
 
 const prod = (id: string, sku: string): Product =>
@@ -289,5 +290,20 @@ describe("categoriasTotalesPublicas (total fijo de cada categoría del panel)", 
     expect(cat.getFacetaCategorias).toHaveBeenCalledWith({ soloStock: true }, true);
     expect(cacheTagMock).toHaveBeenCalledWith("catalogo");
     expect(cacheLifeMock).toHaveBeenCalledWith("catalogo");
+  });
+});
+
+describe("productosPromo", () => {
+  it("sólo los SKUs pedidos, en su orden, sin relleno; perfil catalogo", async () => {
+    cat.getProductosPorSkus.mockResolvedValue([prod("1", "A"), prod("3", "C"), prod("4", "D")]);
+    const out = await productosPromo({ skus: ["C", "A", "NO-EXISTE"], soloVisibles: true });
+    expect(out.map((p) => p.sku)).toEqual(["C", "A"]);
+    expect(cat.getPaginaCatalogo).not.toHaveBeenCalled();
+    expect(cacheTagMock).toHaveBeenCalledWith("catalogo");
+  });
+
+  it("sin SKUs no consulta", async () => {
+    expect(await productosPromo({ skus: [], soloVisibles: true })).toEqual([]);
+    expect(cat.getProductosPorSkus).not.toHaveBeenCalled();
   });
 });

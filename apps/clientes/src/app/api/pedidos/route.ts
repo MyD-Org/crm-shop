@@ -7,7 +7,7 @@ import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
 import { provinciaCanonica } from "@/lib/provincias";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
-import { marcarStockCambiado } from "@/lib/cache-invalidar";
+import { marcarModalidadesCambiadas, marcarStockCambiado } from "@/lib/cache-invalidar";
 import { ProductoNoDisponibleError, StockInsuficienteError } from "@/lib/stock-disponible";
 import { admiteEnvio } from "@/lib/facturacion";
 import { guardarTelefonoSiFalta } from "@/lib/facturacion-db";
@@ -32,6 +32,7 @@ import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { SucursalPedidoError, localDeRetiro } from "@/lib/sucursales-pedido";
 import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 import { idsAPedido, VentaSinStockCambioError } from "@/lib/venta-sin-stock";
+import { modalidadesActivas } from "@/lib/venta-sin-stock-repo";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { contextoUnion } from "@/lib/disponibilidad-contexto";
@@ -385,8 +386,10 @@ export async function POST(req: Request) {
     // Venta sin stock con el flag: la disponibilidad va ANTES de cotizar y decide qué líneas van a
     // pedido con las reglas reales (`origenDeLinea`), el mismo motor y el mismo local que el carrito.
     // null (flag apagado o falla) = decide el stock de la cotización. Nunca hace fallar el pedido.
+    // Sin modalidades activas ninguna línea puede ir a pedido: no se consulta el motor (la cotización
+    // lee la misma lista cacheada, así que el resultado es idéntico).
     let aPedido: Set<string> | undefined;
-    if (disp && sucursalEntrada) {
+    if (disp && sucursalEntrada && (await modalidadesActivas()).length > 0) {
       try {
         const disponibilidad = await disponibilidadParaMostrar(
           lineas.map((l) => l.id),
@@ -585,7 +588,10 @@ export async function POST(req: Request) {
       // Otro checkout se llevó las unidades entre la cotización y el pedido, o la modalidad de venta
       // sin stock de una línea se desactivó o cambió de flujo (la transacción ya se deshizo). Se
       // re-cotiza (con las mismas líneas a pedido y la misma lista), que ya descuenta su reserva y lee
-      // la modalidad de ahora, para que el checkout marque qué línea cambió.
+      // la modalidad de ahora, para que el checkout marque qué línea cambió. Si fue la modalidad, la
+      // lista cacheada quedó vieja (p. ej. se perdió el aviso del CRM): se vence para que el
+      // reintento cotice con la de ahora y no choque igual hasta el TTL.
+      if (err instanceof VentaSinStockCambioError) marcarModalidadesCambiadas();
       return productosCambiaron(await cotizar(lineas, opcionesCotizar));
     }
 

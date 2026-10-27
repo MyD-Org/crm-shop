@@ -21,3 +21,18 @@ export function marcarStockCambiado(origen: string): void {
     console.warn(`[cache] no se pudo invalidar el catálogo tras ${origen}:`, err);
   }
 }
+
+/**
+ * La modalidad de venta sin stock que leyó `crearPedido` (sin caché, en la transacción) no es la de
+ * la cotización: la lista cacheada (`modalidadesActivas`, tag `catalogo`) quedó vieja, por ejemplo
+ * porque se perdió el aviso del CRM. Se vence YA (`expire: 0`, como el aviso del CRM): con
+ * stale-while-revalidate el reintento del comprador volvería a cotizar con la vieja y chocaría
+ * igual hasta el TTL. Es raro (cambio de modalidad sin aviso); nunca tira.
+ */
+export function marcarModalidadesCambiadas(): void {
+  try {
+    revalidateTag(TAG_CATALOGO, { expire: 0 });
+  } catch (err) {
+    console.warn("[cache] no se pudo invalidar el catálogo tras un cambio de modalidad:", err);
+  }
+}

@@ -3,6 +3,7 @@ import { setFlag } from "@/test/flags";
 import type { MedioPago } from "@/lib/medios-pago";
 import type { DatosSucursales, SucursalVista } from "@/lib/sucursales-repo";
 import { VentaSinStockCambioError, type VentaSinStock } from "@/lib/venta-sin-stock";
+import { modalidadesActivas } from "@/lib/venta-sin-stock-repo";
 
 /**
  * Venta sin stock por modalidad en POST /api/pedidos (fixtures sintéticas):
@@ -19,6 +20,7 @@ const crearPedido = vi.fn();
 const cotizar = vi.fn();
 const getPedidoPorClave = vi.fn();
 const disponibilidadParaMostrar = vi.fn();
+const marcarModalidadesCambiadas = vi.fn();
 let identidad: Record<string, unknown>;
 let medios: MedioPago[];
 let estadoDisp = false;
@@ -91,6 +93,10 @@ vi.mock("@/lib/disponibilidad-vista", () => ({
   disponibilidadParaMostrar: (...a: unknown[]) => disponibilidadParaMostrar(...a),
 }));
 vi.mock("@/lib/sucursales-datos", () => ({ sucursalesCacheadas: async () => datosSucursales }));
+vi.mock("@/lib/cache-invalidar", () => ({
+  marcarStockCambiado: () => {},
+  marcarModalidadesCambiadas: () => marcarModalidadesCambiadas(),
+}));
 
 import { POST } from "./route";
 
@@ -205,6 +211,7 @@ beforeEach(() => {
   getPedidoPorClave.mockResolvedValue(null);
   disponibilidadParaMostrar.mockReset();
   disponibilidadParaMostrar.mockResolvedValue(null);
+  marcarModalidadesCambiadas.mockReset();
   crearPedido.mockReset();
   crearPedido.mockImplementation(async (_c, datos) => ({
     id: "p1",
@@ -329,12 +336,26 @@ describe("POST /api/pedidos — venta sin stock por modalidad", () => {
     });
     // La recotización usa las mismas opciones (la lista del pedido a confirmar).
     expect(listasCotizadas().at(-1)).toBe("lista-destacado");
+    // La lista cacheada de modalidades quedó vieja: se vence para el reintento.
+    expect(marcarModalidadesCambiadas).toHaveBeenCalledTimes(1);
   });
 
   describe("con el flag disponibilidad-sucursal", () => {
     beforeEach(() => {
       setFlag("sucursales", true);
       estadoDisp = true;
+      // Las modalidades activas (caché `catalogo`); el mock global devuelve [].
+      vi.mocked(modalidadesActivas).mockResolvedValue([EN_LINEA, A_PEDIDO]);
+    });
+
+    it("sin modalidades activas no consulta el motor: decide el stock de la cotización, sin aPedido", async () => {
+      vi.mocked(modalidadesActivas).mockResolvedValue([]);
+      modalidadDe = {};
+      disponibilidadParaMostrar.mockResolvedValue({ productos: productos("por_pedido"), locales: [] });
+      const r = await post({ items: [conStock], pagoMetodo: "transferencia", sucursalRetiro: "sede-a" });
+      expect(r.status).toBe(201);
+      expect(disponibilidadParaMostrar).not.toHaveBeenCalled();
+      expect(cotizar.mock.calls[0][1]).not.toHaveProperty("aPedido");
     });
 
     const productos = (estado: string) => ({

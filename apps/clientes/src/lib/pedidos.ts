@@ -52,6 +52,8 @@ import { leerReglasVenta, leerSucursalesYZonas, type ReglasVentaTenant } from ".
 import { decidirSucursalDePedido } from "./sucursales-pedido";
 import { disponibleNeto } from "./sucursales-disponibilidad";
 import { leerDisponibilidadBruta } from "./stock-sucursal";
+import { snapshotLinea, VentaSinStockCambioError, type SnapshotVentaSinStock } from "./venta-sin-stock";
+import { leerModalidadesActivas } from "./venta-sin-stock-repo";
 import {
   armarSnapshotCuenta,
   resolverCuenta,
@@ -224,6 +226,9 @@ export async function crearPedido(
   const pedidasPorItem = new Map<string, number>();
   for (const l of lineas) pedidasPorItem.set(l.id, (pedidasPorItem.get(l.id) ?? 0) + l.qty);
   const ids = [...pedidasPorItem.keys()].sort();
+  // Venta sin stock: las líneas que la cotización (servidor) dejó "a pedido". Pasan las compuertas de
+  // stock; las demás se validan exactamente como siempre.
+  const idsAPedido = new Set(lineas.filter((l) => l.ventaSinStock).map((l) => l.id));
 
   return getDb().transaction(async (tx) => {
     // Las reglas de sucursales se leen frescas acá adentro (nunca de la caché de mostrar). Sin
@@ -283,6 +288,8 @@ export async function crearPedido(
               id,
               qty: pedidasPorItem.get(id)!,
               ocultoEn: bruta.ocultoEn[id] ?? [],
+              // Sin cobertura con las reglas de respaldo, sale "por pedido" de la sucursal del pedido.
+              porPedido: idsAPedido.has(id),
             })),
           },
           { ...sucursalesYZonas, reglas },
@@ -422,11 +429,16 @@ export async function crearPedido(
       const disponibles = await disponiblesEnTx(tx, ids);
       const faltan = ids.filter((id) => {
         if (!disponibles.has(id)) return true; // ya no está en el espejo
+        if (idsAPedido.has(id)) return false; // a pedido: no se topea con el stock
         const disponible = disponibles.get(id);
         return disponible != null && disponible < pedidasPorItem.get(id)!;
       });
       if (faltan.length > 0) throw new StockInsuficienteError(faltan);
     }
+
+    // La modalidad de cada línea a pedido se relee fresca acá (activa y con el mismo flujo que se
+    // cotizó) y se congela en la línea. Sin líneas a pedido no se lee nada: el pedido es el de siempre.
+    const snapshots = idsAPedido.size > 0 ? await snapshotsVentaSinStock(tx, lineas) : new Map();
 
     await tx.insert(orderItems).values(
       lineas.map((l) => ({
@@ -443,6 +455,7 @@ export async function crearPedido(
         total: String(l.total),
         // Línea "a traer": el origen no es la sucursal que despacha el pedido.
         aTraerDe: aTraerDe(asignacion, l.id),
+        ventaSinStock: snapshots.get(l.id) ?? null,
       })),
     );
 
@@ -463,6 +476,30 @@ export async function crearPedido(
       cuentaPago,
     };
   });
+}
+
+/**
+ * Snapshot de la modalidad fresca de cada línea a pedido (lectura dentro de la transacción, en un
+ * savepoint: si la tabla del CRM falta, no aborta la transacción). Si la modalidad ya no está activa
+ * o cambió de flujo desde la cotización, tira `VentaSinStockCambioError` con esos ids: el pedido no
+ * se crea y la API recotiza.
+ */
+async function snapshotsVentaSinStock(
+  tx: Tx,
+  lineas: Cotizacion["lineas"],
+): Promise<Map<string, SnapshotVentaSinStock>> {
+  const modalidades = await tx.transaction((sp) => leerModalidadesActivas(sp)).catch(() => []);
+  const snapshots = new Map<string, SnapshotVentaSinStock>();
+  const cambiaron: string[] = [];
+  for (const l of lineas) {
+    if (!l.ventaSinStock) continue;
+    const cotizada = l.ventaSinStock;
+    const fresca = modalidades.find((m) => m.id === cotizada.id);
+    if (!fresca || fresca.flujo !== cotizada.flujo) cambiaron.push(l.id);
+    else snapshots.set(l.id, snapshotLinea(fresca));
+  }
+  if (cambiaron.length > 0) throw new VentaSinStockCambioError(cambiaron);
+  return snapshots;
 }
 
 /** Sucursal de la que se trae una línea si no sale de la que despacha; null si sale de ésa. */

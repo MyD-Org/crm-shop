@@ -140,3 +140,88 @@ describe("cotizarConMedio con forma en Payway", () => {
     });
   });
 });
+
+/**
+ * Venta sin stock por modalidad: `aPedido` viaja a todas las cotizaciones (también a las del 409) y un
+ * pedido a confirmar (`a_coordinar`, sin lista privada ni cuenta corriente) se cotiza con la lista que
+ * muestran las cards (`idListaAConfirmar`), sin cuotas ni forma.
+ */
+describe("cotizarConMedio con venta sin stock", () => {
+  const A_PEDIDO = new Set(["1"]);
+  const conFlujo = (flujo: "normal" | "a_confirmar") =>
+    cotizar.mockImplementation(async (_l, o: { idListaMedio?: string }) => ({
+      lineas: [],
+      subtotal: 0,
+      iva: 0,
+      costoEnvio: 0,
+      total: o.idListaMedio === "lista-destacado" ? 90 : 100,
+      hayProblemas: false,
+      flujo,
+    }));
+  const aCoordinar = (extra: Partial<Parameters<typeof cotizarConMedio>[0]> = {}) =>
+    cotizarConMedio({
+      lineas: [{ id: "1", qty: 1 }],
+      entregaTipo: "retiro",
+      pagoMetodo: "a_coordinar",
+      cuotasPedidas: 3,
+      formaPedida: "debito",
+      mediosCrm: [MP],
+      opcionesMedios: { procesadorDisponible: () => true },
+      idListaPrivada: null,
+      soloVisibles: false,
+      aPedido: A_PEDIDO,
+      idListaAConfirmar: "lista-destacado",
+      ...extra,
+    });
+
+  it("devuelve el flujo de la cotización y pasa aPedido a cotizar y a opcionesCotizar", async () => {
+    conFlujo("normal");
+    const r = await llamar(TRANSFERENCIA, { aPedido: A_PEDIDO });
+    expect(r).toMatchObject({ ok: true, flujo: "normal" });
+    expect(cotizar.mock.calls[0][1]).toMatchObject({ aPedido: A_PEDIDO });
+    if (r.ok) expect(r.opcionesCotizar.aPedido).toBe(A_PEDIDO);
+  });
+
+  it("sin aPedido no agrega la clave (como hoy)", async () => {
+    conFlujo("normal");
+    const r = await llamar(TRANSFERENCIA);
+    expect(cotizar.mock.calls[0][1]).not.toHaveProperty("aPedido");
+    if (r.ok) expect(r.opcionesCotizar).not.toHaveProperty("aPedido");
+  });
+
+  it("a_coordinar + a_confirmar: recotiza con la lista del destacado, sin cuotas ni forma", async () => {
+    conFlujo("a_confirmar");
+    const r = await aCoordinar();
+    expect(r).toMatchObject({
+      ok: true,
+      flujo: "a_confirmar",
+      idListaMedio: "lista-destacado",
+      cuotasPedido: null,
+      formaCobro: null,
+    });
+    if (!r.ok) throw new Error("esperaba ok");
+    expect(r.cotizacion.total).toBe(90);
+    // Las recotizaciones del 409 usan la misma lista y las mismas líneas a pedido.
+    expect(r.opcionesCotizar).toMatchObject({ idListaMedio: "lista-destacado", aPedido: A_PEDIDO });
+    expect(cotizar.mock.calls.at(-1)?.[1]).toMatchObject({ idListaMedio: "lista-destacado", aPedido: A_PEDIDO });
+  });
+
+  it("no recotiza con la lista del destacado: flujo normal, otro medio, lista privada, cuenta corriente, pedido existente o sin lista", async () => {
+    conFlujo("normal");
+    expect(await aCoordinar()).toMatchObject({ ok: true, idListaMedio: undefined });
+    conFlujo("a_confirmar");
+    expect(await llamar(TRANSFERENCIA, { idListaAConfirmar: "lista-destacado", aPedido: A_PEDIDO })).toMatchObject({
+      ok: true,
+      flujo: "a_confirmar",
+      idListaMedio: "A",
+    });
+    expect(await aCoordinar({ idListaPrivada: "privada" })).toMatchObject({ ok: true, idListaMedio: undefined });
+    expect(await aCoordinar({ opcionesMedios: { esCuentaCorriente: true } })).toMatchObject({
+      ok: true,
+      idListaMedio: undefined,
+    });
+    expect(await aCoordinar({ ignorarStock: true })).toMatchObject({ ok: true, idListaMedio: undefined });
+    expect(await aCoordinar({ idListaAConfirmar: undefined })).toMatchObject({ ok: true, idListaMedio: undefined });
+    expect(cotizar.mock.calls.every((c) => c[1].idListaMedio !== "lista-destacado")).toBe(true);
+  });
+});

@@ -290,3 +290,39 @@ describe("GET /api/pedidos/:id/medio", () => {
     });
   });
 });
+
+/**
+ * Venta sin stock por modalidad (caracterización, sin código nuevo en la ruta): un pedido a confirmar
+ * (`a_coordinar`) no se pasa a un medio en línea, y la reserva del propio pedido —que hace leer el
+ * stock en cero y deja la línea "a pedido" en la cotización— no le cambia a un pedido existente ni el
+ * flujo ni el medio ni la lista.
+ */
+describe("POST /api/pedidos/:id/medio — venta sin stock", () => {
+  it("un pedido a_coordinar no puede pasar a un medio en línea (409 no_cambia)", async () => {
+    pedidoParaCambiarMedio.mockResolvedValue({ entregaTipo: "retiro", pagoMetodo: "a_coordinar", lineas: [{ id: "1", qty: 2 }] });
+    const r = await llamar({ pagoMetodo: "mercadopago" });
+    expect(r.status).toBe(409);
+    expect(await r.json()).toMatchObject({ motivo: "no_cambia" });
+    expect(cotizar).not.toHaveBeenCalled();
+    expect(cambiarMedioPedido).not.toHaveBeenCalled();
+  });
+
+  it("pedido existente cuya línea ahora cotiza a pedido (a confirmar): cambia al medio pedido con su lista", async () => {
+    cotizar.mockResolvedValue({
+      ...COT,
+      lineas: [
+        {
+          ...COT.lineas[0],
+          ventaSinStock: { id: "mod-1", texto: "A pedido", plazoDias: null, flujo: "a_confirmar" },
+          aceptaSinStock: true,
+        },
+      ],
+      flujo: "a_confirmar",
+    });
+    const r = await llamar({ pagoMetodo: "mercadopago" });
+    expect(r.status).toBe(200);
+    expect(cambiarMedioPedido.mock.calls[0][2]).toMatchObject({ pagoMetodo: "mercadopago", idPriceList: null });
+    // Ninguna recotización con otra lista: sólo la del medio pedido.
+    expect(cotizar.mock.calls.every((c) => c[1].idListaMedio === undefined)).toBe(true);
+  });
+});

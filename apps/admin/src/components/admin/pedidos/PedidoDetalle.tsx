@@ -5,6 +5,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { Alert, Badge, Button, Card, Dialog, Field, Select, Stepper, Table, Textarea, type StepItem, type TableColumn, useToast } from "@myd-org/ui"
 import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
+import { lineasFaltaStock, textoLineaAPedido, tituloAPedido } from "@/lib/pedido-venta-sin-stock"
 import { reglaATexto, whatsappLink, type NombresSucursal } from "@/lib/sucursales-texto"
 import { ESTADO_PEDIDO_LABEL, MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
 import { AlertaCobroOtraCuenta } from "./AlertaCobroOtraCuenta"
@@ -191,7 +192,8 @@ export function PedidoDetalle({
   const esEnvio = pedido.entrega.tipo === "envio"
   // Envío sin ciudad ni dirección: el Shop lo ofrece como "Envío a coordinar" (lo acuerda un asesor).
   const envioACoordinar = esEnvio && !pedido.entrega.ciudad?.trim() && !pedido.entrega.direccion?.trim()
-  const sinStock = pedido.items.filter((i) => i.stockActual !== null && i.stockActual < i.qty)
+  const sinStock = lineasFaltaStock(pedido.items)
+  const lineasAPedido = pedido.items.filter((i) => i.ventaSinStock)
   const lineasATraer = pedido.items.filter((i) => i.aTraerDe)
   const whatsappRaw = pedido.sucursal ? whatsappsSucursal[pedido.sucursal] : undefined
   const whatsappHref = whatsappLink(whatsappRaw)
@@ -217,6 +219,11 @@ export function PedidoDetalle({
           {i.aTraerDe && (
             <div className="text-xs font-medium" style={{ color: "var(--amber)" }}>
               A traer de {nombresSucursal[i.aTraerDe] ?? i.aTraerDe}
+            </div>
+          )}
+          {i.ventaSinStock && (
+            <div className="text-xs font-medium" style={{ color: "var(--amber)" }}>
+              {textoLineaAPedido(i.ventaSinStock)}
             </div>
           )}
           {(i.code || i.brand) && (
@@ -297,6 +304,17 @@ export function PedidoDetalle({
             {sinStock.map((i) => (
               <li key={i.id}>
                 {i.name}: se {i.qty === 1 ? "pide" : "piden"} {fmtCantidad(i.qty)} y hay {fmtCantidad(i.stockActual ?? 0)}.
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
+      {lineasAPedido.length > 0 && (
+        <Alert tone="neutral" title={tituloAPedido(lineasAPedido.length)}>
+          <ul className="flex flex-col gap-0.5">
+            {lineasAPedido.map((i) => (
+              <li key={i.id}>
+                {i.name}: {i.ventaSinStock?.texto}
               </li>
             ))}
           </ul>
@@ -715,7 +733,7 @@ function EstadoAcciones({
 // Costo unitario cargado en Alegra: SÓLO admin+. El DTO no trae el campo para operator (ver
 // `canSeeCosts`), así que se oculta por rol y no por "vino null".
 function DatosDelLocal({ item, esAdminPlus }: { item: PedidoItemDto; esAdminPlus: boolean }) {
-  const falta = item.stockActual !== null && item.stockActual < item.qty ? item.qty - item.stockActual : 0
+  const falta = !item.ventaSinStock && item.stockActual !== null && item.stockActual < item.qty ? item.qty - item.stockActual : 0
   return (
     <div className="mt-1 text-xs tabular-nums" style={{ color: "var(--ink-faint)" }}>
       <span style={falta > 0 ? { color: "var(--red)" } : undefined}>

@@ -7,6 +7,7 @@
  * del pedido.
  */
 import type { Product } from "@/data/products";
+import type { DisponibilidadProducto } from "./sucursales-disponibilidad";
 
 export type FlujoVentaSinStock = "en_linea" | "a_confirmar";
 
@@ -109,4 +110,26 @@ export class VentaSinStockCambioError extends Error {
     super("La modalidad de venta sin stock cambió");
     this.name = "VentaSinStockCambioError";
   }
+}
+
+/**
+ * Ids que el motor de disponibilidad dejó "por pedido" para la entrega elegida: envío =
+ * `envio.estado`; retiro = el estado en el local (sin local, ninguno). Es lo que decide qué líneas
+ * van a pedido al cotizar con el flag `disponibilidad-sucursal`.
+ */
+export function idsAPedido(
+  productos: Record<string, DisponibilidadProducto>,
+  entrega: { tipo: "envio" | "retiro"; local: string | null },
+): Set<string> {
+  const ids = new Set<string>();
+  for (const [id, p] of Object.entries(productos)) {
+    const estado =
+      entrega.tipo === "envio"
+        ? p.envio?.estado
+        : entrega.local
+          ? p.retiro?.[entrega.local]?.estado
+          : undefined;
+    if (estado === "por_pedido") ids.add(id);
+  }
+  return ids;
 }

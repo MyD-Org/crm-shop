@@ -164,6 +164,7 @@ beforeEach(() => {
     stockPorSucursal: { "1": { "sede-a": 5, "sede-b": 5 } },
     reservadoPorSucursal: {},
     ocultoEn: {},
+    ventaSinStock: {},
   };
 });
 

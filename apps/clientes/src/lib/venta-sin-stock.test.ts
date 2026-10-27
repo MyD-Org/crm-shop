@@ -4,6 +4,7 @@ import {
   aVentaSinStock,
   esAPedido,
   flujoDelPedido,
+  idsAPedido,
   leerSnapshot,
   lineaAPedido,
   modalidadPorId,
@@ -13,6 +14,7 @@ import {
   VentaSinStockCambioError,
   type VentaSinStock,
 } from "./venta-sin-stock";
+import type { DisponibilidadProducto } from "./sucursales-disponibilidad";
 
 const M: VentaSinStock = { id: "m1", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea" };
 const C: VentaSinStock = { id: "m2", texto: "A pedido", plazoDias: null, flujo: "a_confirmar" };
@@ -72,5 +74,29 @@ describe("venta sin stock (módulo puro)", () => {
     const e = new VentaSinStockCambioError(["a", "b"]);
     expect(e).toBeInstanceOf(Error);
     expect(e.ids).toEqual(["a", "b"]);
+  });
+
+  it("idsAPedido por entrega", () => {
+    const PRODUCTOS: Record<string, DisponibilidadProducto> = {
+      p1: {
+        envio: { estado: "por_pedido", origen: "igz", demoraDias: 2, despachoDias: 1 },
+        retiro: {
+          igz: { estado: "por_pedido", desde: null, demoraDias: 2 },
+          mdp: { estado: "con_demora", desde: "igz", demoraDias: 7 },
+        },
+        servible: true,
+      },
+      p2: {
+        envio: { estado: "a_traer", origen: "mdp", demoraDias: 7, despachoDias: 1 },
+        retiro: { igz: { estado: "disponible", desde: null, demoraDias: null } },
+        servible: true,
+      },
+      p3: { envio: null, retiro: null, servible: true },
+    };
+    expect([...idsAPedido(PRODUCTOS, { tipo: "envio", local: null })]).toEqual(["p1"]);
+    expect([...idsAPedido(PRODUCTOS, { tipo: "retiro", local: "mdp" })]).toEqual([]);
+    expect([...idsAPedido(PRODUCTOS, { tipo: "retiro", local: "igz" })]).toEqual(["p1"]);
+    expect([...idsAPedido(PRODUCTOS, { tipo: "retiro", local: null })]).toEqual([]);
+    expect([...idsAPedido({}, { tipo: "envio", local: null })]).toEqual([]);
   });
 });

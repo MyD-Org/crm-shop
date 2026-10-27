@@ -11,6 +11,10 @@
  * (`DisponibilidadEnvio.despachoDias`; 1 día = "24 h hábiles"); si hay que traerlo de otra
  * sucursal, es la demora más ese plazo. Con el plazo oculto, el envío dice "disponible" (o, si hay
  * que traerlo, "disponible en N días" con la demora del traslado).
+ *
+ * Venta sin stock por modalidad (`por_pedido`): el plazo es el de la modalidad, en días hábiles
+ * ("Retiro en <local>: disponible en N días hábiles", "Envío a domicilio: despacho dentro de
+ * <plazo + despacho> días hábiles"); 0 = "a coordinar". Tono y peso como `a_traer`/`con_demora`.
  */
 import type { ExcepcionHorario, HorarioSemanal } from "./horario-agrupado";
 import type {
@@ -18,6 +22,7 @@ import type {
   DisponibilidadProducto,
   DisponibilidadRetiro,
 } from "./sucursales-disponibilidad";
+import { textoPlazoHabil } from "./venta-sin-stock";
 
 /** Disponibilidad de un producto en las dos modalidades (lo que viaja al browser). */
 export type DisponibilidadVista = DisponibilidadProducto;
@@ -41,6 +46,10 @@ const plazo = (dias: number | null): string =>
     ? "a coordinar"
     : `disponible en ${dias} ${dias === 1 ? "día" : "días"}`;
 
+/** Plazo de una modalidad de venta sin stock: "disponible en N días hábiles"; 0 = "a coordinar". */
+const plazoPedido = (dias: number | null): string =>
+  dias === null || dias <= 0 ? "a coordinar" : `disponible en ${textoPlazoHabil(dias)}`;
+
 /** "dentro de las 24 h hábiles" (1 día) o "dentro de N días hábiles". Misma frase que el CRM. */
 const dentroDe = (dias: number): string =>
   dias <= 1 ? "dentro de las 24 h hábiles" : `dentro de ${dias} días hábiles`;
@@ -53,13 +62,15 @@ const despacho = (d: DisponibilidadEnvio): string => {
   const dias = d.despachoDias === undefined ? 1 : d.despachoDias;
   if (d.estado === "disponible") return dias === null ? "disponible" : `despacho ${dentroDe(dias)}`;
   if (d.demoraDias === null || d.demoraDias <= 0) return "a coordinar";
-  return dias === null ? plazo(d.demoraDias) : `despacho ${dentroDe(d.demoraDias + dias)}`;
+  if (dias === null) return d.estado === "por_pedido" ? plazoPedido(d.demoraDias) : plazo(d.demoraDias);
+  return `despacho ${dentroDe(d.demoraDias + dias)}`;
 };
 
 export function textoEnvio(d: DisponibilidadEnvio): string {
   switch (d.estado) {
     case "disponible":
     case "a_traer":
+    case "por_pedido":
       return `Envío a domicilio: ${despacho(d)}`;
     default:
       return "Envío a domicilio: no disponible";
@@ -75,6 +86,8 @@ export function textoRetiro(
       return `Retiro en ${nombreLocal}: disponible hoy`;
     case "con_demora":
       return `Retiro en ${nombreLocal}: ${plazo(d.demoraDias)}`;
+    case "por_pedido":
+      return `Retiro en ${nombreLocal}: ${plazoPedido(d.demoraDias)}`;
     default:
       return `Retiro en ${nombreLocal}: no disponible`;
   }
@@ -89,12 +102,12 @@ export interface LineaDisponibilidad {
 }
 
 const tonoEnvio = (d: DisponibilidadEnvio): TonoDisponibilidad =>
-  d.estado === "disponible" ? "ok" : d.estado === "a_traer" ? "demora" : "no";
+  d.estado === "disponible" ? "ok" : d.estado === "a_traer" || d.estado === "por_pedido" ? "demora" : "no";
 
 const tonoRetiro = (d: DisponibilidadRetiro): TonoDisponibilidad =>
   d.estado === "disponible"
     ? "ok"
-    : d.estado === "con_demora"
+    : d.estado === "con_demora" || d.estado === "por_pedido"
       ? "demora"
       : "no";
 
@@ -130,14 +143,18 @@ export function estadoRetiroLocal(d: DisponibilidadRetiro): LineaDisponibilidad 
       ? "Disponible hoy"
       : d.estado === "con_demora"
         ? mayuscula(plazo(d.demoraDias))
-        : "No disponible";
+        : d.estado === "por_pedido"
+          ? mayuscula(plazoPedido(d.demoraDias))
+          : "No disponible";
   return { texto, tono: tonoRetiro(d) };
 }
 
 /** Estado del envío a domicilio sin el prefijo (fila de envío de la ficha). */
 export function estadoEnvio(d: DisponibilidadEnvio): LineaDisponibilidad {
   const texto =
-    d.estado === "disponible" || d.estado === "a_traer" ? mayuscula(despacho(d)) : "No disponible";
+    d.estado === "disponible" || d.estado === "a_traer" || d.estado === "por_pedido"
+      ? mayuscula(despacho(d))
+      : "No disponible";
   return { texto, tono: tonoEnvio(d) };
 }
 
@@ -155,9 +172,17 @@ export function textosDisponibilidad(
 /** Cuánto "pesa" un estado: manda el producto más lento. "A coordinar" (0/null días) va al final. */
 const pesoDemora = (dias: number | null): number => (dias === null || dias <= 0 ? 10_000 : dias);
 export const pesoRetiro =(d: DisponibilidadRetiro): number =>
-  d.estado === "disponible" ? 0 : d.estado === "con_demora" ? pesoDemora(d.demoraDias) : 100_000;
+  d.estado === "disponible"
+    ? 0
+    : d.estado === "con_demora" || d.estado === "por_pedido"
+      ? pesoDemora(d.demoraDias)
+      : 100_000;
 const pesoEnvio = (d: DisponibilidadEnvio): number =>
-  d.estado === "disponible" ? 0 : d.estado === "a_traer" ? pesoDemora(d.demoraDias) : 100_000;
+  d.estado === "disponible"
+    ? 0
+    : d.estado === "a_traer" || d.estado === "por_pedido"
+      ? pesoDemora(d.demoraDias)
+      : 100_000;
 
 /** Un producto del carrito con su estado en un local (detalle del popup "Ver local"). */
 export interface EstadoProductoLocal {
@@ -206,8 +231,12 @@ export function localesPorConveniencia(
 
 /** ¿El producto no se puede ni retirar en ningún local ni enviar? (único aviso por ítem del carrito). */
 export function sinEntregaPosible(d: DisponibilidadVista): boolean {
-  const retiroAlguno = Object.values(d.retiro ?? {}).some((r) => r.estado === "disponible" || r.estado === "con_demora");
-  const envioPosible = d.envio ? d.envio.estado === "disponible" || d.envio.estado === "a_traer" : false;
+  const retiroAlguno = Object.values(d.retiro ?? {}).some(
+    (r) => r.estado === "disponible" || r.estado === "con_demora" || r.estado === "por_pedido",
+  );
+  const envioPosible = d.envio
+    ? d.envio.estado === "disponible" || d.envio.estado === "a_traer" || d.envio.estado === "por_pedido"
+    : false;
   return !retiroAlguno && !envioPosible;
 }
 
@@ -219,7 +248,7 @@ export function sinEntregaPosible(d: DisponibilidadVista): boolean {
  *  - `resumen`: UNA línea con el estado del producto más lento (sin contar los que no se pueden
  *    entregar), o null si no hay nada que decir;
  *  - `aclaracion`: si no todos los productos tienen el mismo estado, cuántos se traen de otra
- *    sucursal;
+ *    sucursal (sólo `con_demora`: un `por_pedido` no viene de otra sucursal);
  *  - `sinEntrega`: ids de los productos que NO se pueden entregar en esta modalidad (llevan su
  *    propio aviso).
  */
@@ -242,7 +271,10 @@ export function resumenEntregaPedido(
   );
   const resumen = peor ? (lineasDisponibilidad(peor.producto, locales, opts)[0] ?? null) : null;
   const textos = new Set(entregables.map((p) => p.linea.texto));
-  const aTraer = entregables.filter((p) => p.linea.tono === "demora").length;
+  // El estado del retiro que pinta la línea (el primer local con dato, como `lineasDisponibilidad`).
+  const aTraer = entregables.filter(
+    (p) => locales.map((l) => p.disp.retiro?.[l.slug]).find(Boolean)?.estado === "con_demora",
+  ).length;
   // Sólo en el retiro: explica por qué el local tarda. En el envío, de qué sucursal sale es
   // logística interna; al cliente le alcanza con el plazo.
   const esRetiro = Boolean(peor?.producto.retiro && Object.keys(peor.producto.retiro).length > 0);

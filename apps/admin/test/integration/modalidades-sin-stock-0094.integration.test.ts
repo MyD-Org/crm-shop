@@ -2,6 +2,13 @@ import { describe, it, expect, beforeEach, afterAll } from "vitest"
 import { sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { seedTenant, truncateAll } from "./helpers"
+import {
+  actualizarModalidad,
+  borrarModalidad,
+  crearModalidad,
+  listarModalidades,
+  modalidadPropia,
+} from "@/lib/modalidades-sin-stock-repo"
 
 /**
  * Migración 0094 (modalidades de venta sin stock) contra la base real de test: tabla, CHECK,
@@ -78,5 +85,53 @@ describe("0094 modalidades_sin_stock", () => {
     const filas = await getDb().execute(sql`select modalidad_sin_stock_id from catalog_overlay where alegra_id = 'item-1'`)
     expect(filas).toHaveLength(1)
     expect((filas[0] as { modalidad_sin_stock_id: string | null }).modalidad_sin_stock_id).toBeNull()
+  })
+})
+
+describe("repo de modalidades", () => {
+  const datos = { nombre: "Modalidad 48 h", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea", activa: true }
+
+  it("crea, lista por nombre y aísla por tenant", async () => {
+    const r = await crearModalidad(A, datos)
+    expect(r).toMatchObject({ kind: "ok", modalidad: { nombre: "Modalidad 48 h", plazoDias: 2, flujo: "en_linea", activa: true } })
+    await crearModalidad(A, { ...datos, nombre: "A pedido", plazoDias: null, flujo: "a_confirmar" })
+    await crearModalidad(B, { ...datos, nombre: "Ajena" })
+    expect((await listarModalidades(A)).map((m) => m.nombre)).toEqual(["A pedido", "Modalidad 48 h"])
+    expect((await listarModalidades(B)).map((m) => m.nombre)).toEqual(["Ajena"])
+  })
+
+  it("un nombre duplicado en el tenant es invalid/nombre; en otro tenant se admite", async () => {
+    await crearModalidad(A, datos)
+    expect(await crearModalidad(A, datos)).toEqual({ kind: "invalid", campo: "nombre", error: "Ya existe una modalidad con ese nombre." })
+    expect((await crearModalidad(B, datos)).kind).toBe("ok")
+  })
+
+  it("actualiza (mueve updated_at), detecta el duplicado y no toca ids ajenos", async () => {
+    const a = await crearModalidad(A, datos)
+    const b = await crearModalidad(A, { ...datos, nombre: "Otra" })
+    if (a.kind !== "ok" || b.kind !== "ok") throw new Error("setup")
+    const antes = await getDb().execute(sql`select updated_at from modalidades_sin_stock where id = ${a.modalidad.id}`)
+    const upd = await actualizarModalidad(A, a.modalidad.id, { ...datos, texto: "Nuevo", activa: false })
+    expect(upd).toMatchObject({ kind: "ok", modalidad: { texto: "Nuevo", activa: false } })
+    const despues = await getDb().execute(sql`select updated_at from modalidades_sin_stock where id = ${a.modalidad.id}`)
+    expect(new Date(despues[0].updated_at as string).getTime()).toBeGreaterThan(new Date(antes[0].updated_at as string).getTime())
+    expect(await actualizarModalidad(A, b.modalidad.id, datos)).toMatchObject({ kind: "invalid", campo: "nombre" })
+    expect(await actualizarModalidad(B, a.modalidad.id, datos)).toEqual({ kind: "not_found" })
+    expect(await actualizarModalidad(A, "no-uuid", datos)).toEqual({ kind: "not_found" })
+  })
+
+  it("modalidadPropia y borrar respetan el tenant; borrar deja el overlay en NULL", async () => {
+    const a = await crearModalidad(A, datos)
+    if (a.kind !== "ok") throw new Error("setup")
+    const id = a.modalidad.id
+    expect(await modalidadPropia(A, id)).toBe(true)
+    expect(await modalidadPropia(B, id)).toBe(false)
+    expect(await modalidadPropia(A, "no-uuid")).toBe(false)
+    await getDb().execute(sql`insert into catalog_overlay (tenant_id, alegra_id, modalidad_sin_stock_id) values (${A}, 'item-2', ${id})`)
+    expect(await borrarModalidad(B, id)).toEqual({ kind: "not_found" })
+    expect(await borrarModalidad(A, id)).toEqual({ kind: "ok" })
+    expect(await borrarModalidad(A, id)).toEqual({ kind: "not_found" })
+    const f = await getDb().execute(sql`select modalidad_sin_stock_id from catalog_overlay where alegra_id = 'item-2'`)
+    expect((f[0] as { modalidad_sin_stock_id: string | null }).modalidad_sin_stock_id).toBeNull()
   })
 })

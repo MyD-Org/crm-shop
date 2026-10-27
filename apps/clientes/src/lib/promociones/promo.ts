@@ -61,6 +61,13 @@ export function porcentajeAhorro(precio: number, referencia?: number): number | 
   return pct > 0 ? pct : null;
 }
 
+/** Cuánto se ahorra (pesos enteros) frente a la referencia; null si no hay ahorro real. */
+export function ahorroPesos(precio: number, referencia?: number): number | null {
+  if (!referencia || referencia <= precio) return null;
+  const pesos = Math.round(referencia - precio);
+  return pesos > 0 ? pesos : null;
+}
+
 /** El precio que la promo muestra grande: el del medio destacado (transferencia) con IVA. */
 export function precioPrincipal(
   p: Pick<Product, "price" | "precioFinal" | "precioMedio">,

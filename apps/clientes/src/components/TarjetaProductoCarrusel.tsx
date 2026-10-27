@@ -39,7 +39,14 @@ function LightbulbIcon({ className }: { className?: string }) {
  * Imagen: la foto real del producto (overlay del CRM) o, si no tiene, el
  * ícono de siempre.
  */
-export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
+export function TarjetaProductoCarrusel({
+  producto,
+  sinBadge = false,
+}: {
+  producto: Product;
+  /** La sección de promociones dibuja su propio sello sobre la foto: la card no lleva badge. */
+  sinBadge?: boolean;
+}) {
   // Precio de la lista privada de la cuenta: todas las tarjetas se piden en una sola tanda.
   const p = aplicarEstadoPrecio(producto, usePreciosCuenta([producto.id]).get(producto.id));
   // Modelo con opciones: el panel para elegirla se monta fuera del `<Link>` (ver `PanelOpciones`).
@@ -97,7 +104,7 @@ export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
         showStock={mostrarStockEnCard(p)}
         price={vv.precio}
         oldPrice={vv.esDesde ? undefined : p.oldPrice}
-        badge={badgePromo(promo) ?? badgeProducto(p)}
+        badge={sinBadge ? undefined : (badgePromo(promo) ?? badgeProducto(p))}
         // La card entera es un <Link>: el corazón corta la navegación.
         cornerAction={<BotonFavorito productId={p.id} dentroDeLink />}
         image={

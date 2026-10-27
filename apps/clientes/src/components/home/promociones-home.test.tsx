@@ -57,6 +57,25 @@ describe("PromocionesVista", () => {
     expect(t).toContain("Kit Candle");
   });
 
+  it("se presenta como lanzamiento: cinta con el eyebrow y cuenta regresiva en cajas", () => {
+    const t = texto(vista());
+    expect(t).toContain(contenido.eyebrow!);
+    expect(t).toContain("La promo termina en");
+    for (const unidad of ["días", "horas", "min", "seg"]) expect(t).toContain(unidad);
+  });
+
+  it("la oferta se entiende: sello de descuento y escasez sobre la foto, y ahorro en pesos", () => {
+    const html = vista();
+    expect(html).toContain('data-sello="descuento"');
+    expect(html).toContain('data-sello="unidades"');
+    expect(texto(html)).toContain("Solo 5 unidades");
+    expect(texto(html)).toContain("Ahorre $ 40.001");
+  });
+
+  it("cada oferta lleva su sello de descuento", () => {
+    expect(vista()).toContain('data-sello-item="A1"');
+  });
+
   it("no muestra el precio de lista en la estrella", () => {
     const t = texto(vista());
     expect(t).toContain("109.999");

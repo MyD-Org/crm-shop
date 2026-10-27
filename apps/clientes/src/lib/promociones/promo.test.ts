@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LEGALES_DEFAULT,
   aIsoArgentina,
+  ahorroPesos,
   datosPromoCliente,
   infoPromoDe,
   deIsoArgentina,
@@ -208,5 +209,16 @@ describe("skusNoResueltos", () => {
 
   it("sin repetidos ni vacíos", () => {
     expect(skusNoResueltos({ estrella: { sku: "A1" }, items: [{ sku: "a1" }, { sku: "  " }] }, [])).toEqual(["A1"]);
+  });
+});
+
+describe("ahorroPesos", () => {
+  it("la diferencia redondeada contra la referencia", () => {
+    expect(ahorroPesos(109999.4, 150000)).toBe(40001);
+  });
+  it("sin ahorro real, null", () => {
+    expect(ahorroPesos(150000, 150000)).toBeNull();
+    expect(ahorroPesos(160000, 150000)).toBeNull();
+    expect(ahorroPesos(100000)).toBeNull();
   });
 });

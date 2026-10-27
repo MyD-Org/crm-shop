@@ -1,6 +1,10 @@
-import { describe, it, expect, beforeEach, afterAll } from "vitest"
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import postgres from "postgres"
 import { sql } from "drizzle-orm"
 import { getDb } from "@/db"
+import { TEST_DATABASE_URL, assertLocalTestDb } from "./db-url"
 import { seedTenant, truncateAll } from "./helpers"
 import {
   actualizarModalidad,
@@ -12,8 +16,11 @@ import {
 
 /**
  * Migración 0094 (modalidades de venta sin stock) contra la base real de test: tabla, CHECK,
- * UNIQUE por tenant y `ON DELETE SET NULL` de la columna del overlay. Datos inventados.
+ * UNIQUE por tenant, `ON DELETE SET NULL` de la columna del overlay y los GRANT a `shop_app`.
+ * Datos inventados.
  */
+
+const MIGRACION_0094 = fileURLToPath(new URL("../../drizzle/0094_modalidades_sin_stock.sql", import.meta.url))
 
 const A = "tenant-a"
 const B = "tenant-b"
@@ -85,6 +92,82 @@ describe("0094 modalidades_sin_stock", () => {
     const filas = await getDb().execute(sql`select modalidad_sin_stock_id from catalog_overlay where alegra_id = 'item-1'`)
     expect(filas).toHaveLength(1)
     expect((filas[0] as { modalidad_sin_stock_id: string | null }).modalidad_sin_stock_id).toBeNull()
+  })
+})
+
+describe("0094: GRANT a shop_app (el Shop lee las modalidades y la columna del overlay)", () => {
+  let pg: postgres.Sql
+  let rolCreadoAca = false
+
+  async function comoShopApp(stmt: string): Promise<{ ok: true } | { ok: false; code: string }> {
+    let r: { ok: true } | { ok: false; code: string } | null = null
+    const ROLLBACK = new Error("rollback")
+    try {
+      await pg.begin(async (tx) => {
+        await tx.unsafe("SET LOCAL ROLE shop_app")
+        try {
+          await tx.unsafe(stmt)
+          r = { ok: true }
+        } catch (e) {
+          r = { ok: false, code: (e as { code?: string }).code ?? "?" }
+        }
+        throw ROLLBACK
+      })
+    } catch (e) {
+      if (e !== ROLLBACK) throw e
+    }
+    if (!r) throw new Error("comoShopApp: sin resultado")
+    return r
+  }
+
+  const bloque = (archivo: string) => {
+    const partes = readFileSync(archivo, "utf8").split("--> statement-breakpoint")
+    const b = partes[partes.length - 1]
+    if (!/DO \$\$/.test(b)) throw new Error(`${archivo}: no encontré el bloque DO $$ de los GRANTs`)
+    return b
+  }
+
+  beforeAll(async () => {
+    assertLocalTestDb(TEST_DATABASE_URL)
+    pg = postgres(TEST_DATABASE_URL, { max: 1, onnotice: () => {} })
+    const existe = await pg`SELECT 1 FROM pg_roles WHERE rolname = 'shop_app'`
+    if (existe.length === 0) {
+      // Sin el rol el bloque condicional no concede nada y NO falla (como al migrar crm_test).
+      await pg.unsafe(bloque(MIGRACION_0094))
+      await pg.unsafe("CREATE ROLE shop_app NOLOGIN")
+      rolCreadoAca = true
+    }
+    // Idempotente: es el bloque que se corre a mano si el rol se creó después de migrar.
+    await pg.unsafe(bloque(MIGRACION_0094))
+  })
+  afterAll(async () => {
+    if (!pg) return
+    if (rolCreadoAca) {
+      await pg.unsafe("DROP OWNED BY shop_app")
+      await pg.unsafe("DROP ROLE shop_app")
+    }
+    await pg.end()
+  })
+
+  it("shop_app lee modalidades_sin_stock (las columnas que lee el Shop)", async () => {
+    expect(
+      await comoShopApp(
+        `SELECT "id", "tenant_id", "nombre", "texto", "plazo_dias", "flujo", "activa" FROM public.modalidades_sin_stock`,
+      ),
+    ).toEqual({ ok: true })
+  })
+
+  it("shop_app lee catalog_overlay.modalidad_sin_stock_id (GRANT por columna)", async () => {
+    expect(await comoShopApp(`SELECT "modalidad_sin_stock_id" FROM public.catalog_overlay`)).toEqual({ ok: true })
+  })
+
+  it("shop_app no escribe modalidades", async () => {
+    expect(await comoShopApp(`UPDATE public.modalidades_sin_stock SET "activa" = false`)).toEqual({ ok: false, code: "42501" })
+    expect(
+      await comoShopApp(
+        `INSERT INTO public.modalidades_sin_stock (tenant_id, nombre, texto, flujo) VALUES ('tenant-a', 'X', 'X', 'en_linea')`,
+      ),
+    ).toEqual({ ok: false, code: "42501" })
   })
 })
 

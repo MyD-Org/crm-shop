@@ -83,7 +83,7 @@ export function PedidoDetalle({
               {estadoPago.detalle && <p className="mt-1 text-sm text-muted">{estadoPago.detalle}</p>}
             </div>
           )}
-          {pedido.aConfirmar && (
+          {pedido.aConfirmar && pedido.estado === "pendiente" && (
             <p className="mt-1 text-sm text-text">
               A confirmar: no se realizó ningún cobro. Nos comunicaremos con usted para confirmar el pedido.
             </p>

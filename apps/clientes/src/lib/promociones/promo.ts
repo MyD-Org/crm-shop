@@ -121,3 +121,69 @@ export function restante(fin: string, ahora: number): { d: number; h: number; m:
     s: total % 60,
   };
 }
+
+/**
+ * Lo mínimo de la promo que viaja al navegador (contexto del layout) para badges y ficha. Sin fin
+ * o sin productos no viaja nada. La vigencia la decide el cliente con `infoPromoDe`.
+ */
+export type DatosPromoCliente = {
+  inicio?: string;
+  fin: string;
+  etiquetaBadge: string;
+  etiquetaReferencia: string;
+  legales?: string;
+  estrellaSku?: string;
+  unidadesPromo?: number;
+  /** SKU normalizado → precio de referencia (undefined = sin referencia). */
+  refs: Record<string, number | undefined>;
+};
+
+export function datosPromoCliente(p: PromocionesContent): DatosPromoCliente | null {
+  const skus = skusPromo(p);
+  if (!p.fin || skus.length === 0) return null;
+  const refs: Record<string, number | undefined> = {};
+  if (p.estrella?.sku) refs[normalizar(p.estrella.sku)] = p.estrella.precioReferencia;
+  for (const i of p.items ?? []) {
+    const k = normalizar(i.sku);
+    if (k && !(k in refs)) refs[k] = i.precioReferencia;
+  }
+  return {
+    inicio: p.inicio,
+    fin: p.fin,
+    etiquetaBadge: p.etiquetaBadge,
+    etiquetaReferencia: p.etiquetaReferencia,
+    legales: p.legales,
+    estrellaSku: p.estrella?.sku ? normalizar(p.estrella.sku) : undefined,
+    unidadesPromo: p.estrella?.unidadesPromo,
+    refs,
+  };
+}
+
+export type InfoPromoProducto = {
+  etiquetaBadge: string;
+  etiquetaReferencia: string;
+  referencia?: number;
+  inicio?: string;
+  fin: string;
+  legales?: string;
+  unidadesPromo?: number;
+  esEstrella: boolean;
+};
+
+/** La promo de UN producto (por SKU exacto) si está vigente en `ahora`; si no, null. */
+export function infoPromoDe(datos: DatosPromoCliente | null, sku: string | undefined, ahora: number): InfoPromoProducto | null {
+  if (!datos || !sku) return null;
+  const k = normalizar(sku);
+  if (!(k in datos.refs)) return null;
+  if (estadoPromo({ inicio: datos.inicio, fin: datos.fin, items: [{ sku: k }] }, ahora) !== "vigente") return null;
+  return {
+    etiquetaBadge: datos.etiquetaBadge,
+    etiquetaReferencia: datos.etiquetaReferencia,
+    referencia: datos.refs[k],
+    inicio: datos.inicio,
+    fin: datos.fin,
+    legales: datos.legales,
+    unidadesPromo: datos.unidadesPromo,
+    esEstrella: datos.estrellaSku === k,
+  };
+}

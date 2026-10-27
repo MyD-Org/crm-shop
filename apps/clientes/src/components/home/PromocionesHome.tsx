@@ -2,9 +2,8 @@ import { connection } from "next/server";
 import type { PromocionesContent } from "@/data/home-defaults";
 import { productosPromo } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
-import { estadoPromo, skusPromo, unidadesQuedan } from "@/lib/promociones/promo";
-import { stockEnSucursal, sucursalesDePromo } from "@/lib/promociones/stock";
-import { leerSucursalesYZonas } from "@/lib/sucursales-repo";
+import { estadoPromo, skusPromo } from "@/lib/promociones/promo";
+import { quedanEstrella } from "@/lib/promociones/stock";
 import { dispCatalogo } from "@/lib/zona-servidor";
 import { PromocionesVista } from "./PromocionesVista";
 
@@ -33,7 +32,7 @@ export async function PromocionesHome({ contenido }: { contenido: PromocionesCon
 
   let quedan: number | null = null;
   if (prodEstrella && contenido.estrella?.unidadesPromo) {
-    quedan = await quedanDeEstrella(contenido, prodEstrella.id);
+    quedan = await quedanEstrella(contenido.estrella, prodEstrella.id);
   }
 
   // Los items sin stock no se ofrecen; la estrella sin stock se muestra agotada (nunca "Agregar").
@@ -49,24 +48,6 @@ export async function PromocionesHome({ contenido }: { contenido: PromocionesCon
       estado={estado}
     />
   );
-}
-
-/** Unidades que quedan según el stock de la sucursal de la promo (ver `unidadesQuedan`). */
-async function quedanDeEstrella(contenido: PromocionesContent, id: string): Promise<number | null> {
-  const e = contenido.estrella!;
-  try {
-    const sucursales = sucursalesDePromo((await leerSucursalesYZonas()).sucursales);
-    const predeterminada = sucursales[0]?.slug;
-    const sucursal = e.sucursal ?? predeterminada;
-    if (!sucursal || !predeterminada) return null;
-    const stock = (await stockEnSucursal([id], sucursal, predeterminada))[id];
-    // No inventariable: sin ventas que descontar (el contador queda en el total).
-    if (stock === null) return e.unidadesPromo ?? null;
-    return unidadesQuedan(e, stock ?? 0);
-  } catch (err) {
-    console.error("[promociones] no se pudo leer el stock de la estrella:", err);
-    return null;
-  }
 }
 
 /** Fuera del componente: la hora del request (después de `connection()`, nunca cacheada). */

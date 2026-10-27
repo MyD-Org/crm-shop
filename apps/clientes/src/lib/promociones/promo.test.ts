@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   LEGALES_DEFAULT,
   aIsoArgentina,
+  datosPromoCliente,
+  infoPromoDe,
   deIsoArgentina,
   esUltimas,
   estadoPromo,
@@ -149,5 +151,45 @@ describe("restante", () => {
   });
   it("null pasado el fin", () => {
     expect(restante(FIN, Date.parse(FIN) + 1)).toBeNull();
+  });
+});
+
+describe("datosPromoCliente / infoPromoDe", () => {
+  const contenido = {
+    etiquetaBadge: "Precio de apertura",
+    etiquetaReferencia: "En otras tiendas desde",
+    legales: LEGALES_DEFAULT,
+    fin: FIN,
+    estrella: { sku: "nk-1", precioReferencia: 150000, unidadesPromo: 5, stockBase: 10 },
+    items: [{ sku: "A1" }],
+  };
+  const durante = Date.parse("2026-11-05T12:00:00-03:00");
+
+  it("sin fin no hay datos para el cliente", () => {
+    expect(datosPromoCliente({ ...contenido, fin: undefined })).toBeNull();
+  });
+
+  it("referencias por SKU normalizado", () => {
+    const d = datosPromoCliente(contenido)!;
+    expect(d.refs).toEqual({ "NK-1": 150000, A1: undefined });
+    expect(d.estrellaSku).toBe("NK-1");
+  });
+
+  it("info del producto en promo vigente", () => {
+    const d = datosPromoCliente(contenido)!;
+    expect(infoPromoDe(d, "NK-1", durante)).toMatchObject({ etiquetaBadge: "Precio de apertura", referencia: 150000, esEstrella: true, fin: FIN });
+    expect(infoPromoDe(d, "a1", durante)).toMatchObject({ esEstrella: false });
+  });
+
+  it("fuera de vigencia o sin SKU, nada", () => {
+    const d = datosPromoCliente(contenido)!;
+    expect(infoPromoDe(d, "NK-1", Date.parse(FIN))).toBeNull();
+    expect(infoPromoDe(d, undefined, durante)).toBeNull();
+    expect(infoPromoDe(null, "NK-1", durante)).toBeNull();
+  });
+
+  it("sólo por SKU exacto: un nombre igual al SKU no cuenta", () => {
+    const d = datosPromoCliente(contenido)!;
+    expect(infoPromoDe(d, "NK-10", durante)).toBeNull();
   });
 });

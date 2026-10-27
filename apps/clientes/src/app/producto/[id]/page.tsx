@@ -9,6 +9,8 @@ import { flagsPublicos } from "@/lib/flags-publicos";
 import { metadataProducto } from "@/lib/producto-metadata";
 import { jsonLdProductoHtml } from "@/lib/producto-jsonld";
 import { ProductoClient } from "@/components/ProductoClient";
+import { getContenidoHome } from "@/lib/home-datos";
+import { quedanEstrella } from "@/lib/promociones/stock";
 import { CONFIG_ENVIO_DEFAULT, textoEnvioFicha } from "@/lib/envio";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto";
@@ -94,6 +96,13 @@ export default async function ProductoPage({ params }: Props) {
   );
   // Migas: la categoría del admin con sus padres. Sin ella, la de Alegra.
   const rutaCategorias = producto.categoriaPropiaId ? await rutaCategoriaPublica(producto.categoriaPropiaId) : [];
+  // Promo de la home: si este producto es la estrella con contador, las unidades que quedan.
+  const { promociones } = await getContenidoHome();
+  const estrella = promociones.estrella;
+  const quedanPromo =
+    estrella?.unidadesPromo && producto.sku && estrella.sku.trim().toUpperCase() === producto.sku.toUpperCase()
+      ? await quedanEstrella(estrella, producto.id)
+      : undefined;
 
   return (
     <>
@@ -108,6 +117,7 @@ export default async function ProductoPage({ params }: Props) {
         producto={producto}
         configEnvio={configEnvio}
         localElegido={localElegido}
+        quedanPromo={quedanPromo}
         envioElegido={envioElegido}
         // La ubicación sale de la cookie: va en un hueco por request, con la regla general de
         // fallback, para que la ficha siga con su shell estático.

@@ -9,6 +9,7 @@ import { PrecioMedioCard } from "@/components/PrecioMedio";
 import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
 import { badgeProducto } from "@/components/badge-producto";
+import { badgePromo, usePromoProducto } from "@/components/promociones/PromoProvider";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { IconoLampara } from "@/components/mi-cuenta/iconos";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
@@ -23,6 +24,7 @@ import { formatMarca } from "@/lib/formato-rubro";
  * cuenta aplicado (`aplicarEstadoPrecio`).
  */
 export function ProductoFavCard({ p }: { p: Product }) {
+  const promo = usePromoProducto(p.sku);
   // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
   const marca = p.brand ? formatMarca(p.brand) : undefined;
   const { nombre: nombreParaMostrar, esCodigo } = nombreConMarca(p.name, marca);
@@ -66,7 +68,7 @@ export function ProductoFavCard({ p }: { p: Product }) {
       // Final con IVA si se conoce; si no, el de siempre (igual que el catálogo).
       price={p.precioFinal ?? p.price}
       oldPrice={p.oldPrice}
-      badge={badgeProducto(p)}
+      badge={badgePromo(promo) ?? badgeProducto(p)}
       image={
         p.images?.[0] ? (
           <Image

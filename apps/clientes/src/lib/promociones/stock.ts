@@ -1,5 +1,8 @@
 import { leerDisponibilidadBruta, type DisponibilidadBruta } from "@/lib/stock-sucursal";
 import type { SucursalDato } from "@/lib/sucursales";
+import { leerSucursalesYZonas } from "@/lib/sucursales-repo";
+import { unidadesQuedan } from "./promo";
+import type { EstrellaPromo } from "./tipos";
 
 /**
  * Stock de la promo por sucursal (spec 2026-10-26-promociones-home §3): el contador de unidades
@@ -45,4 +48,21 @@ export function sucursalesDePromo(sucursales: (Pick<SucursalDato, "slug" | "acti
     .filter((s) => s.activa)
     .sort((a, b) => a.orden - b.orden || a.slug.localeCompare(b.slug))
     .map((s, i) => ({ slug: s.slug, nombre: s.nombre, predeterminada: i === 0 }));
+}
+
+/** Unidades que quedan según el stock de la sucursal de la promo (ver `unidadesQuedan`). */
+export async function quedanEstrella(e: EstrellaPromo, id: string): Promise<number | null> {
+  try {
+    const sucursales = sucursalesDePromo((await leerSucursalesYZonas()).sucursales);
+    const predeterminada = sucursales[0]?.slug;
+    const sucursal = e.sucursal ?? predeterminada;
+    if (!sucursal || !predeterminada) return null;
+    const stock = (await stockEnSucursal([id], sucursal, predeterminada))[id];
+    // No inventariable: sin ventas que descontar (el contador queda en el total).
+    if (stock === null) return e.unidadesPromo ?? null;
+    return unidadesQuedan(e, stock ?? 0);
+  } catch (err) {
+    console.error("[promociones] no se pudo leer el stock de la estrella:", err);
+    return null;
+  }
 }

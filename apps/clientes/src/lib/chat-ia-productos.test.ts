@@ -21,6 +21,17 @@ const base: Product = {
   images: [{ url: "https://cliente.example/foto.jpg", w: 800 }],
 };
 
+const M = { id: "m1", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea" as const };
+
+describe("a pedido en el agente", () => {
+  it("agente: a pedido y disponible", () => {
+    expect(aProductoAgente({ ...base, stock: "out", ventaSinStock: M })).toMatchObject({ stock: "a pedido", entrega: "Retiro en ~48 h" });
+    expect(aProductoResuelto({ ...base, stock: "out", ventaSinStock: M }).available).toBe(true);
+    expect(aProductoResuelto({ ...base, stock: "out" }).available).toBe(false);
+    expect(aProductoAgente({ ...base, stock: "out" })).not.toHaveProperty("entrega");
+  });
+});
+
 describe("aProductoAgente", () => {
   it("forma compacta con precio final y stock en palabras", () => {
     expect(aProductoAgente(base)).toEqual({

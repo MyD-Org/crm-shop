@@ -78,6 +78,22 @@ describe("ProductoClient con selector de variantes", () => {
     expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Sin stock/);
   });
 
+ it("a pedido a confirmar: sin 'Sin stock', botón habilitado, sin cuotas y con la leyenda", () => {
+    const aConfirmar = prod("20", {
+      stock: "out",
+      cuotasSinInteres: [{ cuotas: 3, desde: 0 }] as never,
+      ventaSinStock: { id: "m2", texto: "A pedido", plazoDias: null, flujo: "a_confirmar" },
+    });
+    const html = renderToStaticMarkup(<ProductoClient producto={aConfirmar} />);
+    expect(html).toContain("Se confirma por contacto; no se cobra al comprar");
+    expect(html).not.toContain("Sin stock");
+    expect(html).toContain("Agregar al carrito");
+    const abre = html.slice(0, html.indexOf("Agregar al carrito")).lastIndexOf("<button");
+    const botonAgregar = html.slice(abre, html.indexOf(">", abre));
+    expect(botonAgregar).not.toContain('disabled=""');
+    expect(html).not.toContain("cuotas");
+  });
+
   it("sin grupo (producto suelto o flag apagado) no hay selector", () => {
     const html = renderToStaticMarkup(<ProductoClient producto={verde.producto} />);
     expect(html).not.toContain('role="radiogroup"');

@@ -16,6 +16,8 @@ import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 import { formatDescripcionProducto, nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
+import { estadoFicha, type TonoFicha } from "@/lib/ficha-venta-sin-stock";
+import { agotadoSinModalidad, esAPedido, TEXTO_SE_CONFIRMA_POR_CONTACTO } from "@/lib/venta-sin-stock";
 import { maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
 import { useCart } from "@/context/CartContext";
 import { BotonFavorito } from "@/components/BotonFavorito";
@@ -57,10 +59,10 @@ const CARA_ABAJO = "translate-y-2 opacity-0 blur-[2px]";
 /** Cuánto queda "Agregado" antes de volver al texto de siempre. */
 const MS_AGREGADO = 1600;
 
-const ESTADO_STOCK: Record<Product["stock"], { texto: string; clases: string }> = {
-  in: { texto: "En stock", clases: "bg-success-soft text-success" },
-  low: { texto: "Últimas unidades", clases: "bg-warning-soft text-warning" },
-  out: { texto: "Sin stock", clases: "bg-danger-soft text-danger" },
+const CLASE_TONO_PILL: Record<TonoFicha, string> = {
+  ok: "bg-success-soft text-success",
+  demora: "bg-warning-soft text-warning",
+  no: "bg-danger-soft text-danger",
 };
 
 /** Nombres de Alegra largos ("1 int y 1 toma 10 A (BI) stik superficie"): un escalón menos. */
@@ -175,8 +177,7 @@ export function ProductoClient({
   // Cuotas sobre el precio final unitario: sin IVA conocido no se calcula nada.
   const cuotas = producto.cuotasSinInteres;
 
-  const estado = ESTADO_STOCK[producto.stock];
-  const agotado = producto.stock === "out";
+  const { texto: textoEstado, tono: tonoEstado, agotado, aConfirmar } = estadoFicha(producto);
   // Sin cantidad si es 0 o menos (pasa con la simulación de stock): nada de
   // "En stock: 0 disponibles".
   const disponibles = textoUnidadesDisponibles(producto);
@@ -337,7 +338,7 @@ export function ProductoClient({
                 label={TEXTOS_VARIANTES.etiquetaSelector}
                 options={opciones.map((o) => ({
                   id: o.id,
-                  label: etiquetaDeOpcion(o.etiqueta, o.producto.stock === "out"),
+                  label: etiquetaDeOpcion(o.etiqueta, agotadoSinModalidad(o.producto)),
                 }))}
                 value={producto.id}
                 onChange={elegirOpcion}
@@ -363,7 +364,7 @@ export function ProductoClient({
                   preciosMedios={producto.preciosMedios}
                 />
               )}
-              {!sinPrecio && cuotas && producto.precioFinal != null && hayCuotasParaModal(cuotas) && (
+              {!sinPrecio && !aConfirmar && cuotas && producto.precioFinal != null && hayCuotasParaModal(cuotas) && (
                 <div className="mt-3">
                   {cuotasConCarrito ? (
                     <CuotasLinea
@@ -391,12 +392,12 @@ export function ProductoClient({
                   />
                 </div>
               )}
-              {!noComprable && !agotado && <CuotasConCarrito meta={metaCarrito} />}
+              {!noComprable && !agotado && !aConfirmar && <CuotasConCarrito meta={metaCarrito} />}
             </div>
 
-            <p className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${estado.clases}`}>
+            <p className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${CLASE_TONO_PILL[tonoEstado]}`}>
               <span className="h-2 w-2 rounded-full bg-current" aria-hidden />
-              {estado.texto}
+              {textoEstado}
               {disponibles && `: ${disponibles}`}
             </p>
 
@@ -406,6 +407,11 @@ export function ProductoClient({
               {botonAgregar}
               <BotonFavorito productId={producto.id} />
             </div>
+            {aConfirmar && (
+              <p className="text-sm text-muted" data-testid="se-confirma-por-contacto">
+                {TEXTO_SE_CONFIRMA_POR_CONTACTO}
+              </p>
+            )}
 
             <EntregaProducto
               configEnvio={configEnvio}
@@ -418,6 +424,7 @@ export function ProductoClient({
               localElegido={localElegido}
               envioElegido={envioElegido}
               consultaWhatsapp={textoConsultaProducto(nombreParaMostrar, producto.sku)}
+              aPedido={esAPedido(producto) ? producto.ventaSinStock!.texto : undefined}
             />
 
             {/* Preguntas sugeridas al asesor: sólo con el chat montado. */}

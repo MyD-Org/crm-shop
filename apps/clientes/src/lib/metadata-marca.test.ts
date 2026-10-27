@@ -10,6 +10,9 @@ const ICONOS = {
 };
 import { metadataDeMarca } from "./metadata-marca";
 
+/** Lo de Open Graph del sitio; la imagen la agrega src/app/opengraph-image.tsx. */
+const OG_CENTRAL = { type: "website", siteName: "Central LED", locale: "es_AR" };
+
 /**
  * Caracterización de Central Led: con la marca vacía el `metadata` del layout es EXACTAMENTE el
  * objeto que estaba escrito en `src/app/layout.tsx` antes de que la marca saliera de la base, más
@@ -23,6 +26,7 @@ describe("metadataDeMarca — Central sin cambios", () => {
       description:
         "Iluminación, materiales eléctricos, herramientas y mucho más en Puerto Iguazú, Misiones. Stock en tiempo real.",
       icons: ICONOS,
+      openGraph: OG_CENTRAL,
     });
   });
 
@@ -35,6 +39,7 @@ describe("metadataDeMarca — Central sin cambios", () => {
       description:
         "Iluminación, materiales eléctricos, herramientas y mucho más en Puerto Iguazú, Misiones. Stock en tiempo real.",
       icons: ICONOS,
+      openGraph: OG_CENTRAL,
       verification: { other: { "facebook-domain-verification": "abc123" } },
     });
   });

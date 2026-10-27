@@ -1,6 +1,19 @@
 import type { Metadata } from "next";
 import { ICONOS_CENTRAL, esMarcaCentral, type Marca } from "@/lib/marca-base";
 
+/** Ruta de la imagen general del sitio (src/app/opengraph-image.tsx). */
+export const IMAGEN_SITIO = "/opengraph-image";
+
+/**
+ * Lo de Open Graph que comparte todo el sitio (`og:type`, `og:site_name`, `og:locale`). Next
+ * mezcla el metadata de los segmentos en forma SUPERFICIAL: una página que declara su `openGraph`
+ * reemplaza entero al del layout. Por eso la ficha y las páginas de marca lo vuelven a poner
+ * con esto. Sin `url`: en el layout la heredarían todas las páginas como si fueran la home.
+ */
+export function openGraphDelSitio(nombreTienda: string) {
+  return { type: "website" as const, siteName: nombreTienda, locale: "es_AR" };
+}
+
 /**
  * `metadata` del layout raíz para una marca. Con la marca de Central es el objeto de siempre
  * (caracterizado en `metadata-marca.test.ts`). Puro: el layout le pasa lo que lee del entorno.
@@ -21,6 +34,8 @@ export function metadataDeMarca(
     metadataBase: entorno.siteUrl ? new URL(entorno.siteUrl) : undefined,
     title: marca.titulo,
     description: marca.descripcion,
+    // La imagen la agrega src/app/opengraph-image.tsx (convención de archivo, con prioridad).
+    openGraph: openGraphDelSitio(marca.nombre),
     ...(marca.faviconUrl
       ? { icons: { icon: marca.faviconUrl } }
       : esMarcaCentral(marca)

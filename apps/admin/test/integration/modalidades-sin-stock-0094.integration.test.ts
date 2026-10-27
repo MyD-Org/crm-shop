@@ -28,19 +28,37 @@ const insertar = (d: Datos, tenant = A) =>
         values (${tenant}, ${d.nombre}, ${d.texto}, ${d.plazo_dias}, ${d.flujo}) returning id`,
   )
 
+/** drizzle envuelve el error del driver: el código y el constraint están en `.cause`. */
+async function falla(p: Promise<unknown>): Promise<{ code: string | null; constraint: string | null }> {
+  try {
+    await p
+  } catch (e) {
+    for (let x: unknown = e, i = 0; x && i < 3; x = (x as { cause?: unknown }).cause, i++) {
+      const c = (x as { code?: unknown }).code
+      if (typeof c === "string") {
+        const n = (x as { constraint_name?: unknown }).constraint_name
+        return { code: c, constraint: typeof n === "string" ? n : null }
+      }
+    }
+  }
+  return { code: null, constraint: null }
+}
+
 describe("0094 modalidades_sin_stock", () => {
   it("crea la tabla con sus CHECK y el UNIQUE por tenant", async () => {
     await insertar({ nombre: "Modalidad 48 h", texto: "Retiro en ~48 h", plazo_dias: 2, flujo: "en_linea" })
-    await expect(
-      insertar({ nombre: "Modalidad 48 h", texto: "Otro", plazo_dias: null, flujo: "a_confirmar" }),
-    ).rejects.toThrow(/modalidades_sin_stock_tenant_nombre_uniq/)
-    await expect(insertar({ nombre: "X", texto: "X", plazo_dias: 0, flujo: "en_linea" })).rejects.toThrow(/check/i)
-    await expect(insertar({ nombre: "X2", texto: "X", plazo_dias: 61, flujo: "en_linea" })).rejects.toThrow(/check/i)
-    await expect(insertar({ nombre: "Y", texto: "Y", plazo_dias: null, flujo: "otro" })).rejects.toThrow(/check/i)
-    await expect(insertar({ nombre: "Z", texto: "", plazo_dias: null, flujo: "en_linea" })).rejects.toThrow(/check/i)
-    await expect(
-      insertar({ nombre: "W", texto: "x".repeat(41), plazo_dias: null, flujo: "en_linea" }),
-    ).rejects.toThrow(/check/i)
+    expect(await falla(insertar({ nombre: "Modalidad 48 h", texto: "Otro", plazo_dias: null, flujo: "a_confirmar" }))).toEqual({
+      code: "23505",
+      constraint: "modalidades_sin_stock_tenant_nombre_uniq",
+    })
+    const plazo = { code: "23514", constraint: "modalidades_sin_stock_plazo_dias_check" }
+    const flujo = { code: "23514", constraint: "modalidades_sin_stock_flujo_check" }
+    const texto = { code: "23514", constraint: "modalidades_sin_stock_texto_check" }
+    expect(await falla(insertar({ nombre: "X", texto: "X", plazo_dias: 0, flujo: "en_linea" }))).toEqual(plazo)
+    expect(await falla(insertar({ nombre: "X2", texto: "X", plazo_dias: 61, flujo: "en_linea" }))).toEqual(plazo)
+    expect(await falla(insertar({ nombre: "Y", texto: "Y", plazo_dias: null, flujo: "otro" }))).toEqual(flujo)
+    expect(await falla(insertar({ nombre: "Z", texto: "", plazo_dias: null, flujo: "en_linea" }))).toEqual(texto)
+    expect(await falla(insertar({ nombre: "W", texto: "x".repeat(41), plazo_dias: null, flujo: "en_linea" }))).toEqual(texto)
   })
 
   it("el mismo nombre se admite en otro tenant y activa arranca en true", async () => {

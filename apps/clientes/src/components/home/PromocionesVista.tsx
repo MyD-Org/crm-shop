@@ -30,6 +30,8 @@ type Props = {
   estrella: { producto: Product; quedan: number | null } | null;
   items: Product[];
   estado: EstadoPromo;
+  /** SKUs cargados que no se dibujan (oculto, borrado o sin stock): sólo se avisan en edición. */
+  noResueltos?: string[];
   /** Fuerza el modo edición (tests); ausente = el de la barra de edición. */
   edicion?: boolean;
 };
@@ -115,7 +117,7 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
   );
 }
 
-export function PromocionesVista({ contenido, estrella, items, estado, edicion: forzada }: Props) {
+export function PromocionesVista({ contenido, estrella, items, estado, noResueltos = [], edicion: forzada }: Props) {
   const modo = useModoEdicion();
   const edicion = forzada ?? (modo.puedeEditar && modo.activo);
   const [terminada, setTerminada] = useState(false);
@@ -124,8 +126,8 @@ export function PromocionesVista({ contenido, estrella, items, estado, edicion: 
   const visible = estado === "vigente" && !terminada && hayProductos;
   if (!visible && !edicion) return null;
 
-  const aviso =
-    !hayProductos
+  const avisoVigencia =
+    !hayProductos && noResueltos.length === 0
       ? "Cargue un producto estrella o hasta 6 ofertas y una fecha de fin para mostrar la promo."
       : estado === "programada" && contenido.inicio
         ? `Programada: empieza el ${fechaCortaAR(contenido.inicio)}.`
@@ -134,11 +136,20 @@ export function PromocionesVista({ contenido, estrella, items, estado, edicion: 
           : estado === "inactiva"
             ? "Falta la fecha de fin: los visitantes no ven la promo."
             : null;
+  const avisos = [noResueltos.length > 0 ? `No se encontró o está oculto: ${noResueltos.join(", ")}` : null, avisoVigencia].filter(
+    (a): a is string => !!a,
+  );
 
   const unidadesLegales = contenido.estrella?.unidadesPromo;
   return (
     <section className="flex flex-col gap-6 pt-[clamp(40px,5vw,72px)]" aria-label="Promociones">
-      {edicion && aviso ? <p className="rounded-md bg-warning-soft px-4 py-3 text-sm text-text">{aviso}</p> : null}
+      {edicion
+        ? avisos.map((a) => (
+            <p key={a} className="rounded-md bg-warning-soft px-4 py-3 text-sm text-text">
+              {a}
+            </p>
+          ))
+        : null}
       <div>
         {contenido.eyebrow ? <p className="mb-2 text-sm font-semibold text-danger">{contenido.eyebrow}</p> : null}
         <TituloSeccion textos={contenido} linkTodos={contenido.linkTodos} />

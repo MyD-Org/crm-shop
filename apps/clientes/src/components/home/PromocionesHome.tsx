@@ -2,7 +2,7 @@ import { connection } from "next/server";
 import type { PromocionesContent } from "@/data/home-defaults";
 import { productosPromo } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
-import { estadoPromo, skusPromo } from "@/lib/promociones/promo";
+import { estadoPromo, skusNoResueltos, skusPromo } from "@/lib/promociones/promo";
 import { quedanEstrella } from "@/lib/promociones/stock";
 import { dispCatalogo } from "@/lib/zona-servidor";
 import { PromocionesVista } from "./PromocionesVista";
@@ -40,12 +40,19 @@ export async function PromocionesHome({ contenido }: { contenido: PromocionesCon
     .map((i) => porSku.get(i.sku.trim().toUpperCase()))
     .filter((p): p is NonNullable<typeof p> => !!p && p.stock !== "out" && p !== prodEstrella);
 
+  // Lo cargado que no se dibuja (oculto, borrado o item sin stock): el admin lo ve en "Modo edición".
+  const noResueltos = skusNoResueltos(
+    contenido,
+    [prodEstrella, ...items].flatMap((p) => (p?.sku ? [p.sku] : [])),
+  );
+
   return (
     <PromocionesVista
       contenido={contenido}
       estrella={prodEstrella ? { producto: prodEstrella, quedan } : null}
       items={items}
       estado={estado}
+      noResueltos={noResueltos}
     />
   );
 }

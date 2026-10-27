@@ -102,6 +102,23 @@ describe("PromocionesVista", () => {
     expect(texto(vista({ estrella: null, items: [], edicion: true }))).toContain("Cargue un producto estrella");
   });
 
+  it("SKU cargado que no se resuelve: en edición lo nombra en vez de pedir que cargue productos", () => {
+    const t = texto(vista({ estrella: null, items: [], noResueltos: ["NK-1"], edicion: true }));
+    expect(t).toContain("No se encontró o está oculto: NK-1");
+    expect(t).not.toContain("Cargue un producto estrella");
+  });
+
+  it("varios SKUs no resueltos junto a los visibles: aviso en edición, nada para el visitante", () => {
+    expect(texto(vista({ noResueltos: ["B2", "C3"], edicion: true }))).toContain("No se encontró o está oculto: B2, C3");
+    expect(texto(vista({ noResueltos: ["B2", "C3"] }))).not.toContain("No se encontró");
+  });
+
+  it("no resuelto y programada: los dos avisos", () => {
+    const t = texto(vista({ estado: "programada", noResueltos: ["B2"], edicion: true }));
+    expect(t).toContain("No se encontró o está oculto: B2");
+    expect(t).toContain("Programada: empieza el 3/11");
+  });
+
   it("legales con las fechas reemplazadas", () => {
     expect(texto(vista())).toContain("Promoción válida del 3/11 al 13/11 o hasta agotar 5 unidades");
   });

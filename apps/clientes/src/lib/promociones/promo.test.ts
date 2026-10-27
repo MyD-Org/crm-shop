@@ -11,6 +11,7 @@ import {
   porcentajeAhorro,
   precioPrincipal,
   restante,
+  skusNoResueltos,
   skusPromo,
   textoLegales,
   unidadesQuedan,
@@ -191,5 +192,21 @@ describe("datosPromoCliente / infoPromoDe", () => {
   it("sólo por SKU exacto: un nombre igual al SKU no cuenta", () => {
     const d = datosPromoCliente(contenido)!;
     expect(infoPromoDe(d, "NK-10", durante)).toBeNull();
+  });
+});
+
+describe("skusNoResueltos", () => {
+  const contenido = { estrella: { sku: " nk-1 " }, items: [{ sku: "A1" }, { sku: "b2" }] };
+
+  it("los SKUs cargados que no se dibujan, como los escribió el admin (sin espacios)", () => {
+    expect(skusNoResueltos(contenido, ["A1"])).toEqual(["nk-1", "b2"]);
+  });
+
+  it("compara sin mayúsculas ni espacios", () => {
+    expect(skusNoResueltos(contenido, ["NK-1", "a1", "B2"])).toEqual([]);
+  });
+
+  it("sin repetidos ni vacíos", () => {
+    expect(skusNoResueltos({ estrella: { sku: "A1" }, items: [{ sku: "a1" }, { sku: "  " }] }, [])).toEqual(["A1"]);
   });
 });

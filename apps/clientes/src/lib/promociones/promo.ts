@@ -80,6 +80,22 @@ export function skusPromo(p: Pick<PromocionesContent, "estrella" | "items">): st
   return [...new Set(todos)];
 }
 
+/**
+ * SKUs cargados en la promo que no se dibujan (oculto, borrado o, si es un item, sin stock), como los
+ * escribió el admin (sin espacios) y sin repetidos. `resueltos` = los SKUs de lo que sí se muestra.
+ */
+export function skusNoResueltos(p: Pick<PromocionesContent, "estrella" | "items">, resueltos: string[]): string[] {
+  const vistos = new Set(resueltos.map(normalizar));
+  const salida: string[] = [];
+  for (const sku of [p.estrella?.sku, ...(p.items ?? []).map((i) => i.sku)]) {
+    const limpio = typeof sku === "string" ? sku.trim() : "";
+    if (!limpio || vistos.has(normalizar(limpio))) continue;
+    vistos.add(normalizar(limpio));
+    salida.push(limpio);
+  }
+  return salida;
+}
+
 /** Valor de un `<input type="datetime-local">` (hora de Argentina) → ISO con offset. */
 export function aIsoArgentina(local: string): string {
   const base = local.length === 16 ? `${local}:00` : local;

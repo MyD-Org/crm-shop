@@ -197,6 +197,8 @@ export function HomeClient({
   // ("Ordenar secciones" de la barra de edición, `contenido.orden`). La cinta de marcas va a todo
   // el ancho; el resto, dentro del ancho del contenido.
   const secciones: Record<SeccionOrdenable, ReactNode> = {
+    // Provisorio (Task 2 del plan de promociones): la sección llega en la Task 4.
+    promociones: null,
     hero: (
       <Contenido className="pt-[clamp(20px,3vw,36px)]">
         <Reveal>

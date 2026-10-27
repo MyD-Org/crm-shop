@@ -3,6 +3,16 @@ import { hostsDeMedios } from "../lib/catalogo-medios";
 import { cuitValido, formatearCuit } from "../lib/facturacion";
 import type { Marca } from "../lib/marca-base";
 import { completarOrden } from "../lib/orden-secciones";
+import { videoEmbebible } from "../lib/marcas/video";
+import {
+  ETIQUETA_BADGE_DEFAULT,
+  ETIQUETA_REFERENCIA_DEFAULT,
+  LEGALES_DEFAULT,
+  MAX_ITEMS_PROMO,
+} from "../lib/promociones/promo";
+import type { PromocionesContent } from "../lib/promociones/tipos";
+
+export type { EstrellaPromo, ItemPromo, PromocionesContent } from "../lib/promociones/tipos";
 
 /**
  * Contenido por defecto de la home, editable desde la home por un usuario
@@ -145,6 +155,7 @@ export type HomeContent = {
   ambientes: SeccionTilesContent;
   destacados: DestacadosContent;
   tiendaOficial: TiendaOficialContent;
+  promociones: PromocionesContent;
   bannerDeco: BannerDecoContent;
   decoGrid: DecoGridContent;
   servicios: ServiciosContent;
@@ -182,6 +193,7 @@ export const SECCIONES_HOME = [
   "navBadge",
   "whatsapp",
   "busquedaAsistida",
+  "promociones",
 ] as const;
 
 export type SeccionHome = (typeof SECCIONES_HOME)[number];
@@ -193,6 +205,7 @@ export type SeccionHome = (typeof SECCIONES_HOME)[number];
  */
 export const ORDEN_HOME = [
   "hero",
+  "promociones",
   "marquee",
   "busquedaAsistida",
   "ambientes",
@@ -269,6 +282,16 @@ export const DEFAULTS_HOME: HomeContent = {
     slug: "led-premium",
     cta: "Entrar a la tienda oficial",
     skus: [],
+  },
+  // Sin productos ni fechas: la sección no se dibuja hasta que el admin carga la promo.
+  promociones: {
+    eyebrow: "Lanzamiento online",
+    titulo: "Precios de *apertura*",
+    bajada: "Ofertas por tiempo limitado y con unidades contadas, para estrenar la tienda online.",
+    items: [],
+    etiquetaBadge: ETIQUETA_BADGE_DEFAULT,
+    etiquetaReferencia: ETIQUETA_REFERENCIA_DEFAULT,
+    legales: LEGALES_DEFAULT,
   },
   bannerDeco: {
     eyebrow: "Línea decorativa · Nuevo",
@@ -380,6 +403,7 @@ export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent 
     },
     navBadge: null,
     tiendaOficial: { cta: DEFAULTS_HOME.tiendaOficial.cta, skus: [] },
+    promociones: DEFAULTS_HOME.promociones,
     whatsapp: DEFAULTS_HOME.whatsapp,
     busquedaAsistida: DEFAULTS_HOME.busquedaAsistida,
     visibilidad: {
@@ -389,6 +413,7 @@ export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent 
       bannerDeco: "nunca",
       decoGrid: "nunca",
       tiendaOficial: "nunca",
+      promociones: "nunca",
     },
     orden: [...ORDEN_HOME],
   };
@@ -624,6 +649,9 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       if (Array.isArray(o.skus) && o.skus.length > 3) errores.push("skus admite hasta 3 productos");
       if (o.imagen !== undefined) imagen("imagen", o.imagen);
       texto("imagenAlt", true);
+      break;
+    case "promociones":
+      errores.push(...erroresPromociones(o, texto, textosTitulo, linkOpcional));
       break;
     case "busquedaAsistida":
       texto("eyebrow", true);
@@ -914,4 +942,66 @@ export function combinarContenidoHome(
     resultado.visibilidad = { ...defaults.visibilidad, ...resolverVisibilidad(porKey.get(KEY_OCULTAS)) };
   }
   return resultado;
+}
+
+const RE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** ISO con fecha, hora y offset explícito (Z o ±hh:mm): sin offset la hora sería ambigua. */
+const RE_ISO_CON_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+const esEnteroPositivo = (v: unknown) => typeof v === "number" && Number.isInteger(v) && v > 0;
+const esFechaIso = (v: unknown) => typeof v === "string" && RE_ISO_CON_OFFSET.test(v) && !Number.isNaN(Date.parse(v));
+
+/** Validación de `promociones` (spec 2026-10-26-promociones-home §1). */
+function erroresPromociones(
+  o: Record<string, unknown>,
+  texto: (campo: string, opcional?: boolean) => void,
+  textosTitulo: () => void,
+  linkOpcional: (campo: string) => void,
+): string[] {
+  const errores: string[] = [];
+  texto("eyebrow", true);
+  textosTitulo();
+  texto("etiquetaBadge");
+  texto("etiquetaReferencia");
+  texto("legales", true);
+  linkOpcional("linkTodos");
+
+  const skus: string[] = [];
+  const item = (v: unknown, campo: string) => {
+    if (!v || typeof v !== "object") return errores.push(`${campo} debe ser un objeto { sku, precioReferencia? }`);
+    const i = v as Record<string, unknown>;
+    if (!esTexto(i.sku)) errores.push(`${campo}.sku debe ser un texto no vacío`);
+    else skus.push(i.sku.trim().toUpperCase());
+    if (i.precioReferencia !== undefined && !esEnteroPositivo(i.precioReferencia))
+      errores.push(`${campo}.precioReferencia debe ser un entero positivo`);
+  };
+
+  const e = o.estrella as Record<string, unknown> | undefined;
+  if (e !== undefined) {
+    item(e, "estrella");
+    if (e && typeof e === "object") {
+      if (e.video !== undefined && !videoEmbebible(e.video)) errores.push("estrella.video debe ser un link de YouTube o Vimeo");
+      if (e.unidadesPromo !== undefined && !esEnteroPositivo(e.unidadesPromo))
+        errores.push("estrella.unidadesPromo debe ser un entero mayor o igual a 1");
+      if (e.stockBase !== undefined && !(typeof e.stockBase === "number" && Number.isInteger(e.stockBase) && e.stockBase >= 0))
+        errores.push("estrella.stockBase debe ser un entero no negativo");
+      if (e.sucursal !== undefined && !(typeof e.sucursal === "string" && RE_SLUG.test(e.sucursal)))
+        errores.push("estrella.sucursal debe ser el slug de una sucursal");
+      for (const campo of ["titulo", "bajada"]) if (e[campo] !== undefined && !esTexto(e[campo])) errores.push(`estrella.${campo} debe ser un texto no vacío`);
+    }
+  }
+
+  if (!Array.isArray(o.items)) errores.push("items debe ser un array");
+  else {
+    if (o.items.length > MAX_ITEMS_PROMO) errores.push(`items admite hasta ${MAX_ITEMS_PROMO} productos`);
+    o.items.forEach((v, n) => item(v, `items[${n}]`));
+  }
+  if (new Set(skus).size !== skus.length) errores.push("un producto no puede repetirse en la promo");
+
+  for (const campo of ["inicio", "fin"] as const)
+    if (o[campo] !== undefined && !esFechaIso(o[campo])) errores.push(`${campo} debe ser una fecha ISO con zona horaria`);
+  if (esFechaIso(o.inicio) && esFechaIso(o.fin) && Date.parse(o.fin as string) <= Date.parse(o.inicio as string))
+    errores.push("fin debe ser posterior a inicio");
+  if (skus.length > 0 && o.fin === undefined) errores.push("fin es obligatorio si la promo tiene productos");
+  return errores;
 }

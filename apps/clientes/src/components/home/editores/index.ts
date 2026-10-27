@@ -36,4 +36,6 @@ export const EDITORES: Record<SeccionHome, ComponentType<EditorProps<any>>> = {
   navBadge: EditorNavBadge,
   whatsapp: EditorWhatsapp,
   busquedaAsistida: EditorBusquedaAsistida,
+  // Provisorio (Task 2 del plan de promociones): el editor propio llega en la Task 5.
+  promociones: EditorAnuncio,
 };

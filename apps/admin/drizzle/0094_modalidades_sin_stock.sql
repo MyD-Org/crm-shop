@@ -16,6 +16,12 @@
 -- Si el rol se crea DESPUÉS de esta migración, correr el bloque DO $$ a mano como owner
 -- (docs/FUNCIONALIDADES.md, "Permisos de `shop_app` sobre `public`").
 --
+-- Orden de despliegue: aplicar 0094 (CRM) → 0039 del Shop (`apps/clientes/drizzle`,
+-- `shop.order_items.venta_sin_stock`) → recién ahí mergear/desplegar las dos apps. 0039 va ANTES del
+-- deploy del CRM porque el detalle del pedido lee `shop.order_items` con `getTableColumns`
+-- (src/lib/pedidos-repo.ts, `itemsDe`): sin la columna, esa consulta falla. Sin 0094 el Shop sigue
+-- andando (lectura tolerante = sin modalidades).
+--
 -- Drift que vive SOLO en SQL (como 0045/0087): los tres CHECK de `modalidades_sin_stock` y los GRANT
 -- no están en src/db/schema.ts.
 --

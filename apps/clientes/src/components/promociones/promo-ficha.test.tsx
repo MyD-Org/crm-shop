@@ -53,6 +53,48 @@ describe("PromoFicha", () => {
     expect(t).toContain("Agotadas las unidades a precio de apertura");
   });
 
+  it("el ahorro sale del medio destacado (como en la home), no del primero de la ficha", () => {
+    info.valor = vigente;
+    const enFicha = {
+      ...producto,
+      precioFinal: 140000,
+      precioMedio: undefined,
+      preciosMedios: [
+        { slug: "cuotas", nombre: "Cuotas", price: 99173, precioFinal: 120000 },
+        { slug: "transferencia", nombre: "Transferencia", price: 90908, precioFinal: 109999 },
+      ],
+    } as unknown as Product;
+    const t = texto(renderToStaticMarkup(<PromoFicha producto={enFicha} quedan={3} slugDestacado="transferencia" />));
+    expect(t).toContain("−26 %");
+    expect(t).not.toContain("−20 %");
+  });
+
+  it("con listas por forma del destacado: la línea sin forma, si no la más barata", () => {
+    info.valor = vigente;
+    const conFormas = {
+      ...producto,
+      precioMedio: undefined,
+      preciosMedios: [
+        { slug: "mp", nombre: "MP", price: 1, precioFinal: 120000, forma: "credito" },
+        { slug: "mp", nombre: "MP", price: 1, precioFinal: 112500, forma: "debito" },
+      ],
+    } as unknown as Product;
+    expect(texto(renderToStaticMarkup(<PromoFicha producto={conFormas} quedan={3} slugDestacado="mp" />))).toContain("−25 %");
+  });
+
+  it("el destacado no está en la ficha: ahorro contra el precio de lista, nunca contra otro medio", () => {
+    info.valor = vigente;
+    const sinDestacado = {
+      ...producto,
+      precioFinal: 135000,
+      precioMedio: undefined,
+      preciosMedios: [{ slug: "cuotas", nombre: "Cuotas", price: 99173, precioFinal: 120000 }],
+    } as unknown as Product;
+    const t = texto(renderToStaticMarkup(<PromoFicha producto={sinDestacado} quedan={3} slugDestacado="transferencia" />));
+    expect(t).toContain("−10 %");
+    expect(t).not.toContain("−20 %");
+  });
+
   it("sin promo: nada", () => {
     info.valor = null;
     expect(renderToStaticMarkup(<PromoFicha producto={producto} quedan={3} />)).toBe("");

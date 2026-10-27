@@ -118,6 +118,7 @@ export default async function ProductoPage({ params }: Props) {
         configEnvio={configEnvio}
         localElegido={localElegido}
         quedanPromo={quedanPromo}
+        slugDestacadoPromo={mediosPrecio?.destacado?.slug}
         envioElegido={envioElegido}
         // La ubicación sale de la cookie: va en un hueco por request, con la regla general de
         // fallback, para que la ficha siga con su shell estático.

@@ -93,10 +93,13 @@ export function ProductoClient({
   localesDisponibilidad,
   logosTarjetas = [],
   quedanPromo,
+  slugDestacadoPromo,
 }: {
   producto: Product;
   /** Promo de la home: unidades a precio de apertura que quedan si es la estrella (ver PromoFicha). */
   quedanPromo?: number | null;
+  /** Slug del medio destacado de las cards: el % de ahorro de la promo usa su precio, como la home. */
+  slugDestacadoPromo?: string;
   /**
    * Con selector de variantes (`producto.grupo`): la disponibilidad de cada opción y los locales, para
    * cambiar de opción sin volver al servidor. Ausentes = ficha de un producto suelto.
@@ -367,7 +370,7 @@ export function ProductoClient({
                   preciosMedios={producto.preciosMedios}
                 />
               )}
-              {!sinPrecio ? <PromoFicha producto={producto} quedan={quedanPromo} /> : null}
+              {!sinPrecio ? <PromoFicha producto={producto} quedan={quedanPromo} slugDestacado={slugDestacadoPromo} /> : null}
               {!sinPrecio && cuotas && producto.precioFinal != null && hayCuotasParaModal(cuotas) && (
                 <div className="mt-3">
                   {cuotasConCarrito ? (

@@ -1,20 +1,40 @@
 "use client";
 
 import { Badge } from "@myd-org/ui";
-import type { Product } from "@/data/products";
+import type { PrecioMedio, Product } from "@/data/products";
 import { fmtPrecioCorto } from "@/lib/format";
 import { esUltimas, fechaCortaAR, porcentajeAhorro, precioPrincipal, textoLegales } from "@/lib/promociones/promo";
 import { CuentaRegresiva } from "./CuentaRegresiva";
 import { usePromoProducto } from "./PromoProvider";
 
 /**
+ * Precio del medio destacado entre los de la ficha (el producto de la ficha no trae `precioMedio`):
+ * la línea sin forma o, con listas por forma, la más barata, como la card. Sin él, undefined.
+ */
+function precioDestacadoEnFicha(medios: PrecioMedio[] | undefined, slug: string | undefined): PrecioMedio | undefined {
+  const delMedio = (medios ?? []).filter((m) => m.slug === slug);
+  const precio = (m: PrecioMedio) => m.precioFinal ?? m.price;
+  return delMedio.find((m) => !m.forma) ?? delMedio.reduce<PrecioMedio | undefined>((min, m) => (!min || precio(m) < precio(min) ? m : min), undefined);
+}
+
+/**
  * Bloque de promo en la ficha (spec 2026-10-26-promociones-home §6): es lo que ve quien llega desde
  * un anuncio. Sin promo vigente para este SKU no dibuja nada.
  */
-export function PromoFicha({ producto, quedan }: { producto: Product; quedan?: number | null }) {
+export function PromoFicha({
+  producto,
+  quedan,
+  slugDestacado,
+}: {
+  producto: Product;
+  quedan?: number | null;
+  /** Medio destacado de las cards (`mediosPrecio.destacado.slug`): el ahorro coincide con la home. */
+  slugDestacado?: string;
+}) {
   const info = usePromoProducto(producto.sku);
   if (!info) return null;
-  const { monto } = precioPrincipal({ ...producto, precioMedio: producto.precioMedio ?? producto.preciosMedios?.[0] });
+  const precioMedio = producto.precioMedio ?? precioDestacadoEnFicha(producto.preciosMedios, slugDestacado);
+  const { monto } = precioPrincipal({ ...producto, precioMedio });
   const pct = porcentajeAhorro(monto, info.referencia);
   const conContador = info.esEstrella && info.unidadesPromo && quedan != null;
   // Sin stock en la tienda manda el stock: nunca "quedan N" sobre algo que no se puede comprar.

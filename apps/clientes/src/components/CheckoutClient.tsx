@@ -1059,6 +1059,9 @@ export function CheckoutClient({
           // Con "a_coordinar" (pedido a confirmar) el servidor no usa ni cuotas ni forma.
           cuotas: pideCuotas && opcionesCuotas.length > 0 ? 1 : undefined,
           ...(formaDelPedido ? { forma: formaDelPedido } : {}),
+          // Armado a confirmar (sin paso Pago): si con el checkout abierto dejó de serlo, el servidor
+          // responde 409 `pedido_ya_no_a_confirmar` (en vez del 400 de siempre) y se vuelve a Pago.
+          ...(flujoCheckout === "a_confirmar" ? { flujoVisto: "a_confirmar" } : {}),
           notas,
           complementoFacturacion: complementoFacturacion ?? undefined,
           // Sólo con el flag `sucursales` (props presentes): local de retiro y provincia de entrega.
@@ -1099,6 +1102,16 @@ export function CheckoutClient({
         setErrorEnvio(json.error ?? "Su pedido incluye productos que se confirman por contacto. Revise el pedido para continuar.");
         recotizar();
         irAPaso("entrega");
+        return;
+      }
+      if (res.status === 409 && json?.motivo === "pedido_ya_no_a_confirmar") {
+        // Al revés: se armó a confirmar (sin Pago) y con el checkout abierto dejó de serlo (entró stock o
+        // la modalidad pasó a en línea). Vuelve el flujo normal y el paso Pago; el total se vuelve a
+        // pedir a /api/carrito/cotizar con el medio que se elija. Nunca se usa la cotización del 409.
+        setFlujoVisto("normal");
+        setErrorEnvio(json.error ?? "Su pedido ya no se confirma por contacto: elija un medio de pago.");
+        recotizar();
+        irAPaso("pago");
         return;
       }
       if (res.status === 409) {

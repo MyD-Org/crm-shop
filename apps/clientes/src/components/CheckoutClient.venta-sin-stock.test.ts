@@ -87,6 +87,20 @@ describe("CheckoutClient: pedido a confirmar por modalidad", () => {
     expect(fuente).toContain('estado === "ok" &&\n    !!cotizacion &&');
   });
 
+  it("409 pedido_ya_no_a_confirmar: vuelve el flujo normal, RECOTIZA y va a Pago; nunca usa la cotización del 409", () => {
+    const r = rama('if (res.status === 409 && json?.motivo === "pedido_ya_no_a_confirmar") {');
+    expect(r).toContain('setFlujoVisto("normal");');
+    expect(r).toContain("setErrorEnvio(json.error");
+    expect(r).toContain("recotizar();");
+    expect(r).toContain('irAPaso("pago");');
+    expect(r).not.toMatch(/json\.cotizacion|totalNuevo|setConfirmado/);
+    // Va antes del 409 genérico (que sólo recotiza y se queda en el paso).
+    expect(fuente.indexOf('json?.motivo === "pedido_ya_no_a_confirmar"')).toBeLessThan(fuente.indexOf("if (res.status === 409) {\n"));
+    // El POST avisa que se armó a confirmar: sin eso el servidor responde el 400 de siempre.
+    const post = fuente.slice(fuente.indexOf('fetch("/api/pedidos", {'));
+    expect(post.slice(0, 2500)).toContain('...(flujoCheckout === "a_confirmar" ? { flujoVisto: "a_confirmar" } : {}),');
+  });
+
   it("a confirmar el pedido sale con a_coordinar y sin pie de medio", () => {
     expect(fuente).toContain("pagoMetodo: pagoParaEnviar,");
     expect(fuente).toContain("const pieConfirmar = sinPasoPago ? TEXTO_CARRITO_A_CONFIRMAR :");

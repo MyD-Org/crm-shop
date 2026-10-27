@@ -96,6 +96,13 @@ interface BodyPedido {
   cuotas?: unknown;
   /** Forma de pago (`credito`, `debito`, `cuenta_mp`): solo cuenta con un medio de Mercado Pago o Payway con precios por forma. */
   forma?: unknown;
+  /**
+   * Venta sin stock: el flujo con el que el checkout armó el pedido ("a_confirmar" = salteó Pago y
+   * manda "a_coordinar"). NO decide nada (el flujo lo resuelve el servidor al cotizar): sólo elige
+   * cómo se rechaza un "a_coordinar" que ya no corresponde (409 para volver a Pago en vez del 400 de
+   * siempre, que siguen recibiendo los clientes que no lo mandan).
+   */
+  flujoVisto?: unknown;
 }
 
 /**
@@ -250,7 +257,8 @@ export async function POST(req: Request) {
   //
   // Venta sin stock: "a_coordinar" con medios aplicables queda PENDIENTE del flujo del pedido, que se
   // conoce recién al cotizar: vale si el pedido queda a confirmar por una modalidad; si no, es el
-  // mismo 400 de siempre. Cuenta corriente: sin cambios (su medio, o "a_coordinar" si no está activo).
+  // mismo 400 de siempre (o un 409 si el checkout lo armó a confirmar, ver más abajo). Cuenta
+  // corriente: sin cambios (su medio, o "a_coordinar" si no está activo).
   const mediosCrm = await leerMediosPagoTolerante();
   const opcionesMedios = {
     procesadorDisponible: procesadorConfigurado,
@@ -469,7 +477,10 @@ export async function POST(req: Request) {
     // Flujo del pedido (venta sin stock). Cuenta corriente: sin cambios, sigue con su medio.
     // - A confirmar: sólo "a_coordinar"; un medio en línea nunca se pisa en silencio (409, el checkout
     //   vuelve a mostrar el pedido).
-    // - Normal: un "a_coordinar" pendiente es el 400 de siempre.
+    // - Normal: un "a_coordinar" pendiente es el 400 de siempre. Salvo que el checkout lo haya armado a
+    //   confirmar (`flujoVisto`) y el pedido dejó de serlo con el checkout abierto (entró stock o la
+    //   modalidad pasó a en línea): 409 con la cotización, para que el checkout recotice y vuelva a
+    //   mostrar el paso Pago. Sin `flujoVisto` (un cliente que no pasó por ese flujo), el 400.
     // Un reintento cuyo primer intento ya se creó puede leer su propia reserva y cambiar de flujo: si la
     // clave ya tiene pedido, es ése.
     const aConfirmar = cotizacion.flujo === "a_confirmar" && !opcionesMedios.esCuentaCorriente;
@@ -480,6 +491,18 @@ export async function POST(req: Request) {
         {
           error: "Su pedido incluye productos que se confirman por contacto. Revise el pedido para continuar.",
           motivo: "pedido_a_confirmar",
+          cotizacion,
+        },
+        { status: 409 },
+      );
+    }
+    if (aCoordinarPendiente && !aConfirmar && body.flujoVisto === "a_confirmar") {
+      const creadoEnElMedio = await pedidoYaCreado();
+      if (creadoEnElMedio) return creadoEnElMedio;
+      return NextResponse.json(
+        {
+          error: "Su pedido ya no se confirma por contacto: elija un medio de pago.",
+          motivo: "pedido_ya_no_a_confirmar",
           cotizacion,
         },
         { status: 409 },

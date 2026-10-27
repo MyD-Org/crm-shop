@@ -276,6 +276,70 @@ describe("POST /api/pedidos — venta sin stock por modalidad", () => {
     expect(listasCotizadas()).not.toContain("lista-destacado");
   });
 
+  describe("el checkout lo armó a confirmar y dejó de serlo con el checkout abierto", () => {
+    const YA_NO = "Su pedido ya no se confirma por contacto: elija un medio de pago.";
+
+    it("entró stock (la línea ya no va a pedido): 409 pedido_ya_no_a_confirmar con la cotización", async () => {
+      // Con stock la línea conserva `aceptaSinStock` pero no va a pedido: flujo normal.
+      cotizar.mockImplementation(async (lineas, o) => {
+        const c = await cotizacionFalsa(lineas, o);
+        const sinPedido = c.lineas.map((l) => ({ ...l, ventaSinStock: undefined, stockDisponible: 5 }));
+        return { ...c, lineas: sinPedido, flujo: "normal" };
+      });
+      const r = await post({ items: [aConfirmar, conStock], pagoMetodo: "a_coordinar", flujoVisto: "a_confirmar" });
+      expect(r.status).toBe(409);
+      const j = await r.json();
+      expect(j).toMatchObject({ error: YA_NO, motivo: "pedido_ya_no_a_confirmar" });
+      expect(j.cotizacion).toMatchObject({ flujo: "normal" });
+      expect(crearPedido).not.toHaveBeenCalled();
+    });
+
+    it("la modalidad pasó a en línea: también 409; sin flujoVisto sigue el 400 de siempre", async () => {
+      modalidadDe = { [aConfirmar.id]: EN_LINEA };
+      const r = await post({ items: [aConfirmar], pagoMetodo: "a_coordinar", flujoVisto: "a_confirmar" });
+      expect(r.status).toBe(409);
+      expect(await r.json()).toMatchObject({ motivo: "pedido_ya_no_a_confirmar" });
+      // Un cliente que no pasó por el flujo a confirmar (no manda `flujoVisto`): el 400 de hoy.
+      const r2 = await post({ items: [aConfirmar], pagoMetodo: "a_coordinar" });
+      expect(r2.status).toBe(400);
+      expect(await r2.json()).toEqual({ error: NO_DISPONIBLE });
+      // `flujoVisto` con otro valor tampoco cambia nada.
+      const r3 = await post({ items: [aConfirmar], pagoMetodo: "a_coordinar", flujoVisto: "normal" });
+      expect(r3.status).toBe(400);
+      expect(crearPedido).not.toHaveBeenCalled();
+    });
+
+    it("si la clave ya creó el pedido (reintento), devuelve ése", async () => {
+      modalidadDe = { [aConfirmar.id]: EN_LINEA };
+      getPedidoPorClave.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: "p0", numero: "PED-00000009" });
+      const r = await post({
+        items: [aConfirmar],
+        pagoMetodo: "a_coordinar",
+        flujoVisto: "a_confirmar",
+        idempotencyKey: "0b1b0b1b-0b1b-4b1b-8b1b-0b1b0b1b0b1b",
+      });
+      expect(r.status).toBe(200);
+      expect(await r.json()).toMatchObject({ id: "p0", repetido: true });
+    });
+
+    it("sigue a confirmar: flujoVisto no cambia nada y el pedido se crea", async () => {
+      const r = await post({ items: [aConfirmar], pagoMetodo: "a_coordinar", flujoVisto: "a_confirmar" });
+      expect(r.status).toBe(201);
+    });
+
+    it("cuenta corriente: flujoVisto no aplica (su a_coordinar inválido es el 400 de siempre)", async () => {
+      identidad = {
+        clerkUserId: "user_1",
+        email: "cc@cliente.example",
+        cliente: { codigocliente: "C-1", razonsocial: "Cliente Ejemplo SA", tipoCuenta: "corriente", origen: "vinculacion" },
+      };
+      medios = [medio({}), MERCADOPAGO, CC];
+      modalidadDe = { [aConfirmar.id]: EN_LINEA };
+      const r = await post({ items: [aConfirmar], pagoMetodo: "a_coordinar", flujoVisto: "a_confirmar" });
+      expect(r.status).toBe(400);
+    });
+  });
+
   it("sin modalidades: a_coordinar con medios aplicables → el mismo 400 de hoy", async () => {
     modalidadDe = {};
     const r = await post({ items: [conStock], pagoMetodo: "a_coordinar" });

@@ -59,7 +59,7 @@ import {
 import { provinciaCanonica } from "@/lib/provincias";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
-import { pagoAEnviar, pasosCheckout, type PasoCheckout } from "@/lib/checkout-flujo";
+import { pagoAEnviar, pasosCheckout, trasGuardarFacturacion, type PasoCheckout } from "@/lib/checkout-flujo";
 import { TEXTO_CARRITO_A_CONFIRMAR, TEXTO_PEDIDO_A_CONFIRMAR, type FlujoPedido } from "@/lib/venta-sin-stock";
 import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
 import { CardOpcionPago } from "@/components/checkout/CardOpcionPago";
@@ -1014,7 +1014,15 @@ export function CheckoutClient({
     }
   }
 
+  /**
+   * Nombre y teléfono recién guardados en la facturación: un pedido a confirmar se confirma en el
+   * mismo clic del guardado, antes de que se vea el estado nuevo. Lo consume `confirmar`.
+   */
+  const contactoRecienGuardado = useRef<{ nombre: string; telefono: string } | null>(null);
+
   async function confirmar() {
+    const contacto = contactoRecienGuardado.current ?? { nombre, telefono };
+    contactoRecienGuardado.current = null;
     setEnviando(true);
     setErrorEnvio(null);
 
@@ -1041,8 +1049,8 @@ export function CheckoutClient({
           idempotencyKey: claveIntento.current ?? undefined,
           totalVisto: cotizacion?.total,
           items: items.map((i) => ({ id: i.id, qty: i.qty })),
-          contactoNombre: nombre,
-          contactoTelefono: telefono,
+          contactoNombre: contacto.nombre,
+          contactoTelefono: contacto.telefono,
           entregaTipo: entrega,
           entregaCiudad: aDomicilio ? ciudadEntrega : undefined,
           entregaDireccion: aDomicilio ? direccionEntrega : undefined,
@@ -1780,6 +1788,28 @@ export function CheckoutClient({
   function confirmarSinPago() {
     if (validarEntrega()) void confirmar();
   }
+  // Con la sección de facturación el botón es el del formulario ("Guardar y confirmar pedido"):
+  // encima, el aviso de que no se cobra y el error del envío.
+  const avisoConfirmarSinPago = (
+    <div className="mt-5">
+      {errorEnvio && estado !== "no_auth" && (
+        <p className="mb-3 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>
+      )}
+      <p className="text-sm text-text">{TEXTO_CARRITO_A_CONFIRMAR}</p>
+    </div>
+  );
+  // Lo que exige `puedeConfirmar` salvo la facturación, que se acaba de guardar (la página todavía
+  // no la releyó) y los datos de contacto y entrega, que el formulario ya validó.
+  const listoParaConfirmarTrasGuardar =
+    estado === "ok" && !!cotizacion && !cotizacion.hayProblemas && cotizacion.lineas.length > 0 && (!aDomicilio || envioDisponible) && !enviando;
+  const motivoTrasGuardar =
+    estado === "no_auth"
+      ? "Inicie sesión para confirmar el pedido."
+      : cotizacion?.hayProblemas
+        ? "Sus datos se guardaron. Revise los productos marcados en rojo para confirmar el pedido."
+        : aDomicilio && !envioDisponible
+          ? "Sus datos se guardaron. Elija retiro en el local: el envío no está disponible."
+          : "Sus datos se guardaron. Estamos confirmando precios y stock: inténtelo de nuevo en unos segundos.";
   const bloqueConfirmarSinPago = (
     <div className="mt-5">
       {/* El error del paso ya lo muestra `bloqueEntrega`. */}
@@ -1788,12 +1818,9 @@ export function CheckoutClient({
       )}
       <p className="mb-3 text-sm text-text">{TEXTO_CARRITO_A_CONFIRMAR}</p>
       <div className="flex items-center gap-3">
-        {/* Con la sección de facturación, "Volver" es el del formulario. */}
-        {!seccionFacturacion && (
-          <Button variant="ghost" onClick={() => irAPaso("datos")}>
-            Volver
-          </Button>
-        )}
+        <Button variant="ghost" onClick={() => irAPaso("datos")}>
+          Volver
+        </Button>
         <Button className="ml-auto" disabled={!puedeConfirmar} onClick={confirmarSinPago}>
           {textoBotonConfirmar}
           <IconoFlechaConfirmar />
@@ -1927,21 +1954,32 @@ export function CheckoutClient({
                   <div className="mt-2 border-t border-border pt-5">
                     <h3 className="mb-3 text-base font-semibold text-text">Entrega</h3>
                     {bloqueEntrega}
+                    {sinPasoPago && avisoConfirmarSinPago}
                   </div>
                 }
                 antesDeGuardar={validarEntrega}
+                // A confirmar no hay paso Pago: el guardado es la única acción del paso y confirma
+                // el pedido con lo recién guardado (sin otro botón que confirme sin guardar).
+                {...(sinPasoPago ? { textoGuardar: "Guardar y confirmar pedido", ocupado: enviando } : {})}
                 onGuardado={(d) => {
                   // Lo cargado acá precarga los datos de contacto del pedido.
-                  if (d.condicionIva === "consumidor_final") setNombre(d.razonSocial);
-                  if (d.telefono) setTelefono(d.telefono);
+                  const contactoGuardado = {
+                    nombre: d.condicionIva === "consumidor_final" ? d.razonSocial : nombre,
+                    telefono: d.telefono || telefono,
+                  };
+                  setNombre(contactoGuardado.nombre);
+                  setTelefono(contactoGuardado.telefono);
                   setFaltantes409(null);
                   setErrorEnvio(null);
-                  // A confirmar no hay paso Pago: se confirma desde el bloque de abajo.
-                  irAPaso(sinPasoPago ? "entrega" : "pago");
+                  const siguiente = trasGuardarFacturacion({ sinPasoPago, listoParaConfirmar: listoParaConfirmarTrasGuardar });
+                  if (siguiente === "pago") irAPaso("pago");
+                  else if (siguiente === "confirmar") {
+                    contactoRecienGuardado.current = contactoGuardado;
+                    void confirmar();
+                  } else setErrorEnvio(motivoTrasGuardar);
                   router.refresh();
                 }}
               />
-              {sinPasoPago && pasoActual === "entrega" && bloqueConfirmarSinPago}
             </section>
           )}
 

@@ -96,12 +96,24 @@ describe("modalidadesActivas (caché `catalogo`)", () => {
 
   it("si la lectura falla: [] con el perfil degradado (no se guarda por 15 minutos)", async () => {
     const mod = await conDb(() => {
-      throw Object.assign(new Error("no existe"), { code: "42P01" });
+      throw new Error("connection refused");
     });
     expect(await mod.modalidadesActivas()).toEqual([]);
     expect(cacheTagMock).toHaveBeenCalledWith("catalogo");
     expect(cacheLifeMock).toHaveBeenCalledWith("degradado");
     expect(cacheLifeMock).not.toHaveBeenCalledWith("catalogo");
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it("sin la migración 0094 (42P01): [] con la vida del catálogo (no acorta las entradas que la anidan)", async () => {
+    const mod = await conDb(() => {
+      throw Object.assign(new Error("no existe"), { code: "42P01" });
+    });
+    expect(await mod.modalidadesActivas()).toEqual([]);
+    expect(cacheLifeMock).toHaveBeenCalledWith("catalogo");
+    expect(cacheLifeMock).not.toHaveBeenCalledWith("degradado");
+    expect(console.warn).toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
   });
 
   it("es una función exportada", () => {

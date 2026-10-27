@@ -12,6 +12,7 @@
  *   recotización de cuotas, totales y bases) no vuelve a pegarle a la base. Si la caché misma falla,
  *   se lee sin caché (`conRespaldoSinCache`).
  */
+import { cache } from "react";
 import { cacheLife, cacheTag } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -67,11 +68,14 @@ async function leerModalidades(db: Lector): Promise<ModalidadSinStock[]> {
 /**
  * Sin la migración 0094 (tabla o GRANT ausentes: 42P01 / 42501) es un aviso: el Shop sigue como
  * siempre. Cualquier otro error es una falla real (base caída, columna renombrada): `console.error`.
+ * Devuelve true si fue la migración ausente.
  */
-function registrarFalla(err: unknown): void {
+function registrarFalla(err: unknown): boolean {
   const detalle = err instanceof Error ? err.message : err;
-  if (esTablaAusenteOSinPermiso(err)) console.warn("[venta-sin-stock] modalidades no disponibles:", detalle);
+  const sinMigracion = esTablaAusenteOSinPermiso(err);
+  if (sinMigracion) console.warn("[venta-sin-stock] modalidades no disponibles:", detalle);
   else console.error("[venta-sin-stock] no se pudieron leer las modalidades:", detalle);
+  return sinMigracion;
 }
 
 export async function leerModalidadesActivas(db?: Lector): Promise<ModalidadSinStock[]> {
@@ -84,12 +88,17 @@ export async function leerModalidadesActivas(db?: Lector): Promise<ModalidadSinS
   }
 }
 
-/** Modalidades activas para mostrar y cotizar (caché `catalogo`, ver arriba). Sin `nombre`. */
-export function modalidadesActivas(): Promise<VentaSinStock[]> {
-  return conRespaldoSinCache("modalidades-sin-stock", modalidadesDeCache, async () =>
-    (await leerModalidadesActivas()).map(aVentaSinStock),
-  );
-}
+/**
+ * Modalidades activas para mostrar y cotizar (caché `catalogo`, ver arriba). Sin `nombre`. El
+ * `cache` de React la deduplica dentro de un render (el catálogo la pide varias veces por página);
+ * en un Route Handler no memoriza y cada llamada va a la caché remota.
+ */
+export const modalidadesActivas = cache(
+  (): Promise<VentaSinStock[]> =>
+    conRespaldoSinCache("modalidades-sin-stock", modalidadesDeCache, async () =>
+      (await leerModalidadesActivas()).map(aVentaSinStock),
+    ),
+);
 
 async function modalidadesDeCache(): Promise<VentaSinStock[]> {
   "use cache: remote";
@@ -99,9 +108,11 @@ async function modalidadesDeCache(): Promise<VentaSinStock[]> {
     cacheLife("catalogo");
     return modalidades;
   } catch (err) {
-    // Una falla (o la migración sin aplicar) no se guarda por 15 minutos: perfil `degradado`.
-    registrarFalla(err);
-    cacheLife("degradado");
+    // Sin la migración 0094: "sin modalidades" es el estado real, con la vida del catálogo (el aviso
+    // del CRM al crear la primera la vence). Una falla real no se guarda por 15 minutos: `degradado`
+    // (que además acorta la vida de las entradas del catálogo que la anidan).
+    if (registrarFalla(err)) cacheLife("catalogo");
+    else cacheLife("degradado");
     return [];
   }
 }

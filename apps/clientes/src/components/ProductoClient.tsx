@@ -408,7 +408,7 @@ export function ProductoClient({
               <BotonFavorito productId={producto.id} />
             </div>
             {aConfirmar && (
-              <p className="text-sm text-muted" data-testid="se-confirma-por-contacto">
+              <p className="hidden text-sm text-muted lg:block" data-testid="se-confirma-por-contacto">
                 {TEXTO_SE_CONFIRMA_POR_CONTACTO}
               </p>
             )}
@@ -445,6 +445,11 @@ export function ProductoClient({
             {selector}
             {botonAgregar}
           </div>
+          {aConfirmar && (
+            <p className="mt-2 text-center text-xs text-muted" data-testid="se-confirma-por-contacto-barra">
+              {TEXTO_SE_CONFIRMA_POR_CONTACTO}
+            </p>
+          )}
         </div>
       </main>
 

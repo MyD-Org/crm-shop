@@ -94,6 +94,16 @@ describe("ProductoClient con selector de variantes", () => {
     expect(html).not.toContain("cuotas");
   });
 
+  it("el aviso 'se confirma por contacto' va dentro de la barra mobile sólo en a_confirmar", () => {
+    const venta = (flujo: "a_confirmar" | "en_linea") =>
+      renderToStaticMarkup(
+        <ProductoClient producto={prod("21", { stock: "out", ventaSinStock: { id: "m", texto: "A pedido", plazoDias: null, flujo } })} />,
+      );
+    const barra = (html: string) => html.slice(html.indexOf("data-barra-compra"));
+    expect(barra(venta("a_confirmar"))).toContain("Se confirma por contacto; no se cobra al comprar");
+    expect(barra(venta("en_linea"))).not.toContain("Se confirma por contacto");
+  });
+
   it("sin grupo (producto suelto o flag apagado) no hay selector", () => {
     const html = renderToStaticMarkup(<ProductoClient producto={verde.producto} />);
     expect(html).not.toContain('role="radiogroup"');

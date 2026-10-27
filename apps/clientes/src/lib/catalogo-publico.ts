@@ -64,6 +64,7 @@ import { elegirDestacados } from "./destacados";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import type { MedioCuotas } from "./cuotas-sin-interes";
 import { SIN_MEDIOS_PRECIO, type MedioPrecio } from "./medios-precio";
+import { agotadoSinModalidad } from "./venta-sin-stock";
 
 /** Categoría de Alegra que alimenta los destacados de la home. */
 const CATEGORIA_DESTACADOS = "ILUMINACION";
@@ -560,7 +561,8 @@ export interface Relacionados {
 
 /**
  * "Productos similares" en la ficha: los de la MISMA categoría que el producto,
- * sin el que se está viendo ni los agotados.
+ * sin el que se está viendo ni los agotados (un producto a pedido, con modalidad de venta sin stock
+ * activa, sí entra: se puede comprar).
  *
  * Con categoría asignada en el admin, es esa exacta (sin subcategorías): en un
  * velador a batería, más veladores a batería. Sin ella, la categoría de Alegra
@@ -583,7 +585,7 @@ export async function relacionadosProducto(args: {
   cuotas?: MedioCuotas[] | null;
 }): Promise<Relacionados | null> {
   const recortar = (productos: Product[]) =>
-    productos.filter((p) => p.id !== args.excluirId && p.stock !== "out").slice(0, args.cantidad);
+    productos.filter((p) => p.id !== args.excluirId && !agotadoSinModalidad(p)).slice(0, args.cantidad);
 
   if (args.categoriaPropiaId) {
     const { categoriaPropiaId, soloVisibles, disp } = args;

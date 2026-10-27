@@ -63,12 +63,15 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
   const titulo = e.titulo || producto.name;
 
   return (
-    <article className="grid overflow-hidden rounded-2xl bg-white text-text shadow-2xl md:grid-cols-[1.1fr_1fr]">
-      <div className="relative aspect-[4/3] bg-elevated md:aspect-auto md:min-h-[460px]">
+    <article className="grid overflow-hidden rounded-2xl bg-white text-text shadow-2xl md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+      <div className="relative aspect-[4/3] bg-elevated md:aspect-auto md:min-h-[320px]">
         {e.video ? (
           <VideoMarca url={e.video} titulo={titulo} />
         ) : foto ? (
-          <Image src={foto} alt={titulo} fill sizes="(max-width: 768px) 100vw, 55vw" className="object-contain p-10" />
+          // Con tope de tamaño: la foto del catálogo viene en 800 px y estirada se pixela.
+          <div className="absolute inset-6 m-auto max-h-[340px] max-w-[400px]">
+            <Image src={foto} alt={titulo} fill sizes="(max-width: 768px) 90vw, 400px" className="object-contain" />
+          </div>
         ) : null}
         <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white shadow-md md:left-5 md:top-5">
           {contenido.etiquetaBadge}
@@ -80,22 +83,27 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-5 border-black/5 p-[clamp(20px,2.6vw,36px)] md:border-l">
-        <div className="flex flex-col gap-2">
-          <h3 className="font-display text-[clamp(20px,2.2vw,28px)] font-semibold leading-tight text-text">{titulo}</h3>
+      <div className="flex flex-col gap-4 border-black/5 p-[clamp(18px,2.2vw,28px)] md:border-l">
+        <div className="flex flex-col gap-1.5">
+          <h3 className="font-display text-[clamp(18px,1.8vw,24px)] font-semibold leading-tight text-text">{titulo}</h3>
           {e.bajada ? <p className="max-w-prose text-sm text-muted">{e.bajada}</p> : null}
         </div>
 
-        <PrecioPromo precio={monto} habitual={e.precioHabitual} esTransferencia={esTransferencia} />
-        <EscaleraPrecios
-          precio={monto}
-          referencias={e.referencias}
-          tienda={tienda}
-          titulo={contenido.tituloComparador}
-          fecha={contenido.fechaRelevamiento}
-        />
+        {/* En pantallas anchas, dos columnas (precio y unidades | comparación): la card no crece en alto. */}
+        <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+          <div className="flex flex-col gap-4">
+            <PrecioPromo precio={monto} habitual={e.precioHabitual} esTransferencia={esTransferencia} />
+            {conContador ? <UnidadesPromo quedan={quedan!} total={e.unidadesPromo!} /> : null}
+          </div>
+          <EscaleraPrecios
+            precio={monto}
+            referencias={e.referencias}
+            tienda={tienda}
+            titulo={contenido.tituloComparador}
+            fecha={contenido.fechaRelevamiento}
+          />
+        </div>
 
-        {conContador ? <UnidadesPromo quedan={quedan!} total={e.unidadesPromo!} /> : null}
         {agotada ? <p className="text-sm font-semibold text-text">Agotadas las unidades a precio de apertura</p> : null}
         {agotada && edicion ? <p className="rounded-md bg-warning/90 px-3 py-2 text-xs font-medium text-black">{AVISO_AJUSTE_CRM}</p> : null}
 
@@ -204,29 +212,32 @@ export function PromocionesVista({ contenido, estrella, items, estado, noResuelt
         {/* Halo celeste detrás del encabezado: marca la banda sin competir con la foto. */}
         <div aria-hidden className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-[#58C8F9]/15 blur-3xl" />
 
-        <div className="relative flex flex-wrap items-end justify-between gap-6">
-          <div className="flex max-w-2xl flex-col gap-3">
-            {contenido.eyebrow ? (
-              <span className="inline-flex w-fit items-center gap-2 rounded-full bg-danger px-3 py-1 text-xs font-bold text-white">
-                <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
-                {contenido.eyebrow}
-              </span>
-            ) : null}
-            {titulo || tituloMobile ? (
-              <h2 className={`font-display text-[clamp(32px,4.4vw,56px)] font-extrabold leading-[1.02] tracking-[-0.02em] ${clasesVisibilidad(visibilidadTextos?.titulo)}`}>
-                <AccentText text={titulo ?? ""} mobileText={tituloMobile} accentClassName={`not-italic ${CELESTE}`} />
-              </h2>
-            ) : null}
-            {bajada ? <p className={`max-w-[52ch] text-[15px] leading-[1.6] text-white/75 ${clasesVisibilidad(visibilidadTextos?.bajada)}`}>{bajada}</p> : null}
-          </div>
+        {/* Línea de arriba: la cinta de lanzamiento y la cuenta regresiva; debajo, el título a todo el ancho. */}
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          {contenido.eyebrow ? (
+            <span className="inline-flex w-fit items-center gap-2 rounded-full bg-danger px-3 py-1 text-xs font-bold text-white">
+              <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+              {contenido.eyebrow}
+            </span>
+          ) : (
+            <span />
+          )}
           {contenido.fin ? (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <p className="text-xs font-semibold text-white/80">
                 La promo termina en <span className="text-white/60">· hasta el {fechaCortaAR(contenido.fin)}</span>
               </p>
               <CuentaRegresiva fin={contenido.fin} onFin={() => setTerminada(true)} variante="cajas" />
             </div>
           ) : null}
+        </div>
+        <div className="relative mt-4 flex flex-col gap-2">
+          {titulo || tituloMobile ? (
+            <h2 className={`font-display text-[clamp(32px,5vw,64px)] font-extrabold leading-[1.02] tracking-[-0.02em] ${clasesVisibilidad(visibilidadTextos?.titulo)}`}>
+              <AccentText text={titulo ?? ""} mobileText={tituloMobile} accentClassName={`not-italic ${CELESTE}`} />
+            </h2>
+          ) : null}
+          {bajada ? <p className={`max-w-[60ch] text-[15px] leading-[1.6] text-white/75 ${clasesVisibilidad(visibilidadTextos?.bajada)}`}>{bajada}</p> : null}
         </div>
 
         <div className="relative mt-[clamp(20px,3vw,32px)] flex flex-col gap-4">

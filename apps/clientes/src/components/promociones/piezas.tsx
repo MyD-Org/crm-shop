@@ -39,7 +39,7 @@ export function PrecioPromo({
         <span
           className={cn(
             "font-display font-extrabold leading-none tabular-nums text-primary",
-            grande ? "text-[clamp(38px,5vw,60px)]" : "text-[clamp(20px,2vw,26px)]",
+            grande ? "text-[clamp(32px,3.6vw,46px)]" : "text-[clamp(20px,2vw,26px)]",
           )}
         >
           {fmtPrecioCorto(precio)}

@@ -46,9 +46,9 @@ export function CuentaRegresiva({
     return (
       <div className={cn("flex gap-2", className)} role="timer" aria-label="Tiempo que falta para que termine la promo">
         {cajas.map((c) => (
-          <div key={c.unidad} className="flex min-w-[64px] flex-col items-center rounded-xl bg-white/10 px-3 py-2 ring-1 ring-white/15">
-            <span className="font-display text-[clamp(24px,3vw,34px)] font-bold leading-none tabular-nums text-white">{c.valor}</span>
-            <span className="mt-1 text-[11px] text-white/70">{c.unidad}</span>
+          <div key={c.unidad} className="flex min-w-[52px] flex-col items-center rounded-lg bg-white/10 px-2.5 py-1.5 ring-1 ring-white/15">
+            <span className="font-display text-[22px] font-bold leading-none tabular-nums text-white">{c.valor}</span>
+            <span className="mt-0.5 text-[10px] text-white/70">{c.unidad}</span>
           </div>
         ))}
       </div>

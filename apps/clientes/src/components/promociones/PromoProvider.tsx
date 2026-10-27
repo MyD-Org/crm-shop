@@ -1,9 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { Badge } from "@myd-org/ui";
-import { infoPromoDe, type DatosPromoCliente, type InfoPromoProducto } from "@/lib/promociones/promo";
-import { useAhora } from "./reloj";
+import { infoPromoSku, promoClienteVigente, type DatosPromoCliente, type InfoPromoProducto } from "@/lib/promociones/promo";
 
 /**
  * Promo de la home disponible en toda la tienda (cards y ficha). Lo monta el layout con
@@ -16,11 +15,46 @@ export function PromoProvider({ datos, children }: { datos: DatosPromoCliente | 
   return <PromoContext.Provider value={datos}>{children}</PromoContext.Provider>;
 }
 
+/** `setTimeout` admite hasta ~24,8 días; más allá se reprograma al vencer. */
+const MAX_ESPERA_MS = 2 ** 31 - 1;
+
+/**
+ * Suscripción a la vigencia: UN timer hasta el próximo corte (inicio o fin), no un reloj por
+ * segundo. Sin promo no programa nada: las cards de toda la tienda no se vuelven a dibujar.
+ */
+export function suscribirVigencia(datos: DatosPromoCliente | null) {
+  return (aviso: () => void) => {
+    if (!datos) return () => {};
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const programar = () => {
+      const ahora = Date.now();
+      const cortes = [datos.inicio, datos.fin].map((iso) => (iso ? Date.parse(iso) : NaN)).filter((ms) => ms > ahora);
+      if (cortes.length === 0) return;
+      t = setTimeout(() => {
+        aviso();
+        programar();
+      }, Math.min(Math.min(...cortes) - ahora, MAX_ESPERA_MS));
+    };
+    programar();
+    return () => clearTimeout(t);
+  };
+}
+
+/** Vigencia en el cliente; `false` en el servidor y en la hidratación (sin mismatch). */
+function useVigente(datos: DatosPromoCliente | null): boolean {
+  const suscribir = useMemo(() => suscribirVigencia(datos), [datos]);
+  return useSyncExternalStore(
+    suscribir,
+    () => promoClienteVigente(datos, Date.now()),
+    () => false,
+  );
+}
+
 /** Para listas (una llamada por componente, no por card): sku → info de la promo o null. */
 export function useInfoPromo(): (sku: string | undefined) => InfoPromoProducto | null {
   const datos = useContext(PromoContext);
-  const ahora = useAhora();
-  return useCallback((sku) => (ahora === null ? null : infoPromoDe(datos, sku, ahora)), [datos, ahora]);
+  const vigente = useVigente(datos);
+  return useCallback((sku) => (vigente ? infoPromoSku(datos, sku) : null), [datos, vigente]);
 }
 
 export function usePromoProducto(sku: string | undefined): InfoPromoProducto | null {

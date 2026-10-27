@@ -9,14 +9,10 @@ import { aIsoArgentina, deIsoArgentina, MAX_ITEMS_PROMO, porcentajeAhorro } from
 import type { SucursalPromo } from "@/lib/promociones/stock";
 import { CamposTitulo } from "./CamposTitulo";
 import { SelectorSkusDestacados } from "./SelectorSkusDestacados";
-import { aplicarUnidades, necesitaStockBase } from "./promociones-editor";
+import { aplicarUnidades, cambiarEstrella, enteroPesos, necesitaStockBase } from "./promociones-editor";
 import type { EditorProps } from "./index";
 
 const clave = (sku: string) => sku.trim().toUpperCase();
-const entero = (v: string): number | undefined => {
-  const n = Number(v.replace(/\D/g, ""));
-  return v.trim() && Number.isInteger(n) && n > 0 ? n : undefined;
-};
 
 /** Precio actual del producto y ahorro contra la referencia: para ver si ya se cargó el ajuste en el CRM. */
 export function ResumenPrecio({ precio, esTransferencia, referencia }: { precio: number; esTransferencia: boolean; referencia?: number }) {
@@ -32,7 +28,7 @@ export function ResumenPrecio({ precio, esTransferencia, referencia }: { precio:
 function CampoReferencia({ valor, onChange }: { valor?: number; onChange: (v: number | undefined) => void }) {
   return (
     <Field label="Precio en otras tiendas (con IVA)" hint="Vacío: sin línea de referencia ni porcentaje de ahorro.">
-      <Input inputMode="numeric" value={valor ? String(valor) : ""} onChange={(e) => onChange(entero(e.target.value))} placeholder="150000" />
+      <Input inputMode="numeric" value={valor ? String(valor) : ""} onChange={(e) => onChange(enteroPesos(e.target.value))} placeholder="150000" />
     </Field>
   );
 }
@@ -88,16 +84,12 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
     if (!e || !necesitaStockBase(antes && { ...antes, sucursal: antes.sucursal ?? sucursal }, conSucursal)) return;
     const p = productos[clave(e.sku)];
     if (!p) return;
-    onChange(aplicarUnidades(valor, { unidades: e.unidadesPromo, stock: p.stock }));
+    onChange(aplicarUnidades(valor, { unidades: e.unidadesPromo, stock: p.stock, sucursal }));
   }, [e, productos, productosEn, sucursal, valor, onChange]);
 
   const setEstrella = (cambios: Partial<EstrellaPromo> | null) => {
     if (cambios === null) return onChange({ ...valor, estrella: undefined });
-    // Cambiar las unidades, la estrella o la sucursal invalida el stock base: se vuelve a tomar.
-    const reinicia = "sku" in cambios || "sucursal" in cambios || "unidadesPromo" in cambios;
-    const actual = { ...(e ?? { sku: "" }), ...cambios };
-    if (reinicia) delete actual.stockBase;
-    onChange({ ...valor, estrella: actual });
+    onChange({ ...valor, estrella: cambiarEstrella(e, cambios) });
   };
   const setItem = (n: number, cambios: Partial<ItemPromo>) =>
     onChange({ ...valor, items: valor.items.map((it, i) => (i === n ? { ...it, ...cambios } : it)) });
@@ -140,7 +132,7 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Unidades a precio de apertura" hint="Vacío: sin contador.">
-                <Input inputMode="numeric" value={e.unidadesPromo ? String(e.unidadesPromo) : ""} onChange={(ev) => setEstrella({ unidadesPromo: entero(ev.target.value) })} />
+                <Input inputMode="numeric" value={e.unidadesPromo ? String(e.unidadesPromo) : ""} onChange={(ev) => setEstrella({ unidadesPromo: enteroPesos(ev.target.value) })} />
               </Field>
               <Field label="Sucursal que cuenta las unidades">
                 <Select

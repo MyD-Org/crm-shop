@@ -644,6 +644,17 @@ describe("promociones (spec 2026-10-26-promociones-home §1)", () => {
     expect(erroresSeccion("promociones", sinFin).length).toBeGreaterThan(0);
   });
 
+  it("rechaza unidades de promo sin el stock base del contador", () => {
+    const { stockBase: _s, ...sinBase } = base.estrella;
+    expect(erroresSeccion("promociones", { ...base, estrella: sinBase }).length).toBeGreaterThan(0);
+  });
+
+  it("si los legales mencionan {inicio}, exige la fecha de inicio", () => {
+    expect(erroresSeccion("promociones", { ...base, legales: "Del {inicio} al {fin}" }).length).toBeGreaterThan(0);
+    expect(erroresSeccion("promociones", { ...base, legales: "Hasta el {fin}" })).toEqual([]);
+    expect(erroresSeccion("promociones", { ...base, inicio: "2026-11-03T00:00:00-03:00", legales: "Del {inicio} al {fin}" })).toEqual([]);
+  });
+
   it("rechaza una sucursal que no es un slug", () => {
     expect(erroresSeccion("promociones", { ...base, estrella: { ...base.estrella, sucursal: "MDP!" } }).length).toBeGreaterThan(0);
   });

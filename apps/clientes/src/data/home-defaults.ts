@@ -983,6 +983,9 @@ function erroresPromociones(
       if (e.video !== undefined && !videoEmbebible(e.video)) errores.push("estrella.video debe ser un link de YouTube o Vimeo");
       if (e.unidadesPromo !== undefined && !esEnteroPositivo(e.unidadesPromo))
         errores.push("estrella.unidadesPromo debe ser un entero mayor o igual a 1");
+      // Sin el stock base el contador no descuenta ventas: "quedan 5 de 5" para siempre.
+      if (e.unidadesPromo !== undefined && e.stockBase === undefined)
+        errores.push("Espere a que se lea el stock del producto estrella antes de guardar las unidades de promo.");
       if (e.stockBase !== undefined && !(typeof e.stockBase === "number" && Number.isInteger(e.stockBase) && e.stockBase >= 0))
         errores.push("estrella.stockBase debe ser un entero no negativo");
       if (e.sucursal !== undefined && !(typeof e.sucursal === "string" && RE_SLUG.test(e.sucursal)))
@@ -1003,5 +1006,7 @@ function erroresPromociones(
   if (esFechaIso(o.inicio) && esFechaIso(o.fin) && Date.parse(o.fin as string) <= Date.parse(o.inicio as string))
     errores.push("fin debe ser posterior a inicio");
   if (skus.length > 0 && o.fin === undefined) errores.push("fin es obligatorio si la promo tiene productos");
+  if (skus.length > 0 && typeof o.legales === "string" && o.legales.includes("{inicio}") && o.inicio === undefined)
+    errores.push("Indique la fecha de inicio: los legales la mencionan con {inicio}.");
   return errores;
 }

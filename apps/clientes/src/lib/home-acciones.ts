@@ -380,7 +380,7 @@ export async function productosParaPromo(skus: string[], sucursal: string): Prom
         .filter((p): p is typeof p & { sku: string } => !!p.sku)
         .map((p) => {
           const { monto, esTransferencia } = precioPrincipal(p);
-          return { sku: p.sku, nombre: p.name, foto: p.images?.[0]?.url, precio: monto, esTransferencia, stock: stock[p.id] ?? 0 };
+          return { sku: p.sku, nombre: p.name, foto: p.images?.[0]?.url, precio: monto, esTransferencia, stock: stock[p.id] === undefined ? 0 : stock[p.id] };
         }),
     };
   } catch (err) {

@@ -42,6 +42,12 @@ vi.mock("@/lib/busqueda-v2/motor-servidor", () => ({
   buscarEnShop: buscarEnShopMock,
 }));
 
+const stockPromoMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/promociones/stock", async (orig) => ({
+  ...(await orig<typeof import("@/lib/promociones/stock")>()),
+  stockEnSucursal: stockPromoMock,
+}));
+vi.mock("@/lib/sucursales-repo", () => ({ leerSucursalesYZonas: async () => ({ sucursales: [], zonas: [] }) }));
 vi.mock("@/lib/catalog", () => ({
   getProductosPorSkus: porSkusMock,
 }));
@@ -639,5 +645,19 @@ describe("acciones del editor de promociones", () => {
   it("Sin códigos: productosParaPromo no consulta", async () => {
     expect(await productosParaPromo([], "mdp")).toEqual({ ok: true, productos: [] });
     expect(porSkusMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("productosParaPromo: stock de la sucursal", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    esAdminMock.mockResolvedValue(true);
+  });
+
+  it("un producto sin control de stock llega como null, no como 0", async () => {
+    porSkusMock.mockResolvedValue([{ id: "1", name: "Servicio", sku: "S-1", price: 100, stock: "in" }]);
+    stockPromoMock.mockResolvedValue({ "1": null });
+    const r = await productosParaPromo(["S-1"], "mdp");
+    expect(r).toMatchObject({ ok: true, productos: [{ sku: "S-1", stock: null }] });
   });
 });

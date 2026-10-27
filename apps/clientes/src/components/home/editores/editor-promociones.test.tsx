@@ -10,18 +10,18 @@ vi.mock("@/lib/home-acciones", () => ({
 }));
 
 import { EditorPromociones, ResumenPrecio } from "./EditorPromociones";
-import { aplicarUnidades, necesitaStockBase } from "./promociones-editor";
+import { aplicarUnidades, cambiarEstrella, enteroPesos, necesitaStockBase } from "./promociones-editor";
 
 const base: PromocionesContent = { ...DEFAULTS_HOME.promociones, fin: "2026-11-13T23:59:00-03:00" };
 
 describe("aplicarUnidades", () => {
   it("guarda las unidades y el stock de ese momento", () => {
-    const r = aplicarUnidades({ ...base, estrella: { sku: "NK-1" } }, { unidades: 5, stock: 10 });
-    expect(r.estrella).toEqual({ sku: "NK-1", unidadesPromo: 5, stockBase: 10 });
+    const r = aplicarUnidades({ ...base, estrella: { sku: "NK-1" } }, { unidades: 5, stock: 10, sucursal: "mdp" });
+    expect(r.estrella).toEqual({ sku: "NK-1", unidadesPromo: 5, stockBase: 10, sucursal: "mdp" });
   });
 
   it("sin unidades quita el contador", () => {
-    const r = aplicarUnidades({ ...base, estrella: { sku: "NK-1", unidadesPromo: 5, stockBase: 10 } }, { unidades: undefined, stock: 10 });
+    const r = aplicarUnidades({ ...base, estrella: { sku: "NK-1", unidadesPromo: 5, stockBase: 10 } }, { unidades: undefined, stock: 10, sucursal: "mdp" });
     expect(r.estrella).toEqual({ sku: "NK-1" });
   });
 });
@@ -65,5 +65,34 @@ describe("EditorPromociones", () => {
     const html = renderToStaticMarkup(<EditorPromociones valor={base} onChange={() => {}} />);
     expect(html).toContain('type="datetime-local"');
     expect(html).toContain('value="2026-11-13T23:59"');
+  });
+});
+
+describe("cambiarEstrella", () => {
+  const antes = { sku: "NK-1", precioReferencia: 150000, video: "https://youtu.be/x", titulo: "Noak", unidadesPromo: 5, stockBase: 10, sucursal: "mdp" };
+  it("al cambiar de producto no arrastra referencia, video, textos ni contador (sí la sucursal)", () => {
+    expect(cambiarEstrella(antes, { sku: "OTRO" })).toEqual({ sku: "OTRO", sucursal: "mdp" });
+  });
+  it("otros cambios se aplican sobre la estrella actual", () => {
+    expect(cambiarEstrella(antes, { precioReferencia: 140000 })).toMatchObject({ sku: "NK-1", precioReferencia: 140000, video: antes.video });
+  });
+  it("cambiar unidades o sucursal invalida el stock base", () => {
+    expect(cambiarEstrella(antes, { unidadesPromo: 3 }).stockBase).toBeUndefined();
+    expect(cambiarEstrella(antes, { sucursal: "igz" }).stockBase).toBeUndefined();
+  });
+});
+
+describe("enteroPesos", () => {
+  it.each([
+    ["150000", 150000],
+    ["150.000", 150000],
+    ["$ 150.000", 150000],
+    ["149999,50", 150000],
+    ["149.999,49", 149999],
+    ["", undefined],
+    ["0", undefined],
+    ["abc", undefined],
+  ])("%s → %s", (v, esperado) => {
+    expect(enteroPesos(v)).toBe(esperado);
   });
 });

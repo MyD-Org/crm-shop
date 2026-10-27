@@ -170,12 +170,21 @@ export type InfoPromoProducto = {
   esEstrella: boolean;
 };
 
+/** ¿La promo que viajó al cliente está vigente en `ahora`? */
+export function promoClienteVigente(datos: DatosPromoCliente | null, ahora: number): boolean {
+  return !!datos && estadoPromo({ inicio: datos.inicio, fin: datos.fin, items: [{ sku: "_" }] }, ahora) === "vigente";
+}
+
 /** La promo de UN producto (por SKU exacto) si está vigente en `ahora`; si no, null. */
 export function infoPromoDe(datos: DatosPromoCliente | null, sku: string | undefined, ahora: number): InfoPromoProducto | null {
+  return promoClienteVigente(datos, ahora) ? infoPromoSku(datos, sku) : null;
+}
+
+/** El dato de la promo de UN producto, sin mirar la fecha (la vigencia la decide quien llama). */
+export function infoPromoSku(datos: DatosPromoCliente | null, sku: string | undefined): InfoPromoProducto | null {
   if (!datos || !sku) return null;
   const k = normalizar(sku);
   if (!(k in datos.refs)) return null;
-  if (estadoPromo({ inicio: datos.inicio, fin: datos.fin, items: [{ sku: k }] }, ahora) !== "vigente") return null;
   return {
     etiquetaBadge: datos.etiquetaBadge,
     etiquetaReferencia: datos.etiquetaReferencia,

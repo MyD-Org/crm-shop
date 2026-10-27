@@ -9,7 +9,8 @@
  *
  * Copy en español formal de usted (CLAUDE.md).
  */
-import type { BreadcrumbItem } from "@myd-org/ui";
+import type { BreadcrumbItem, ProductStock } from "@myd-org/ui";
+import { esAPedido } from "@/lib/venta-sin-stock";
 import type { Product } from "@/data/products";
 import { fmtPesosEnteros } from "@/lib/format";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
@@ -133,7 +134,10 @@ export function anuncioResultados(
  * pone "Últimas unidades" / "Sin stock" (las cards ya no muestran "En
  * stock": ver `mostrarStockEnCard`).
  */
-export function etiquetaStock(p: Pick<Product, "stock" | "stockQty">): string | undefined {
+export function etiquetaStock(
+  p: Pick<Product, "stock" | "stockQty" | "ventaSinStock">
+): string | undefined {
+  if (esAPedido(p)) return p.ventaSinStock?.texto;
   const n = unidadesPositivas(p);
   if (p.stock !== "low" || n == null) return undefined;
   return n === 1 ? "Queda 1" : `Quedan ${miles.format(n)}`;
@@ -172,8 +176,26 @@ export const CANTIDAD_MAXIMA = 999;
  * Cuántas unidades deja elegir el selector de cantidad: las disponibles si se
  * conocen; si no (ítem no inventariable), el tope general.
  */
-export function maxCantidad(p: Pick<Product, "stock" | "stockQty">): number {
+export function maxCantidad(p: Pick<Product, "stock" | "stockQty" | "ventaSinStock">): number {
+  if (p.ventaSinStock) return CANTIDAD_MAXIMA;
   return unidadesPositivas(p) ?? CANTIDAD_MAXIMA;
+}
+
+/**
+ * Tope del selector de cantidad de una línea del carrito: con modalidad sin stock (o stock
+ * desconocido) el tope general; si no, el stock.
+ */
+export function topeCantidad(l: { stockDisponible: number | null; aceptaSinStock?: boolean }): number {
+  if (l.aceptaSinStock || l.stockDisponible == null) return CANTIDAD_MAXIMA;
+  return l.stockDisponible;
+}
+
+/**
+ * Estado de stock que se le pasa a la card del DS: un producto a pedido va en tono `low` (ámbar,
+ * "demora"); el DS no tiene tono neutro.
+ */
+export function stockParaCard(p: Pick<Product, "stock" | "ventaSinStock">): ProductStock {
+  return esAPedido(p) ? "low" : p.stock;
 }
 
 /** Un chip de filtro activo y el cambio de estado que lo quita. */

@@ -55,6 +55,16 @@ describe("CatalogoProductos con modelos de variantes", () => {
     expect(out).toContain('data-testid="agregar"');
   });
 
+  it("card a pedido: botón habilitado y texto de la modalidad; agotada sin modalidad: deshabilitada", () => {
+    const aPedido = html([
+      prod("3", { stock: "out", stockQty: 0, ventaSinStock: { id: "m1", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea" } }),
+    ]);
+    expect(aPedido).toContain("Retiro en ~48 h");
+    expect(aPedido).not.toContain("Sin stock");
+    const agotada = html([prod("4", { stock: "out", stockQty: 0 })]);
+    expect(agotada).toContain("Sin stock");
+  });
+
   it("la card enlaza a la ficha de la representante", () => {
     const out = html([prod("mdp:7", { variantes: { cantidad: 2 } })]);
     expect(out).toContain('href="/producto/mdp:7"');

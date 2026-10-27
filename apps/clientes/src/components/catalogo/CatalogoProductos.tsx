@@ -8,8 +8,9 @@ import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
 import type { Product } from "@/data/products";
+import { agotadoSinModalidad } from "@/lib/venta-sin-stock";
 import type { VistaCatalogo } from "@/lib/catalogo-url";
-import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
+import { etiquetaStock, maxCantidad, mostrarStockEnCard, stockParaCard } from "@/lib/catalogo-vista";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { vistaCardVariantes } from "@/lib/variantes-ficha";
 import { formatMarca } from "@/lib/formato-rubro";
@@ -121,7 +122,7 @@ export function CatalogoProductos({
           name={nombreParaMostrar}
           // Si el nombre ya es el código, la línea "Cód." lo repetiría.
           code={esCodigo ? undefined : p.sku}
-          stock={p.stock}
+          stock={stockParaCard(p)}
           stockLabel={etiquetaStock(p)}
           showStock={mostrarStockEnCard(p)}
           // Final con IVA si se conoce; si no, el de siempre.
@@ -169,7 +170,7 @@ export function CatalogoProductos({
               <AccionOpciones producto={p} titulo={nombreParaMostrar} />
             ) : (
               <AddToCartButton
-                disabled={p.stock === "out"}
+                disabled={agotadoSinModalidad(p)}
                 max={maxCantidad(p)}
                 product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
               />

@@ -22,6 +22,8 @@ import {
   interpretacionVigente,
   itemsVisibles,
   ordenesPara,
+  stockParaCard,
+  topeCantidad,
 } from "./catalogo-vista";
 import type { EstadoCatalogo } from "./catalogo-url";
 
@@ -105,6 +107,28 @@ describe("anuncioResultados", () => {
 
   it("sin resultados", () => {
     expect(anuncioResultados(0, 0, 1, 0)).toBe("Sin resultados");
+  });
+});
+
+const M = { id: "m1", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea" as const };
+
+describe("venta sin stock en cards", () => {
+  const P = { stock: "out" as const, stockQty: 0, ventaSinStock: M };
+  it("card a pedido: texto de la modalidad en tono low", () => {
+    expect(stockParaCard(P)).toBe("low");
+    expect(etiquetaStock(P)).toBe("Retiro en ~48 h");
+    expect(mostrarStockEnCard({ stock: "out" })).toBe(true);
+  });
+  it("sin modalidad, igual que hoy", () => {
+    expect(stockParaCard({ stock: "out" })).toBe("out");
+    expect(etiquetaStock({ stock: "out", stockQty: 0 })).toBeUndefined();
+    expect(maxCantidad({ stock: "low", stockQty: 3 })).toBe(3);
+  });
+  it("con modalidad el tope no es el stock (cantidad > stock → a pedido)", () => {
+    expect(maxCantidad({ stock: "low", stockQty: 3, ventaSinStock: M })).toBe(999);
+    expect(topeCantidad({ stockDisponible: 3 })).toBe(3);
+    expect(topeCantidad({ stockDisponible: 3, aceptaSinStock: true })).toBe(999);
+    expect(topeCantidad({ stockDisponible: null })).toBe(999);
   });
 });
 

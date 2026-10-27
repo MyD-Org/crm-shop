@@ -8,6 +8,7 @@ import { linkNext } from "@/components/catalogo/link-next";
 import { useCart } from "@/context/CartContext";
 import type { Product } from "@/data/products";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
+import { agotadoSinModalidad, esAPedido } from "@/lib/venta-sin-stock";
 import { etiquetaStock, maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
 import { fmtPrecio } from "@/lib/format";
 import { nombreDeLinea } from "@/lib/nombre-linea";
@@ -42,6 +43,7 @@ function useEsMovil(): boolean {
 
 /** El estado de stock de una opción en una frase corta. */
 function textoDisponibilidad(p: Product): string {
+  if (esAPedido(p)) return p.ventaSinStock?.texto ?? TEXTOS_VARIANTES.sinStock;
   if (p.stock === "out") return TEXTOS_VARIANTES.sinStock;
   const unidades = textoUnidadesDisponibles(p);
   if (p.stock === "low") return etiquetaStock(p) ?? "Últimas unidades";
@@ -111,7 +113,7 @@ export function PanelOpciones({
   const cerrar = useCallback(() => alCambiar(false), [alCambiar]);
 
   const noSePuedeAgregar =
-    !elegida || elegida.stock === "out" || !(elegida.price > 0) || elegida.precioCuenta === "pendiente";
+    !elegida || agotadoSinModalidad(elegida) || !(elegida.price > 0) || elegida.precioCuenta === "pendiente";
 
   // La cantidad nunca pasa del stock de la opción elegida (al cambiar de opción se recorta sola).
   const maximo = elegida ? maxCantidad(elegida) : 1;
@@ -212,7 +214,7 @@ export function PiePanelOpciones({
           onClick={onAgregar}
         >
           <CartIcon />
-          {elegida?.stock === "out" ? TEXTOS_VARIANTES.sinStock : TEXTOS_PANEL.agregarAlCarrito}
+          {elegida && agotadoSinModalidad(elegida) ? TEXTOS_VARIANTES.sinStock : TEXTOS_PANEL.agregarAlCarrito}
         </Button>
       </div>
       <Button
@@ -310,7 +312,7 @@ export function CuerpoPanelOpciones({
                 )}
               </>
             )}
-            <p className={elegida.stock === "out" ? "mt-2 text-sm text-danger" : "mt-2 text-sm text-muted"}>
+            <p className={agotadoSinModalidad(elegida) ? "mt-2 text-sm text-danger" : "mt-2 text-sm text-muted"}>
               {textoDisponibilidad(elegida)}
             </p>
           </div>
@@ -320,7 +322,7 @@ export function CuerpoPanelOpciones({
           label={TEXTOS_VARIANTES.etiquetaSelector}
           options={datos.opciones.map((o) => ({
             id: o.id,
-            label: etiquetaDeOpcion(o.opcion ?? o.name, o.stock === "out"),
+            label: etiquetaDeOpcion(o.opcion ?? o.name, agotadoSinModalidad(o)),
           }))}
           value={elegida.id}
           onChange={onElegir}

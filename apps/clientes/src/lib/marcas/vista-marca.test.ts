@@ -60,6 +60,15 @@ describe("metadataMarca", () => {
     expect(m.description).toBe("Desc");
   });
 
+  it("sin imagen propia ni logo usa la imagen general del sitio y repite el nombre de la tienda", () => {
+    const m = metadataMarca(pagina({ logo: undefined }), "Central Led", false);
+    expect(m.openGraph).toMatchObject({
+      siteName: "Central Led",
+      locale: "es_AR",
+      images: ["/opengraph-image"],
+    });
+  });
+
   it("con query: noindex, follow", () => {
     expect(metadataMarca(pagina(), "Central Led", true).robots).toEqual({ index: false, follow: true });
   });

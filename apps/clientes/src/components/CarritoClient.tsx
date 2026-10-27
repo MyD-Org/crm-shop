@@ -20,6 +20,8 @@ import { formatMarca } from "@/lib/formato-rubro";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
 import { BotonCompartirLista } from "@/components/BotonCompartirLista";
 import { hrefCompartido, MENSAJE_CARRITO } from "@/lib/carrito-compartido";
+import { topeCantidad } from "@/lib/catalogo-vista";
+import { TEXTO_CARRITO_A_CONFIRMAR } from "@/lib/venta-sin-stock";
 
 function LightbulbIcon({ className }: { className?: string }) {
   return (
@@ -266,6 +268,8 @@ export function CarritoClient({
   const metas = ordenarMetas([metaEnvio(progresoEnvio), metaCuotas(ultimoProgresoCuotas)]);
 
   const lineasConProblema = cotizacion?.lineas.filter((l) => l.problema).length ?? 0;
+  // Venta sin stock: el pedido incluye líneas que se confirman por contacto (no se cobra al comprar).
+  const aConfirmar = cotizacion?.flujo === "a_confirmar";
 
   const botonCompra = (etiquetaBloqueado?: string) => (
     <Link href="/checkout" className="block" aria-disabled={cotizacion?.hayProblemas || undefined}>
@@ -397,8 +401,17 @@ export function CarritoClient({
                               {item.qty} × {fmtPrecio(precio.unitario)}
                             </p>
                           )}
-                          {!linea?.problema && linea?.stockDisponible != null && item.qty >= linea.stockDisponible && (
-                            <p className="text-xs font-semibold text-muted">Stock máximo disponible</p>
+                          {!linea?.problema &&
+                            !linea?.aceptaSinStock &&
+                            linea?.stockDisponible != null &&
+                            item.qty >= linea.stockDisponible && (
+                              <p className="text-xs font-semibold text-muted">Stock máximo disponible</p>
+                            )}
+                          {/* Venta sin stock: la línea va a pedido con el texto de su modalidad. */}
+                          {linea?.ventaSinStock && (
+                            <p className="text-xs font-semibold text-muted" data-testid="linea-a-pedido">
+                              {linea.ventaSinStock.texto}
+                            </p>
                           )}
                           {linea?.problema && (
                             <p className="flex items-center gap-1.5 rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] font-bold text-warning">
@@ -437,7 +450,7 @@ export function CarritoClient({
                               value={item.qty}
                               onValueChange={(qty) => updateQty(item.id, qty)}
                               min={1}
-                              max={linea?.stockDisponible ?? 999}
+                              max={topeCantidad(linea ?? { stockDisponible: null })}
                               // El contador de todo el sitio. Sin tacho: quitar
                               // tiene su propio botón, con Deshacer.
                               tone="soft"
@@ -523,6 +536,11 @@ export function CarritoClient({
 
             {/* También en mobile: cuando el resumen está a la vista, la barra fija se va. */}
             <div className="space-y-3">
+              {aConfirmar && (
+                <p className="text-sm text-muted" data-testid="carrito-a-confirmar">
+                  {TEXTO_CARRITO_A_CONFIRMAR}
+                </p>
+              )}
               {botonCompra()}
               <Link href="/catalogo" className="block text-center text-sm font-semibold text-accent hover:underline">
                 Seguir comprando
@@ -546,7 +564,7 @@ export function CarritoClient({
           data-barra-compra
           aria-hidden={resumenALaVista || undefined}
           inert={resumenALaVista || undefined}
-          className={`sticky bottom-0 z-30 -mx-4 mt-8 flex items-center gap-4 rounded-t-[20px] border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur transition-[opacity,translate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:hidden ${
+          className={`sticky bottom-0 z-30 -mx-4 mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-t-[20px] border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur transition-[opacity,translate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:hidden ${
             resumenALaVista ? "pointer-events-none translate-y-full opacity-0" : "translate-y-0 opacity-100"
           }`}
         >
@@ -562,6 +580,11 @@ export function CarritoClient({
               lineasConProblema === 1 ? "Revise 1 producto" : `Revise ${lineasConProblema} productos`,
             )}
           </div>
+          {aConfirmar && (
+            <p className="basis-full text-center text-xs text-muted" data-testid="carrito-a-confirmar-barra">
+              {TEXTO_CARRITO_A_CONFIRMAR}
+            </p>
+          )}
         </div>
       </main>
       {/* Mobile: sobre la barra fija, salvo que se haya retirado por el resumen. */}

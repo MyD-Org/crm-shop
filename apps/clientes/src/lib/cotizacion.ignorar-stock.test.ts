@@ -23,7 +23,7 @@ const cot = (lineas: LineaCotizada[]): Cotizacion => ({
   costoEnvio: 0,
   total: 0,
   hayProblemas: lineas.some((l) => l.problema),
-  listaPrivada: false,
+  listaPrivada: false, flujo: "normal",
 });
 
 describe("ignorarProblemasDeStock", () => {

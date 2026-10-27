@@ -13,8 +13,9 @@ vi.mock("./alegra", async (orig) => ({
 }));
 
 // Fila en el orden del select de `leerEspejo`: alegraId, name, code, brand,
-// prices, stock, ivaPorcentaje, status, categoryName.
-type Fila = [string, string, string | null, string | null, unknown, string | null, string | null, string, string | null];
+// prices, stock, ivaPorcentaje, status, categoryName (y, al final, las columnas opcionales:
+// mostrarMarca, etiqueta/grupoId con `agrupar`, modalidadId con modalidades activas).
+type Fila = [string, string, string | null, string | null, unknown, string | null, string | null, string, string | null, ...unknown[]];
 let filas: Fila[] = [];
 let grabadora = dbGrabadora(() => filas);
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
@@ -22,6 +23,7 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 const preciosPrivados = vi.fn();
 vi.mock("./precios-privados-repo", () => ({ preciosPrivados: (...a: unknown[]) => preciosPrivados(...a) }));
 
+import { modalidadesActivas } from "@/lib/venta-sin-stock-repo";
 import { cotizar } from "./cotizacion";
 
 const precios = [
@@ -192,6 +194,82 @@ describe("cotizar", () => {
       const c = await cotizar([{ id: '10', qty: 1 }]);
       expect(grabadora.consultas[0].sql).not.toContain('"visible"');
       expect(c.hayProblemas).toBe(false);
+    });
+  });
+
+  describe("venta sin stock por modalidad", () => {
+    const A_CONFIRMAR = { id: "m-1", texto: "A pedido", plazoDias: null, flujo: "a_confirmar" as const };
+    const EN_LINEA = { id: "m-2", texto: "Modalidad 48 h", plazoDias: 2, flujo: "en_linea" as const };
+    // Sin `agrupar`, la modalidad va después de mostrarMarca (posición 11).
+    const fila = (id: string, stock: string | null, modalidadId: string | null): Fila =>
+      [id, `COD-${id}`, null, null, precios, stock, "21", "active", null, null, modalidadId];
+
+    it("con modalidad activa y sin stock: la línea va a pedido y suma en el total", async () => {
+      vi.mocked(modalidadesActivas).mockResolvedValue([EN_LINEA]);
+      filas = [fila("10", "0", "m-2")];
+      const c = await cotizar([{ id: "10", qty: 2 }]);
+      expect(grabadora.consultas[0].sql).toContain('"public"."catalog_overlay"."modalidad_sin_stock_id"');
+      expect(c.lineas[0]).toMatchObject({ ventaSinStock: EN_LINEA, aceptaSinStock: true, subtotal: 2000 });
+      expect(c.lineas[0].problema).toBeUndefined();
+      expect(c).toMatchObject({ hayProblemas: false, subtotal: 2000, flujo: "normal" });
+    });
+
+    it("modalidad desactivada (no está en activas) → la línea vuelve a sin_stock", async () => {
+      vi.mocked(modalidadesActivas).mockResolvedValue([]);
+      filas = [fila("1", "0", "m-1")];
+      expect((await cotizar([{ id: "1", qty: 1 }])).lineas[0].problema).toBe("sin_stock");
+      vi.mocked(modalidadesActivas).mockResolvedValue([EN_LINEA]);
+      const c = await cotizar([{ id: "1", qty: 1 }]);
+      expect(c.lineas[0].problema).toBe("sin_stock");
+      expect(c.lineas[0].aceptaSinStock).toBeUndefined();
+    });
+
+    it("sin modalidades el SQL de leerEspejo es el de hoy", async () => {
+      filas = [["10", "COD-10", null, null, precios, "5", "21", "active", null]];
+      const c = await cotizar([{ id: "10", qty: 1 }]);
+      expect(grabadora.consultas).toHaveLength(1);
+      expect(grabadora.consultas[0].sql).not.toContain("modalidad_sin_stock_id");
+      expect(c.flujo).toBe("normal");
+      expect(c.lineas[0].aceptaSinStock).toBeUndefined();
+    });
+
+    it("con `agrupar` la modalidad es la del overlay del ancla", async () => {
+      vi.mocked(modalidadesActivas).mockResolvedValue([EN_LINEA]);
+      filas = [["10", "COD-10", null, null, precios, "0", "21", "active", null, null, null, null, "m-2"]];
+      const c = await cotizar([{ id: "10", qty: 1 }], { agrupar: true });
+      expect(grabadora.consultas[0].sql).toContain('"public"."catalog_overlay"."modalidad_sin_stock_id"');
+      expect(c.lineas[0].ventaSinStock).toEqual(EN_LINEA);
+    });
+
+    it("mixto: flujo a_confirmar con una sola línea a confirmar", async () => {
+      vi.mocked(modalidadesActivas).mockResolvedValue([A_CONFIRMAR, EN_LINEA]);
+      filas = [fila("10", "5", null), fila("20", "0", "m-1"), fila("30", "8", "m-1")];
+      const c = await cotizar([{ id: "10", qty: 1 }, { id: "20", qty: 1 }, { id: "30", qty: 1 }]);
+      expect(c.lineas.map((l) => l.ventaSinStock?.id)).toEqual([undefined, "m-1", undefined]);
+      expect(c.lineas[2].aceptaSinStock).toBe(true);
+      expect(c).toMatchObject({ flujo: "a_confirmar", hayProblemas: false, subtotal: 3000 });
+    });
+
+    it("sólo líneas a pedido en línea: flujo normal", async () => {
+      vi.mocked(modalidadesActivas).mockResolvedValue([EN_LINEA]);
+      filas = [fila("10", "0", "m-2")];
+      expect((await cotizar([{ id: "10", qty: 1 }])).flujo).toBe("normal");
+    });
+
+    it("con `aPedido` (motor por sucursal) decide el motor, y sólo con modalidad activa", async () => {
+      vi.mocked(modalidadesActivas).mockResolvedValue([A_CONFIRMAR]);
+      filas = [fila("10", "5", "m-1"), fila("20", "0", "m-1"), fila("30", "0", null)];
+      const c = await cotizar(
+        [{ id: "10", qty: 1 }, { id: "20", qty: 1 }, { id: "30", qty: 1 }],
+        { aPedido: new Set(["10", "30"]) },
+      );
+      // 10: la unión tiene stock pero el motor lo deja a pedido (traslado apagado).
+      expect(c.lineas[0].ventaSinStock).toEqual(A_CONFIRMAR);
+      // 20: el motor no lo deja a pedido: bloquea como hoy.
+      expect(c.lineas[1].problema).toBe("sin_stock");
+      // 30: sin modalidad, el motor no alcanza.
+      expect(c.lineas[2].problema).toBe("sin_stock");
+      expect(c.flujo).toBe("a_confirmar");
     });
   });
 });

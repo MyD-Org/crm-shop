@@ -23,6 +23,16 @@ export function linksContacto(footer: DatosFooter): SiteFooterLink[] {
   ];
 }
 
+/**
+ * Cómo se ven los links de "Mi cuenta" sin sesión (los aplica
+ * `components/footer/link-footer.tsx` en el navegador). `ingreso`: va a
+ * /ingresar y vuelve al href original.
+ */
+export const LINKS_SIN_SESION: Record<string, { label: string; href?: string; ingreso?: boolean }> = {
+  "/mi-cuenta/pedidos": { label: "Ingresar", ingreso: true },
+  "/mi-cuenta": { label: "Crear cuenta", href: "/registro" },
+};
+
 export function columnasFooter(ctx: {
   arrepentimiento: boolean;
   footer?: DatosFooter;

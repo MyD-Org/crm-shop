@@ -1,4 +1,5 @@
-import { SignIn } from "@clerk/nextjs";
+import { ClerkLoaded, ClerkLoading, SignIn } from "@clerk/nextjs";
+import { FormularioClerkCargando } from "@/components/FormularioClerkCargando";
 
 /**
  * Login del shop.
@@ -26,7 +27,12 @@ export default function IngresarPage() {
           mandan el destino (ver src/lib/ingreso.ts), que Clerk respeta por
           encima de este fallback; esto cubre a quien entra directo a /ingresar.
         */}
-        <SignIn fallbackRedirectUrl="/" signUpFallbackRedirectUrl="/" />
+        <ClerkLoading>
+          <FormularioClerkCargando />
+        </ClerkLoading>
+        <ClerkLoaded>
+          <SignIn fallbackRedirectUrl="/" signUpFallbackRedirectUrl="/" />
+        </ClerkLoaded>
       </main>
     </>
   );

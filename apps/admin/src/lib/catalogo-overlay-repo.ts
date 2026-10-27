@@ -30,6 +30,7 @@ import {
 } from "@/lib/catalogo-overlay"
 import { ORDEN_DESTACADO_SIN_POSICION } from "@/components/admin/catalogo/destacado"
 import { sonSlugsDeSucursal } from "@/lib/sucursales-repo"
+import { modalidadPropia } from "@/lib/modalidades-sin-stock-repo"
 
 // Acceso a datos del catálogo comercial. TODO filtra por el `tenantId` del guard, nunca por uno
 // que venga del body: un id de otro tenant se comporta igual que uno inexistente (not_found).
@@ -376,6 +377,8 @@ export interface FiltrosAdmin {
   stockEn?: string
   /** "si" = solo los destacados (`catalog_overlay.orden` no nulo). Combinable con `categoria` (subárbol). */
   destacado?: "si"
+  /** Clave normalizada de la marca (`lower(btrim(brand))`, la de `listarMarcas`). */
+  marca?: string
 }
 
 /** `visible:<slug>` u `oculto:<slug>`, con el formato del slug de sucursal. */
@@ -489,6 +492,8 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
   }
 
   if (f.destacado === "si") cond.push(sql`o.orden IS NOT NULL`)
+
+  if (f.marca) cond.push(sql`lower(btrim(p.brand)) = ${f.marca}`)
 
   if (f.tag && esUuid(f.tag)) {
     cond.push(sql`EXISTS (
@@ -624,6 +629,7 @@ export async function masivaOverlay(
   accion:
     | { tipo: "visible"; valor: boolean }
     | { tipo: "categoria"; categoriaId: string | null }
+    | { tipo: "modalidad"; modalidadId: string | null }
     | { tipo: "destacado"; valor: boolean },
   updatedBy: string | null = null,
   ejecutor: Ejecutor = getDb(),
@@ -637,9 +643,20 @@ export async function masivaOverlay(
     return { kind: "invalid", campo: "categoriaId", error: "Seleccione una categoría válida" }
   }
 
+  // Ídem para la modalidad sin stock: la FK no mira el tenant.
+  if (accion.tipo === "modalidad" && accion.modalidadId !== null && !(await modalidadPropia(tenantId, accion.modalidadId))) {
+    return { kind: "invalid", campo: "modalidadId", error: "Seleccione una modalidad válida." }
+  }
+
   const sel = seleccionSql(tenantId, seleccion)
-  const columna = accion.tipo === "visible" ? sql`visible` : sql`categoria_id`
-  const valor = accion.tipo === "visible" ? sql`${accion.valor}` : sql`${accion.categoriaId}::uuid`
+  const columna =
+    accion.tipo === "visible" ? sql`visible` : accion.tipo === "modalidad" ? sql`modalidad_sin_stock_id` : sql`categoria_id`
+  const valor =
+    accion.tipo === "visible"
+      ? sql`${accion.valor}`
+      : accion.tipo === "modalidad"
+        ? sql`${accion.modalidadId}::uuid`
+        : sql`${accion.categoriaId}::uuid`
 
   const filas = await ejecutor.execute(sql`
     INSERT INTO ${catalogOverlay} (tenant_id, alegra_id, ${columna}, updated_by, updated_at)

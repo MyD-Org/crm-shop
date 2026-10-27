@@ -160,6 +160,8 @@ export interface Filtros {
   sucursal?: string
   /** Slug de sucursal: solo productos con stock en ella. */
   stockEn?: string
+  /** Clave normalizada de la marca (la de `/api/admin/catalogo/marcas`). */
+  marca?: string
 }
 
 /** Sucursal del tenant, para el campo "Visible en" del producto y el filtro del listado. */

@@ -9,6 +9,7 @@ import { hayVariantesAgrupadas, masivaOverlay, masivaSucursal, masivaTags, type 
 // Body: { seleccion, accion }
 //   seleccion: { tipo:"ids", alegraIds } | { tipo:"filtro", filtros, excluir }
 //   accion:    { tipo:"visible", valor } | { tipo:"categoria", categoriaId }
+//            | { tipo:"modalidad", modalidadId }    (null = quitar la modalidad sin stock)
 //            | { tipo:"tag", tagId, modo:"agregar"|"quitar" }
 //            | { tipo:"sucursal", slug, visible }   (visible:false = deja de ofrecerse en esa sucursal)
 //            | { tipo:"destacado", valor }          (true = destacar sin pisar la posición ya cargada;
@@ -79,6 +80,13 @@ async function ejecutar(
       { tipo: "categoria", categoriaId: categoriaId === "" ? null : categoriaId },
       updatedBy,
     )
+  }
+  if (accion.tipo === "modalidad") {
+    const modalidadId = accion.modalidadId
+    if (modalidadId !== null && typeof modalidadId !== "string") {
+      return invalidResponse("Seleccione una modalidad válida.", "modalidadId")
+    }
+    return masivaOverlay(tenantId, seleccion, { tipo: "modalidad", modalidadId }, updatedBy)
   }
   if (accion.tipo === "tag") {
     if (typeof accion.tagId !== "string") return invalidResponse("Seleccione una etiqueta válida", "tagId")

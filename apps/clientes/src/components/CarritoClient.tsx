@@ -80,6 +80,7 @@ export function CarritoClient({
   configEnvio = CONFIG_ENVIO_DEFAULT,
   provincia = null,
   entregaTipo = "retiro",
+  sucursalRetiro = null,
   ubicacionConocida,
 }: {
   conSesion: boolean;
@@ -92,6 +93,11 @@ export function CarritoClient({
    * Con retiro NO se manda provincia: pisaría la sucursal del local elegido.
    */
   entregaTipo?: EntregaTipo;
+  /**
+   * Con retiro: el local con el que cotiza, el mismo con el que arranca el checkout (el elegido o, si
+   * no, el de la zona). Decide qué líneas van a pedido (venta sin stock). null = el servidor elige.
+   */
+  sucursalRetiro?: string | null;
   /** Hay elección (retiro o envío con provincia): no se pide la localidad. Por defecto, hay provincia. */
   ubicacionConocida?: boolean;
 }) {
@@ -193,6 +199,7 @@ export function CarritoClient({
     entregaTipo,
     conProgresoCuotas: true,
     ...(entregaTipo === "envio" && provincia ? { provincia } : {}),
+    ...(entregaTipo === "retiro" && sucursalRetiro ? { sucursalRetiro } : {}),
   });
 
   // Los precios de cada línea salen de la cotización, con IVA como en la ficha

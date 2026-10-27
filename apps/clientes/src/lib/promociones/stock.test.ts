@@ -1,5 +1,15 @@
-import { describe, expect, it } from "vitest";
-import { disponibleEnSucursal, sucursalesDePromo } from "./stock";
+import { describe, expect, it, vi } from "vitest";
+
+const leerSinCache = vi.hoisted(() => vi.fn(async () => {
+  throw new Error("lectura sin caché");
+}));
+const cacheadas = vi.hoisted(() => vi.fn());
+const bruta = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/sucursales-repo", () => ({ leerSucursalesYZonas: leerSinCache }));
+vi.mock("@/lib/sucursales-datos", () => ({ sucursalesCacheadas: cacheadas }));
+vi.mock("@/lib/stock-sucursal", () => ({ leerDisponibilidadBruta: bruta }));
+
+import { disponibleEnSucursal, quedanEstrella, sucursalesDePromo } from "./stock";
 
 describe("disponibleEnSucursal", () => {
   const bruta = {
@@ -37,5 +47,18 @@ describe("sucursalesDePromo", () => {
       { slug: "mdp", nombre: "Mar del Plata", predeterminada: true },
       { slug: "igz", nombre: "Puerto Iguazú", predeterminada: false },
     ]);
+  });
+});
+
+describe("quedanEstrella", () => {
+  it("lee las sucursales de la caché (no de la base en cada vista)", async () => {
+    cacheadas.mockResolvedValue({
+      sucursales: [{ slug: "mdp", nombre: "Mar del Plata", activa: true, orden: 0 }],
+      zonas: [],
+    });
+    bruta.mockResolvedValue({ stockPorSucursal: { "7": { mdp: 8 } }, reservadoPorSucursal: {}, ocultoEn: {} });
+    expect(await quedanEstrella({ sku: "NK-1", unidadesPromo: 5, stockBase: 10 }, "7")).toBe(3);
+    expect(bruta).toHaveBeenCalledWith(["7"], ["mdp"], "mdp");
+    expect(leerSinCache).not.toHaveBeenCalled();
   });
 });

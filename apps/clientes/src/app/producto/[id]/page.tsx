@@ -10,6 +10,7 @@ import { metadataProducto } from "@/lib/producto-metadata";
 import { jsonLdProductoHtml } from "@/lib/producto-jsonld";
 import { ProductoClient } from "@/components/ProductoClient";
 import { getContenidoHome } from "@/lib/home-datos";
+import { estadoPromo } from "@/lib/promociones/promo";
 import { quedanEstrella } from "@/lib/promociones/stock";
 import { CONFIG_ENVIO_DEFAULT, textoEnvioFicha } from "@/lib/envio";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
@@ -55,13 +56,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProductoPage({ params }: Props) {
   const id = idDeRuta((await params).id);
-  const [producto, reglas, { soloVisibles, variantes, mediosPrecio }, disp, dispEntrega, tarjetas] = await Promise.all([
+  const [producto, reglas, { soloVisibles, variantes, mediosPrecio }, disp, dispEntrega, tarjetas, { promociones }] = await Promise.all([
     productoDe(id),
     reglasVentaCacheadas(),
     flagsPublicos(),
     dispCatalogo(),
     dispDelVisitante(),
     getTarjetasMercadoPago(),
+    getContenidoHome(),
   ]);
   // Local de retiro elegido en "Enviar a" (si la lectura falla, sin local elegido).
   const eleccion = (await ubicacionDelVisitante().catch(() => null))?.eleccion;
@@ -96,11 +98,14 @@ export default async function ProductoPage({ params }: Props) {
   );
   // Migas: la categoría del admin con sus padres. Sin ella, la de Alegra.
   const rutaCategorias = producto.categoriaPropiaId ? await rutaCategoriaPublica(producto.categoriaPropiaId) : [];
-  // Promo de la home: si este producto es la estrella con contador, las unidades que quedan.
-  const { promociones } = await getContenidoHome();
+  // Promo de la home: si este producto es la estrella con contador y la promo está vigente, las
+  // unidades que quedan. La hora es la del request (la cookie de ubicación ya se leyó arriba).
   const estrella = promociones.estrella;
   const quedanPromo =
-    estrella?.unidadesPromo && producto.sku && estrella.sku.trim().toUpperCase() === producto.sku.toUpperCase()
+    estrella?.unidadesPromo &&
+    producto.sku &&
+    estrella.sku.trim().toUpperCase() === producto.sku.toUpperCase() &&
+    estadoPromo(promociones, ahoraServidor()) === "vigente"
       ? await quedanEstrella(estrella, producto.id)
       : undefined;
 
@@ -154,4 +159,9 @@ export default async function ProductoPage({ params }: Props) {
       />
     </>
   );
+}
+
+/** Fuera del componente: la hora del request (la página ya leyó la cookie, nunca se cachea). */
+function ahoraServidor(): number {
+  return Date.now();
 }

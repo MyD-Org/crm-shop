@@ -47,7 +47,10 @@ vi.mock("@/lib/promociones/stock", async (orig) => ({
   ...(await orig<typeof import("@/lib/promociones/stock")>()),
   stockEnSucursal: stockPromoMock,
 }));
-vi.mock("@/lib/sucursales-repo", () => ({ leerSucursalesYZonas: async () => ({ sucursales: [], zonas: [] }) }));
+const leerSucursalesSinCache = vi.hoisted(() => vi.fn(async () => ({ sucursales: [], zonas: [] })));
+const sucursalesCacheadasMock = vi.hoisted(() => vi.fn(async () => ({ sucursales: [] as unknown[], zonas: [] })));
+vi.mock("@/lib/sucursales-repo", () => ({ leerSucursalesYZonas: leerSucursalesSinCache }));
+vi.mock("@/lib/sucursales-datos", () => ({ sucursalesCacheadas: sucursalesCacheadasMock }));
 vi.mock("@/lib/catalog", () => ({
   getProductosPorSkus: porSkusMock,
 }));
@@ -652,6 +655,27 @@ describe("productosParaPromo: stock de la sucursal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     esAdminMock.mockResolvedValue(true);
+  });
+
+  it("la predeterminada sale de las sucursales cacheadas, sin leer la base", async () => {
+    sucursalesCacheadasMock.mockResolvedValue({
+      sucursales: [{ slug: "igz", nombre: "Puerto Iguazú", activa: true, orden: 0 }],
+      zonas: [],
+    });
+    porSkusMock.mockResolvedValue([{ id: "1", name: "Ventilador", sku: "S-1", price: 100, stock: "in" }]);
+    stockPromoMock.mockResolvedValue({ "1": 4 });
+    await productosParaPromo(["S-1"], "mdp");
+    expect(stockPromoMock).toHaveBeenCalledWith(["1"], "mdp", "igz");
+    expect(leerSucursalesSinCache).not.toHaveBeenCalled();
+  });
+
+  it("sucursalesParaPromo: de la caché, sin leer la base", async () => {
+    sucursalesCacheadasMock.mockResolvedValue({
+      sucursales: [{ slug: "mdp", nombre: "Mar del Plata", activa: true, orden: 0 }],
+      zonas: [],
+    });
+    expect(await sucursalesParaPromo()).toEqual([{ slug: "mdp", nombre: "Mar del Plata", predeterminada: true }]);
+    expect(leerSucursalesSinCache).not.toHaveBeenCalled();
   });
 
   it("un producto sin control de stock llega como null, no como 0", async () => {

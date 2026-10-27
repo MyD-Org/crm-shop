@@ -1,6 +1,6 @@
 import { leerDisponibilidadBruta, type DisponibilidadBruta } from "@/lib/stock-sucursal";
 import type { SucursalDato } from "@/lib/sucursales";
-import { leerSucursalesYZonas } from "@/lib/sucursales-repo";
+import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 import { unidadesQuedan } from "./promo";
 import type { EstrellaPromo } from "./tipos";
 
@@ -50,10 +50,13 @@ export function sucursalesDePromo(sucursales: (Pick<SucursalDato, "slug" | "acti
     .map((s, i) => ({ slug: s.slug, nombre: s.nombre, predeterminada: i === 0 }));
 }
 
-/** Unidades que quedan según el stock de la sucursal de la promo (ver `unidadesQuedan`). */
+/**
+ * Unidades que quedan según el stock de la sucursal de la promo (ver `unidadesQuedan`). Las
+ * sucursales salen de la caché (el CRM la vence al guardar); el stock, sin caché.
+ */
 export async function quedanEstrella(e: EstrellaPromo, id: string): Promise<number | null> {
   try {
-    const sucursales = sucursalesDePromo((await leerSucursalesYZonas()).sucursales);
+    const sucursales = sucursalesDePromo((await sucursalesCacheadas()).sucursales);
     const predeterminada = sucursales[0]?.slug;
     const sucursal = e.sucursal ?? predeterminada;
     if (!sucursal || !predeterminada) return null;

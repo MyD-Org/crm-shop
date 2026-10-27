@@ -29,7 +29,7 @@ import { shopTenantId } from "@/lib/tenant";
 import { getMarca } from "@/lib/marca";
 import { precioPrincipal } from "@/lib/promociones/promo";
 import { stockEnSucursal, sucursalesDePromo, type SucursalPromo } from "@/lib/promociones/stock";
-import { leerSucursalesYZonas } from "@/lib/sucursales-repo";
+import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 
 export type ResultadoGuardar =
   | { ok: true; updatedAt: string | null }
@@ -366,7 +366,7 @@ export async function productosParaPromo(skus: string[], sucursal: string): Prom
     const { soloVisibles, variantes, mediosPrecio } = await flagsPublicos();
     const [productos, { sucursales }] = await Promise.all([
       getProductosPorSkus(pedidos, { soloVisibles, ...(variantes ? { agrupar: true } : {}), mediosPrecio }),
-      leerSucursalesYZonas(),
+      sucursalesCacheadas(),
     ]);
     const predeterminada = sucursalesDePromo(sucursales)[0]?.slug ?? sucursal;
     const stock = await stockEnSucursal(
@@ -393,7 +393,7 @@ export async function productosParaPromo(skus: string[], sucursal: string): Prom
 export async function sucursalesParaPromo(): Promise<SucursalPromo[]> {
   if (!(await esAdmin())) return [];
   try {
-    const { sucursales } = await leerSucursalesYZonas();
+    const { sucursales } = await sucursalesCacheadas();
     return sucursalesDePromo(sucursales);
   } catch (err) {
     console.error("[home-acciones] no se pudieron leer las sucursales:", err);

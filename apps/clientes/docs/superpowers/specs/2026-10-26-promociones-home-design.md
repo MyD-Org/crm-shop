@@ -143,7 +143,12 @@ vendidas  = max(0, stockBase - stockActual)
 quedan    = clamp(unidadesPromo - vendidas, 0, unidadesPromo)
 ```
 
-- `quedan > 0`: "Quedan **3 de 5** a precio de apertura" con una barra de progreso.
+- `quedan > 0`: "Quedan **3 de 5** a precio de apertura" con una barra de progreso. Con
+  `quedan ≤ 2`, el texto pasa a "¡Últimas unidades!" con el acento de oferta. Los números son
+  siempre los reales: Emanuel propuso inflar el total para generar FOMO y se descartó (publicidad
+  engañosa sobre cantidad, DNU 274/2019; además arriesga los anuncios en Meta). La urgencia sale de
+  la escasez real, la cuenta regresiva y, si se agotan, una "segunda tanda" nueva (otra carga de
+  `unidadesPromo` con su `stockBase`).
 - `quedan = 0`: la tarjeta estrella dice "Agotadas las unidades a precio de apertura" y el botón
   lleva a la ficha (no agrega al carrito); en "Modo edición" se ve el aviso "Quite el ajuste de
   precio del producto en Precios online del CRM". Si entra stock nuevo, `quedan` no supera `unidadesPromo`.

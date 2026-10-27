@@ -41,9 +41,13 @@ export function AhorroPesos({
 }) {
   if (enFoto) {
     return (
-      <div data-ahorro="" className="rounded-xl bg-white/95 px-3 py-2 shadow-md ring-1 ring-black/5 backdrop-blur">
-        <p className="text-[13px] font-extrabold leading-tight text-danger">{fmtPrecioCorto(pesos)} menos que en otras tiendas</p>
-        <p className="mt-0.5 text-[11px] leading-tight text-muted">
+      <div data-ahorro="" className="rounded-lg bg-white/95 px-2 py-1.5 shadow-md ring-1 ring-black/5 backdrop-blur sm:rounded-xl sm:px-3 sm:py-2">
+        <p className="text-[11px] leading-tight text-danger sm:text-[13px]">
+          <span className="font-extrabold">{fmtPrecioCorto(pesos)} menos</span>{" "}
+          <span className="font-semibold">que en otras tiendas</span>
+        </p>
+        {/* En mobile la card es angosta: sólo la primera línea, para no tapar el producto. */}
+        <p className="mt-0.5 hidden text-[11px] leading-tight text-muted sm:block">
           {pct ? <span className="font-semibold text-text">{pct} % más barato · </span> : null}
           {etiqueta} {fmtPrecioCorto(referencia)}
         </p>

@@ -135,7 +135,8 @@ function Oferta({ contenido, producto }: { contenido: PromocionesContent; produc
       <Link href={href} className="relative block aspect-square bg-elevated" aria-label={nombre}>
         {foto ? <Image src={foto} alt={nombre} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-contain p-6" /> : null}
         <div data-sello-item={producto.sku} className="pointer-events-none absolute left-2.5 top-2.5 flex flex-col items-start gap-1.5">
-          <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white shadow">{contenido.etiquetaBadge}</span>
+          {/* En mobile no entra al lado del corazón de favoritos: la franja de ahorro ya dice que es promo. */}
+          <span className="hidden rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white shadow sm:inline">{contenido.etiquetaBadge}</span>
         </div>
         {pesos && ref ? (
           <div className="pointer-events-none absolute inset-x-2.5 bottom-2.5">

@@ -7,6 +7,7 @@ import { EditorDestacados } from "./EditorDestacados";
 import { EditorHero } from "./EditorHero";
 import { EditorMarquee } from "./EditorMarquee";
 import { EditorNavBadge } from "./EditorNavBadge";
+import { EditorPromociones } from "./EditorPromociones";
 import { EditorServicios } from "./EditorServicios";
 import { EditorTiendaOficial } from "./EditorTiendaOficial";
 import { EditorTiles } from "./EditorTiles";
@@ -36,6 +37,5 @@ export const EDITORES: Record<SeccionHome, ComponentType<EditorProps<any>>> = {
   navBadge: EditorNavBadge,
   whatsapp: EditorWhatsapp,
   busquedaAsistida: EditorBusquedaAsistida,
-  // Provisorio (Task 2 del plan de promociones): el editor propio llega en la Task 5.
-  promociones: EditorAnuncio,
+  promociones: EditorPromociones,
 };

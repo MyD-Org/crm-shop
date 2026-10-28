@@ -1,14 +1,14 @@
 "use client";
 
 import { Fragment, useId, useState } from "react";
-import { Button, Card, Divider, FacetGroup, Field, Input, RangeSlider, Select, Switch } from "@myd-org/ui";
+import { Button, Card, Chip, Divider, FacetGroup, Field, Input, RangeSlider, Select, Switch } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
 import { alternarCar, cambiosDeCarRango, rangoDeCar } from "@/lib/catalogo-car";
 import type { FacetaClave } from "@/lib/catalogo-facetas-registro";
 import {
   cambiosDePotencia,
   cambiosDeRango,
-  ordenPorDefecto,
+  quitarBusqueda,
   rangoEfectivo,
   rangoEfectivoPotencia,
   type EstadoCatalogo,
@@ -25,6 +25,7 @@ import {
 } from "@/lib/catalogo-vista";
 import { enviarFiltroCar } from "@/lib/busqueda-v2/telemetria";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
+import { TEXTOS_FRANJA } from "@/lib/busqueda-inteligente/textos";
 import { POSICION_MAX, POSICION_MIN, posicionAPrecio, precioAPosicion } from "@/lib/escala-precio";
 
 type Ir = (cambios: Partial<EstadoCatalogo>) => void;
@@ -53,6 +54,7 @@ export function CatalogoFiltros({
   dentroDeSheet = false,
   alElegirCategoria,
   alCambiarStock,
+  alQuitarBusqueda,
   sinMarcas = false,
 }: {
   facetas: Facetas;
@@ -69,11 +71,17 @@ export function CatalogoFiltros({
    * lo usa para aplicarlos en el acto: cambian los conteos de todo el panel.
    */
   alCambiarStock?: Ir;
+  /**
+   * Si se pasa, la X de la búsqueda llama a esto en vez de `ir`. La hoja de mobile lo usa para
+   * quitarla en el acto: la búsqueda no viaja en el borrador.
+   */
+  alQuitarBusqueda?: () => void;
   /** Sin el grupo "Marcas": en una página de marca la marca la fija la página. */
   sinMarcas?: boolean;
 }) {
   // useId: el panel se monta dos veces (aside y hoja de mobile).
   const idDisponibilidad = useId();
+  const idBusqueda = useId();
   const irStock = alCambiarStock ?? ir;
   const panel = panelPorTipo(facetas.porClave, estado, facetas.categorias);
   const disponibilidad = (
@@ -109,18 +117,28 @@ export function CatalogoFiltros({
   );
   const grupos = (
     <div className="flex flex-col gap-5">
-      {/* Con búsqueda, los números de las categorías son los de la búsqueda: lo dice y la deja quitar. */}
+      {/* Con búsqueda, los números son los de la búsqueda: un bloque propio, con la búsqueda en un
+          chip que se quita con la X, y la aclaración de qué cuentan los números. */}
       {facetas.categoriasEnBusqueda && (
-        <p className="-mb-3 flex flex-wrap items-center gap-x-2 text-xs text-muted">
-          <span>Conteos en «{facetas.categoriasEnBusqueda}»</span>
-          <Button
-            variant="link"
-            size="inline"
-            onClick={() => ir({ query: undefined, ia: undefined, orden: ordenPorDefecto(undefined), pagina: 1 })}
-          >
-            Quitar búsqueda
-          </Button>
-        </p>
+        <>
+          <section aria-labelledby={idBusqueda} className="flex flex-col gap-2">
+            <h3 id={idBusqueda} className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Búsqueda
+            </h3>
+            <div>
+              <Chip
+                variant="removable"
+                className="max-w-full"
+                removeLabel={TEXTOS_FRANJA.quitarTexto(facetas.categoriasEnBusqueda)}
+                onRemove={alQuitarBusqueda ?? (() => ir(quitarBusqueda()))}
+              >
+                «{facetas.categoriasEnBusqueda}»
+              </Chip>
+            </div>
+            <p className="text-xs text-muted">Los números cuentan dentro de esta búsqueda.</p>
+          </section>
+          <Divider />
+        </>
       )}
       <FacetGroup
         title="Categorías"

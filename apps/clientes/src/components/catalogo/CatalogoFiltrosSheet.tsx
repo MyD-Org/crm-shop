@@ -8,6 +8,7 @@ import {
   hrefAlAplicar,
   hrefAlCambiarStock,
   hrefAlElegirCategoria,
+  hrefAlQuitarBusqueda,
   limpiarBorrador,
 } from "@/lib/catalogo-borrador";
 import { hrefCatalogo, type EstadoCatalogo } from "@/lib/catalogo-url";
@@ -35,6 +36,7 @@ import { useAlOcultar } from "@/lib/use-al-ocultar";
  *
  * "Solo con stock" y "Con stock en" también se aplican en el acto, de la misma forma: cambian los
  * conteos de todo el panel (las marcas, las categorías, el precio), y con el borrador no se verían.
+ * Lo mismo la X de la búsqueda: la búsqueda no viaja en el borrador ("Aplicar" no la tocaría).
  *
  * El foco queda atrapado en la hoja y vuelve a este botón al cerrar (lo
  * resuelve el `Dialog` del DS). En el celular también se cierra arrastrándola
@@ -96,6 +98,8 @@ export function CatalogoFiltrosSheet({
     else setBorrador((b) => cambiarBorrador(b, cambios));
   };
 
+  const alQuitarBusqueda = () => navegar(hrefAlQuitarBusqueda(estado, borrador));
+
   return (
     <>
       <Button
@@ -156,6 +160,7 @@ export function CatalogoFiltrosSheet({
             ir={(cambios) => setBorrador((b) => cambiarBorrador(b, cambios))}
             alElegirCategoria={alElegirCategoria}
             alCambiarStock={alCambiarStock}
+            alQuitarBusqueda={alQuitarBusqueda}
             sinMarcas={sinMarcas}
           />
         </div>

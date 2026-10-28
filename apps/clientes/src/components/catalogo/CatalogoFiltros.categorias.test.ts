@@ -78,3 +78,22 @@ describe("CatalogoFiltros: marcas (todas, también las de 0)", () => {
     expect(t).not.toContain("Rosca E27");
   });
 });
+
+describe("CatalogoFiltros: búsqueda", () => {
+  const html = renderToStaticMarkup(
+    createElement(CatalogoFiltros, {
+      facetas: { ...facetas, categoriasEnBusqueda: "luz cálida" },
+      estado: leerEstado({ q: "luz cálida" }),
+      ir: () => {},
+    }),
+  );
+
+  it("muestra la búsqueda en un chip con la X para quitarla", () => {
+    expect(texto(html)).toContain("Búsqueda «luz cálida»");
+    expect(html).toContain('aria-label="Quitar la búsqueda «luz cálida»"');
+  });
+
+  it("aclara que los números cuentan dentro de la búsqueda", () => {
+    expect(texto(html)).toContain("Los números cuentan dentro de esta búsqueda.");
+  });
+});

@@ -46,6 +46,7 @@ import {
   getFacetas,
   getFacetaCategorias,
   getIdAlternativoDeVariante,
+  getMarcasDelCatalogo,
   getPaginaCatalogo,
   getProducto,
   getRutaCategoriaPropia,
@@ -239,6 +240,34 @@ export function categoriasTotalesPublicas(
     "catalogo-categorias-totales",
     () => (agrupar ? categoriasTotalesCacheadas(soloVisibles, disp, true) : categoriasTotalesCacheadas(soloVisibles, disp)),
     directa,
+  );
+}
+
+async function marcasDelCatalogoCacheadas(
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+  agrupar = false,
+): Promise<Faceta[]> {
+  "use cache: remote";
+  cacheTag(TAG_CATALOGO);
+  cacheLife("catalogo");
+  console.info("[cache] catalogo-marcas-todas miss");
+  return getMarcasDelCatalogo(soloVisibles, disp, agrupar);
+}
+
+/**
+ * Todas las marcas del catálogo para el panel de filtros (sin búsqueda, filtros ni stock): una sola
+ * clave de la caché compartida (tag `catalogo`), igual que `categoriasTotalesPublicas`.
+ */
+export function marcasDelCatalogoPublicas(
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+  agrupar = false,
+): Promise<Faceta[]> {
+  return conRespaldoSinCache(
+    "catalogo-marcas-todas",
+    () => (agrupar ? marcasDelCatalogoCacheadas(soloVisibles, disp, true) : marcasDelCatalogoCacheadas(soloVisibles, disp)),
+    () => getMarcasDelCatalogo(soloVisibles, disp, agrupar),
   );
 }
 

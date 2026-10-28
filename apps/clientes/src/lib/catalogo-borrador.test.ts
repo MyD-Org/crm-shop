@@ -3,6 +3,7 @@ import {
   borradorAlElegirCategoria,
   cambiarBorrador,
   hrefAlAplicar,
+  hrefAlCambiarStock,
   hrefAlElegirCategoria,
   limpiarBorrador,
 } from "./catalogo-borrador";
@@ -255,5 +256,28 @@ describe("categoría en el acto en la hoja (spec R13)", () => {
 
   it("\"Limpiar filtros\" de la hoja también limpia las características", () => {
     expect(limpiarBorrador(estado).caracteristicas).toEqual([]);
+  });
+});
+
+describe("hrefAlCambiarStock (el stock se aplica en el acto en la hoja)", () => {
+  it("apagar 'Solo con stock' navega sin esperar Aplicar", () => {
+    expect(hrefAlCambiarStock(base, base, { soloStock: false })).toBe(
+      `/catalogo?stock=${STOCK_INCLUYE_SIN_STOCK}`
+    );
+  });
+
+  it("lleva el borrador completo: lo que ya se había tocado viaja con el cambio de stock", () => {
+    const b = cambiarBorrador(base, { marcas: ["DCK"] });
+    expect(hrefAlCambiarStock(base, b, { soloStock: false })).toBe(
+      `/catalogo?marca=DCK&stock=${STOCK_INCLUYE_SIN_STOCK}`
+    );
+  });
+
+  it("elegir un local navega con el local", () => {
+    expect(hrefAlCambiarStock(base, base, { retiroEn: "igz", soloStock: true })).toBe("/catalogo?retiro=igz");
+  });
+
+  it("sin cambios respecto de la URL no navega", () => {
+    expect(hrefAlCambiarStock(base, base, { soloStock: true })).toBeNull();
   });
 });

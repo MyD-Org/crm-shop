@@ -12,7 +12,6 @@ const OFFSET_AR = "-03:00";
 const OFFSET_AR_MS = -3 * 3600 * 1000;
 
 export const ETIQUETA_BADGE_DEFAULT = "Precio de apertura";
-export const TITULO_COMPARADOR_DEFAULT = "Nosotros comparamos. Usted ahorra.";
 /** Máximo de referencias por producto en la escalera. */
 export const MAX_REFERENCIAS = 3;
 /** Nombres sugeridos para las filas de la escalera (el admin puede escribir otro). */
@@ -100,12 +99,6 @@ export function escaleraPrecios(precio: number, referencias?: Referencia[]): Esc
   };
 }
 
-/** "2026-10-26" → "26/10" (sin pasar por Date: una fecha sin hora no tiene zona). */
-export function fechaRelevamientoAR(dia: string): string {
-  const [, mes, d] = dia.split("-");
-  return `${Number(d)}/${Number(mes)}`;
-}
-
 /** El precio que la promo muestra grande: el del medio destacado (transferencia) con IVA. */
 export function precioPrincipal(
   p: Pick<Product, "price" | "precioFinal" | "precioMedio">,
@@ -191,8 +184,7 @@ export type DatosPromoCliente = {
   inicio?: string;
   fin: string;
   etiquetaBadge: string;
-  tituloComparador: string;
-  fechaRelevamiento?: string;
+  tituloComparador?: string;
   legales?: string;
   estrellaSku?: string;
   unidadesPromo?: number;
@@ -213,7 +205,6 @@ export function datosPromoCliente(p: PromocionesContent): DatosPromoCliente | nu
     fin: p.fin,
     etiquetaBadge: p.etiquetaBadge,
     tituloComparador: p.tituloComparador,
-    fechaRelevamiento: p.fechaRelevamiento,
     legales: p.legales,
     estrellaSku: p.estrella?.sku ? normalizar(p.estrella.sku) : undefined,
     unidadesPromo: p.estrella?.unidadesPromo,
@@ -223,8 +214,7 @@ export function datosPromoCliente(p: PromocionesContent): DatosPromoCliente | nu
 
 export type InfoPromoProducto = {
   etiquetaBadge: string;
-  tituloComparador: string;
-  fechaRelevamiento?: string;
+  tituloComparador?: string;
   habitual?: number;
   referencias?: Referencia[];
   inicio?: string;
@@ -253,7 +243,6 @@ export function infoPromoSku(datos: DatosPromoCliente | null, sku: string | unde
   return {
     etiquetaBadge: datos.etiquetaBadge,
     tituloComparador: datos.tituloComparador,
-    fechaRelevamiento: datos.fechaRelevamiento,
     habitual: producto.habitual,
     referencias: producto.referencias,
     inicio: datos.inicio,

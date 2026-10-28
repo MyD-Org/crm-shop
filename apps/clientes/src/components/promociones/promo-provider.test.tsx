@@ -6,7 +6,6 @@ const datos = {
   inicio: undefined,
   fin: "2999-01-01T00:00:00-03:00",
   etiquetaBadge: "Precio de apertura",
-  tituloComparador: "Nosotros comparamos. Usted ahorra.",
   legales: undefined,
   estrellaSku: "NK-1",
   unidadesPromo: 5,

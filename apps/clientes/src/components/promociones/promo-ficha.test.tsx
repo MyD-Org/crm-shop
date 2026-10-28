@@ -20,8 +20,6 @@ const producto = {
 const texto = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 const vigente = {
   etiquetaBadge: "Precio de apertura",
-  tituloComparador: "Nosotros comparamos. Usted ahorra.",
-  fechaRelevamiento: "2026-10-26",
   habitual: 132172,
   referencias: [{ etiqueta: "Tiendas online", precio: 150000 }],
   fin: "2026-11-13T23:59:00-03:00",
@@ -38,24 +36,23 @@ describe("PromoFicha", () => {
     expect(t).toContain("Precio de apertura");
     expect(t).toContain("Precio habitual $ 132.172");
     expect(t).toContain("16 % de descuento");
-    expect(t).toContain("Nosotros comparamos. Usted ahorra.");
     expect(t).toContain("Tiendas online");
     expect(t).toContain("Ahorra hasta $ 40.001");
-    expect(t).toContain("Precios relevados el 26/10");
+    expect(t).not.toContain("Precios relevados");
     expect(t).toContain("Termina el 13/11");
-    expect(t).toContain("Quedan 3 de 5");
+    expect(t).toContain("¡Últimas 3 unidades a precio de apertura!");
     expect(t).toContain("Promoción válida del 3/11 al 13/11");
   });
 
   it("quedan 2: últimas unidades", () => {
     info.valor = vigente;
-    expect(texto(renderToStaticMarkup(<PromoFicha producto={producto} quedan={2} />))).toContain("¡Últimas 2 unidades!");
+    expect(texto(renderToStaticMarkup(<PromoFicha producto={producto} quedan={2} />))).toContain("¡Últimas 2 unidades a precio de apertura!");
   });
 
   it("sin stock: no muestra el contador", () => {
     info.valor = vigente;
     const t = texto(renderToStaticMarkup(<PromoFicha producto={{ ...producto, stock: "out" } as Product} quedan={3} />));
-    expect(t).not.toContain("Quedan 3 de 5");
+    expect(t).not.toContain("Últimas 3");
     expect(t).toContain("Agotadas las unidades a precio de apertura");
   });
 

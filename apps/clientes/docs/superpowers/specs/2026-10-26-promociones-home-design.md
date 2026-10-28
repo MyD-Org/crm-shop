@@ -275,3 +275,13 @@ diga en contrario §1, §4 y §5):
   precio normal".
 - **Mobile**: las ofertas son filas horizontales (foto chica a la izquierda), sin nada encima de la
   foto y sin escalera.
+
+### Ajustes de copy (2026-10-27, segunda vuelta)
+
+- La escalera ya no lleva título por defecto ni fecha de relevamiento: `tituloComparador` es
+  opcional (vacío = sin título) y `fechaRelevamiento` se eliminó. Las capturas fechadas de los
+  precios relevados se guardan igual, fuera de la tienda.
+- Unidades: siempre "¡Últimas N unidades a precio de apertura!" (o "¡Última unidad…!") con un punto
+  por unidad; sin "Quedan X de Y" ni "Después vuelve a su precio normal".
+- Cuenta regresiva: una pastilla con reloj ("Termina en …"; "Termina el 5/11" hasta que hay reloj).
+- La estrella es una sola columna sin cajas internas; la comparación es discreta (barras de 4 px).

@@ -9,7 +9,6 @@ import {
   LEGALES_DEFAULT,
   MAX_ITEMS_PROMO,
   MAX_REFERENCIAS,
-  TITULO_COMPARADOR_DEFAULT,
 } from "../lib/promociones/promo";
 import type { PromocionesContent } from "../lib/promociones/tipos";
 
@@ -291,7 +290,6 @@ export const DEFAULTS_HOME: HomeContent = {
     bajada: "Precios de apertura por tiempo limitado y con unidades contadas.",
     items: [],
     etiquetaBadge: ETIQUETA_BADGE_DEFAULT,
-    tituloComparador: TITULO_COMPARADOR_DEFAULT,
     legales: LEGALES_DEFAULT,
   },
   bannerDeco: {
@@ -963,9 +961,7 @@ function erroresPromociones(
   texto("eyebrow", true);
   textosTitulo();
   texto("etiquetaBadge");
-  texto("tituloComparador");
-  if (o.fechaRelevamiento !== undefined && !(typeof o.fechaRelevamiento === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.fechaRelevamiento)))
-    errores.push("fechaRelevamiento debe ser un día AAAA-MM-DD");
+  texto("tituloComparador", true);
   texto("legales", true);
   linkOpcional("linkTodos");
 

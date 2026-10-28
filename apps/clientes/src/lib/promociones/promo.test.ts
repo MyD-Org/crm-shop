@@ -4,7 +4,6 @@ import {
   aIsoArgentina,
   descuentoPropio,
   escaleraPrecios,
-  fechaRelevamientoAR,
   ahorroPesos,
   datosPromoCliente,
   infoPromoDe,
@@ -162,8 +161,6 @@ describe("restante", () => {
 describe("datosPromoCliente / infoPromoDe", () => {
   const contenido = {
     etiquetaBadge: "Precio de apertura",
-    tituloComparador: "Nosotros comparamos. Usted ahorra.",
-    fechaRelevamiento: "2026-10-26",
     legales: LEGALES_DEFAULT,
     fin: FIN,
     estrella: { sku: "nk-1", precioHabitual: 132172, referencias: [{ etiqueta: "Tiendas online", precio: 165000 }], unidadesPromo: 5, stockBase: 10 },
@@ -188,8 +185,6 @@ describe("datosPromoCliente / infoPromoDe", () => {
     const d = datosPromoCliente(contenido)!;
     expect(infoPromoDe(d, "NK-1", durante)).toMatchObject({
       etiquetaBadge: "Precio de apertura",
-      tituloComparador: "Nosotros comparamos. Usted ahorra.",
-      fechaRelevamiento: "2026-10-26",
       habitual: 132172,
       esEstrella: true,
       fin: FIN,
@@ -241,12 +236,6 @@ describe("escaleraPrecios", () => {
   });
 });
 
-describe("fechaRelevamientoAR", () => {
-  it("día/mes sin corrimiento de zona", () => {
-    expect(fechaRelevamientoAR("2026-10-26")).toBe("26/10");
-    expect(fechaRelevamientoAR("2026-11-01")).toBe("1/11");
-  });
-});
 
 describe("skusNoResueltos", () => {
   const contenido = { estrella: { sku: " nk-1 " }, items: [{ sku: "A1" }, { sku: "b2" }] };

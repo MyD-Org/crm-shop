@@ -101,7 +101,6 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
           referencias={e.referencias}
           tienda={tienda}
           titulo={contenido.tituloComparador}
-          fecha={contenido.fechaRelevamiento}
           className="border-t border-black/5 pt-4"
         />
 

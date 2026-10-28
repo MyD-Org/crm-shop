@@ -44,10 +44,8 @@ export type PromocionesContent = TextosSeccion & {
   estrella?: EstrellaPromo;
   items: ItemPromo[];
   etiquetaBadge: string;
-  /** Título de la comparación de la estrella y de la ficha ("Nosotros comparamos. Usted ahorra."). */
-  tituloComparador: string;
-  /** Día del relevamiento de precios (YYYY-MM-DD). Se muestra junto a la comparación. */
-  fechaRelevamiento?: string;
+  /** Título opcional sobre la comparación de la estrella y de la ficha. Ausente = sin título. */
+  tituloComparador?: string;
   /** Admite {inicio} {fin} {unidades}. */
   legales?: string;
   linkTodos?: string;

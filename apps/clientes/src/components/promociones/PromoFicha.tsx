@@ -58,7 +58,7 @@ export function PromoFicha({
           </span>
         </p>
       ) : null}
-      <EscaleraPrecios precio={monto} referencias={info.referencias} tienda={tienda} titulo={info.tituloComparador} fecha={info.fechaRelevamiento} />
+      <EscaleraPrecios precio={monto} referencias={info.referencias} tienda={tienda} titulo={info.tituloComparador} />
       {conContador ? (
         quedanVista! > 0 ? (
           <UnidadesPromo quedan={quedanVista!} total={info.unidadesPromo!} />

@@ -238,13 +238,10 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
         <Field label="Etiqueta de las ofertas">
           <Input value={valor.etiquetaBadge} onChange={(ev) => onChange({ ...valor, etiquetaBadge: ev.target.value })} />
         </Field>
-        <Field label="Título de la comparación" hint="Va sobre la escalera de precios de la estrella y de la ficha.">
-          <Input value={valor.tituloComparador} onChange={(ev) => onChange({ ...valor, tituloComparador: ev.target.value })} />
+        <Field label="Título de la comparación (opcional)" hint="Va sobre la escalera de precios de la estrella y de la ficha. Vacío: sin título.">
+          <Input value={valor.tituloComparador ?? ""} onChange={(ev) => onChange({ ...valor, tituloComparador: ev.target.value.trim() ? ev.target.value : undefined })} />
         </Field>
       </div>
-      <Field label="Día del relevamiento de precios" hint="Se muestra como «Precios relevados el …». Guarde capturas de esos precios.">
-        <Input type="date" value={valor.fechaRelevamiento ?? ""} onChange={(ev) => onChange({ ...valor, fechaRelevamiento: ev.target.value || undefined })} />
-      </Field>
       <datalist id={LISTA_SUGERENCIAS}>
         {ETIQUETAS_REFERENCIA_SUGERIDAS.map((e) => (
           <option key={e} value={e} />

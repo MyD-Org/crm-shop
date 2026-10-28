@@ -590,8 +590,6 @@ describe("promociones (spec 2026-10-26-promociones-home §1)", () => {
   const FIN = "2026-11-13T23:59:00-03:00";
   const base = {
     etiquetaBadge: "Precio de apertura",
-    tituloComparador: "Nosotros comparamos. Usted ahorra.",
-    fechaRelevamiento: "2026-10-26",
     fin: FIN,
     estrella: {
       sku: "NK-1",
@@ -646,13 +644,11 @@ describe("promociones (spec 2026-10-26-promociones-home §1)", () => {
     expect(erroresSeccion("promociones", { ...base, items: [{ sku: "A1", referencias: [{ etiqueta: " ", precio: 100 }] }] }).length).toBeGreaterThan(0);
   });
 
-  it("la fecha del relevamiento es un día YYYY-MM-DD", () => {
-    expect(erroresSeccion("promociones", { ...base, fechaRelevamiento: "26/10" }).length).toBeGreaterThan(0);
+  it("el título de la comparación es opcional", () => {
+    expect(erroresSeccion("promociones", base)).toEqual([]);
+    expect(erroresSeccion("promociones", { ...base, tituloComparador: "Comparado con otras tiendas" })).toEqual([]);
   });
 
-  it("exige el título de la comparación", () => {
-    expect(erroresSeccion("promociones", { ...base, tituloComparador: "" }).length).toBeGreaterThan(0);
-  });
 
   it("rechaza un video que no es YouTube/Vimeo", () => {
     expect(erroresSeccion("promociones", { ...base, estrella: { ...base.estrella, video: "https://cdn.example/v.mp4" } }).length).toBeGreaterThan(0);

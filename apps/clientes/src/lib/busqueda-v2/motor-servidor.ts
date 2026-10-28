@@ -61,7 +61,11 @@ function depsDe(c: ContextoShop): DepsMotor {
         ? // La página del catálogo siempre cuenta y pagina de a PRODUCTOS_POR_PAGINA (su caché lo asume).
           paginaCatalogoPublica({ filtros, orden, pagina, soloVisibles, ...agrupado, disp, destacado, cuotas, campanias })
         : getPaginaCatalogo({ soloVisibles, ...agrupado, filtros, orden, pagina, porPagina, disp, sinConteo, ...conCampanias }),
-    facetas: (filtros) => (c.agrupar ? facetasPublicas(filtros, soloVisibles, disp, true) : facetasPublicas(filtros, soloVisibles, disp)),
+    facetas: (f) => {
+      // El rango de precio del slider con el precio vigente (campañas activas), como la página.
+      const filtros = campanias?.length ? { ...f, precioCampanias: campanias.map((x) => x.id) } : f;
+      return c.agrupar ? facetasPublicas(filtros, soloVisibles, disp, true) : facetasPublicas(filtros, soloVisibles, disp);
+    },
     log: (mensaje) => console.error(mensaje),
   };
 }

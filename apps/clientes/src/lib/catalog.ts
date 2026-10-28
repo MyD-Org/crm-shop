@@ -1105,6 +1105,13 @@ export interface FiltrosCatalogo {
    */
   marcasPropias?: string[];
   /**
+   * Interno (no viaja en la URL): ids de las campañas de precios ACTIVAS en el request. Con ellas el
+   * orden, el filtro y el rango por precio usan el precio de campaña (`precioVigenteSql`), el mismo
+   * que muestra la card. Va en los filtros porque ya llegan a la página, al orden y a las facetas, y
+   * son parte de la clave de sus cachés. Lo completa `getPaginaCatalogo` desde `mediosPrecio`.
+   */
+  precioCampanias?: string[];
+  /**
    * Una línea de una página de marca: lo que está en alguna de estas categorías (con su
    * subárbol, como `categorias`) O tiene alguno de estos códigos (como `getProductosPorSkus`).
    * Las dos listas vacías no filtran.
@@ -1254,6 +1261,41 @@ const precioSql = sql<string>`coalesce(
  * que se muestra sigue saliendo de `mapFilaToProduct`.
  */
 const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${crmCatalogo.ivaPorcentaje}, 0) / 100)`;
+
+/**
+ * Precio general VIGENTE en SQL (campañas de precios, spec 2026-10-28-campanias-precios-design.md):
+ * con campañas activas, el de campaña de la lista general (`main`, si no la primera) de la primera
+ * entrada de `campanias_online` cuya id está activa; si no, `precioSql`. Es el equivalente de
+ * `campaniaParaExhibir` para ORDENAR, filtrar por rango y armar el slider, así el catálogo ordena
+ * por el precio que muestra la card. No descuenta unidades agotadas (límite aceptado: la card y el
+ * cobro sí; el orden lo corrige el vencimiento de la caché).
+ */
+function precioVigenteSql(idsCampanias: readonly string[] | undefined) {
+  if (!idsCampanias?.length) return precioSql;
+  const ids = sql`array[${sql.join(idsCampanias.map((i) => sql`${i}`), sql`, `)}]::text[]`;
+  const campanias = crmCatalogo.campaniasOnline;
+  return sql<string>`coalesce((
+    select (pe->>'price')::numeric
+    from jsonb_array_elements(case when jsonb_typeof(${campanias}) = 'array' then ${campanias} else '[]'::jsonb end) e
+    cross join jsonb_array_elements(case when jsonb_typeof(e->'precios') = 'array' then e->'precios' else '[]'::jsonb end) pe
+    where e->>'id' = any(${ids})
+      and (pe->>'price')::numeric > 0
+      and pe->>'idPriceList' = coalesce(
+        case when jsonb_typeof(${preciosSql}) = 'array' then (
+          select m->>'idPriceList' from jsonb_array_elements(${preciosSql}) m where (m->>'main')::boolean limit 1
+        ) end,
+        case when jsonb_typeof(${preciosSql}) = 'array' then ${preciosSql}->0->>'idPriceList' end
+      )
+    limit 1
+  ), ${precioSql})`;
+}
+
+/** `precioExhibidoSql` con el precio vigente (ver `precioVigenteSql`). Sin campañas, el mismo SQL. */
+function precioExhibidoVigenteSql(idsCampanias: readonly string[] | undefined) {
+  return idsCampanias?.length
+    ? sql<string>`${precioVigenteSql(idsCampanias)} * (1 + coalesce(${crmCatalogo.ivaPorcentaje}, 0) / 100)`
+    : precioExhibidoSql;
+}
 
 /**
  * Sólo productos con precio. Un ítem sin precio en Alegra resuelve a 0 en
@@ -1600,10 +1642,10 @@ function condicionesDe(
       : undefined,
     aplicar.car && conFacetasPorTipo(filtros) ? filtroCaracteristicasSql(contextoCar, filtros.caracteristicas) : undefined,
     aplicar.precio && filtros.precioMin != null
-      ? sql`${precioExhibidoSql} >= ${filtros.precioMin}`
+      ? sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} >= ${filtros.precioMin}`
       : undefined,
     aplicar.precio && filtros.precioMax != null
-      ? sql`${precioExhibidoSql} <= ${filtros.precioMax}`
+      ? sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} <= ${filtros.precioMax}`
       : undefined,
     aplicar.stock && filtros.soloStock ? conStock(disp) : undefined,
   );
@@ -1741,9 +1783,9 @@ function ordenDe(
       return [sql`${relevanciaSql(texto.q, !!texto.tolerante, codigo)} desc`, ...desempateRelevancia(disp)];
     }
     case "precio-asc":
-      return [sql`${precioExhibidoSql} asc`, asc(crmCatalogo.name)];
+      return [sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} asc`, asc(crmCatalogo.name)];
     case "precio-desc":
-      return [sql`${precioExhibidoSql} desc`, asc(crmCatalogo.name)];
+      return [sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} desc`, asc(crmCatalogo.name)];
     case "destacados":
       return ordenDestacadosSql(destacados ?? contextoDestacados([]), disp);
     default:
@@ -1789,7 +1831,12 @@ export async function getPaginaCatalogo(opts: {
    */
   sinConteo?: boolean;
 }): Promise<PaginaCatalogo> {
-  const filtros = opts.filtros ?? {};
+  // Campañas activas (ver `MediosPrecio.campanias`): el orden y el filtro por precio usan el vigente.
+  const idsCampanias = opts.mediosPrecio?.campanias?.map((c) => c.id);
+  const filtros: FiltrosCatalogo =
+    idsCampanias?.length && !opts.filtros?.precioCampanias
+      ? { ...(opts.filtros ?? {}), precioCampanias: idsCampanias }
+      : (opts.filtros ?? {});
   const porPagina = opts.porPagina ?? PRODUCTOS_POR_PAGINA;
   const agrupar = opts.agrupar ?? false;
   const where = condicionesDe(filtros, APLICAR_TODOS, opts.soloVisibles, agrupar, opts.disp);
@@ -2166,8 +2213,8 @@ export async function getFacetas(
     // de los límites que muestra el slider.
     getDb()
       .select({
-        min: sql<number | null>`floor(min(${precioExhibidoSql}))::int`,
-        max: sql<number | null>`ceil(max(${precioExhibidoSql}))::int`,
+        min: sql<number | null>`floor(min(${precioExhibidoVigenteSql(filtros.precioCampanias)}))::int`,
+        max: sql<number | null>`ceil(max(${precioExhibidoVigenteSql(filtros.precioCampanias)}))::int`,
       })
       .from(crmCatalogo)
       .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())

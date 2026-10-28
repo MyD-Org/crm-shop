@@ -111,6 +111,8 @@ export async function ProductosMarcaBloque({
     ...filtrosDeMarca(pagina, linea),
     marcas: [],
     sinFacetaAtributos: true as const,
+    // Campañas activas: el orden y el rango de precio con el precio vigente (como la página).
+    ...(ctx.campanias.length ? { precioCampanias: ctx.campanias.map((c) => c.id) } : {}),
   };
   const [resultado, facetas] = await Promise.all([
     paginaMarcaPublica({ ...ctx, filtros, orden: estado.orden, pagina: estado.pagina }),

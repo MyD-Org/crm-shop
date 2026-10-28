@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Button, Dialog, Divider, Select } from "@myd-org/ui";
+import { Button, Dialog, Divider, Select } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
 import {
   cambiarBorrador,
@@ -14,6 +14,7 @@ import {
 import { hrefCatalogo, type EstadoCatalogo } from "@/lib/catalogo-url";
 import { esOrden, ordenesPara, contarFiltrosActivos, etiquetaBotonFiltros } from "@/lib/catalogo-vista";
 import { CatalogoFiltros } from "./CatalogoFiltros";
+import { FiltrosIcon } from "./iconos";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 /**
@@ -102,15 +103,23 @@ export function CatalogoFiltrosSheet({
 
   return (
     <>
+      {/* Relleno y con ícono: es la entrada a los filtros en el celular y tiene que verse al lado de
+          los controles de la grilla. Los activos van en un círculo de contraste. */}
       <Button
-        variant="outline"
-        size="sm"
+        variant="primary"
+        size="md"
+        shape="round"
         onClick={abrir}
         aria-label={etiquetaBotonFiltros(activos)}
         aria-haspopup="dialog"
       >
+        <FiltrosIcon />
         Filtros
-        {activos > 0 && <Badge tone="info">{activos}</Badge>}
+        {activos > 0 && (
+          <span className="min-w-5 rounded-full bg-on-primary px-1.5 text-center text-xs font-semibold tabular-nums text-primary">
+            {activos}
+          </span>
+        )}
       </Button>
 
       <Dialog

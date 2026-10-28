@@ -42,6 +42,15 @@ vi.mock("@/lib/busqueda-v2/motor-servidor", () => ({
   buscarEnShop: buscarEnShopMock,
 }));
 
+const stockPromoMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/promociones/stock", async (orig) => ({
+  ...(await orig<typeof import("@/lib/promociones/stock")>()),
+  stockEnSucursal: stockPromoMock,
+}));
+const leerSucursalesSinCache = vi.hoisted(() => vi.fn(async () => ({ sucursales: [], zonas: [] })));
+const sucursalesCacheadasMock = vi.hoisted(() => vi.fn(async () => ({ sucursales: [] as unknown[], zonas: [] })));
+vi.mock("@/lib/sucursales-repo", () => ({ leerSucursalesYZonas: leerSucursalesSinCache }));
+vi.mock("@/lib/sucursales-datos", () => ({ sucursalesCacheadas: sucursalesCacheadasMock }));
 vi.mock("@/lib/catalog", () => ({
   getProductosPorSkus: porSkusMock,
 }));
@@ -55,8 +64,10 @@ import {
   guardarOrdenHome,
   guardarSeccion,
   leerSeccionParaEditar,
+  productosParaPromo,
   resolverProductosHome,
   restablecerFooter,
+  sucursalesParaPromo,
   restablecerSeccion,
 } from "./home-acciones";
 import { DEFAULTS_HOME } from "@/data/home-defaults";
@@ -596,7 +607,7 @@ describe("guardarOrdenHome", () => {
   });
 
   it("guarda una permutación de las secciones y revalida la home", async () => {
-    const orden = ["whatsapp", "hero", "marquee", "busquedaAsistida", "ambientes", "destacados", "tiendaOficial", "bannerDeco", "decoGrid", "servicios"];
+    const orden = ["whatsapp", "hero", "promociones", "marquee", "busquedaAsistida", "ambientes", "destacados", "tiendaOficial", "bannerDeco", "decoGrid", "servicios"];
     const r = await guardarOrdenHome(orden);
     expect(r.ok).toBe(true);
     expect(guardarMock).toHaveBeenCalledWith("orden", { secciones: orden });
@@ -613,5 +624,64 @@ describe("guardarOrdenHome", () => {
     esAdminMock.mockResolvedValue(false);
     expect((await guardarOrdenHome([])).ok).toBe(false);
     expect(guardarMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("acciones del editor de promociones", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    esAdminMock.mockResolvedValue(true);
+  });
+
+  it("No-admin: productosParaPromo no consulta el catálogo", async () => {
+    esAdminMock.mockResolvedValue(false);
+    const r = await productosParaPromo(["A-1"], "mdp");
+    expect(r).toEqual({ ok: false, errores: ["No tiene permisos para editar la página de inicio."] });
+    expect(porSkusMock).not.toHaveBeenCalled();
+  });
+
+  it("No-admin: sucursalesParaPromo devuelve vacío", async () => {
+    esAdminMock.mockResolvedValue(false);
+    expect(await sucursalesParaPromo()).toEqual([]);
+  });
+
+  it("Sin códigos: productosParaPromo no consulta", async () => {
+    expect(await productosParaPromo([], "mdp")).toEqual({ ok: true, productos: [] });
+    expect(porSkusMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("productosParaPromo: stock de la sucursal", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    esAdminMock.mockResolvedValue(true);
+  });
+
+  it("la predeterminada sale de las sucursales cacheadas, sin leer la base", async () => {
+    sucursalesCacheadasMock.mockResolvedValue({
+      sucursales: [{ slug: "igz", nombre: "Puerto Iguazú", activa: true, orden: 0 }],
+      zonas: [],
+    });
+    porSkusMock.mockResolvedValue([{ id: "1", name: "Ventilador", sku: "S-1", price: 100, stock: "in" }]);
+    stockPromoMock.mockResolvedValue({ "1": 4 });
+    await productosParaPromo(["S-1"], "mdp");
+    expect(stockPromoMock).toHaveBeenCalledWith(["1"], "mdp", "igz");
+    expect(leerSucursalesSinCache).not.toHaveBeenCalled();
+  });
+
+  it("sucursalesParaPromo: de la caché, sin leer la base", async () => {
+    sucursalesCacheadasMock.mockResolvedValue({
+      sucursales: [{ slug: "mdp", nombre: "Mar del Plata", activa: true, orden: 0 }],
+      zonas: [],
+    });
+    expect(await sucursalesParaPromo()).toEqual([{ slug: "mdp", nombre: "Mar del Plata", predeterminada: true }]);
+    expect(leerSucursalesSinCache).not.toHaveBeenCalled();
+  });
+
+  it("un producto sin control de stock llega como null, no como 0", async () => {
+    porSkusMock.mockResolvedValue([{ id: "1", name: "Servicio", sku: "S-1", price: 100, stock: "in" }]);
+    stockPromoMock.mockResolvedValue({ "1": null });
+    const r = await productosParaPromo(["S-1"], "mdp");
+    expect(r).toMatchObject({ ok: true, productos: [{ sku: "S-1", stock: null }] });
   });
 });

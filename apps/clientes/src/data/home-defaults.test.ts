@@ -586,11 +586,119 @@ describe("tiendaOficial (spec 2026-10-20-marcas-tienda-oficial §9)", () => {
   });
 });
 
+describe("promociones (spec 2026-10-26-promociones-home §1)", () => {
+  const FIN = "2026-11-13T23:59:00-03:00";
+  const base = {
+    etiquetaBadge: "Precio de apertura",
+    fin: FIN,
+    estrella: {
+      sku: "NK-1",
+      precioHabitual: 132172,
+      referencias: [{ etiqueta: "Tiendas online", precio: 165000 }],
+      unidadesPromo: 5,
+      stockBase: 10,
+      sucursal: "mdp",
+    },
+    items: [{ sku: "A1", precioHabitual: 61984, referencias: [{ etiqueta: "Casas de iluminación", precio: 76000 }] }],
+  };
+
+  it("los textos por defecto presentan el lanzamiento", () => {
+    expect(DEFAULTS_HOME.promociones.titulo).toBe("Promoción de *lanzamiento*");
+    expect(DEFAULTS_HOME.promociones.eyebrow).toBe("Abrimos la tienda online");
+  });
+
+  it("va después del hero en el orden por defecto", () => {
+    expect(ORDEN_HOME[1]).toBe("promociones");
+  });
+
+  it("el default valida y no tiene productos ni fechas", () => {
+    expect(erroresSeccion("promociones", DEFAULTS_HOME.promociones)).toEqual([]);
+    expect(DEFAULTS_HOME.promociones.items).toEqual([]);
+    expect(DEFAULTS_HOME.promociones.fin).toBeUndefined();
+  });
+
+  it("acepta una promo completa con video de YouTube", () => {
+    expect(erroresSeccion("promociones", { ...base, estrella: { ...base.estrella, video: "https://www.youtube.com/watch?v=abcdefghijk" } })).toEqual([]);
+  });
+
+  it("rechaza más de 6 items", () => {
+    const items = Array.from({ length: 7 }, (_, i) => ({ sku: `S${i}` }));
+    expect(erroresSeccion("promociones", { ...base, items }).length).toBeGreaterThan(0);
+  });
+
+  it("rechaza un SKU repetido entre estrella e items", () => {
+    expect(erroresSeccion("promociones", { ...base, items: [{ sku: "nk-1 " }] }).length).toBeGreaterThan(0);
+  });
+
+  it.each([-1, 1.5, 0])("rechaza precioHabitual %s", (precioHabitual) => {
+    expect(erroresSeccion("promociones", { ...base, items: [{ sku: "A1", precioHabitual }] }).length).toBeGreaterThan(0);
+  });
+
+  it.each([-1, 1.5, 0])("rechaza el precio %s de una referencia", (precio) => {
+    expect(erroresSeccion("promociones", { ...base, items: [{ sku: "A1", referencias: [{ etiqueta: "Tiendas online", precio }] }] }).length).toBeGreaterThan(0);
+  });
+
+  it("rechaza más de 3 referencias o una sin nombre", () => {
+    const r = { etiqueta: "Tiendas online", precio: 100 };
+    expect(erroresSeccion("promociones", { ...base, items: [{ sku: "A1", referencias: [r, r, r, r] }] }).length).toBeGreaterThan(0);
+    expect(erroresSeccion("promociones", { ...base, items: [{ sku: "A1", referencias: [{ etiqueta: " ", precio: 100 }] }] }).length).toBeGreaterThan(0);
+  });
+
+  it("el título de la comparación es opcional", () => {
+    expect(erroresSeccion("promociones", base)).toEqual([]);
+    expect(erroresSeccion("promociones", { ...base, tituloComparador: "Comparado con otras tiendas" })).toEqual([]);
+  });
+
+
+  it("rechaza un video que no es YouTube/Vimeo", () => {
+    expect(erroresSeccion("promociones", { ...base, estrella: { ...base.estrella, video: "https://cdn.example/v.mp4" } }).length).toBeGreaterThan(0);
+  });
+
+  it("rechaza unidadesPromo 0", () => {
+    expect(erroresSeccion("promociones", { ...base, estrella: { ...base.estrella, unidadesPromo: 0 } }).length).toBeGreaterThan(0);
+  });
+
+  it("rechaza un fin que no es posterior al inicio", () => {
+    expect(erroresSeccion("promociones", { ...base, inicio: FIN }).length).toBeGreaterThan(0);
+  });
+
+  it("rechaza fechas sin offset", () => {
+    expect(erroresSeccion("promociones", { ...base, fin: "2026-11-13T23:59" }).length).toBeGreaterThan(0);
+  });
+
+  it("exige fin si hay productos", () => {
+    const { fin: _fin, ...sinFin } = base;
+    expect(erroresSeccion("promociones", sinFin).length).toBeGreaterThan(0);
+  });
+
+  it("rechaza unidades de promo sin el stock base del contador", () => {
+    const { stockBase: _s, ...sinBase } = base.estrella;
+    expect(erroresSeccion("promociones", { ...base, estrella: sinBase }).length).toBeGreaterThan(0);
+  });
+
+  it("si los legales mencionan {inicio}, exige la fecha de inicio", () => {
+    expect(erroresSeccion("promociones", { ...base, legales: "Del {inicio} al {fin}" }).length).toBeGreaterThan(0);
+    expect(erroresSeccion("promociones", { ...base, legales: "Hasta el {fin}" })).toEqual([]);
+    expect(erroresSeccion("promociones", { ...base, inicio: "2026-11-03T00:00:00-03:00", legales: "Del {inicio} al {fin}" })).toEqual([]);
+  });
+
+  it("rechaza una sucursal que no es un slug", () => {
+    expect(erroresSeccion("promociones", { ...base, estrella: { ...base.estrella, sucursal: "MDP!" } }).length).toBeGreaterThan(0);
+  });
+
+  it("en las tiendas genéricas viene apagada", () => {
+    const generica = defaultsHomeGenerica({ nombre: "Acme" });
+    expect(generica.visibilidad.promociones).toBe("nunca");
+    expect(erroresSeccion("promociones", generica.promociones)).toEqual([]);
+  });
+});
+
 describe("orden de las secciones de la home", () => {
   it("por defecto, el de siempre (sin anuncio ni badge, que no van en el cuerpo)", () => {
     expect(DEFAULTS_HOME.orden).toEqual([...ORDEN_HOME]);
     expect(ORDEN_HOME).toEqual([
       "hero",
+      "promociones",
       "marquee",
       "busquedaAsistida",
       "ambientes",

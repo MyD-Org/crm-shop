@@ -3,6 +3,7 @@ import { HomeClient } from "@/components/HomeClient";
 import { DestacadosHome, DestacadosHomeSkeleton } from "@/components/home/DestacadosHome";
 import { EdicionSiAdmin } from "@/components/home/EdicionSiAdmin";
 import { TiendaOficialHome } from "@/components/home/TiendaOficialHome";
+import { PromocionesHome } from "@/components/home/PromocionesHome";
 import { CuentenosSiBusquedaIa } from "@/components/home/CuentenosQueNecesita";
 import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
 import { getContenidoHome } from "@/lib/home-datos";
@@ -51,6 +52,11 @@ export default async function Home() {
         tiendaOficial={
           <Suspense fallback={null}>
             <TiendaOficialHome contenido={contenido.tiendaOficial} />
+          </Suspense>
+        }
+        promociones={
+          <Suspense fallback={null}>
+            <PromocionesHome contenido={contenido.promociones} />
           </Suspense>
         }
         busquedaAsistida={

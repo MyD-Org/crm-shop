@@ -5,6 +5,7 @@ import Link from "next/link";
 import { textoConsultaProducto } from "@/lib/contacto-pedido";
 import { Button, QuantityStepper, Skeleton, VariantSelector, type PaymentLogo } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
+import { PromoFicha } from "@/components/promociones/PromoFicha";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { CuotasConCarrito, useProgresoCuotasCarrito } from "@/components/producto/CuotasConCarrito";
 import { cuotasFichaConCarrito, cuotasHastaFicha, metaCuotasFicha } from "@/lib/ficha-cuotas-carrito";
@@ -91,8 +92,14 @@ export function ProductoClient({
   disponibilidadPorId,
   localesDisponibilidad,
   logosTarjetas = [],
+  quedanPromo,
+  slugDestacadoPromo,
 }: {
   producto: Product;
+  /** Promo de la home: unidades a precio de apertura que quedan si es la estrella (ver PromoFicha). */
+  quedanPromo?: number | null;
+  /** Slug del medio destacado de las cards: el % de ahorro de la promo usa su precio, como la home. */
+  slugDestacadoPromo?: string;
   /**
    * Con selector de variantes (`producto.grupo`): la disponibilidad de cada opción y los locales, para
    * cambiar de opción sin volver al servidor. Ausentes = ficha de un producto suelto.
@@ -363,6 +370,7 @@ export function ProductoClient({
                   preciosMedios={producto.preciosMedios}
                 />
               )}
+              {!sinPrecio ? <PromoFicha producto={producto} quedan={quedanPromo} slugDestacado={slugDestacadoPromo} /> : null}
               {!sinPrecio && cuotas && producto.precioFinal != null && hayCuotasParaModal(cuotas) && (
                 <div className="mt-3">
                   {cuotasConCarrito ? (

@@ -47,10 +47,10 @@ describe("SeccionEditable para el visitante", () => {
 });
 
 describe("HomeClient no manda los datos del editor", () => {
-  it("ninguna de las 9 SeccionEditable recibe `inicial` ni `puedeEditar`", () => {
+  it("ninguna de las 10 SeccionEditable recibe `inicial` ni `puedeEditar`", () => {
     const texto = readFileSync(HOME_CLIENT, "utf8");
     const aperturas = texto.match(/<SeccionEditable[^>]*>/g) ?? [];
-    expect(aperturas).toHaveLength(9);
+    expect(aperturas).toHaveLength(10);
     for (const tag of aperturas) {
       expect(tag).not.toMatch(/inicial=|puedeEditar=/);
     }

@@ -61,10 +61,10 @@ Acciones disponibles:
   - Sin redondeo "psicológico", igual que los precios normales.
 - El **% exhibido es el de la regla**. Es honesto porque el precio sale exactamente de aplicarlo al precio normal.
   - Respeta lo aprobado en el spec de la promo: % sólo contra nuestro precio habitual, en verde.
-- **Listas privadas** (cuentas con precio propio): ver Decisiones abiertas, punto B.
+- **Listas privadas** (cuentas con precio propio): ver Decisiones de Emanuel, punto B.
   - Hoy esos clientes pagan siempre su precio privado (`cotizacion.ts:155-163`), aunque sea más alto que el público con descuento.
   - `aplicarEstadoPrecio` (`precios-cuenta-estado.ts:56-65`) borra `oldPrice` y `discount`, pero **no** `badge`. Sea cual sea la decisión, el badge de campaña tiene que caer cuando el precio que se cobra no es el de campaña.
-- **Por debajo del costo:** el CRM lo permite, pero lo avisa (ver Decisiones abiertas). Los ajustes de hoy no pueden bajar del costo; una campaña sí.
+- **Por debajo del costo:** el CRM lo permite, pero lo avisa (ver Decisiones de Emanuel). Los ajustes de hoy no pueden bajar del costo; una campaña sí.
 - **Variantes:**
   - Una regla de producto sobre un producto que pertenece a un modelo (`grupo_id`) alcanza a todas las variantes del modelo (decisión mía).
   - Las reglas de categoría se resuelven con `coalesce(grupo_id, alegra_id)` contra `catalog_overlay`, igual que el Shop. Así no se escapan las variantes cuya categoría está cargada sólo en el ancla.
@@ -129,7 +129,7 @@ Sigue el patrón de `flagsPublicos()`: se evalúa por request, afuera de `use ca
    - En el checkout, `idsActivas` se calcula con el mismo `campaniasVigentes()`. Lo exhibido y lo cobrado salen de la misma fila y la misma regla.
 4. **Pedidos ya creados:**
    - El pedido congela `precio_unitario` como hoy, y la factura de Alegra lo toma de ahí sin cambios.
-   - Al recotizar un pedido existente (`/api/pedidos/[id]/medio` y `/cuotas`), las ids activas se calculan con la **fecha de creación del pedido**. Así un pedido creado en campaña conserva su precio durante la ventana de pago de 24 h aunque cambie el medio (ver Decisiones abiertas).
+   - Al recotizar un pedido existente (`/api/pedidos/[id]/medio` y `/cuotas`), las ids activas se calculan con la **fecha de creación del pedido**. Así un pedido creado en campaña conserva su precio durante la ventana de pago de 24 h aunque cambie el medio (ver Decisiones de Emanuel).
 5. **Orden, filtro y rango de precio del catálogo** también usan el precio vigente (decisión mía).
    - Hoy salen de SQL sobre el precio normal: `precioSql` y `precioExhibidoSql` (`apps/clientes/src/lib/catalog.ts:1202-1225`) alimentan `precio-asc/desc`, `precio_min/max` y el rango del slider.
    - Hace falta una expresión SQL `precioVigenteSql(idsActivas)` que tome de `campanias_online` el precio de la campaña activa o, si no hay, el normal. La usan el orden, el filtro y las facetas.
@@ -141,7 +141,7 @@ Sigue el patrón de `flagsPublicos()`: se evalúa por request, afuera de `use ca
 Todo el catálogo, no sólo la home. Se respetan las decisiones de UI ya aprobadas:
 
 - **Cards** (grilla, búsqueda, carruseles, favoritos):
-  - `oldPrice` tachado y `discount`, campos que `Product` y el `ProductCard` de `@myd-org/ui` ya tienen sin usar (ver Decisiones abiertas, punto A);
+  - `oldPrice` tachado y `discount`, campos que `Product` y el `ProductCard` de `@myd-org/ui` ya tienen sin usar (decisión A de Emanuel);
   - el tachado es el precio normal **de la misma lista** que muestra la card en grande, así que no se mezclan lista y transferencia;
   - badge con la etiqueta de la campaña y la pastilla verde del %, reusando `badgePromo`;
   - nada encima de las fotos en mobile, sin cuenta regresiva en cards.
@@ -178,6 +178,34 @@ Va dentro de Catálogo, junto a Precios online, con el mismo permiso (`requireAd
 - **Historial:** cada guardado deja una entrada en `precios_online_cambios`. Hay que extender el CHECK de `tipo` con `campania`.
 - En la grilla de Precios online, un indicador "En campaña" por producto.
 
+## Límite de unidades
+
+Lo necesita la promo de lanzamiento: "solo 5 unidades a precio de apertura; el resto sigue a precio normal". Hoy eso es un contador sólo visual, y volver al precio normal es manual.
+
+- **Dónde se define:**
+  - Una **regla de producto** puede llevar `unidades` (entero ≥ 1, opcional).
+  - Si la regla es de un modelo con variantes, el límite es el total del modelo.
+  - Las reglas de marca y categoría no llevan límite.
+  - Viaja en la entrada de `campanias_online` como `reglaId` y `unidades`.
+- **Qué cuenta:** las unidades de **pedidos de la tienda** con esa campaña y esa regla.
+  - Cuentan los pagados y los pendientes con la reserva viva, con el mismo criterio que `shop.stock_reservado`.
+  - Un pedido cancelado o vencido libera sus unidades.
+  - Se identifica por `order_items.campania_id` más la regla (columna `campania_regla_id` en la misma migración del Shop).
+  - **No cuenta ventas del local** (decisión mía): la campaña es sólo de la tienda online. Si el local vende unidades a precio de promoción, se baja el límite editando la campaña, que se puede editar en curso.
+- **Quedan** = `unidades − contadas`, nunca más que el stock disponible.
+  - Con `quedan = 0`, el producto **vuelve solo al precio normal** en exhibición y cobro: sin badge, sin tachado y sin aviso en el CRM.
+- **Exhibición:**
+  - En la ficha: "Quedan 3 de 5 a precio de <etiqueta>" con números reales (regla del spec de la promo: nunca inflar). Con `quedan ≤ 2`, "¡Últimas unidades!".
+  - En las cards, sólo el precio, que vuelve al normal al agotarse.
+- **Cobro:**
+  - El pedido valida `quedan` dentro de la misma transacción y con el mismo advisory lock por ítem que el stock (`disponiblesEnTx`, `stock-disponible.ts`).
+  - Si la cantidad del carrito supera lo que queda, el pedido no se crea: `409 unidades_campania` con lo que queda. El carrito muestra "Quedan N unidades a precio de <etiqueta>" y ofrece bajar la cantidad (decisión mía; partir la línea en dos precios queda fuera).
+  - Si se agotó entre la vista y la confirmación, sale el `409 precio_cambio` de siempre.
+- **Caché:** que se agote cambia el precio sin que cambie la hora. La creación y la cancelación de pedidos ya vencen el tag del catálogo (`marcarStockCambiado`).
+  - El cálculo de `quedan` puede ir dentro de la caché del catálogo.
+  - Si un visitante llega a ver un precio viejo unos segundos, el checkout igual lo frena.
+- **Estrella de la home:** sus unidades pasan a ser el límite de la campaña. El editor ya no pide `unidadesPromo` ni guarda `stockBase`, aunque se respetan en contenido guardado sin campaña. Los textos "Quedan 3 de 5" y "Agotadas las unidades a precio de apertura" se mantienen.
+
 ## Sección "Promociones" de la home
 
 Pasa a ser la **vidriera**: elige qué SKUs destacar y la estrella. El precio, el tachado y el fin salen de la campaña.
@@ -186,12 +214,11 @@ Pasa a ser la **vidriera**: elige qué SKUs destacar y la estrella. El precio, e
 - La sección puede asociarse a una campaña. Si lo está, su inicio y fin son los de la campaña.
   - El precio y el tachado de sus items vienen del servidor (`Product`).
   - El `PromoProvider` del navegador queda sólo para mostrar u ocultar la sección y para la cuenta regresiva. No decide precios.
-- Escalera de comparación, unidades de la estrella y cuenta regresiva: sin cambios.
+- Escalera de comparación y cuenta regresiva: sin cambios. Las unidades de la estrella salen del límite de la campaña (ver "Límite de unidades").
 - Al salir las campañas, la promo de lanzamiento se pasa a una campaña y se borran sus ajustes.
 
 ## Fuera de alcance (v1)
 
-- **Límite de unidades por producto a precio de campaña.** Exige un contador nuevo validado dentro de la transacción del pedido. Se mantiene la indicación de unidades reales de la estrella de la home, que el checkout no aplica.
 - Precio final fijo por producto (sólo %).
 - Campañas superpuestas.
 - Descuentos sobre listas privadas.
@@ -222,22 +249,13 @@ Pasa a ser la **vidriera**: elige qué SKUs destacar y la estrella. El precio, e
 - El diseño fino de la pantalla del CRM.
 - Cómo el mini-carrito obtiene el precio vigente.
 
-## Decisiones abiertas (para Emanuel)
+## Decisiones de Emanuel (2026-10-28)
 
-A. **Tachado en las cards.**
-   - El spec de la promo lo descartó (`2026-10-26-promociones-home-design.md:199-201`): la card muestra en grande el precio de lista y el habitual era el de transferencia, así que mezclarlos confundía.
-   - Con campañas el tachado es de la misma lista que el precio grande, así que esa confusión ya no existe.
-   - Propuesta: tachado + % en las cards.
-
-B. **Clientes con lista privada durante una campaña.**
-   - Propuesta: pagan el menor entre su precio privado y el público de campaña. Ven badge y tachado sólo cuando gana el de campaña.
-   - Alternativa (menos código): siempre su privado, sin badge, aunque le salga más caro que a un visitante anónimo.
-
-C. **Pedido pendiente después del fin.**
-   - Propuesta: conserva el precio de campaña durante las 24 h de pago, aunque se cambie el medio. Por eso la vista y la poda guardan la campaña 24 h más.
-   - Alternativa: al recotizar vuelve al precio normal. Saca la gracia de 24 h de la vista y de la poda.
-
-D. **Valores por defecto a confirmar:**
-   - sólo % en v1, sin precio final fijo (el fijo es ambiguo: ¿qué lista?, ¿con o sin IVA?);
-   - por debajo del costo, la vista previa avisa y pide confirmar, pero no bloquea;
-   - el límite de unidades por producto queda para v2.
+- **A. Tachado en las cards:** sí, tachado + % contra el precio normal de la misma lista. Reemplaza lo dicho en el spec de la promo para las cards.
+- **C. Pedido pendiente después del fin:** conserva el precio de campaña durante las 24 h de pago, aunque se cambie el medio.
+- **D. Límite de unidades:** entra en v1 (sección "Límite de unidades"). Quedan como propuestas sin objeción:
+  - sólo %, sin precio fijo;
+  - por debajo del costo, avisar sin bloquear.
+- **B. Clientes con lista privada:** pendiente.
+  - Propuesta: pagan el menor entre su precio privado y el público de campaña, con badge sólo cuando gana el de campaña.
+  - Alternativa: siempre su privado, sin badge.

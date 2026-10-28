@@ -89,8 +89,8 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
           {e.bajada ? <p className="max-w-prose text-sm text-muted">{e.bajada}</p> : null}
         </div>
 
-        {/* En pantallas anchas, dos columnas (precio y unidades | comparación): la card no crece en alto. */}
-        <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        {/* En pantallas muy anchas (xl), dos columnas (precio y unidades | comparación): la card no crece en alto. */}
+        <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
           <div className="flex flex-col gap-4">
             <PrecioPromo precio={monto} habitual={e.precioHabitual} esTransferencia={esTransferencia} />
             {conContador ? <UnidadesPromo quedan={quedan!} total={e.unidadesPromo!} /> : null}

@@ -11,6 +11,8 @@
  * Una excepción, con las facetas por tipo prendidas: elegir o quitar una
  * categoría se aplica en el acto (`hrefAlElegirCategoria`), porque los filtros
  * por tipo de producto dependen de ella y hay que traerlos para mostrarlos.
+ * Lo mismo con el stock ("Solo con stock" y "Con stock en", `hrefAlCambiarStock`):
+ * cambian los conteos de todo el panel.
  *
  * Módulo puro (sin React): el Shop no tiene tests de render.
  */
@@ -112,4 +114,17 @@ export function hrefAlElegirCategoria(
   categorias: string[]
 ): string | null {
   return hrefAlAplicar(estado, borradorAlElegirCategoria(borrador, categorias));
+}
+
+/**
+ * URL a la que navega la hoja al cambiar "Solo con stock" o "Con stock en", sin esperar "Aplicar":
+ * lleva el borrador COMPLETO con el cambio de stock. `null` si el borrador con el cambio queda igual
+ * a la URL vigente (no hay nada que traer).
+ */
+export function hrefAlCambiarStock(
+  estado: EstadoCatalogo,
+  borrador: EstadoCatalogo,
+  cambios: Pick<Partial<EstadoCatalogo>, "soloStock" | "retiroEn">
+): string | null {
+  return hrefAlAplicar(estado, cambiarBorrador(borrador, cambios));
 }

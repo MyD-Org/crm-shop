@@ -20,7 +20,6 @@ import {
   hayFiltros,
   itemsDeFaceta,
   itemsDeFacetaClave,
-  itemsVisibles,
   limpiarFiltros,
   panelPorTipo,
 } from "@/lib/catalogo-vista";
@@ -39,8 +38,8 @@ const alternar = (lista: string[], valor: string, tildado: boolean) =>
 
 /**
  * Panel de filtros: categorías, marcas, disponibilidad, características por tipo de producto
- * (`facetas.porClave`, ver `panelPorTipo`) y precio. En marcas y características los ítems con conteo 0
- * se ocultan (ver `itemsVisibles`); categorías muestra siempre el árbol completo.
+ * (`facetas.porClave`, ver `panelPorTipo`) y precio. Categorías muestra siempre el árbol completo y
+ * marcas, todas las del catálogo (las de 0 con su 0, ver `completarMarcas`).
  * Puro: todo
  * lo que toca el visitante sale por `ir` como cambios de estado (que el
  * padre convierte en URL). Sin `dentroDeSheet` va dentro de una `Card` con
@@ -53,6 +52,7 @@ export function CatalogoFiltros({
   ir,
   dentroDeSheet = false,
   alElegirCategoria,
+  alCambiarStock,
   sinMarcas = false,
 }: {
   facetas: Facetas;
@@ -64,11 +64,17 @@ export function CatalogoFiltros({
    * La hoja de mobile lo usa, con las facetas por tipo, para aplicar la categoría en el acto.
    */
   alElegirCategoria?: (categorias: string[]) => void;
+  /**
+   * Si se pasa, "Solo con stock" y "Con stock en" llaman a esto en vez de `ir`. La hoja de mobile
+   * lo usa para aplicarlos en el acto: cambian los conteos de todo el panel.
+   */
+  alCambiarStock?: Ir;
   /** Sin el grupo "Marcas": en una página de marca la marca la fija la página. */
   sinMarcas?: boolean;
 }) {
   // useId: el panel se monta dos veces (aside y hoja de mobile).
   const idDisponibilidad = useId();
+  const irStock = alCambiarStock ?? ir;
   const panel = panelPorTipo(facetas.porClave, estado, facetas.categorias);
   const disponibilidad = (
     <section aria-labelledby={idDisponibilidad} className="flex flex-col gap-3">
@@ -82,7 +88,7 @@ export function CatalogoFiltros({
         label="Solo con stock"
         checked={estado.soloStock || Boolean(estado.retiroEn)}
         // Apagarlo también quita "Con stock en <local>": sin stock no hay local que filtrar.
-        onCheckedChange={(v) => ir(v ? { soloStock: true } : { soloStock: false, retiroEn: undefined })}
+        onCheckedChange={(v) => irStock(v ? { soloStock: true } : { soloStock: false, retiroEn: undefined })}
       />
       {facetas.locales && facetas.locales.length > 1 && (
         <Field label="Con stock en">
@@ -94,7 +100,7 @@ export function CatalogoFiltros({
             ]}
             value={estado.retiroEn ?? TODOS_LOS_LOCALES}
             onValueChange={(v) =>
-              ir(v === TODOS_LOS_LOCALES ? { retiroEn: undefined } : { retiroEn: v, soloStock: true })
+              irStock(v === TODOS_LOS_LOCALES ? { retiroEn: undefined } : { retiroEn: v, soloStock: true })
             }
           />
         </Field>
@@ -142,14 +148,14 @@ export function CatalogoFiltros({
         <Divider />
         <FacetGroup
           title="Marcas"
-          items={itemsVisibles(
-            itemsDeFaceta(facetas.marcas, estado.marcas).map((m) => ({
-              value: m.label,
-              label: formatMarca(m.label),
-              count: m.count,
-              checked: m.checked,
-            })),
-          )}
+          // Todas las marcas del catálogo, siempre: las de 0 se ven con su 0 (la regla de ceros no
+          // aplica acá, igual que en categorías). Ver `completarMarcas`.
+          items={itemsDeFaceta(facetas.marcas, estado.marcas).map((m) => ({
+            value: m.label,
+            label: formatMarca(m.label),
+            count: m.count,
+            checked: m.checked,
+          }))}
           onToggle={(valor, tildado) => ir({ marcas: alternar(estado.marcas, valor, tildado) })}
           searchable
           searchPlaceholder="Buscar marca…"

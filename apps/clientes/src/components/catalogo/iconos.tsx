@@ -145,3 +145,23 @@ export function ConversarIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/** Botón "Filtros" de mobile: dos deslizadores. */
+export function FiltrosIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
+      <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+      <circle cx="16" cy="7" r="2" />
+      <circle cx="8" cy="17" r="2" />
+    </svg>
+  );
+}

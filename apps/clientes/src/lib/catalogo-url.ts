@@ -44,6 +44,11 @@ export function ordenPorDefecto(query: string | undefined): OrdenCatalogo {
   return query ? "relevancia" : ORDEN_DEFAULT;
 }
 
+/** Cambios que quitan el texto buscado (y su plan): el orden vuelve al default sin búsqueda. */
+export function quitarBusqueda(): Partial<EstadoCatalogo> {
+  return { query: undefined, ia: undefined, orden: ordenPorDefecto(undefined), pagina: 1 };
+}
+
 /** Orden que aceptan las URLs viejas y que hoy equivale al default. */
 const ORDEN_ALIAS_VIEJO = "ventas";
 

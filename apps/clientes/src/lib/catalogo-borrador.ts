@@ -12,11 +12,12 @@
  * categoría se aplica en el acto (`hrefAlElegirCategoria`), porque los filtros
  * por tipo de producto dependen de ella y hay que traerlos para mostrarlos.
  * Lo mismo con el stock ("Solo con stock" y "Con stock en", `hrefAlCambiarStock`):
- * cambian los conteos de todo el panel.
+ * cambian los conteos de todo el panel. Y con la X de la búsqueda
+ * (`hrefAlQuitarBusqueda`): la búsqueda no es parte del borrador.
  *
  * Módulo puro (sin React): el Shop no tiene tests de render.
  */
-import { hrefCon, type EstadoCatalogo } from "@/lib/catalogo-url";
+import { hrefCon, quitarBusqueda, type EstadoCatalogo } from "@/lib/catalogo-url";
 import { limpiarFiltros } from "@/lib/catalogo-vista";
 
 /**
@@ -127,4 +128,16 @@ export function hrefAlCambiarStock(
   cambios: Pick<Partial<EstadoCatalogo>, "soloStock" | "retiroEn">
 ): string | null {
   return hrefAlAplicar(estado, cambiarBorrador(borrador, cambios));
+}
+
+/**
+ * URL a la que navega la hoja al quitar la búsqueda con su X, sin esperar "Aplicar": lleva el
+ * borrador COMPLETO sin el texto ni su plan. El orden vuelve al default sin búsqueda, salvo que se
+ * haya elegido otro en la hoja (relevancia sin búsqueda cae al default en `hrefCon`).
+ */
+export function hrefAlQuitarBusqueda(estado: EstadoCatalogo, borrador: EstadoCatalogo): string {
+  const cambios = { ...manejaLaHoja(borrador), ...quitarBusqueda() };
+  if (borrador.orden !== estado.orden) cambios.orden = borrador.orden;
+  if (!mismaLista(estado.categorias, borrador.categorias)) cambios.caracteristicas = [];
+  return hrefCon(estado, cambios);
 }

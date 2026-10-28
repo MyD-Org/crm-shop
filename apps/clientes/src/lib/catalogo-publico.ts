@@ -519,6 +519,49 @@ async function leerDestacados(args: ArgsDestacados): Promise<{ productos: Produc
   return { productos: elegirDestacados(pool, skus, cantidad), fallo };
 }
 
+/**
+ * Productos de la promo de la home (spec 2026-10-26-promociones-home §8): SÓLO los SKUs pedidos,
+ * en ese orden, sin el relleno de `destacadosHome`. Misma caché y mismo tag que el catálogo, así un
+ * cambio de precio se ve igual que en el resto de la tienda.
+ */
+type ArgsPromo = Omit<ArgsDestacados, "cantidad" | "base">;
+
+export function productosPromo(args: ArgsPromo): Promise<Product[]> {
+  if (args.skus.length === 0) return Promise.resolve([]);
+  return conRespaldoSinCache(
+    "promociones",
+    () => promoCacheados(args),
+    async () => (await leerPromo(args)).productos,
+  );
+}
+
+async function promoCacheados(args: ArgsPromo): Promise<Product[]> {
+  "use cache: remote";
+  cacheTag(TAG_CATALOGO);
+  console.info("[cache] promociones miss");
+  const { productos, fallo } = await leerPromo(args);
+  if (fallo) cacheLife("degradado");
+  else cacheLife("catalogo");
+  return productos;
+}
+
+async function leerPromo(args: ArgsPromo): Promise<{ productos: Product[]; fallo: boolean }> {
+  const { skus, soloVisibles, disp } = args;
+  const { mediosPrecio } = conMedios(args);
+  try {
+    const pool = await getProductosPorSkus(skus, { soloVisibles, ...conAgrupar(args.agrupar), disp, mediosPrecio });
+    // `elegirDestacados` ordena por los SKUs pedidos y completa con el resto: el relleno se descarta.
+    const pedidos = new Set(skus.map((s) => s.trim().toUpperCase()));
+    const enPromo = pool.filter(
+      (p) => pedidos.has((p.sku ?? "").toUpperCase()) || !!p.codigosElegidos?.some((c) => pedidos.has(c)),
+    );
+    return { productos: elegirDestacados(enPromo, skus, Math.max(1, enPromo.length)).slice(0, enPromo.length), fallo: false };
+  } catch (err) {
+    console.error("[catalogo-publico] no se pudieron cargar los productos de la promo:", err);
+    return { productos: [], fallo: true };
+  }
+}
+
 async function primeraPaginaCategoria(
   categoria: string,
   soloVisibles: boolean,

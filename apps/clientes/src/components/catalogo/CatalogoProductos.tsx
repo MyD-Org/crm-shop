@@ -16,6 +16,7 @@ import { vistaCardVariantes } from "@/lib/variantes-ficha";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { badgeProducto } from "@/components/badge-producto";
+import { badgePromo, useInfoPromo } from "@/components/promociones/PromoProvider";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { LightbulbIcon } from "./iconos";
 import { linkNext } from "./link-next";
@@ -47,6 +48,8 @@ export function CatalogoProductos({
   const reservarCuotas = productos.some((p) => cuotasPorProducto.has(p.id));
   // Igual con "$X con <Medio>": se reserva sólo si algún producto de la página lo muestra.
   const reservarMedio = productos.some((p) => p.precioMedio);
+  // Badge de la promo de la home (vigencia en el cliente, sin mismatch: ver PromoProvider).
+  const promoDe = useInfoPromo();
   return (
     <div
       // 2/3/4 columnas: 24 productos por página entran justo en las tres
@@ -129,7 +132,7 @@ export function CatalogoProductos({
           price={vv.precio}
           priceNote={vv.nota}
           oldPrice={vv.esDesde ? undefined : p.oldPrice}
-          badge={badgeProducto(p)}
+          badge={badgePromo(promoDe(p.sku), p) ?? badgeProducto(p)}
           // El slot queda fuera del enlace estirado de la card: no navega.
           // Favorito arriba y compartir debajo, apilados en la esquina de la foto.
           cornerAction={

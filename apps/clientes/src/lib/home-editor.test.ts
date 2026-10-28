@@ -56,6 +56,22 @@ describe("constructores de items nuevos", () => {
 });
 
 describe("normalizarPayload", () => {
+  it("promociones: recorta a 6 items, limpia los SKUs y descarta los vacíos", () => {
+    const items = [{ sku: " a1 " }, { sku: "" }, ...Array.from({ length: 7 }, (_, i) => ({ sku: `S${i}` }))];
+    const r = normalizarPayload("promociones", {
+      ...DEFAULTS_HOME.promociones,
+      estrella: { sku: " NK-1 " },
+      items,
+    }) as { items: { sku: string }[]; estrella: { sku: string } };
+    expect(r.items.map((i) => i.sku)).toEqual(["a1", "S0", "S1", "S2", "S3", "S4"]);
+    expect(r.estrella.sku).toBe("NK-1");
+  });
+
+  it("promociones: una estrella sin SKU se quita", () => {
+    const r = normalizarPayload("promociones", { ...DEFAULTS_HOME.promociones, estrella: { sku: "  " } }) as Record<string, unknown>;
+    expect(r.estrella).toBeUndefined();
+  });
+
   it("trim de strings y acento vacío se omite", () => {
     const r = normalizarPayload("hero", { ...DEFAULTS_HOME.hero, titulo: "  Hola  ", acento: "" }) as Record<
       string,

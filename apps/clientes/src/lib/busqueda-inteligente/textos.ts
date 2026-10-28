@@ -36,9 +36,9 @@ export const TEXTOS_SIN_RESULTADOS = {
   verSinStock: "Ver también los productos sin stock",
   /** Búsqueda + categoría tildada que da 0: el 0 viene de combinarlas, no de la búsqueda sola. */
   tituloCategoria: (consulta: string, categorias: string) => `No hay «${consulta}» en ${categorias}`,
-  descripcionCategoria: "Puede quitar la categoría para volver a la búsqueda, o ver la categoría completa sin la búsqueda.",
+  descripcionCategoria: "Puede quitar la categoría para volver a la búsqueda, o ver todo lo que hay en ella.",
   quitarCategoria: (categorias: string) => `Quitar ${categorias}`,
-  verCategoriaSinBusqueda: (categorias: string) => `Ver ${categorias} sin la búsqueda`,
+  verCategoriaSinBusqueda: (categorias: string) => `Ver todo en ${categorias}`,
 } as const;
 
 /**

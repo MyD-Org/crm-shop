@@ -55,9 +55,9 @@ describe("sinResultadosPorCategoria", () => {
   it("dice que el 0 es de la búsqueda en esa categoría y nombra las dos salidas", () => {
     expect(sinResultadosPorCategoria({ ...base, categorias: ["HERRAMIENTAS"] }, "Plafón 60x60")).toEqual({
       titulo: "No hay «Plafón 60x60» en Herramientas",
-      descripcion: "Puede quitar la categoría para volver a la búsqueda, o ver la categoría completa sin la búsqueda.",
+      descripcion: "Puede quitar la categoría para volver a la búsqueda, o ver todo lo que hay en ella.",
       quitar: "Quitar Herramientas",
-      verSinBusqueda: "Ver Herramientas sin la búsqueda",
+      verSinBusqueda: "Ver todo en Herramientas",
     });
   });
 

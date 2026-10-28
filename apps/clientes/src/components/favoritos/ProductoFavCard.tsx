@@ -68,7 +68,7 @@ export function ProductoFavCard({ p }: { p: Product }) {
       // Final con IVA si se conoce; si no, el de siempre (igual que el catálogo).
       price={p.precioFinal ?? p.price}
       oldPrice={p.oldPrice}
-      badge={badgePromo(promo) ?? badgeProducto(p)}
+      badge={badgePromo(promo, p) ?? badgeProducto(p)}
       image={
         p.images?.[0] ? (
           <Image

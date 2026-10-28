@@ -131,7 +131,7 @@ export function CatalogoProductos({
           price={vv.precio}
           priceNote={vv.nota}
           oldPrice={vv.esDesde ? undefined : p.oldPrice}
-          badge={badgePromo(promoDe(p.sku)) ?? badgeProducto(p)}
+          badge={badgePromo(promoDe(p.sku), p) ?? badgeProducto(p)}
           // El slot queda fuera del enlace estirado de la card: no navega.
           cornerAction={<BotonFavorito productId={p.id} />}
           // Fotos del overlay del CRM servibles (host en SHOP_MEDIA_HOSTS);

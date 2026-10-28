@@ -1,8 +1,15 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import { Badge } from "@myd-org/ui";
-import { infoPromoSku, promoClienteVigente, type DatosPromoCliente, type InfoPromoProducto } from "@/lib/promociones/promo";
+import type { Product } from "@/data/products";
+import {
+  descuentoPropio,
+  infoPromoSku,
+  precioPrincipal,
+  promoClienteVigente,
+  type DatosPromoCliente,
+  type InfoPromoProducto,
+} from "@/lib/promociones/promo";
 
 /**
  * Promo de la home disponible en toda la tienda (cards y ficha). Lo monta el layout con
@@ -61,7 +68,19 @@ export function usePromoProducto(sku: string | undefined): InfoPromoProducto | n
   return useInfoPromo()(sku);
 }
 
-/** Badge de promo de una card, o undefined (la card usa entonces su badge de siempre). */
-export function badgePromo(info: InfoPromoProducto | null): ReactNode {
-  return info ? <Badge tone="danger">{info.etiquetaBadge}</Badge> : undefined;
+/**
+ * Badge de promo de una card: la etiqueta ("Precio de apertura", navy como en la sección) y, si hay
+ * rebaja real contra el precio habitual, el descuento en verde. Sin promo: undefined (la card usa su
+ * badge de siempre). Sin tachado: la card muestra en grande el precio de lista y el habitual es el de
+ * transferencia, mezclarlos confundiría.
+ */
+export function badgePromo(info: InfoPromoProducto | null, producto: Pick<Product, "price" | "precioFinal" | "precioMedio">): ReactNode {
+  if (!info) return undefined;
+  const d = descuentoPropio(precioPrincipal(producto).monto, info.habitual);
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white">{info.etiquetaBadge}</span>
+      {d ? <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-bold text-success">{d.pct} % de descuento</span> : null}
+    </span>
+  );
 }

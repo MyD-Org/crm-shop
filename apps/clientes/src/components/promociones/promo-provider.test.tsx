@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PromoProvider, suscribirVigencia, usePromoProducto } from "./PromoProvider";
+import type { Product } from "@/data/products";
+import { PromoProvider, badgePromo, suscribirVigencia, usePromoProducto } from "./PromoProvider";
 
 const datos = {
   inicio: undefined,
@@ -52,5 +53,34 @@ describe("suscribirVigencia (sin reloj de 1 s en las cards)", () => {
     expect(aviso).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
     baja();
+  });
+});
+
+describe("badgePromo (cards del catálogo)", () => {
+  const texto = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const info = { etiquetaBadge: "Precio de apertura", habitual: 132172, fin: "2999-01-01T00:00:00-03:00", esEstrella: false };
+  const producto = {
+    id: "1",
+    sku: "NK-1",
+    name: "Ventilador",
+    price: 1,
+    stock: "in",
+    precioMedio: { slug: "transferencia", nombre: "Transferencia", price: 90908, precioFinal: 109999 },
+  } as unknown as Product;
+
+  it("etiqueta y descuento contra el precio habitual", () => {
+    const t = texto(renderToStaticMarkup(<>{badgePromo(info, producto)}</>));
+    expect(t).toContain("Precio de apertura");
+    expect(t).toContain("16 % de descuento");
+  });
+
+  it("sin habitual o sin rebaja real, sólo la etiqueta", () => {
+    const t = texto(renderToStaticMarkup(<>{badgePromo({ ...info, habitual: undefined }, producto)}</>));
+    expect(t).toContain("Precio de apertura");
+    expect(t).not.toContain("de descuento");
+  });
+
+  it("sin promo, nada (la card usa su badge de siempre)", () => {
+    expect(badgePromo(null, producto)).toBeUndefined();
   });
 });

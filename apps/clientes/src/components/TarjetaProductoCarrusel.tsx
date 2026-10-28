@@ -104,7 +104,7 @@ export function TarjetaProductoCarrusel({
         showStock={mostrarStockEnCard(p)}
         price={vv.precio}
         oldPrice={vv.esDesde ? undefined : p.oldPrice}
-        badge={sinBadge ? undefined : (badgePromo(promo) ?? badgeProducto(p))}
+        badge={sinBadge ? undefined : (badgePromo(promo, p) ?? badgeProducto(p))}
         // La card entera es un <Link>: el corazón corta la navegación.
         cornerAction={<BotonFavorito productId={p.id} dentroDeLink />}
         image={

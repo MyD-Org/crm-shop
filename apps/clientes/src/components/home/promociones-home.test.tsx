@@ -66,11 +66,19 @@ describe("PromocionesVista", () => {
     expect(t).toContain("Kit Candle");
   });
 
-  it("se presenta como lanzamiento: cinta con el eyebrow y cuenta regresiva en cajas", () => {
-    const t = texto(vista());
-    expect(t).toContain(contenido.eyebrow!);
-    expect(t).toContain("La promo termina en");
-    for (const unidad of ["días", "horas", "min", "seg"]) expect(t).toContain(unidad);
+  it("se presenta como lanzamiento: cinta con el eyebrow y pastilla de cuenta regresiva", () => {
+    const html = vista();
+    expect(texto(html)).toContain(contenido.eyebrow!);
+    // Sin reloj (servidor e hidratación) la pastilla dice la fecha; en el cliente pasa a la cuenta.
+    expect(html).toContain('role="timer"');
+    expect(texto(html)).toContain("Termina el 13/11");
+    expect(texto(html)).not.toContain("hasta el");
+  });
+
+  it("el nombre de la estrella va en formato oración, no en mayúsculas sostenidas", () => {
+    const t = texto(vista({ estrella: { producto: { ...estrellaProd, name: "VENTILADOR DE TECHO NOAK SLIM" } as Product, quedan: 3 } }));
+    expect(t).toContain("Ventilador de techo");
+    expect(t).not.toContain("VENTILADOR DE TECHO");
   });
 
   it("antes y ahora: nuestro precio habitual tachado y el % de descuento propio", () => {

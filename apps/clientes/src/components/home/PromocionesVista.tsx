@@ -60,10 +60,11 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
   const conContador = !agotada && quedan !== null && quedan > 0 && !!e.unidadesPromo;
   const foto = producto.images?.[0]?.url;
   const href = `/producto/${producto.id}`;
-  const titulo = e.titulo || producto.name;
+  const marca = producto.brand ? formatMarca(producto.brand) : undefined;
+  const titulo = e.titulo || nombreConMarca(producto.name, marca).nombre;
 
   return (
-    <article className="grid overflow-hidden rounded-2xl bg-white text-text shadow-2xl md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+    <article className="grid overflow-hidden rounded-2xl bg-white text-text shadow-2xl md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="relative aspect-[4/3] bg-elevated md:aspect-auto md:min-h-[320px]">
         {e.video ? (
           <VideoMarca url={e.video} titulo={titulo} />
@@ -83,26 +84,26 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-4 border-black/5 p-[clamp(18px,2.2vw,28px)] md:border-l">
+      {/* Una sola superficie: jerarquía tipográfica y líneas finas entre bloques, sin cajas anidadas. */}
+      <div className="flex flex-col gap-5 border-black/5 p-[clamp(20px,2.4vw,32px)] md:border-l">
         <div className="flex flex-col gap-1.5">
-          <h3 className="font-display text-[clamp(18px,1.8vw,24px)] font-semibold leading-tight text-text">{titulo}</h3>
+          {marca ? <p className="text-xs font-semibold uppercase tracking-wide text-muted">{marca}</p> : null}
+          <h3 className="font-display text-[clamp(19px,1.7vw,24px)] font-semibold leading-snug text-text">{titulo}</h3>
           {e.bajada ? <p className="max-w-prose text-sm text-muted">{e.bajada}</p> : null}
         </div>
 
-        {/* En pantallas muy anchas (xl), dos columnas (precio y unidades | comparación): la card no crece en alto. */}
-        <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
-          <div className="flex flex-col gap-4">
-            <PrecioPromo precio={monto} habitual={e.precioHabitual} esTransferencia={esTransferencia} />
-            {conContador ? <UnidadesPromo quedan={quedan!} total={e.unidadesPromo!} /> : null}
-          </div>
-          <EscaleraPrecios
-            precio={monto}
-            referencias={e.referencias}
-            tienda={tienda}
-            titulo={contenido.tituloComparador}
-            fecha={contenido.fechaRelevamiento}
-          />
-        </div>
+        <PrecioPromo precio={monto} habitual={e.precioHabitual} esTransferencia={esTransferencia} />
+
+        {conContador ? <UnidadesPromo quedan={quedan!} total={e.unidadesPromo!} /> : null}
+
+        <EscaleraPrecios
+          precio={monto}
+          referencias={e.referencias}
+          tienda={tienda}
+          titulo={contenido.tituloComparador}
+          fecha={contenido.fechaRelevamiento}
+          className="border-t border-black/5 pt-4"
+        />
 
         {agotada ? <p className="text-sm font-semibold text-text">Agotadas las unidades a precio de apertura</p> : null}
         {agotada && edicion ? <p className="rounded-md bg-warning/90 px-3 py-2 text-xs font-medium text-black">{AVISO_AJUSTE_CRM}</p> : null}
@@ -222,14 +223,7 @@ export function PromocionesVista({ contenido, estrella, items, estado, noResuelt
           ) : (
             <span />
           )}
-          {contenido.fin ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="text-xs font-semibold text-white/80">
-                La promo termina en <span className="text-white/60">· hasta el {fechaCortaAR(contenido.fin)}</span>
-              </p>
-              <CuentaRegresiva fin={contenido.fin} onFin={() => setTerminada(true)} variante="cajas" />
-            </div>
-          ) : null}
+          {contenido.fin ? <CuentaRegresiva fin={contenido.fin} onFin={() => setTerminada(true)} variante="pastilla" /> : null}
         </div>
         <div className="relative mt-4 flex flex-col gap-2">
           {titulo || tituloMobile ? (

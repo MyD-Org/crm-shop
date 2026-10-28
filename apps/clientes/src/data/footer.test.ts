@@ -155,13 +155,20 @@ describe("validarDatosFooter", () => {
 
   it("cuentas de Instagram: nombre y usuario obligatorios, tope", () => {
     const r = validarDatosFooter(
-      valido({ redes: [{ nombre: "", usuario: "comercio" }, { nombre: "Local", usuario: "no válido" }] }),
+      valido({
+        redes: [
+          { nombre: "", usuario: "comercio" },
+          { nombre: "Local", usuario: "no válido" },
+          { nombre: "n".repeat(MAX_FOOTER.nombreRed + 1), usuario: "comercio3" },
+        ],
+      }),
     );
     expect(r).toEqual({
       ok: false,
       errores: [
         "Indique el nombre de la cuenta de Instagram 1.",
         "Indique un usuario de Instagram válido para la cuenta 2 (por ejemplo, @comercio).",
+        `El nombre de la cuenta de Instagram 3 supera los ${MAX_FOOTER.nombreRed} caracteres.`,
       ],
     });
     const redes = Array.from({ length: MAX_FOOTER.redes + 1 }, (_, i) => ({ nombre: `L${i}`, usuario: `local${i}` }));

@@ -15,7 +15,7 @@ import { guardarFooter, restablecerFooter } from "@/lib/home-acciones";
 /**
  * Editor del footer global (fila `footer` de home_content): descripción,
  * columna "Contacto" (WhatsApp, locales y enlaces extra), cuentas de Instagram
- * (franja arriba del footer) y textos de la barra inferior. Se abre desde la barra de edición de la home y desde el botón
+ * (íconos en la barra superior y en el footer) y textos de la barra inferior. Se abre desde la barra de edición de la home y desde el botón
  * "Editar footer" que ven los admins arriba del footer. "Mi cuenta" y
  * "Legales" no se editan. El refresco lo hace `updateTag(TAG_HOME)` en la acción.
  *
@@ -249,14 +249,14 @@ export function DialogoFooter({
         <div className="flex flex-col gap-3">
           <span className="text-sm font-medium text-text">Cuentas de Instagram</span>
           <span className="text-xs text-muted">
-            Se muestran en la franja «Síganos en Instagram», arriba del footer. Sin cuentas, la franja no aparece.
+            Se muestran con el ícono de Instagram en la barra superior de la tienda y en el pie de página.
           </span>
           {borrador.redes.map((red, i) => (
             <div key={i} className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-end">
               <div className="sm:flex-[2]">
-                <Field label="Nombre" hint="Por ejemplo, el nombre del local.">
+                <Field label="Nombre" hint="Corto, va al lado del ícono. Por ejemplo, la ciudad del local.">
                   <Input
-                    maxLength={MAX_FOOTER.nombre}
+                    maxLength={MAX_FOOTER.nombreRed}
                     value={red.nombre}
                     onChange={(e) => setRed(i, { nombre: e.target.value })}
                   />

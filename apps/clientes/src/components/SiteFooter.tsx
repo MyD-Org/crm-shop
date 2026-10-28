@@ -3,7 +3,7 @@ import { cacheLife } from "next/cache";
 import { SiteFooter as SiteFooterDS } from "@myd-org/ui";
 import { linkFooter } from "@/components/footer/link-footer";
 import { BotonEditarFooterSiAdmin } from "@/components/footer/BotonEditarFooterSiAdmin";
-import { FranjaRedes } from "@/components/footer/FranjaRedes";
+import { RedesSociales } from "@/components/footer/RedesSociales";
 import { textoBarra } from "@/data/footer";
 import { getDatosFooter, getDatosLegales } from "@/lib/home-datos";
 import { getPaginasPublicadas } from "@/lib/institucional/datos";
@@ -33,10 +33,12 @@ import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
  * "Medios de pago": logos de las tarjetas que acepta Mercado Pago en la cuenta (`getTarjetasMercadoPago`,
  * cacheado por días). Si Mercado Pago no responde, la fila no se muestra.
  *
- * Arriba del footer, la franja de Instagram (`FranjaRedes`, cuentas de la
- * misma fila `footer`; sin cuentas no se pinta).
+ * Cuentas de Instagram (`redes` de la misma fila) en la barra inferior, junto
+ * al QR de Data Fiscal (el DS no tiene lugar para íconos bajo la marca). En
+ * mobile no: la barra es angosta y el copyright se partía en tres líneas; ahí
+ * las cuentas ya están siempre en la barra superior (layout).
  *
- * Admin: botón "Editar footer" arriba de todo, en un hueco aparte
+ * Admin: botón "Editar footer" arriba del footer, en un hueco aparte
  * (`BotonEditarFooterSiAdmin` dentro de `<Suspense fallback={null}>`).
  */
 export async function SiteFooter() {
@@ -55,7 +57,6 @@ export async function SiteFooter() {
       <Suspense fallback={null}>
         <BotonEditarFooterSiAdmin inicial={footer} />
       </Suspense>
-      <FranjaRedes redes={footer.redes} />
       <SiteFooterDS
         className="site-footer"
         renderLink={linkFooter}
@@ -67,12 +68,17 @@ export async function SiteFooter() {
         barRight={textoBarra(footer.barraDerecha, anio)}
         payments={{ title: "Medios de pago", logos }}
         barExtra={
-          legal.dataFiscalUrl ? (
-            <a href={legal.dataFiscalUrl} target="_blank" rel="noopener noreferrer">
-              {/* Imagen genérica de ARCA, local (public/images). */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/data-fiscal.jpg" alt="Data Fiscal" width={40} height={54} />
-            </a>
+          footer.redes.length > 0 || legal.dataFiscalUrl ? (
+            <div className="flex items-center gap-5">
+              <RedesSociales redes={footer.redes} className="justify-end max-md:hidden" />
+              {legal.dataFiscalUrl ? (
+                <a href={legal.dataFiscalUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                  {/* Imagen genérica de ARCA, local (public/images). */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/images/data-fiscal.jpg" alt="Data Fiscal" width={40} height={54} />
+                </a>
+              ) : null}
+            </div>
           ) : undefined
         }
       />

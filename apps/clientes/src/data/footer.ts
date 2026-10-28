@@ -4,8 +4,9 @@
  * igual que los datos legales: NO es una sección de la home (no está en
  * `SECCIONES_HOME` ni en la visibilidad, y `combinarContenidoHome` la ignora).
  *
- * Las cuentas de Instagram (`redes`) no van en la columna: se muestran en una
- * franja propia arriba del footer, en todas las páginas (`FranjaRedes`).
+ * Las cuentas de Instagram (`redes`) no van en la columna: se muestran como
+ * íconos en la barra superior y en la barra inferior del footer
+ * (`RedesSociales`).
  *
  * Fuera de alcance a propósito: "Mi cuenta" y "Legales" (Legales tiene que
  * estar siempre), la marca y el QR de Data Fiscal.
@@ -35,9 +36,9 @@ export type LocalFooter = {
   horario: string;
 };
 
-/** Una cuenta de Instagram ("Central Led Mar del Plata" → `usuario`). */
+/** Una cuenta de Instagram ("Mar del Plata" → `usuario`). */
 export type RedFooter = {
-  /** Texto visible arriba del usuario. */
+  /** Nombre corto que va al lado del ícono (una ciudad, un local). */
   nombre: string;
   /** Usuario sin `@`. El link se arma con `hrefInstagram`. */
   usuario: string;
@@ -51,7 +52,7 @@ export type DatosFooter = {
   locales: LocalFooter[];
   /** Enlaces extra de la columna "Contacto", después de WhatsApp y los locales. */
   enlaces: EnlaceFooter[];
-  /** 0..N cuentas de Instagram de la franja de redes. Vacío = sin franja. */
+  /** 0..N cuentas de Instagram (barra superior y footer). Vacío = no se muestran. */
   redes: RedFooter[];
   /** Admite `{anio}`. Vacío = sin texto. */
   barraIzquierda: string;
@@ -78,7 +79,7 @@ export const DEFAULTS_FOOTER: DatosFooter = {
     },
   ],
   enlaces: [],
-  // Vacío = sin franja. Las cuentas reales se cargan en el editor del footer.
+  // Vacío = sin íconos. Las cuentas reales se cargan en el editor del footer.
   redes: [],
   barraIzquierda: `© ${MARCADOR_ANIO} Central Led — Puerto Iguazú, Misiones`,
   barraDerecha: "Av. República Argentina · Lun a Sáb",
@@ -113,6 +114,8 @@ export const MAX_FOOTER = {
   enlaces: 4,
   etiqueta: 40,
   redes: 4,
+  /** Nombre de una cuenta: va en una barra angosta, al lado del ícono. */
+  nombreRed: 24,
 } as const;
 
 export function nuevoLocal(): LocalFooter {
@@ -296,8 +299,8 @@ function validarRedes(crudo: unknown, errores: string[]): RedFooter[] {
     const n = i + 1;
     const antes = errores.length;
     if (!nombre) errores.push(`Indique el nombre de la cuenta de Instagram ${n}.`);
-    else if (nombre.length > MAX_FOOTER.nombre) {
-      errores.push(`El nombre de la cuenta de Instagram ${n} supera los ${MAX_FOOTER.nombre} caracteres.`);
+    else if (nombre.length > MAX_FOOTER.nombreRed) {
+      errores.push(`El nombre de la cuenta de Instagram ${n} supera los ${MAX_FOOTER.nombreRed} caracteres.`);
     }
     const usuario = normalizarUsuarioInstagram(usuarioCrudo);
     if (!usuario) errores.push(`Indique un usuario de Instagram válido para la cuenta ${n} (por ejemplo, @comercio).`);

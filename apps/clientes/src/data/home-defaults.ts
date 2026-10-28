@@ -220,7 +220,7 @@ export const DEFAULTS_HOME: HomeContent = {
     imagen: "/images/hero-neutral.webp",
     imagenAlt: "Living con lámparas de pie y de mesa",
     ctas: [
-      { label: "Ver catálogo →", href: "/catalogo" },
+      { label: "Comprar ahora →", href: "/catalogo" },
       { label: "Línea decorativa", href: CATALOGO_ILUMINACION },
     ],
     usps: [
@@ -343,7 +343,7 @@ export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent 
       titulo: `Bienvenido a ${marca.nombre}`,
       imagen: "/images/hero-neutral.webp",
       imagenAlt: "Imagen principal de la tienda",
-      ctas: [{ label: "Ver catálogo →", href: "/catalogo" }],
+      ctas: [{ label: "Comprar ahora →", href: "/catalogo" }],
       usps: [],
     },
     marquee: { items: [] },

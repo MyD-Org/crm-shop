@@ -34,6 +34,11 @@ export const TEXTOS_SIN_RESULTADOS = {
       ? "Hay 1 producto sin stock que coincide con su búsqueda."
       : `Hay ${n} productos sin stock que coinciden con su búsqueda.`,
   verSinStock: "Ver también los productos sin stock",
+  /** Búsqueda + categoría tildada que da 0: el 0 viene de combinarlas, no de la búsqueda sola. */
+  tituloCategoria: (consulta: string, categorias: string) => `No hay «${consulta}» en ${categorias}`,
+  descripcionCategoria: "Puede quitar la categoría para volver a la búsqueda, o ver todo lo que hay en ella.",
+  quitarCategoria: (categorias: string) => `Quitar ${categorias}`,
+  verCategoriaSinBusqueda: (categorias: string) => `Ver todo en ${categorias}`,
 } as const;
 
 /**

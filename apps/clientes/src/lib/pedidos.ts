@@ -443,6 +443,10 @@ export async function crearPedido(
         total: String(l.total),
         // Línea "a traer": el origen no es la sucursal que despacha el pedido.
         aTraerDe: aTraerDe(asignacion, l.id),
+        // Campaña de precios con la que se cotizó (trazabilidad y conteo de unidades).
+        ...(l.campaniaId
+          ? { campaniaId: l.campaniaId, campaniaReglaId: l.campaniaReglaId ?? null, precioNormal: l.precioNormal != null ? String(l.precioNormal) : null }
+          : {}),
       })),
     );
 
@@ -2014,10 +2018,13 @@ export async function pedidoParaCambiarMedio(
   /** Lo que el checkout precarga al volver al paso Pago con un pedido retomado. */
   entrega: { local: string | null; ciudad: string | null; direccion: string | null };
   contacto: { nombre: string; telefono: string };
+  /** Cuándo se creó: al recotizar rigen las campañas de precios activas ese día (decisión C). */
+  creadoEn: Date;
 } | null> {
   const db = getDb();
   const [p] = await db
     .select({
+      createdAt: orders.createdAt,
       entregaTipo: orders.entregaTipo,
       pagoMetodo: orders.pagoMetodo,
       cuotas: orders.cuotas,
@@ -2059,6 +2066,7 @@ export async function pedidoParaCambiarMedio(
       direccion: p.entregaDireccion ?? null,
     },
     contacto: { nombre: p.contactoNombre, telefono: p.contactoTelefono },
+    creadoEn: p.createdAt,
   };
 }
 
@@ -2184,6 +2192,10 @@ export async function cambiarMedioPedido(
           subtotal: String(l.subtotal),
           iva: String(l.iva),
           total: String(l.total),
+          // La campaña de la recotización (con las activas a la fecha de creación del pedido).
+          campaniaId: l.campaniaId ?? null,
+          campaniaReglaId: l.campaniaReglaId ?? null,
+          precioNormal: l.precioNormal != null ? String(l.precioNormal) : null,
         })
         .where(and(eq(orderItems.orderId, id), eq(orderItems.alegraItemId, l.id)));
     }

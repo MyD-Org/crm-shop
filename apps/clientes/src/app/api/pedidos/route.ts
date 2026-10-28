@@ -1,3 +1,4 @@
+import { campaniasActivasEn } from "@/lib/campanias/vigentes";
 import { NextResponse, after } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
@@ -371,6 +372,8 @@ export async function POST(req: Request) {
     // Precio por medio de pago, cuotas y lista: una sola resolución para crear y para cambiar el medio
     // (`cotizarConMedio`). La lista sale del slug ya validado (medios releídos sin caché más arriba),
     // nunca del body.
+    // Campañas de precios activas AHORA, leídas sin caché (lo que cobra va siempre en vivo).
+    const campanias = await campaniasActivasEn(new Date());
     const resuelto = await cotizarConMedio({
       lineas,
       entregaTipo,
@@ -383,6 +386,7 @@ export async function POST(req: Request) {
       disp: dispCotizacion,
       soloVisibles,
       ...(agrupar ? { agrupar: true } : {}),
+      ...(campanias.length ? { campanias } : {}),
     });
     if (!resuelto.ok) {
       if (resuelto.motivo === "forma_no_disponible") {

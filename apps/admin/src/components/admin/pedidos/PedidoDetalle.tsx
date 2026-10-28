@@ -18,7 +18,7 @@ import { RemitoControl } from "./RemitoControl"
 import { VincularFacturaControl } from "./VincularFacturaControl"
 import { MotivosFrecuentes } from "./MotivosFrecuentes"
 import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
-import { avisoDevolucion, ofreceCancelar, opcionesOtroEstado, pasosPedido, siguientePaso, verboSiguientePaso } from "./logica"
+import { avisoDevolucion, ofreceCancelar, opcionesOtroEstado, pasosPedido, siguientePaso, textoCampaniaLinea, verboSiguientePaso } from "./logica"
 import {
   PAGO_REVISION_INFO,
   condicionIvaLabel,
@@ -241,7 +241,20 @@ export function PedidoDetalle({
       align: "right",
       hideBelow: "sm",
       className: "tabular-nums",
-      render: (i) => <span style={{ color: "var(--ink-soft)" }}>{fmtMoneda(i.precioUnitario)}</span>,
+      render: (i) => {
+        const campania = textoCampaniaLinea(i)
+        return (
+          <span style={{ color: "var(--ink-soft)" }}>
+            {campania && i.precioNormal && (
+              <span className="block text-xs line-through" style={{ color: "var(--ink-faint)" }}>
+                {fmtMoneda(i.precioNormal)}
+              </span>
+            )}
+            {fmtMoneda(i.precioUnitario)}
+            {campania && <span className="block text-xs" style={{ color: "var(--green)" }}>{campania}</span>}
+          </span>
+        )
+      },
     },
     {
       key: "iva",

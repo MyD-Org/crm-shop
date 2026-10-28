@@ -1,3 +1,4 @@
+import { campaniasActivasEn } from "@/lib/campanias/vigentes";
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
@@ -175,12 +176,15 @@ export async function POST(req: Request) {
     const soloVisibles = await catalogoSoloVisibles();
     // Flag `variantes-selector`: el overlay (visibilidad) es el del ancla del grupo. Apagado = como siempre.
     const agrupar = await variantesSelector();
+    // Campañas de precios activas AHORA, leídas sin caché (lo que cotiza va siempre en vivo).
+    const campanias = await campaniasActivasEn(new Date());
     const opcionesCotizar = {
       soloVisibles,
       ...(agrupar ? { agrupar: true } : {}),
       idListaPrivada,
       entregaTipo,
       disp: disp ? contextoUnion(disp) : undefined,
+      ...(campanias.length ? { campanias } : {}),
     };
     // Monto mínimo por cantidad de cuotas: la base es el total con impuestos a la lista del PAGO ÚNICO
     // del medio. Sólo se cotiza si hay algún mínimo cargado y se pidieron cuotas u opciones.

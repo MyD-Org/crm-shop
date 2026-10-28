@@ -88,3 +88,12 @@ describe("esPagoManual con medios configurables", () => {
     expect(esPagoManual({ pagoMetodo: "efectivo", pagoProveedor: "modo" })).toBe(false)
   })
 })
+
+describe("toPedidoDetalleDto: campaña de precios de la línea", () => {
+  it("con campaña trae el precio normal y el nombre; sin campaña, null", () => {
+    const [con] = toPedidoDetalleDto(pedido, [item({ precioNormal: "160.00", campaniaNombre: "Black Friday" })]).items
+    expect(con).toMatchObject({ precioNormal: 160, campaniaNombre: "Black Friday" })
+    const [sin] = toPedidoDetalleDto(pedido, [item()]).items
+    expect(sin).toMatchObject({ precioNormal: null, campaniaNombre: null })
+  })
+})

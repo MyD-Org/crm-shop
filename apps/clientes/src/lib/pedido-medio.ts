@@ -2,6 +2,7 @@
  * Medio de pago, cuotas y lista de precios de un pedido: UNA sola resolución para crear el pedido
  * (`POST /api/pedidos`) y para cambiarle el medio (`POST /api/pedidos/:id/medio`). Sólo servidor.
  */
+import type { CampaniaActiva } from "./campanias/vigentes";
 import { cotizar, ignorarProblemasDeStock, type Cotizacion, type LineaPedida } from "./cotizacion";
 import { cuotasElegidas } from "./cuotas-sin-interes";
 import { cuotasHabilitadas } from "./cuotas-flag";
@@ -52,6 +53,13 @@ export async function cotizarConMedio(a: {
   soloVisibles: boolean;
   /** Flag `variantes-selector`: se cotiza con el overlay del ancla del grupo. Ausente = apagado. */
   agrupar?: boolean;
+  /**
+   * Campañas de precios activas en el instante que rige: ahora para un pedido nuevo, la fecha de
+   * creación al recotizar uno ya creado (decisión C). Ausente o vacío = precio normal.
+   */
+  campanias?: readonly CampaniaActiva[];
+  /** Recotizar un pedido existente: sus propias unidades no cuentan contra el límite de una campaña. */
+  excluirPedidoId?: string;
   ignorarStock?: boolean;
   /** Para los logs. */
   origen?: string;
@@ -60,6 +68,11 @@ export async function cotizarConMedio(a: {
   const cotizarEstas = async (o: Parameters<typeof cotizar>[1]) => {
     const c = await cotizar(lineas, o);
     return a.ignorarStock ? ignorarProblemasDeStock(c) : c;
+  };
+  // Campañas de precios y pedido a excluir del conteo de unidades: viajan a cada cotización.
+  const conCampanias = {
+    ...(a.campanias?.length ? { campanias: a.campanias } : {}),
+    ...(a.excluirPedidoId ? { excluirPedidoId: a.excluirPedidoId } : {}),
   };
   // Con lista privada el precio ya no depende del medio: se ignora.
   const conMedio = !a.idListaPrivada;
@@ -90,6 +103,7 @@ export async function cotizarConMedio(a: {
         disp: a.disp,
         soloVisibles: a.soloVisibles,
         ...(a.agrupar ? { agrupar: true } : {}),
+        ...conCampanias,
       });
       totalBase = cotBase.hayProblemas ? 0 : cotBase.total;
       console.info(
@@ -109,6 +123,7 @@ export async function cotizarConMedio(a: {
     disp: a.disp,
     soloVisibles: a.soloVisibles,
     ...(a.agrupar ? { agrupar: true } : {}),
+    ...conCampanias,
   };
   const cotizacion = await cotizarEstas(opcionesCotizar);
   return { ok: true, cuotasPedido, idListaMedio, formaCobro, opcionesCotizar, cotizacion };

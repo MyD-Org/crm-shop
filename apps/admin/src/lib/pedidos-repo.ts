@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, getTableColumns, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
-import { alegraContacts, alegraCuentas, catalogProducts, mediosPagoShop, paymentReceipts, sucursales } from "@/db/schema"
+import { alegraContacts, alegraCuentas, campanias, catalogProducts, mediosPagoShop, paymentReceipts, sucursales } from "@/db/schema"
 import {
   shopOrderEventos,
   shopOrderPayments,
@@ -246,7 +246,12 @@ export async function listarPedidos(
  *  - `catalogoCosto`: el "costo unitario" cargado en Alegra (`raw->inventory->unitCost`); el
  *    espejo no lo tiene en columna propia, sale del ítem completo que guarda `raw`.
  */
-export type PedidoItemConCatalogo = PedidoItemRow & { catalogoStock: string | null; catalogoCosto: string | null }
+export type PedidoItemConCatalogo = PedidoItemRow & {
+  catalogoStock: string | null
+  catalogoCosto: string | null
+  /** Nombre de la campaña de precios con la que se vendió (null = sin campaña o borrada). */
+  campaniaNombre: string | null
+}
 
 async function itemsDe(tenantId: string, orderId: string): Promise<PedidoItemConCatalogo[]> {
   // Orden determinístico para que el detalle no "baile" entre cargas. `order_items` no tiene
@@ -257,12 +262,14 @@ async function itemsDe(tenantId: string, orderId: string): Promise<PedidoItemCon
       ...getTableColumns(shopOrderItems),
       catalogoStock: catalogProducts.stock,
       catalogoCosto: sql<string | null>`${catalogProducts.raw}->'inventory'->>'unitCost'`,
+      campaniaNombre: campanias.nombre,
     })
     .from(shopOrderItems)
     .leftJoin(
       catalogProducts,
       and(eq(catalogProducts.tenantId, tenantId), eq(catalogProducts.alegraId, shopOrderItems.alegraItemId)),
     )
+    .leftJoin(campanias, and(eq(campanias.tenantId, tenantId), eq(campanias.id, shopOrderItems.campaniaId)))
     .where(eq(shopOrderItems.orderId, orderId))
     .orderBy(asc(shopOrderItems.name), asc(shopOrderItems.id))
 }
@@ -1502,6 +1509,10 @@ export interface PedidoItemDto {
   /** Slug de la sucursal de la que se TRAE esta línea (no sale de la que despacha el pedido);
    *  null = sale de la sucursal del pedido. */
   aTraerDe: string | null
+  /** Campaña de precios con la que se vendió la línea: el unitario normal sin IVA que se tachó y el
+   *  nombre de la campaña. null = sin campaña. */
+  precioNormal: number | null
+  campaniaNombre: string | null
   /** Costo unitario cargado en Alegra (`inventory.unitCost`). SÓLO viaja para admin y
    *  superadmin (`incluirCosto` en `toPedidoDetalleDto`): para operator la clave no existe en
    *  la respuesta. `null` = sin costo cargado en Alegra, o producto fuera del espejo. */
@@ -1639,7 +1650,7 @@ export function toPedidoDto(row: PedidoRow): PedidoListaDto {
 }
 
 /** Ítem con o sin los datos del espejo: los tests y algún caller viejo arman filas peladas. */
-type ItemParaDto = PedidoItemRow & Partial<Pick<PedidoItemConCatalogo, "catalogoStock" | "catalogoCosto">>
+type ItemParaDto = PedidoItemRow & Partial<Pick<PedidoItemConCatalogo, "catalogoStock" | "catalogoCosto" | "campaniaNombre">>
 
 function toItemDto(item: ItemParaDto, incluirCosto: boolean): PedidoItemDto {
   const dto: PedidoItemDto = {
@@ -1656,6 +1667,8 @@ function toItemDto(item: ItemParaDto, incluirCosto: boolean): PedidoItemDto {
     total: num(item.total),
     stockActual: numONull(item.catalogoStock),
     aTraerDe: item.aTraerDe,
+    precioNormal: numONull(item.precioNormal),
+    campaniaNombre: item.campaniaNombre ?? null,
   }
   // La clave se AGREGA sólo con permiso (nunca `costoUnitario: undefined`): así ni siquiera el
   // nombre del campo aparece en la respuesta que ve un operador.

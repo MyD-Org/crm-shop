@@ -169,6 +169,11 @@ export const shopOrderItems = shop.table("order_items", {
   // Slug de la sucursal desde la que sale ESTA línea cuando es "a traer" de otra (0024 del Shop;
   // NULL = la del pedido). Lo escribe el Shop; el CRM solo lo lee.
   aTraerDe: text("a_traer_de"),
+  // Campaña de precios con la que se vendió la línea (0039 del Shop; ids de `public.campanias` /
+  // `campania_reglas`, sin FK) y el unitario normal sin IVA que se tachó. NULL = sin campaña.
+  campaniaId: uuid("campania_id"),
+  campaniaReglaId: uuid("campania_regla_id"),
+  precioNormal: numeric("precio_normal", { precision: 14, scale: 2 }),
 })
 
 export type ShopOrderRow = typeof shopOrders.$inferSelect

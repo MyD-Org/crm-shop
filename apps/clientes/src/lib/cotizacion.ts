@@ -17,6 +17,8 @@
  * SOLO servidor: usa la DB.
  */
 
+import { mapCampanias, resolverPrecioVigente, type ContextoCampania, type EntradaCampania } from "./campanias/precio";
+import type { CampaniaActiva } from "./campanias/vigentes";
 import { and, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { stockReservado } from "@/db/schema";
@@ -74,6 +76,15 @@ export interface LineaCotizada {
   problema?: ProblemaLinea;
   /** Texto listo para mostrar cuando hay `problema`. */
   detalle?: string;
+  /**
+   * Campaña de precios que rige la línea (spec 2026-10-28-campanias-precios-design.md): el unitario
+   * NORMAL sin IVA que se tacha, la campaña, su regla (para contar unidades) y su etiqueta. Ausentes =
+   * precio normal.
+   */
+  precioNormal?: number;
+  campaniaId?: string;
+  campaniaReglaId?: string;
+  campaniaEtiqueta?: string;
 }
 
 export interface Cotizacion {
@@ -141,9 +152,15 @@ function lineaRota(
   };
 }
 
+/** Ítem a cotizar: el de Alegra más las campañas materializadas por el CRM (`campanias_online`). */
+export type ItemCotizable = AlegraItem & { campanias?: EntradaCampania[] };
+
+/** Las campañas activas al cotizar, con su etiqueta (para la línea) y las unidades que quedan. */
+export type ContextoCotizacionCampania = ContextoCampania & { etiquetas?: ReadonlyMap<string, string> };
+
 export function cotizarItem(
   pedida: LineaPedida,
-  item: AlegraItem,
+  item: ItemCotizable,
   /**
    * Lista del medio de pago elegido (la resuelve el servidor desde el slug, ver `lista-medio.ts`).
    * Se ignora si el comprador tiene lista privada.
@@ -156,11 +173,23 @@ export function cotizarItem(
    * se cobra tal cual aunque sea mayor que el público.
    */
   precioPrivado?: number | null,
+  /**
+   * Campañas activas (la MISMA regla que la exhibición, `resolverPrecioVigente`). Ausente = precio
+   * normal. Con lista privada rige el menor entre su privado y el de campaña de la lista general.
+   */
+  campanias?: ContextoCotizacionCampania,
 ): LineaCotizada {
   const categoria = item.itemCategory as { name?: string } | undefined;
   const conListaPrivada = precioPrivado !== undefined;
+  const vigente =
+    campanias && Array.isArray(item.price)
+      ? resolverPrecioVigente(item.price, item.campanias, campanias, {
+          idListaMedio,
+          ...(conListaPrivada ? { precioPrivado } : {}),
+        })
+      : null;
   const precioUnitario = redondear(
-    conListaPrivada ? (precioPrivado ?? 0) : resolverPrecio(item, idListaMedio),
+    vigente ? vigente.precio : conListaPrivada ? (precioPrivado ?? 0) : resolverPrecio(item, idListaMedio),
   );
   const ivaPorcentaje = ivaDeItem(item);
   const disponible = item.inventory?.availableQuantity;
@@ -181,6 +210,14 @@ export function cotizarItem(
     iva,
     total: redondear(subtotal + iva),
     stockDisponible,
+    ...(vigente?.campania
+      ? {
+          precioNormal: redondear(vigente.normal),
+          campaniaId: vigente.campania.id,
+          campaniaReglaId: vigente.campania.reglaId,
+          ...(campanias?.etiquetas?.get(vigente.campania.id) ? { campaniaEtiqueta: campanias.etiquetas.get(vigente.campania.id) } : {}),
+        }
+      : {}),
   };
 
   if (item.status === "inactive") {
@@ -224,6 +261,8 @@ export interface FilaEspejo {
    */
   etiqueta?: string | null;
   grupoId?: string | null;
+  /** Campañas de precios del CRM (0095), crudas: ver `mapCampanias`. Ausente = ninguna. */
+  campanias?: unknown;
 }
 
 /**
@@ -235,7 +274,7 @@ export interface FilaEspejo {
  * - Precios: pasan por `mapPrecios` porque vienen crudos del CRM (ids
  *   numéricos).
  */
-export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
+export function itemDesdeEspejo(fila: FilaEspejo): ItemCotizable {
   // Con la marca apagada tampoco va la categoría: `cotizarItem` la usa de fallback de la marca.
   const conMarca = fila.mostrarMarca !== false;
   return {
@@ -252,6 +291,7 @@ export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
       fila.stock != null ? { availableQuantity: Number(fila.stock) } : undefined,
     customFields: conMarca && fila.brand ? [{ name: "Marca", value: fila.brand }] : undefined,
     itemCategory: conMarca && fila.categoryName ? { name: fila.categoryName } : undefined,
+    ...(fila.campanias != null ? { campanias: mapCampanias(fila.campanias) } : {}),
   };
 }
 
@@ -273,7 +313,7 @@ async function leerEspejo(
    * filtra por representante: la variante que está en el carrito se cotiza siempre.
    */
   agrupar = false,
-): Promise<Map<string, AlegraItem>> {
+): Promise<Map<string, ItemCotizable>> {
   if (ids.length === 0) return new Map();
   const filas: FilaEspejo[] = await getDb()
     .select({
@@ -301,6 +341,8 @@ async function leerEspejo(
       mostrarMarca: crmOverlay.mostrarMarca,
       // Con el flag: la opción de la variante, para nombrar la línea "Modelo / Opción".
       ...(agrupar ? { etiqueta: crmCatalogo.etiqueta, grupoId: crmCatalogo.grupoId } : {}),
+      // Campañas de precios (0095): al final, como en el catálogo.
+      campanias: crmCatalogo.campaniasOnline,
     })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
@@ -338,6 +380,14 @@ export async function cotizar(
     soloVisibles?: boolean;
     /** Flag `variantes-selector`: overlay del ancla del grupo (ver `leerEspejo`). Ausente = apagado. */
     agrupar?: boolean;
+    /**
+     * Campañas de precios activas en el instante que se cotiza: `campaniasActivasEn(new Date())` para
+     * el carrito y el pedido nuevo, o con la fecha de creación al recotizar un pedido ya creado
+     * (decisión C). Ausente o vacío = precio normal.
+     */
+    campanias?: readonly CampaniaActiva[];
+    /** Recotizar un pedido existente: sus propias unidades no cuentan contra el límite de una campaña. */
+    excluirPedidoId?: string;
   } = {},
 ): Promise<Cotizacion> {
   const items = await leerEspejo(
@@ -350,6 +400,12 @@ export async function cotizar(
   const privados = opts.idListaPrivada
     ? await preciosPrivados(opts.idListaPrivada, pedidas.map((p) => p.id))
     : undefined;
+  const campanias: ContextoCotizacionCampania | undefined = opts.campanias?.length
+    ? {
+        activas: new Set(opts.campanias.map((c) => c.id)),
+        etiquetas: new Map(opts.campanias.map((c) => [c.id, c.etiqueta])),
+      }
+    : undefined;
   const lineas = pedidas.map((pedida) => {
     const item = items.get(pedida.id);
     return item
@@ -358,6 +414,7 @@ export async function cotizar(
           item,
           opts.idListaMedio,
           privados ? (privados.get(pedida.id) ?? null) : undefined,
+          campanias,
         )
       : lineaRota(pedida, "no_encontrado", "Este producto ya no existe.");
   });

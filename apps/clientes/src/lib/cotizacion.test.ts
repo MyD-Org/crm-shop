@@ -310,3 +310,68 @@ describe("itemDesdeEspejo: variantes (flag variantes-selector)", () => {
     expect(itemDesdeEspejo(fila).name).toBe("Panel 18W");
   });
 });
+
+describe("cotizarItem: venta sin stock por modalidad", () => {
+  const M = { id: "m-1", texto: "A pedido", plazoDias: 5, flujo: "a_confirmar" as const };
+  const item = (o: { stock: number | null; status?: string; precio?: number }) =>
+    ({
+      id: "1",
+      name: "Panel LED",
+      status: o.status ?? "active",
+      price: [{ idPriceList: "1", price: o.precio ?? 100, main: true }],
+      inventory: o.stock === null ? undefined : { availableQuantity: o.stock },
+    }) as unknown as AlegraItem;
+
+  it("sin stock con modalidad: a pedido, sin problema", () => {
+    const l = cotizarItem({ id: "1", qty: 2 }, item({ stock: 0 }), undefined, undefined, { modalidad: M });
+    expect(l).toMatchObject({ ventaSinStock: M, aceptaSinStock: true, subtotal: 200 });
+    expect(l.problema).toBeUndefined();
+    expect(l.detalle).toBeUndefined();
+  });
+
+  it("cantidad > stock con modalidad: la línea entera a pedido", () =>
+    expect(cotizarItem({ id: "1", qty: 5 }, item({ stock: 3 }), undefined, undefined, { modalidad: M })).toMatchObject({
+      qty: 5,
+      subtotal: 500,
+      ventaSinStock: M,
+    }));
+
+  it("con stock suficiente y modalidad: normal pero acepta sin stock", () => {
+    const l = cotizarItem({ id: "1", qty: 1 }, item({ stock: 3 }), undefined, undefined, { modalidad: M });
+    expect(l.ventaSinStock).toBeUndefined();
+    expect(l.aceptaSinStock).toBe(true);
+    expect(l.problema).toBeUndefined();
+  });
+
+  it("sin modalidad: sin_stock y stock_insuficiente como hoy", () => {
+    const sin = cotizarItem({ id: "1", qty: 1 }, item({ stock: 0 }), undefined, undefined, undefined);
+    expect(sin).toMatchObject({ problema: "sin_stock", detalle: "Sin stock por el momento." });
+    expect(sin.aceptaSinStock).toBeUndefined();
+    expect(sin.ventaSinStock).toBeUndefined();
+    expect(cotizarItem({ id: "1", qty: 5 }, item({ stock: 3 })).problema).toBe("stock_insuficiente");
+  });
+
+  it("aPedido del motor manda aunque la unión tenga stock (traslado apagado)", () =>
+    expect(
+      cotizarItem({ id: "1", qty: 1 }, item({ stock: 5 }), undefined, undefined, { modalidad: M, aPedido: true }).ventaSinStock,
+    ).toEqual(M));
+
+  it("aPedido false del motor: el stock de la línea vuelve a bloquear como hoy", () => {
+    const l = cotizarItem({ id: "1", qty: 1 }, item({ stock: 0 }), undefined, undefined, { modalidad: M, aPedido: false });
+    expect(l.problema).toBe("sin_stock");
+    expect(l.ventaSinStock).toBeUndefined();
+    expect(l.aceptaSinStock).toBe(true);
+  });
+
+  it("inactivo y sin precio siguen bloqueando con modalidad", () => {
+    const inactivo = cotizarItem({ id: "1", qty: 1 }, item({ stock: 0, status: "inactive" }), undefined, undefined, { modalidad: M });
+    expect(inactivo.problema).toBe("inactivo");
+    expect(inactivo.ventaSinStock).toBeUndefined();
+    const sinPrecio = cotizarItem({ id: "1", qty: 1 }, item({ stock: 0, precio: 0 }), undefined, undefined, { modalidad: M });
+    expect(sinPrecio.problema).toBe("sin_precio");
+    expect(sinPrecio.ventaSinStock).toBeUndefined();
+    const privadoSinPrecio = cotizarItem({ id: "1", qty: 1 }, item({ stock: 0 }), undefined, null, { modalidad: M });
+    expect(privadoSinPrecio.problema).toBe("sin_precio");
+    expect(privadoSinPrecio.ventaSinStock).toBeUndefined();
+  });
+});

@@ -11,6 +11,7 @@ import {
   smallint,
   index,
   uniqueIndex,
+  unique,
   primaryKey,
   foreignKey,
   customType,
@@ -727,6 +728,28 @@ export interface FichaTecnicaOverlay {
   origen?: { key: string; bytes: number }
 }
 
+// Modalidades de venta sin stock por tenant (feature "venta sin stock por modalidad"; migración 0094).
+// `nombre` es interno (único por tenant, no viaja al comprador); `texto` lo ve el comprador. El Shop la
+// lee con GRANT SELECT a `shop_app`. Drift que vive SOLO en SQL: los CHECK (`plazo_dias` NULL o 1..60,
+// `flujo` en en_linea/a_confirmar, `texto` de 1 a 40 caracteres) y el GRANT.
+export const modalidadesSinStock = pgTable(
+  "modalidades_sin_stock",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    nombre: text("nombre").notNull(),
+    texto: text("texto").notNull(),
+    // NULL = sin plazo.
+    plazoDias: integer("plazo_dias"),
+    // 'en_linea' | 'a_confirmar'
+    flujo: text("flujo").notNull(),
+    activa: boolean("activa").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("modalidades_sin_stock_tenant_nombre_uniq").on(t.tenantId, t.nombre)],
+)
+
 // Overlay comercial, ESPARSO: sólo hay fila para los productos que alguien tocó. La ausencia
 // de fila equivale a todos los defaults (visible=false, sin nombre, sin categoría, sin fotos).
 export const catalogOverlay = pgTable(
@@ -755,6 +778,9 @@ export const catalogOverlay = pgTable(
     // true = esta variante no se muestra en la tienda aunque su modelo sí (overlay PROPIO de la variante;
     // default false = se muestra). Migración 0087; el Shop la lee directo del overlay (GRANT por columna).
     ocultaEnTienda: boolean("oculta_en_tienda").notNull().default(false),
+    // Modalidad de venta sin stock asignada al producto (NULL = sin modalidad). Migración 0094; el Shop la
+    // lee directo del overlay (GRANT por columna).
+    modalidadSinStockId: uuid("modalidad_sin_stock_id").references(() => modalidadesSinStock.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // Insumo del delta hacia el Shop: lo setea el repo con now() de Postgres en CADA escritura.
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

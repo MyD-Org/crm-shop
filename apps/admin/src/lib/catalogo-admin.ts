@@ -159,6 +159,12 @@ export function parsearQueryListado(url: URL): QueryListado | Response {
     filtros.stockEn = stockEn
   }
 
+  const marca = p.get("marca")
+  if (marca !== null) {
+    if (marca.trim() === "" || marca.length > 100) return invalidResponse("El filtro de marca es inválido", "marca")
+    filtros.marca = marca
+  }
+
   const startParam = p.get("start")
   const start = startParam === null ? 0 : Number(startParam)
   if (!Number.isInteger(start) || start < 0) return invalidResponse("La paginación es inválida", "start")
@@ -204,7 +210,7 @@ export function parsearSeleccion(body: unknown): Seleccion | Response {
     // masiva "sobre todo lo que coincide" tiene que resolver exactamente el mismo conjunto.
     const params = new URLSearchParams()
     if (esObjeto(s.filtros)) {
-      for (const clave of ["q", "categoria", "estado", "foto", "nombre", "alegra", "precio", "stock", "destacado", "tag", "cuenta", "sucursal", "stockEn"]) {
+      for (const clave of ["q", "categoria", "estado", "foto", "nombre", "alegra", "precio", "stock", "destacado", "tag", "cuenta", "sucursal", "stockEn", "marca"]) {
         const valor = s.filtros[clave]
         if (typeof valor === "string" && valor !== "") params.set(clave, valor)
       }

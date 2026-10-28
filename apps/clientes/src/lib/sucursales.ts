@@ -158,6 +158,11 @@ export interface LineaEntrada {
   id: string;
   qty: number;
   ocultoEn: string[];
+  /**
+   * El producto tiene una modalidad de venta sin stock activa: si NINGUNA sucursal puede cubrir la
+   * línea con las reglas de respaldo, sale "por pedido" de la preferida en vez de `sin_stock`.
+   */
+  porPedido?: boolean;
 }
 
 /**
@@ -226,8 +231,13 @@ export interface ErrorLineas {
   ids: string[];
 }
 
-/** Resultado de resolver el origen de UNA línea. */
-export type OrigenLinea = { origen: string; aTraer: boolean } | { error: "sin_stock" | "no_servible" };
+/**
+ * Resultado de resolver el origen de UNA línea. `porPedido`: nadie la cubre y tiene modalidad de
+ * venta sin stock; sale de la preferida (nunca es "a traer").
+ */
+export type OrigenLinea =
+  | { origen: string; aTraer: boolean; porPedido?: true }
+  | { error: "sin_stock" | "no_servible" };
 
 /**
  * Origen de una línea. `preferida` es la sucursal que debería despachar (la de la zona o el local de
@@ -235,7 +245,9 @@ export type OrigenLinea = { origen: string; aTraer: boolean } | { error: "sin_st
  * sirve la línea (stock suficiente o no inventariable), sale de ahí; si no, el respaldo es la
  * primera otra sucursal activa, por `orden`, que la cubra entera (una línea sale de UNA sola
  * sucursal). `aTraer` = el origen no es la preferida. Sin candidatas = `no_servible`; con
- * candidatas pero ninguna con stock = `sin_stock`.
+ * candidatas pero ninguna con stock = `sin_stock`, salvo que la línea sea `porPedido` y la preferida
+ * sea candidata: entonces sale de la preferida, por pedido. Con cobertura (propia o por respaldo)
+ * la modalidad no cambia nada.
  */
 export function origenDeLinea(
   linea: LineaEntrada,
@@ -255,7 +267,11 @@ export function origenDeLinea(
     return { origen: preferida, aTraer: false };
   }
   const otra = respaldo ? candidatas.find((s) => s.slug !== preferida && cubre(s.slug)) : undefined;
-  return otra ? { origen: otra.slug, aTraer: true } : { error: "sin_stock" };
+  if (otra) return { origen: otra.slug, aTraer: true };
+  if (linea.porPedido && candidatas.some((s) => s.slug === preferida)) {
+    return { origen: preferida, aTraer: false, porPedido: true };
+  }
+  return { error: "sin_stock" };
 }
 
 /** Junta el origen de cada línea en una asignación, o el error de las que no se pueden servir. */
@@ -273,7 +289,8 @@ function resolverLineas(
   if (noServibles.length > 0) return { error: "no_servible", ids: noServibles };
   const sinStock = resueltas.filter((x) => "error" in x.r).map((x) => x.l.id);
   if (sinStock.length > 0) return { error: "sin_stock", ids: sinStock };
-  const ok = resueltas.map((x) => ({ id: x.l.id, ...(x.r as { origen: string; aTraer: boolean }) }));
+  // Una línea por pedido sale de la preferida (`aTraer` falso): no es `sin_stock` ni "a traer".
+  const ok = resueltas.map((x) => ({ id: x.l.id, ...(x.r as Exclude<OrigenLinea, { error: string }>) }));
   const aTraer = ok.filter((x) => x.aTraer).map((x) => x.id);
   return {
     lineas: ok.map(({ id, origen }) => ({ id, origen })),

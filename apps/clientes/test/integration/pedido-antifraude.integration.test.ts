@@ -36,7 +36,7 @@ const linea: LineaCotizada = {
   total: 1210,
   stockDisponible: null,
 };
-const cotizacion: Cotizacion = { lineas: [linea], subtotal: 1000, iva: 210, costoEnvio: 0, total: 1210, hayProblemas: false, listaPrivada: false };
+const cotizacion: Cotizacion = { lineas: [linea], subtotal: 1000, iva: 210, costoEnvio: 0, total: 1210, hayProblemas: false, listaPrivada: false, flujo: "normal" };
 
 async function limpiar() {
   assertLocalTestDb(process.env.DATABASE_URL || "");

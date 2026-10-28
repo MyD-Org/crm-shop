@@ -7,6 +7,8 @@ import { pagoEstadoVista, puedeReintentarPago } from "@/lib/pago-estado-visible"
 import { seguimientoPedido } from "@/lib/pedido-seguimiento";
 import { puedeCancelarPedido } from "@/lib/pedido-cancelable";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
+import { PedidoContacto } from "@/components/PedidoContacto";
+import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import { cuentaDelPedido } from "@/lib/pedido-cuenta-vista";
 import { TEXTO_PLAZO_COMPROBANTE, puedeSubirComprobante } from "@/lib/comprobantes/pedido";
 import { ActualizarPagoPedido } from "./ActualizarPagoPedido";
@@ -34,10 +36,13 @@ function Fila({ label, valor, fuerte = false }: { label: string; valor: string; 
 export function PedidoDetalle({
   pedido,
   medioPago,
+  contacto,
 }: {
   pedido: Order;
   /** Medio del CRM que eligió el comprador (nombre e instrucciones). */
   medioPago?: { nombre: string; instrucciones: string | null };
+  /** Pedido a confirmar por modalidad: plazo de contacto y WhatsApp de la sucursal. */
+  contacto?: ContactoPedidoVista | null;
 }) {
   const pill = estadoPedidoPill(pedido);
   const pasos = seguimientoPedido(pedido);
@@ -77,6 +82,14 @@ export function PedidoDetalle({
               <p className="text-sm font-semibold text-text">{estadoPago.label}</p>
               {estadoPago.detalle && <p className="mt-1 text-sm text-muted">{estadoPago.detalle}</p>}
             </div>
+          )}
+          {pedido.aConfirmar && pedido.estado === "pendiente" && (
+            <p className="mt-1 text-sm text-text">
+              A confirmar: no se realizó ningún cobro. Nos comunicaremos con usted para confirmar el pedido.
+            </p>
+          )}
+          {pedido.aConfirmar && contacto && (
+            <PedidoContacto contacto={contacto} mostrarPlazo={pedido.estado === "pendiente"} className="mt-3" />
           )}
           {consultarPago && <ActualizarPagoPedido pedidoId={pedido.id} />}
           {puedeReintentar && (

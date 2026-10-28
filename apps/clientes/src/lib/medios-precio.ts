@@ -222,3 +222,14 @@ export function armarPreciosMedios(
     ...(cuotasMedios.length > 0 ? { cuotasSinInteres: { medios: cuotasMedios } } : {}),
   };
 }
+
+/**
+ * Lista con la que se cotiza un pedido A CONFIRMAR por modalidad (no se cobra en línea): la que
+ * muestran las cards, la del medio destacado. Sin destacado, o con uno que sólo tiene listas por
+ * forma (sin lista propia), `undefined` = la general: una lista por pedido no puede seguir el "más
+ * barato por producto" de la card. `medios` = los ofrecibles (`sinProcesadoresNoConfigurados`),
+ * el mismo filtro que usan las cards.
+ */
+export function listaAConfirmar(medios: readonly MedioPago[]): string | undefined {
+  return seleccionarMediosPrecio(medios, false).destacado?.idListaPrecios || undefined;
+}

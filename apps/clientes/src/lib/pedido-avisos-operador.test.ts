@@ -163,3 +163,39 @@ describe("aviso al local con pago en línea", () => {
     expect(enviarEmail.mock.calls[0][0].idempotencyKey).toBe("pedido/p1/recibido");
   });
 });
+
+describe("venta sin stock en los avisos", () => {
+  const SNAPSHOT = { modalidadId: "m1", nombre: "Modalidad 48 h", texto: "A pedido", plazoDias: 2, flujo: "a_confirmar" };
+
+  it("recibido a confirmar: bajada sin cobro y el texto de la línea (del snapshot)", async () => {
+    colas.length = 0;
+    colas.push(
+      [{ ...PEDIDO, pagoMetodo: "a_coordinar" }],
+      [
+        { nombre: "Panel", cantidad: "2", ventaSinStock: SNAPSHOT },
+        { nombre: "Lámpara", cantidad: "1", ventaSinStock: null },
+      ],
+    );
+    await avisarPedidoRecibido("p1");
+    const { text } = enviarEmail.mock.calls[0][0];
+    expect(text).toContain("no se realizó ningún cobro");
+    expect(text).toContain("- Panel × 2 (A pedido)");
+    expect(text).toContain("- Lámpara × 1\n");
+  });
+
+  it("un jsonb roto no rompe el mail: la línea sale sin texto y el pedido no queda a confirmar", async () => {
+    colas.length = 0;
+    colas.push([{ ...PEDIDO, pagoMetodo: "a_coordinar" }], [{ nombre: "Panel", cantidad: "2", ventaSinStock: { roto: true } }]);
+    await avisarPedidoRecibido("p1");
+    const { text } = enviarEmail.mock.calls[0][0];
+    expect(text).toContain("- Panel × 2\n");
+    expect(text).not.toContain("ningún cobro");
+  });
+
+  it("al local: la línea a pedido lleva su texto", async () => {
+    cargar({ sucursalEmail: "centro@tienda.cliente.example", receipts: "" });
+    colas[3] = [{ nombre: "Panel", cantidad: "2", ventaSinStock: SNAPSHOT }];
+    await avisarOperadorPedidoNuevo("p1");
+    expect(enviarEmail.mock.calls[0][0].text).toContain("- Panel × 2 (A pedido)");
+  });
+});

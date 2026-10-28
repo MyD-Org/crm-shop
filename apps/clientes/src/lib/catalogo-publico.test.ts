@@ -11,6 +11,7 @@ import type { Product } from "@/data/products";
 const { cat, cacheTagMock, cacheLifeMock } = vi.hoisted(() => ({
   cat: {
     getCatalogo: vi.fn(),
+    getCategoriaExacta: vi.fn(),
     getCategorias: vi.fn(),
     getFacetas: vi.fn(),
     getFacetaCategorias: vi.fn(),
@@ -35,6 +36,7 @@ import {
   paginaCatalogoPublica,
   productoPublico,
   productosPromo,
+  relacionadosProducto,
 } from "./catalogo-publico";
 
 const prod = (id: string, sku: string): Product =>
@@ -290,6 +292,31 @@ describe("categoriasTotalesPublicas (total fijo de cada categoría del panel)", 
     expect(cat.getFacetaCategorias).toHaveBeenCalledWith({ soloStock: true }, true);
     expect(cacheTagMock).toHaveBeenCalledWith("catalogo");
     expect(cacheLifeMock).toHaveBeenCalledWith("catalogo");
+  });
+});
+
+describe("relacionadosProducto: venta sin stock", () => {
+  const M = { id: "00000000-0000-4000-8000-000000000001", texto: "A pedido", plazoDias: null, flujo: "a_confirmar" as const };
+  const conStock = { ...prod("1", "S1"), stock: "in" } as Product;
+  const aPedido = { ...prod("2", "S2"), stock: "out", ventaSinStock: M } as Product;
+  const agotado = { ...prod("3", "S3"), stock: "out" } as Product;
+  const propio = { ...prod("9", "S9"), stock: "in" } as Product;
+
+  it("relacionados incluye a pedido y excluye agotados sin modalidad", async () => {
+    cat.getPaginaCatalogo.mockResolvedValue({ productos: [propio, conStock, aPedido, agotado] });
+    const r = await relacionadosProducto({ categoria: "Rubro", excluirId: "9", cantidad: 4, soloVisibles: false });
+    expect(r?.productos.map((p) => p.id)).toEqual(["1", "2"]);
+  });
+
+  it("por categoría exacta, el mismo criterio", async () => {
+    cat.getCategoriaExacta.mockResolvedValue({ nombre: "Rubro", productos: [aPedido, agotado, conStock] });
+    const r = await relacionadosProducto({
+      categoriaPropiaId: "00000000-0000-4000-8000-0000000000aa",
+      excluirId: "9",
+      cantidad: 4,
+      soloVisibles: false,
+    });
+    expect(r?.productos.map((p) => p.id)).toEqual(["2", "1"]);
   });
 });
 

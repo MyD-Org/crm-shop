@@ -28,6 +28,8 @@ export type AvisoPedidoShop = "recibido" | "pago_recibido" | "pago_rechazado";
 export interface LineaMail {
   nombre: string;
   cantidad: number;
+  /** Línea a pedido (venta sin stock): el texto de su modalidad, del snapshot del pedido. */
+  aPedido?: string;
 }
 
 export interface DatosMailPedido {
@@ -58,6 +60,8 @@ export interface DatosMailPedido {
   pagado?: { total: number; cuotas: number };
   /** Sólo "recibido": el pedido es de una cuenta corriente y `pago` es el nombre de su medio. */
   pagoCuentaCorriente?: boolean;
+  /** Sólo "recibido": pedido a confirmar por modalidad (venta sin stock): no se cobró nada. */
+  aConfirmar?: boolean;
   /**
    * "recibido" y "pago_recibido": plazo de contacto (mensaje ya resuelto).
    */
@@ -151,7 +155,9 @@ const COPY: Record<AvisoPedidoShop, { asunto: string; titulo: string; bajada: (d
     bajada: (d) =>
       d.pagoCuentaCorriente && d.pago
         ? `Registramos su pedido. ${textoPagaConMedio(d.pago)} Le avisaremos por este medio cada vez que avance.`
-        : "Registramos su pedido. Le avisaremos por este medio cada vez que avance.",
+        : d.aConfirmar
+          ? "Registramos su pedido. Quedó a confirmar y no se realizó ningún cobro: nos comunicaremos con usted para confirmarlo. Le avisaremos por este medio cada vez que avance."
+          : "Registramos su pedido. Le avisaremos por este medio cada vez que avance.",
   },
   pago_recibido: {
     asunto: "y pago recibidos",
@@ -180,16 +186,24 @@ function textoPago(d: { pago?: string; total?: number; pagado?: { total: number;
   }`;
 }
 
-function resumen(d: DatosMailPedido): string {
-  const filas = (d.lineas ?? [])
-    .map(
-      (l) => `
+/** Fila de una línea: el nombre y, si va a pedido, el texto de su modalidad en gris debajo. */
+function filaLineaHtml(l: LineaMail): string {
+  const aPedido = l.aPedido
+    ? `<br><span style="font-size:13px;color:#77808a">${e(l.aPedido)}</span>`
+    : "";
+  return `
           <tr>
-            <td style="padding:4px 0;font-size:14px;color:#1c2733">${e(l.nombre)}</td>
+            <td style="padding:4px 0;font-size:14px;color:#1c2733">${e(l.nombre)}${aPedido}</td>
             <td align="right" style="padding:4px 0 4px 12px;font-size:14px;color:#77808a;white-space:nowrap">× ${e(cantidad(l.cantidad))}</td>
-          </tr>`,
-    )
-    .join("");
+          </tr>`;
+}
+
+function lineaTexto(l: LineaMail): string {
+  return `- ${l.nombre} × ${cantidad(l.cantidad)}${l.aPedido ? ` (${l.aPedido})` : ""}`;
+}
+
+function resumen(d: DatosMailPedido): string {
+  const filas = (d.lineas ?? []).map(filaLineaHtml).join("");
   const datos: [string, string | undefined][] = [
     ["Total", d.total !== undefined ? moneda(d.total) : undefined],
     ["Entrega", d.entrega],
@@ -264,7 +278,7 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
   const lineasTexto = conResumen
     ? [
         "",
-        ...(d.lineas ?? []).map((l) => `- ${l.nombre} × ${cantidad(l.cantidad)}`),
+        ...(d.lineas ?? []).map(lineaTexto),
         ...(d.total !== undefined ? [`Total: ${moneda(d.total)}`] : []),
         ...(d.entrega ? [`Entrega: ${d.entrega}`] : []),
         ...(d.pago ? [`Pago: ${textoPago(d)}`] : []),
@@ -363,15 +377,7 @@ export function armarMailPedidoOperador(d: DatosMailPedidoOperador): MailPedido 
           </tr>`,
       )
       .join("");
-  const lineasHtml = d.lineas
-    .map(
-      (l) => `
-          <tr>
-            <td style="padding:4px 0;font-size:14px;color:#1c2733">${e(l.nombre)}</td>
-            <td align="right" style="padding:4px 0 4px 12px;font-size:14px;color:#77808a;white-space:nowrap">× ${e(cantidad(l.cantidad))}</td>
-          </tr>`,
-    )
-    .join("");
+  const lineasHtml = d.lineas.map(filaLineaHtml).join("");
   const tabla = (filas: string, extra = "") =>
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:${FUENTE_MAIL};${extra}">${filas}
         </table>`;
@@ -411,7 +417,7 @@ export function armarMailPedidoOperador(d: DatosMailPedidoOperador): MailPedido 
     `Pedido ${d.numero}`,
     ...comprador.filter((f) => f[1]).map(([k, v]) => `${k}: ${v}`),
     "",
-    ...d.lineas.map((l) => `- ${l.nombre} × ${cantidad(l.cantidad)}`),
+    ...d.lineas.map(lineaTexto),
     "",
     ...pedido.filter((f) => f[1]).map(([k, v]) => `${k}: ${v}`),
     ...(d.pedidoUrl ? ["", `Ver el pedido: ${d.pedidoUrl}`] : []),

@@ -82,17 +82,18 @@ export function decidirSucursalDePedido(
 }
 
 /**
- * Retiro sin local elegido (el checkout todavía no ofrece el selector): se usa la sucursal de la
- * zona del visitante si admite retiro; si no, la predeterminada; si tampoco, la primera activa que
- * admita retiro por `orden`. Un local elegido explícitamente NUNCA se reemplaza: si no admite
+ * Local de retiro de la entrada: el elegido, si lo hay. Sin local elegido (el checkout todavía no
+ * ofrece el selector): la sucursal de la zona del visitante si admite retiro; si no, la
+ * predeterminada; si tampoco, la primera activa que admita retiro por `orden`. null en el envío o
+ * si ningún local admite retiro. Un local elegido explícitamente NUNCA se reemplaza: si no admite
  * retiro, `asignarSucursal` lo rechaza.
  */
-function conLocalDeRetiro(
+export function localDeRetiro(
   entrada: EntradaAsignacion,
   datos: DatosSucursales,
-): EntradaAsignacion {
-  if (entrada.entregaTipo !== "retiro" || entrada.sucursalRetiro)
-    return entrada;
+): string | null {
+  if (entrada.entregaTipo !== "retiro") return null;
+  if (entrada.sucursalRetiro) return entrada.sucursalRetiro;
   const admiten = datos.sucursales
     .filter((s) => s.activa && s.aceptaRetiro)
     .sort((a, b) => a.orden - b.orden || a.slug.localeCompare(b.slug));
@@ -100,5 +101,16 @@ function conLocalDeRetiro(
   const deLaZona =
     "error" in zona ? undefined : admiten.find((s) => s.slug === zona.sucursal);
   const local = deLaZona ?? admiten.find((s) => s.predeterminada) ?? admiten[0];
-  return local ? { ...entrada, sucursalRetiro: local.slug } : entrada;
+  return local?.slug ?? null;
+}
+
+/** Completa `sucursalRetiro` con `localDeRetiro` cuando el retiro no trae local elegido. */
+function conLocalDeRetiro(
+  entrada: EntradaAsignacion,
+  datos: DatosSucursales,
+): EntradaAsignacion {
+  if (entrada.entregaTipo !== "retiro" || entrada.sucursalRetiro)
+    return entrada;
+  const local = localDeRetiro(entrada, datos);
+  return local ? { ...entrada, sucursalRetiro: local } : entrada;
 }

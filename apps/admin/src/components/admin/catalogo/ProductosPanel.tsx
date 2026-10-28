@@ -56,11 +56,14 @@ import {
   type Seleccion,
   type TagDto,
 } from "./tipos"
+import type { ModalidadSinStock } from "@/lib/modalidades-sin-stock-validacion"
+import { opcionesModalidad } from "../venta-sin-stock-ui"
 import { FILTROS_INICIALES, conInactivos, verInactivos } from "./inactivos"
 
 interface Props {
   categorias: CategoriaDto[]
   tags: TagDto[]
+  modalidades: ModalidadSinStock[]
   /** Cuentas de Alegra del tenant; con más de una aparece el filtro "Cuenta". */
   cuentas: CuentaOrigenDto[]
   /** Sucursales del tenant; con más de una aparecen el filtro "Visible en" y el badge "Oculto en …". */
@@ -76,6 +79,7 @@ const PAGINA = 50
 type Accion =
   | { tipo: "visible"; valor: boolean }
   | { tipo: "categoria"; categoriaId: string | null }
+  | { tipo: "modalidad"; modalidadId: string | null }
   | { tipo: "tag"; tagId: string; modo: "agregar" | "quitar" }
   | { tipo: "sucursal"; slug: string; visible: boolean }
   | { tipo: "destacado"; valor: boolean }
@@ -95,7 +99,7 @@ interface Pendiente {
 const TODOS = "todos"
 
 /** Filtros que no son la búsqueda: cuentan para "Limpiar filtros". */
-const CLAVES_FILTRO = ["categoria", "estado", "foto", "precio", "stock", "destacado", "tag", "cuenta", "sucursal", "stockEn"] as const
+const CLAVES_FILTRO = ["categoria", "estado", "foto", "precio", "stock", "destacado", "tag", "cuenta", "sucursal", "stockEn", "marca"] as const
 
 /** SKU con un botón para copiarlo sin abrir el producto (la fila entera abre el diálogo). */
 function Sku({ sku }: { sku: string }) {
@@ -139,7 +143,7 @@ function ConAyuda({ titulo, texto }: { titulo: string; texto: string }) {
   )
 }
 
-export function ProductosPanel({ categorias, tags, cuentas, sucursales, busquedaInicial, onTagCreado, onCambio }: Props) {
+export function ProductosPanel({ categorias, tags, modalidades, cuentas, sucursales, busquedaInicial, onTagCreado, onCambio }: Props) {
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_INICIALES)
   const [busqueda, setBusqueda] = useState(busquedaInicial ?? "")
   const [start, setStart] = useState(0)
@@ -153,6 +157,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
   const [aplicando, setAplicando] = useState(false)
   const [moviendo, setMoviendo] = useState(false)
   // Sumar a mano un producto suelto a un modelo (o un producto a un modelo): el diálogo guarda el extremo fijo.
+  const [marcas, setMarcas] = useState<{ clave: string; nombre: string }[]>([])
   const [sumando, setSumando] = useState<{ modo: "producto" | "modelo"; fijo: ProductoDto } | null>(null)
 
   // Sólo vale la respuesta del último pedido: una consulta vieja que llega tarde (p. ej. la de los
@@ -183,6 +188,19 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
       await cargar()
     })()
   }, [cargar])
+
+  // Las marcas del catálogo para el filtro. Si no cargan, el filtro queda con "Todas las marcas".
+  useEffect(() => {
+    let vigente = true
+    api<{ marcas: { clave: string; nombre: string }[] }>("/api/admin/catalogo/marcas")
+      .then((r) => {
+        if (vigente) setMarcas(r.marcas)
+      })
+      .catch(() => {})
+    return () => {
+      vigente = false
+    }
+  }, [])
 
   // La búsqueda por texto se aplica con un respiro: cada tecla no dispara una consulta.
   useEffect(() => {
@@ -573,7 +591,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
         Ver también los inactivos
       </label>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-10">
         <Select
           aria-label="Filtrar por categoría"
           value={filtros.categoria ?? TODOS}
@@ -662,6 +680,15 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
           options={[
             { value: TODOS, label: "Destacados: todos" },
             { value: "si", label: "Destacados: solo destacados" },
+          ]}
+        />
+        <Select
+          aria-label="Filtrar por marca"
+          value={filtros.marca ?? TODOS}
+          onValueChange={(v) => cambiarFiltro("marca", v)}
+          options={[
+            { value: TODOS, label: "Todas las marcas" },
+            ...marcas.map((m) => ({ value: m.clave, label: m.nombre })),
           ]}
         />
         <Select
@@ -792,6 +819,20 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
               )
             }
           />
+          <Select
+            aria-label="Asignar modalidad sin stock a la selección"
+            value=""
+            placeholder="Asignar modalidad sin stock"
+            options={opcionesModalidad(modalidades)}
+            onValueChange={(v) =>
+              void preparar({ tipo: "modalidad", modalidadId: v === "ninguna" ? null : v }, (n) => {
+                const cuantos = `${n} producto${n === 1 ? "" : "s"}`
+                return v === "ninguna"
+                  ? `Va a quitarle la modalidad sin stock a ${cuantos}.`
+                  : `Va a asignar la modalidad sin stock "${modalidades.find((m) => m.id === v)?.nombre ?? ""}" a ${cuantos}.`
+              })
+            }
+          />
           {hayVariasSucursales && <AyudaTooltip etiqueta="Visibilidad por sucursal" texto={AYUDA_VISIBLE_EN} />}
           {hayVariasSucursales && (
             <Select
@@ -872,6 +913,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
           producto={abierto}
           categorias={categorias}
           tags={tags}
+          modalidades={modalidades}
           sucursales={sucursales}
           sincronizacion={datos?.sincronizacion ?? { alegra: null, avisoShop: { ultimoOkAt: null, ultimoIntentoAt: null } }}
           onCerrar={() => setAbierto(null)}

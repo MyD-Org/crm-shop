@@ -3,6 +3,7 @@ import { getGuardedAdminSession } from "@/lib/admin-session"
 import { roleRank } from "@/lib/roles"
 import { EnviosCard } from "@/components/admin/EnviosCard"
 import { DespachoCard } from "@/components/admin/DespachoCard"
+import { VentaSinStockCard } from "@/components/admin/VentaSinStockCard"
 import { EnviosSucursalesCard } from "@/components/admin/EnviosSucursalesCard"
 
 export const dynamic = "force-dynamic"
@@ -20,12 +21,13 @@ export default async function EnviosPage() {
       <div className="mb-6 pl-10 md:pl-0">
         <h1 className="text-lg font-semibold" style={{ color: "var(--ink)" }}>Envíos</h1>
         <p className="text-sm mt-0.5" style={{ color: "var(--ink-soft)" }}>
-          Envío a domicilio, envío gratis, plazo de despacho y qué provincias atiende cada sucursal
+          Envío a domicilio, envío gratis, plazo de despacho, modalidades de venta sin stock y qué provincias atiende cada sucursal
         </p>
       </div>
       <div className="flex flex-col gap-4">
         <EnviosCard />
         <DespachoCard />
+        <VentaSinStockCard />
         <EnviosSucursalesCard />
       </div>
     </div>

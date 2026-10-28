@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterAll, vi } from "vitest"
 import { and, eq } from "drizzle-orm"
 import { NextRequest } from "next/server"
 import { getDb } from "@/db"
-import { catalogOverlay, catalogProducts, shopCategories, shopTags } from "@/db/schema"
+import { catalogOverlay, catalogProducts, modalidadesSinStock, shopCategories, shopTags } from "@/db/schema"
 import { crearCategoria, guardarOverlay } from "@/lib/catalogo-overlay-repo"
 import { crearSucursal } from "@/lib/sucursales-repo"
 import { seedOperator, seedTenant, truncateAll } from "./helpers"
@@ -181,6 +181,36 @@ describe("API del panel de catálogo — productos", () => {
 
       const [fila] = await getDb().select().from(catalogOverlay).where(eq(catalogOverlay.alegraId, "1"))
       expect(fila?.categoriaId ?? null).toBeNull()
+    })
+
+    it("modalidad sin stock: una de otro tenant o inexistente se rechaza; una propia se guarda y viaja en el detalle", async () => {
+      await seedProducto(TENANT_A, "1")
+      const [ajena, propia] = await getDb()
+        .insert(modalidadesSinStock)
+        .values([
+          { tenantId: TENANT_B, nombre: "Ajena", texto: "A pedido", flujo: "a_confirmar" },
+          { tenantId: TENANT_A, nombre: "Modalidad 48 h", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea" },
+        ])
+        .returning()
+      const patch = (modalidadSinStockId: string | null) =>
+        producto.PATCH(req("/api/admin/catalogo/productos/1", { method: "PATCH", body: { modalidadSinStockId } }), params("1"))
+
+      for (const id of [ajena.id, "3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b"]) {
+        const res = await patch(id)
+        expect(res.status).toBe(422)
+        expect((await res.json()).campo).toBe("modalidadSinStockId")
+      }
+      const [sinFila] = await getDb().select().from(catalogOverlay).where(eq(catalogOverlay.alegraId, "1"))
+      expect(sinFila?.modalidadSinStockId ?? null).toBeNull()
+
+      const ok = await patch(propia.id)
+      expect(ok.status).toBe(200)
+      expect((await ok.json()).producto.modalidadSinStockId).toBe(propia.id)
+      const detalle = await producto.GET(req("/api/admin/catalogo/productos/1"), params("1"))
+      expect((await detalle.json()).producto.modalidadSinStockId).toBe(propia.id)
+
+      const quitada = await patch(null)
+      expect((await quitada.json()).producto.modalidadSinStockId).toBeNull()
     })
 
     it("una etiqueta de otro tenant no se asigna", async () => {
@@ -563,6 +593,75 @@ describe("API del panel de catálogo — productos", () => {
       )
       expect(res.status).toBe(400)
       expect(await getDb().select().from(catalogOverlay)).toHaveLength(0)
+    })
+  })
+
+  describe("filtro por marca y modalidad en masa", () => {
+    const post = (seleccion: unknown, accion: unknown) =>
+      masiva.POST(req("/api/admin/catalogo/productos/masiva", { body: { seleccion, accion } }))
+    const modalidades = () =>
+      getDb()
+        .select({ alegraId: catalogOverlay.alegraId, modalidad: catalogOverlay.modalidadSinStockId })
+        .from(catalogOverlay)
+        .where(eq(catalogOverlay.tenantId, TENANT_A))
+    async function seedMarcas() {
+      await seedProducto(TENANT_A, "1", { brand: "Marca A" })
+      await seedProducto(TENANT_A, "2", { brand: "  marca a " })
+      await seedProducto(TENANT_A, "3", { brand: "Marca B" })
+      await seedProducto(TENANT_A, "4")
+    }
+    const crearModalidad = async (tenantId: string, nombre: string) =>
+      (await getDb().insert(modalidadesSinStock).values({ tenantId, nombre, texto: "A pedido", flujo: "a_confirmar" }).returning())[0]
+
+    it("el listado filtra por la clave de marca sin distinguir mayúsculas ni espacios", async () => {
+      await seedMarcas()
+      const r = await listar("?marca=marca%20a")
+      expect(r.status).toBe(200)
+      expect(r.body.items.map((i) => i.alegraId).sort()).toEqual(["1", "2"])
+      expect((await listar("?marca=" + "x".repeat(101))).status).toBe(400)
+    })
+
+    it("GET /marcas devuelve las marcas del tenant con su clave normalizada", async () => {
+      await seedMarcas()
+      await seedProducto(TENANT_B, "9", { brand: "Marca Ajena" })
+      const marcasRoute = await import("@/app/api/admin/catalogo/marcas/route")
+      const res = await marcasRoute.GET(req("/api/admin/catalogo/marcas"))
+      expect(res.status).toBe(200)
+      // `nombre` es el min() de las variantes escritas: cuál gana depende de la collation de la base
+      // ("Marca A" vs "marca a"), así que sólo se fija que sea una de ellas.
+      const marcas = (await res.json()).marcas as { clave: string; nombre: string }[]
+      expect(marcas.map((m) => m.clave)).toEqual(["marca a", "marca b"])
+      expect(["Marca A", "marca a"]).toContain(marcas[0].nombre)
+      expect(marcas[1].nombre).toBe("Marca B")
+    })
+
+    it("asigna la modalidad por filtro de marca a esa marca solamente, y null la limpia", async () => {
+      await seedMarcas()
+      const m = await crearModalidad(TENANT_A, "Modalidad 48 h")
+
+      const res = await post({ tipo: "filtro", filtros: { marca: "marca a" } }, { tipo: "modalidad", modalidadId: m.id })
+      expect(res.status).toBe(200)
+      expect((await res.json()).afectados).toBe(2)
+      expect((await modalidades()).map((f) => [f.alegraId, f.modalidad]).sort()).toEqual([
+        ["1", m.id],
+        ["2", m.id],
+      ])
+
+      const limpia = await post({ tipo: "filtro", filtros: { marca: "marca a" } }, { tipo: "modalidad", modalidadId: null })
+      expect((await limpia.json()).afectados).toBe(2)
+      expect((await modalidades()).every((f) => f.modalidad === null)).toBe(true)
+    })
+
+    it("una modalidad de otro tenant, inexistente o mal formada se rechaza y nada cambia", async () => {
+      await seedMarcas()
+      const ajena = await crearModalidad(TENANT_B, "Ajena")
+      for (const id of [ajena.id, "3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b", "no-es-uuid"]) {
+        const res = await post({ tipo: "ids", alegraIds: ["1"] }, { tipo: "modalidad", modalidadId: id })
+        expect(res.status).toBe(422)
+        expect(await res.json()).toMatchObject({ error: "Seleccione una modalidad válida.", campo: "modalidadId" })
+      }
+      expect((await post({ tipo: "ids", alegraIds: ["1"] }, { tipo: "modalidad", modalidadId: 5 })).status).toBe(400)
+      expect(await modalidades()).toHaveLength(0)
     })
   })
 

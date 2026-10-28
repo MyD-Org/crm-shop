@@ -6,6 +6,7 @@ import { ProductoFavCard } from "@/components/favoritos/ProductoFavCard";
 import { useCart } from "@/context/CartContext";
 import { useFavoritos } from "@/context/FavoritosContext";
 import type { Product } from "@/data/products";
+import { agotadoSinModalidad } from "@/lib/venta-sin-stock";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { useHidratado } from "@/lib/hidratado";
 import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
@@ -38,7 +39,7 @@ export function FavoritosCompartidosLista({
   const todosSonFavoritos = ready && productos.every((p) => esFavorito(p.id));
 
   function agregarAlCarrito() {
-    const conPrecio = visibles.filter((p) => p.price > 0 && p.stock !== "out");
+    const conPrecio = visibles.filter((p) => p.price > 0 && !agotadoSinModalidad(p));
     const omitidos = visibles.length - conPrecio.length;
     if (conPrecio.length === 0) {
       toast({ title: "Ninguno de los productos se puede agregar al carrito en este momento.", tone: "danger" });

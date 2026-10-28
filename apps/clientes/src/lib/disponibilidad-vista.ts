@@ -13,6 +13,7 @@ import type {
 import { disponibilidadDe } from "./stock-sucursal";
 import { reglasVentaCacheadas, sucursalesCacheadas } from "./sucursales-datos";
 import { resolverZona } from "./sucursales";
+import { modalidadesActivas } from "./venta-sin-stock-repo";
 
 /**
  * Contexto de la zona que corresponde a una provincia elegida (checkout, envío): la sucursal que la
@@ -53,14 +54,16 @@ export async function disponibilidadParaMostrar(
 ): Promise<DisponibilidadParaMostrar | null> {
   if (!disp || ids.length === 0) return null;
   try {
-    const [datos, reglas] = await Promise.all([
+    const [datos, reglas, modalidades] = await Promise.all([
       sucursalesCacheadas(),
       reglasVentaCacheadas(),
+      modalidadesActivas(),
     ]);
     const r = await disponibilidadDe(ids, disp.zona, "ambas", {
       sucursales: datos.sucursales,
       reglas,
       cantidades,
+      modalidades,
       ...(agrupar ? { agrupar: true } : {}),
     });
     const locales = datos.sucursales

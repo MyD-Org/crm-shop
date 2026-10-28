@@ -24,10 +24,12 @@ import {
   destinoAvisoOperador,
   transferenciaParaMail,
   type AvisoPedidoShop,
+  type LineaMail,
 } from "./pedido-mail";
 import { shopTenantId } from "./tenant";
 import { urlLogoMarca } from "./vinculacion-mail";
 import { getMarca } from "./marca";
+import { leerSnapshot, pedidoAConfirmarPorModalidad } from "./venta-sin-stock";
 
 const RUTA_PEDIDOS = "/mi-cuenta/pedidos";
 const RUTA_CHECKOUT = "/checkout";
@@ -55,6 +57,15 @@ export function avisoDelCobro(antes: string, despues: string, reversion: boolean
   if (despues === "pagado") return "pago_recibido";
   if (despues === "fallido") return "pago_rechazado";
   return null;
+}
+
+/**
+ * Línea del mail. Una línea a pedido lleva el texto de su modalidad, leído del snapshot del pedido
+ * (sigue aunque la modalidad se haya borrado); un jsonb roto o viejo, sin texto.
+ */
+function lineaParaMail(l: { nombre: string; cantidad: string; ventaSinStock?: unknown }): LineaMail {
+  const aPedido = leerSnapshot(l.ventaSinStock)?.texto;
+  return { nombre: l.nombre, cantidad: Number(l.cantidad), ...(aPedido ? { aPedido } : {}) };
 }
 
 async function enviarAviso(
@@ -89,7 +100,7 @@ async function enviarAviso(
     const lineas =
       confirma
         ? await getDb()
-            .select({ nombre: orderItems.name, cantidad: orderItems.qty })
+            .select({ nombre: orderItems.name, cantidad: orderItems.qty, ventaSinStock: orderItems.ventaSinStock })
             .from(orderItems)
             .where(eq(orderItems.orderId, pedidoId))
             .orderBy(asc(orderItems.id))
@@ -111,10 +122,18 @@ async function enviarAviso(
       pedidosUrl: urlPedidos(),
       checkoutUrl: aviso === "pago_rechazado" ? urlPedidos(undefined, `${RUTA_CHECKOUT}?pedido=${encodeURIComponent(pedidoId)}`) : null,
       sitioUrl: urlSitioMail(),
-      lineas: lineas.map((l) => ({ nombre: l.nombre, cantidad: Number(l.cantidad) })),
+      lineas: lineas.map(lineaParaMail),
       total: Number(pedido.total),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, medios),
+      // Venta sin stock: pedido a confirmar por modalidad (sale con "a_coordinar"; no se cobró nada).
+      ...(recibido &&
+      pedidoAConfirmarPorModalidad(
+        pedido.pagoMetodo,
+        lineas.map((l) => ({ ventaSinStock: leerSnapshot(l.ventaSinStock) })),
+      )
+        ? { aConfirmar: true }
+        : {}),
       // Lo que cobró el procesador (cuotas y total pagado): va junto al medio.
       ...(aviso === "pago_recibido" && pedido.pagoCuotas && pedido.pagoTotalPagado
         ? { pagado: { total: Number(pedido.pagoTotalPagado), cuotas: pedido.pagoCuotas } }
@@ -300,7 +319,7 @@ export async function avisarOperadorPedidoNuevo(
       console.error("[avisos pedido] no se pudieron leer los datos del tenant:", err);
     }
     const lineas = await db
-      .select({ nombre: orderItems.name, cantidad: orderItems.qty })
+      .select({ nombre: orderItems.name, cantidad: orderItems.qty, ventaSinStock: orderItems.ventaSinStock })
       .from(orderItems)
       .where(eq(orderItems.orderId, pedidoId))
       .orderBy(asc(orderItems.id));
@@ -312,7 +331,7 @@ export async function avisarOperadorPedidoNuevo(
       contactoNombre: pedido.contactoNombre,
       contactoTelefono: pedido.contactoTelefono,
       clienteEmail: pedido.clienteEmail,
-      lineas: lineas.map((l) => ({ nombre: l.nombre, cantidad: Number(l.cantidad) })),
+      lineas: lineas.map(lineaParaMail),
       total: Number(pedido.total),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, null),

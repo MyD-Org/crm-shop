@@ -4,6 +4,7 @@
  * (ficha y cards). Los textos visibles van en usted.
  */
 import type { Product, ResumenVariantes } from "@/data/products";
+import { agotadoSinModalidad, type VentaSinStock } from "@/lib/venta-sin-stock";
 
 /** Cuántas etiquetas de opciones nombra la card; el resto va como "+N". */
 export const MAX_ETIQUETAS_CARD = 3;
@@ -83,13 +84,13 @@ export const rutaFichaVariante = (id: string): string => `/producto/${encodeURIC
  * si tiene stock; si no, la primera con stock; si ninguna tiene, la representante (se ve "Sin stock").
  * `null` sin opciones.
  */
-export function opcionInicial<T extends { id: string; stock: Product["stock"] }>(
+export function opcionInicial<T extends { id: string; stock: Product["stock"]; ventaSinStock?: VentaSinStock }>(
   opciones: readonly T[],
   idDeLaCard: string,
 ): T | null {
   const deLaCard = opciones.find((o) => o.id === idDeLaCard);
-  if (deLaCard && deLaCard.stock !== "out") return deLaCard;
-  return opciones.find((o) => o.stock !== "out") ?? deLaCard ?? opciones[0] ?? null;
+  if (deLaCard && !agotadoSinModalidad(deLaCard)) return deLaCard;
+  return opciones.find((o) => !agotadoSinModalidad(o)) ?? deLaCard ?? opciones[0] ?? null;
 }
 
 export const TEXTOS_PANEL = {

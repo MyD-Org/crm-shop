@@ -8,7 +8,7 @@ vi.mock("next/cache", () => ({
   },
 }));
 
-import { marcarStockCambiado } from "./cache-invalidar";
+import { marcarModalidadesCambiadas, marcarStockCambiado } from "./cache-invalidar";
 
 describe("marcarStockCambiado", () => {
   beforeEach(() => {
@@ -25,6 +25,25 @@ describe("marcarStockCambiado", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     estado.falla = true;
     expect(() => marcarStockCambiado("cancelar un pedido")).not.toThrow();
+    expect(warn).toHaveBeenCalled();
+  });
+});
+
+describe("marcarModalidadesCambiadas", () => {
+  beforeEach(() => {
+    estado.llamadas = [];
+    estado.falla = false;
+  });
+
+  it("vence el tag catalogo al instante (la lista cacheada de modalidades quedó vieja)", () => {
+    marcarModalidadesCambiadas();
+    expect(estado.llamadas).toEqual([["catalogo", { expire: 0 }]]);
+  });
+
+  it("nunca tira", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    estado.falla = true;
+    expect(() => marcarModalidadesCambiadas()).not.toThrow();
     expect(warn).toHaveBeenCalled();
   });
 });

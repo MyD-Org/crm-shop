@@ -74,6 +74,30 @@ describe("CuerpoPanelOpciones", () => {
     expect(out).toContain("Sin stock");
   });
 
+  it("opción a pedido: sin «Sin stock», muestra el texto de la modalidad y el botón habilitado", () => {
+    const aPedido = opcion("13", "Neutro", {
+      stock: "out",
+      ventaSinStock: { id: "m1", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea" },
+    });
+    const out = html(listo([frio, aPedido]), aPedido);
+    expect(out).toContain("Retiro en ~48 h");
+    expect(out).not.toContain("Sin stock");
+    const pie = renderToStaticMarkup(
+      <PiePanelOpciones
+        elegida={aPedido}
+        idDeLaCard="11"
+        deshabilitado={false}
+        cantidad={1}
+        maximo={999}
+        onCantidad={() => {}}
+        onAgregar={() => {}}
+        onCerrar={() => {}}
+      />,
+    );
+    expect(pie).not.toContain("Sin stock");
+    expect(pie).toMatch(/<button class="[^"]*" aria-label="Agregar al carrito">/);
+  });
+
   it("«Ver detalle» enlaza a la ficha de la opción elegida (id codificado)", () => {
     const mdp = opcion("mdp:12", "Rojo");
     const pie = (elegida: Product | null) =>

@@ -20,7 +20,7 @@ const cot = (total: number, extra: Partial<Cotizacion> = {}): Cotizacion => ({
   costoEnvio: 0,
   total,
   hayProblemas: false,
-  listaPrivada: false,
+  listaPrivada: false, flujo: "normal",
   ...extra,
 });
 

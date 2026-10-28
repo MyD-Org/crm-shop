@@ -57,3 +57,13 @@ describe("esIdPedido", () => {
     expect(esIdPedido("9f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f/../x")).toBe(false);
   });
 });
+
+describe("subtituloLinea: venta sin stock", () => {
+  it("subtituloLinea con aPedido", () => expect(subtituloLinea({ codigo: "X", nombreVisible: "P", qty: 2, price: 1, aPedido: "A pedido" })).toBe("Cód. X · 2 u. · A pedido"));
+
+  it("en el detalle, el texto va al final", () => {
+    expect(subtituloLinea(linea({ aPedido: "A pedido" }), { detalle: true })).toBe(
+      `Cód. 02141N · 2 u. · ${fmtPrecio(538)} c/u · A pedido`,
+    );
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contextoDisponibilidad } from "./disponibilidad-contexto";
+import { contextoDisponibilidad, contextoUnion } from "./disponibilidad-contexto";
 import type { SucursalDato } from "./sucursales";
 
 const s = (
@@ -76,5 +76,40 @@ describe("contextoDisponibilidad", () => {
       }),
     ).toBeNull();
     expect(contextoDisponibilidad({ zona: "x", sucursales: [] })).toBeNull();
+  });
+});
+
+describe("contextoDisponibilidad: traslado (venta sin stock)", () => {
+  const retiro = (reglas?: { trasladoDias: number; retiroSinStock?: "bloquear" | "ofrecer" }) =>
+    contextoDisponibilidad({ zona: "sede-b", sucursales, modalidad: "retiro", local: "sede-a", reglas });
+  it("retiro con `ofrecer` (o sin regla): otra sucursal puede traerlo", () => {
+    expect(retiro({ trasladoDias: 2, retiroSinStock: "ofrecer" })?.traslado).toBe(true);
+    expect(retiro()?.traslado).toBe(true);
+  });
+  it("retiro con `bloquear`: sin traslado (y sin la clave)", () => {
+    const c = retiro({ trasladoDias: 2, retiroSinStock: "bloquear" });
+    expect(c?.contarEn).toEqual(["sede-a"]);
+    expect(c && "traslado" in c).toBe(false);
+  });
+  it("envío: con respaldo ya cuenta todas; sin respaldo no hay traslado", () => {
+    expect(contextoDisponibilidad({ zona: "sede-b", sucursales })?.traslado).toBeUndefined();
+    expect(
+      contextoDisponibilidad({ zona: "sede-b", sucursales, reglas: { trasladoDias: 2, respaldoEnvio: false } })?.traslado,
+    ).toBeUndefined();
+  });
+  it("retiro sin local válido (cuenta como el envío): sin traslado", () => {
+    expect(
+      contextoDisponibilidad({ zona: "sede-b", sucursales, modalidad: "retiro", local: "sede-c" })?.traslado,
+    ).toBeUndefined();
+  });
+  it("una sola sucursal activa: no hay de dónde traer", () => {
+    expect(
+      contextoDisponibilidad({ zona: "sede-a", sucursales: [s("sede-a", 0)], modalidad: "retiro", local: "sede-a" })
+        ?.traslado,
+    ).toBeUndefined();
+  });
+  it("contextoUnion no lo lleva (ya cuenta todas)", () => {
+    const c = retiro();
+    expect(c && "traslado" in contextoUnion(c)).toBe(false);
   });
 });

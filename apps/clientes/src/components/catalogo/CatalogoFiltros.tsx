@@ -117,8 +117,8 @@ export function CatalogoFiltros({
   );
   const grupos = (
     <div className="flex flex-col gap-5">
-      {/* Con búsqueda, los números son los de la búsqueda: un bloque propio, con la búsqueda en un
-          chip que se quita con la X, y la aclaración de qué cuentan los números. */}
+      {/* Con búsqueda (los números son los de la búsqueda): un bloque propio, con la búsqueda en un
+          chip que se quita con la X. */}
       {facetas.categoriasEnBusqueda && (
         <>
           <section aria-labelledby={idBusqueda} className="flex flex-col gap-2">
@@ -135,7 +135,6 @@ export function CatalogoFiltros({
                 «{facetas.categoriasEnBusqueda}»
               </Chip>
             </div>
-            <p className="text-xs text-muted">Los números cuentan dentro de esta búsqueda.</p>
           </section>
           <Divider />
         </>

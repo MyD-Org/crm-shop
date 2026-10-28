@@ -93,7 +93,8 @@ describe("CatalogoFiltros: búsqueda", () => {
     expect(html).toContain('aria-label="Quitar la búsqueda «luz cálida»"');
   });
 
-  it("aclara que los números cuentan dentro de la búsqueda", () => {
-    expect(texto(html)).toContain("Los números cuentan dentro de esta búsqueda.");
+  it("sin texto aclaratorio de los conteos", () => {
+    expect(texto(html)).not.toContain("cuentan");
+    expect(texto(html)).not.toContain("Conteos en");
   });
 });

@@ -190,6 +190,7 @@ Lo necesita la promo de lanzamiento: "solo 5 unidades a precio de apertura; el r
   - Si la regla es de un modelo con variantes, el límite es el total del modelo.
   - Las reglas de marca y categoría no llevan límite.
   - Viaja en la entrada de `campanias_online` como `reglaId` y `unidades`.
+  - Editar la campaña conserva el id de cada regla que sigue existiendo, porque el conteo es por regla. Recotizar un pedido no cuenta sus propias unidades.
 - **Qué cuenta:** las unidades de **pedidos de la tienda** con esa campaña y esa regla.
   - Cuentan los pagados y los pendientes con la reserva viva, con el mismo criterio que `shop.stock_reservado`.
   - Un pedido cancelado o vencido libera sus unidades.

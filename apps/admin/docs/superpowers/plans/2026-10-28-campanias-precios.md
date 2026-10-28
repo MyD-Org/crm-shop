@@ -132,6 +132,7 @@ Algoritmo SQL (lo que la firma no determina):
 
   - `precios` sale de los elementos de `precios_online` (públicos) con `round(price * (100 - pct) / 100, 2)`.
   - Sin entradas, deja `NULL`. Sólo actualiza filas que cambian (`IS DISTINCT FROM`).
+  - Un producto sin precios públicos (`precios_online` vacío, costo nulo) no recibe entrada: nunca un precio de campaña ≤ 0.
 - Produce `aplicar_precios_online`: se reescribe copiando el cuerpo de `0068` y agregando `PERFORM aplicar_campanias_online(p_tenant, p_ids);` antes del `RETURN QUERY`.
 - Produce la vista `campanias_shop (tenant_id, id, nombre, etiqueta, inicio, fin)` con `fin > now() - interval '24 hours'`, y `GRANT SELECT` condicional a `shop_app`.
 - Produce `catalog_products_shop`: `CREATE OR REPLACE` copiando la definición de `0083` y agregando al final `p.campanias_online AS campanias_online`.
@@ -219,7 +220,7 @@ Reglas:
 - **`guardarCampania`, en una sola transacción:**
   1. `lockTenant`.
   2. Valida el choque de fechas con `tstzrange(inicio, fin) && tstzrange($inicio, $fin)` contra las demás campañas del tenant.
-  3. Reemplaza las reglas.
+  3. Sincroniza las reglas **conservando su `id`**: upsert por `(campania_id, tipo, objetivo)`. Se borran sólo los objetivos que ya no están. El conteo de unidades vendidas (tarea 16) se hace por `campania_regla_id`: si una edición cambiara los ids, el contador volvería a cero.
   4. `SELECT aplicar_campanias_online($tenant, NULL)`.
   5. Inserta en `precios_online_cambios`: `tipo 'campania'`, `objeto 'campania:<id>'`, `antes`/`despues` en jsonb y `resumen` (por ejemplo "Campaña Black Friday: 20 % en marca acme…").
   6. Después del commit, `avisarShop(tenantId)`, como `avisarTrasCommit`.
@@ -236,6 +237,7 @@ Pasos:
 - [ ] **Paso 3: tests de integración del repo.**
   - Guardar con choque de fechas tira. Dos campañas contiguas (fin de A = inicio de B) se guardan.
   - Guardar materializa `campanias_online` y deja una entrada en el historial.
+  - Editar la campaña (por ejemplo, la etiqueta o el % de otra regla) conserva el `id` de una regla existente.
   - Terminar una activa pone `fin ≤ now()`, y el producto sigue con la entrada (gracia de 24 h).
   - Eliminar una activa tira.
   - `previsualizarCampania` con un producto de costo 100 al 50 % y lista ×1,3 → precio 65 y `bajoCosto` 1.
@@ -392,6 +394,7 @@ Reglas de `resolverPrecioVigente`:
   - si ese precio es menor que el privado: `precio` = campaña, `normal` = privado, `pct = floor((1 − campaña / privado) × 100)`;
   - si no, no rige (`campania: null`).
 - **`precioPrivado === null`:** nunca rige campaña; la línea queda "sin precio" como hoy.
+- **Guarda:** un precio de campaña ≤ 0 en la lista elegida no rige (`campania: null`).
 
 Pasos:
 
@@ -550,10 +553,10 @@ Pasos:
   - `FilaEspejo.campanias`;
   - `itemDesdeEspejo` lleva `campanias`;
   - `leerEspejo` selecciona `crmCatalogo.campaniasOnline`;
-  - `cotizar(pedidas, opts)` con `opts.campanias?: ContextoCampania`;
+  - `cotizar(pedidas, opts)` con `opts.campanias?: ContextoCampania` y `opts.excluirPedidoId?: string` (lo usa la tarea 16 para que un pedido no se cuente a sí mismo);
   - `cotizarItem(…, ctx?: ContextoCampania)` usa `resolverPrecioVigente`.
 - Modificar: `LineaCotizada`. Agrega `precioNormal?: number`, `campaniaId?: string`, `campaniaReglaId?: string` y `campaniaEtiqueta?: string`.
-- Modificar: `apps/clientes/src/lib/pedido-medio.ts` (`cotizarConMedio` acepta y pasa `campanias`)
+- Modificar: `apps/clientes/src/lib/pedido-medio.ts` (`cotizarConMedio` acepta y pasa `campanias` y `excluirPedidoId`; `/medio` y `/cuotas` pasan el id del pedido)
 - Modificar:
   - `app/api/carrito/cotizar/route.ts` y `app/api/pedidos/route.ts`: el contexto sale de `campaniasVigentes()`.
   - `app/api/pedidos/[id]/medio` y `/cuotas`: el contexto sale de `campaniasActivasEn(pedido.createdAt)`.
@@ -570,6 +573,7 @@ Pasos:
   - Un pedido creado con la campaña activa y la campaña terminada en el CRM hace 10 minutos: `POST /api/pedidos/[id]/medio` a transferencia recotiza a 104 y no a 130.
   - Un pedido creado después del fin cotiza al normal.
   - `order_items` guarda `campania_id`, `campania_regla_id` y `precio_normal`.
+  - Una vez hecha la tarea 16, agregar este caso: el pedido que tomó la última unidad cambia de medio y sigue a 104, porque no se cuenta a sí mismo.
 - [ ] **Paso 3:** FAIL → escribir la migración y aplicarla a la base de test → implementar → PASS.
 - [ ] **Paso 4:** commit `feat(clientes): cotización y pedido con precio de campaña`.
 
@@ -626,7 +630,7 @@ Pasos:
 **Archivos:**
 - Crear: `apps/clientes/src/lib/campanias/unidades.ts`
 - Modificar: `catalogo-publico.ts` y `catalog.ts`: dentro de la función cacheada se calcula `quedan` para las reglas con `unidades` de las campañas activas y se pasa a `mapFilaToProduct`.
-- Modificar: `cotizacion.ts`: `cotizar` completa `ctx.quedan` y marca la línea.
+- Modificar: `cotizacion.ts`: `cotizar` completa `ctx.quedan` con `unidadesUsadas(…, opts.excluirPedidoId)` y marca la línea.
 - Modificar: `pedidos.ts`: validación en la transacción.
 - Modificar: `app/api/pedidos/route.ts` (409)
 - Modificar: `ProductoClient.tsx` (indicador "Quedan 3 de 5 a precio de <etiqueta>"; con `quedan ≤ 2`, "¡Últimas unidades!", reusando `UnidadesPromo`)

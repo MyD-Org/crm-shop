@@ -1,6 +1,6 @@
 # Campañas de precios (CRM → Shop)
 
-Fecha: 2026-10-28 · Estado: propuesta, pendiente de aprobación de Emanuel · Apps: `apps/admin` (CRM) y `apps/clientes` (Shop) · Contrato CRM↔Shop: sí (vista `catalog_products_shop`).
+Fecha: 2026-10-28 · Estado: decisiones cerradas con Emanuel (2026-10-28) · Apps: `apps/admin` (CRM) y `apps/clientes` (Shop) · Contrato CRM↔Shop: sí (vista `catalog_products_shop`).
 
 ## Por qué
 
@@ -61,9 +61,12 @@ Acciones disponibles:
   - Sin redondeo "psicológico", igual que los precios normales.
 - El **% exhibido es el de la regla**. Es honesto porque el precio sale exactamente de aplicarlo al precio normal.
   - Respeta lo aprobado en el spec de la promo: % sólo contra nuestro precio habitual, en verde.
-- **Listas privadas** (cuentas con precio propio): ver Decisiones de Emanuel, punto B.
-  - Hoy esos clientes pagan siempre su precio privado (`cotizacion.ts:155-163`), aunque sea más alto que el público con descuento.
-  - `aplicarEstadoPrecio` (`precios-cuenta-estado.ts:56-65`) borra `oldPrice` y `discount`, pero **no** `badge`. Sea cual sea la decisión, el badge de campaña tiene que caer cuando el precio que se cobra no es el de campaña.
+- **Listas privadas** (cuentas con precio propio, decisión B de Emanuel): durante una campaña activa el cliente paga el **menor** entre su precio privado y el público de campaña.
+  - El público de campaña se toma de la lista que le tocaría al medio elegido, con la misma regla de `precioDeLista`.
+  - Badge, tachado y % se muestran **sólo cuando gana el de campaña**. En ese caso el tachado es su precio privado, que es lo que paga normalmente, y el % se recalcula contra ese precio (redondeado hacia abajo, `porcentajeAhorro`).
+  - Si gana su precio privado, todo queda como hoy: sin badge y sin consumir unidades del límite.
+  - Hoy `cotizarItem` toma la lista privada e ignora la del medio (`cotizacion.ts:155-163`). La función única de precio recibe también el precio privado y elige el menor; exhibición y cobro siguen usando la misma.
+  - `aplicarEstadoPrecio` (`precios-cuenta-estado.ts:56-65`) borra `oldPrice` y `discount` pero no `badge`. Hay que reemplazarlo: el estado de precio de la cuenta tiene que dar el precio, el tachado y el badge ya resueltos con esta regla.
 - **Por debajo del costo:** el CRM lo permite, pero lo avisa (ver Decisiones de Emanuel). Los ajustes de hoy no pueden bajar del costo; una campaña sí.
 - **Variantes:**
   - Una regla de producto sobre un producto que pertenece a un modelo (`grupo_id`) alcanza a todas las variantes del modelo (decisión mía).
@@ -221,7 +224,6 @@ Pasa a ser la **vidriera**: elige qué SKUs destacar y la estrella. El precio, e
 
 - Precio final fijo por producto (sólo %).
 - Campañas superpuestas.
-- Descuentos sobre listas privadas.
 - Campañas por medio de pago o por sucursal.
 - Cupones.
 - Banner global de campaña.
@@ -256,6 +258,4 @@ Pasa a ser la **vidriera**: elige qué SKUs destacar y la estrella. El precio, e
 - **D. Límite de unidades:** entra en v1 (sección "Límite de unidades"). Quedan como propuestas sin objeción:
   - sólo %, sin precio fijo;
   - por debajo del costo, avisar sin bloquear.
-- **B. Clientes con lista privada:** pendiente.
-  - Propuesta: pagan el menor entre su precio privado y el público de campaña, con badge sólo cuando gana el de campaña.
-  - Alternativa: siempre su privado, sin badge.
+- **B. Clientes con lista privada:** pagan el menor entre su privado y el público de campaña, con badge sólo cuando gana el de campaña (ver Reglas de precio).

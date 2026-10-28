@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, useToast } from "@myd-org/ui";
+import { Button, cn, useToast } from "@myd-org/ui";
 import { compartirEnlace } from "@/lib/compartir";
 
 function IconoCompartir() {
@@ -13,15 +13,28 @@ function IconoCompartir() {
 }
 
 /**
- * Compartir la ficha: hoja nativa en el celular, copiar el enlace en escritorio.
- * El enlace es la dirección de la página tal cual (sin parámetros propios): la
- * vista previa sale de la metadata de `producto/[id]`.
+ * Compartir un producto: hoja nativa en el celular, copiar el enlace en escritorio.
+ *
+ * - Ficha: sin `href`, el enlace es la dirección de la página tal cual (sin
+ *   parámetros propios); la vista previa sale de la metadata de `producto/[id]`.
+ * - Card del catálogo: `href` es la ruta de la ficha (`/producto/<id>`) y se
+ *   arma absoluta con el origen del sitio. El botón va en el `cornerAction` de
+ *   la card, fuera del enlace estirado: no navega.
  */
-export function BotonCompartir({ titulo }: { titulo: string }) {
+export function BotonCompartir({
+  titulo,
+  href,
+  className,
+}: {
+  titulo: string;
+  href?: string;
+  className?: string;
+}) {
   const { toast } = useToast();
 
   async function compartir() {
-    const resultado = await compartirEnlace({ url: window.location.href, titulo });
+    const url = href ? new URL(href, window.location.origin).href : window.location.href;
+    const resultado = await compartirEnlace({ url, titulo });
     if (resultado === "copiado") {
       toast({
         title: "Enlace copiado",
@@ -31,7 +44,9 @@ export function BotonCompartir({ titulo }: { titulo: string }) {
     } else if (resultado === "error") {
       toast({
         title: "No se pudo copiar el enlace",
-        description: "Copie la dirección desde la barra del navegador.",
+        description: href
+          ? "Abra el producto y copie la dirección desde la barra del navegador."
+          : "Copie la dirección desde la barra del navegador.",
         tone: "danger",
       });
     }
@@ -43,6 +58,7 @@ export function BotonCompartir({ titulo }: { titulo: string }) {
       variant="outline"
       size="icon"
       shape="round"
+      className={cn(className)}
       aria-label="Compartir producto"
       onClick={() => void compartir()}
     >

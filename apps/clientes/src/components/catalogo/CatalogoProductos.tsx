@@ -5,6 +5,7 @@ import { ProductCard, cn } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { AccionOpciones } from "./AccionOpciones";
 import { BotonFavorito } from "@/components/BotonFavorito";
+import { BotonCompartir } from "@/components/BotonCompartir";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
 import type { Product } from "@/data/products";
@@ -130,7 +131,17 @@ export function CatalogoProductos({
           oldPrice={vv.esDesde ? undefined : p.oldPrice}
           badge={badgeProducto(p)}
           // El slot queda fuera del enlace estirado de la card: no navega.
-          cornerAction={<BotonFavorito productId={p.id} />}
+          // Favorito arriba y compartir debajo, apilados en la esquina de la foto.
+          cornerAction={
+            <div className="flex flex-col gap-1.5">
+              <BotonFavorito productId={p.id} />
+              <BotonCompartir
+                titulo={nombreParaMostrar}
+                href={`/producto/${p.id}`}
+                className="text-muted hover:text-text"
+              />
+            </div>
+          }
           // Fotos del overlay del CRM servibles (host en SHOP_MEDIA_HOSTS);
           // si no hay ninguna, el placeholder. Con más de una, la card arma la
           // galería y monta de la 2.ª en adelante recién al acercarse.

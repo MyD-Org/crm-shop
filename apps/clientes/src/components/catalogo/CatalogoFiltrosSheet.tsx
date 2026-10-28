@@ -6,6 +6,7 @@ import type { Facetas } from "@/lib/catalog";
 import {
   cambiarBorrador,
   hrefAlAplicar,
+  hrefAlCambiarStock,
   hrefAlElegirCategoria,
   limpiarBorrador,
 } from "@/lib/catalogo-borrador";
@@ -31,6 +32,9 @@ import { useAlOcultar } from "@/lib/use-al-ocultar";
  * (sin las características de la categoría anterior), la hoja sigue abierta con `aria-busy` y, cuando
  * llega el estado nuevo, el borrador se vuelve a sembrar para mostrar los filtros de la categoría
  * nueva sin reabrirla. Con el flag apagado queda como siempre.
+ *
+ * "Solo con stock" y "Con stock en" también se aplican en el acto, de la misma forma: cambian los
+ * conteos de todo el panel (las marcas, las categorías, el precio), y con el borrador no se verían.
  *
  * El foco queda atrapado en la hoja y vuelve a este botón al cerrar (lo
  * resuelve el `Dialog` del DS). En el celular también se cierra arrastrándola
@@ -84,6 +88,12 @@ export function CatalogoFiltrosSheet({
   const alElegirCategoria = (categorias: string[]) => {
     const href = hrefAlElegirCategoria(estado, borrador, categorias);
     if (href) navegar(href);
+  };
+
+  const alCambiarStock = (cambios: Partial<EstadoCatalogo>) => {
+    const href = hrefAlCambiarStock(estado, borrador, cambios);
+    if (href) navegar(href);
+    else setBorrador((b) => cambiarBorrador(b, cambios));
   };
 
   return (
@@ -145,6 +155,7 @@ export function CatalogoFiltrosSheet({
             estado={borrador}
             ir={(cambios) => setBorrador((b) => cambiarBorrador(b, cambios))}
             alElegirCategoria={alElegirCategoria}
+            alCambiarStock={alCambiarStock}
             sinMarcas={sinMarcas}
           />
         </div>

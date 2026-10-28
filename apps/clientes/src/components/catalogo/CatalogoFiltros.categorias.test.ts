@@ -45,7 +45,7 @@ describe("CatalogoFiltros: categorías", () => {
   });
 });
 
-describe("CatalogoFiltros: marcas (regla de ceros)", () => {
+describe("CatalogoFiltros: marcas (todas, también las de 0)", () => {
   const conFiltros: Facetas = {
     ...facetas,
     marcas: [
@@ -61,10 +61,10 @@ describe("CatalogoFiltros: marcas (regla de ceros)", () => {
   const renderizarCon = (f: Facetas, params: Parameters<typeof leerEstado>[0] = {}) =>
     texto(renderToStaticMarkup(createElement(CatalogoFiltros, { facetas: f, estado: leerEstado(params), ir: () => {} })));
 
-  it("oculta la marca con 0 y muestra la que tiene productos", () => {
+  it("muestra la marca con 0 junto a la que tiene productos", () => {
     const t = renderizarCon(conFiltros);
     expect(t).toContain("Aurora 4");
-    expect(t).not.toContain("Zafiro");
+    expect(t).toContain("Zafiro 0");
   });
 
   it("una marca tildada con 0 se sigue mostrando", () => {

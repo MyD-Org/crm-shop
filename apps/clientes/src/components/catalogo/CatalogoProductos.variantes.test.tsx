@@ -10,6 +10,7 @@ import type { Product } from "@/data/products";
 
 vi.mock("@/components/AddToCartButton", () => ({ AddToCartButton: () => <button data-testid="agregar">Agregar</button> }));
 vi.mock("@/components/BotonFavorito", () => ({ BotonFavorito: () => null }));
+vi.mock("@/components/BotonCompartir", () => ({ BotonCompartir: () => null }));
 // El panel (Dialog por portal, pide las opciones al abrirse) se prueba aparte.
 vi.mock("./PanelOpciones", () => ({ PanelOpciones: () => null }));
 

@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { categoriasTotalesPublicas, facetasPublicas } from "@/lib/catalogo-publico";
+import { categoriasTotalesPublicas, facetasPublicas, marcasDelCatalogoPublicas } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import {
   IA_PLAN,
@@ -11,7 +11,7 @@ import {
   type EstadoCatalogo,
   type ParamCrudo,
 } from "@/lib/catalogo-url";
-import { indexable } from "@/lib/catalogo-vista";
+import { completarMarcas, indexable } from "@/lib/catalogo-vista";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servidor";
@@ -173,11 +173,14 @@ async function CatalogoResultados({ searchParams }: Props) {
     conPlanDeUrl: estado.ia === IA_PLAN,
     busquedaIa: conBusquedaIa,
   };
-  const [pagina, categoriasTotales] = await Promise.all([
+  const [pagina, categoriasTotales, marcasDelCatalogo] = await Promise.all([
     buscarEnShop(pedido, { ...contexto, conFacetas: true }),
     // El número de cada categoría del panel sin búsqueda: el total del catálogo, no el de los
     // filtros. Una sola clave de la caché compartida, para todos los visitantes.
     variantes ? categoriasTotalesPublicas(soloVisibles, dispGeneral, true) : categoriasTotalesPublicas(soloVisibles, dispGeneral),
+    // Todas las marcas del catálogo (sin filtros ni stock): el panel las lista siempre, con 0 las que
+    // no tienen productos para los filtros vigentes. Otra clave fija de la caché compartida.
+    variantes ? marcasDelCatalogoPublicas(soloVisibles, dispGeneral, true) : marcasDelCatalogoPublicas(soloVisibles, dispGeneral),
   ]);
   const plan = pagina.plan;
   // Una búsqueda sin resultados dejaba el panel de filtros vacío ("Sin
@@ -232,6 +235,7 @@ async function CatalogoResultados({ searchParams }: Props) {
         // El filtro "Con stock en <local>" sólo tiene sentido con más de un local.
         facetas={{
           ...facetas,
+          marcas: completarMarcas(facetas.marcas, marcasDelCatalogo),
           ...(categoriasDeLaBusqueda
             ? { categorias: categoriasDeLaBusqueda, categoriasEnBusqueda: estado.query?.trim() }
             : { categorias: categoriasTotales }),

@@ -2196,6 +2196,28 @@ export async function getValoresMarca(soloVisibles: boolean): Promise<{ valor: s
     .orderBy(sql`count(*) desc`, sql`${marcaPropiaSql} asc`);
 }
 
+/**
+ * Todas las marcas que muestra el catálogo (`marcaSql`, la que ven las cards), con su cantidad de
+ * productos sin búsqueda, sin filtros y sin el filtro de stock: el panel las lista siempre, con 0
+ * las que no tienen productos para los filtros vigentes (ver `completarMarcas`).
+ */
+export async function getMarcasDelCatalogo(
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+  agrupar = false,
+): Promise<Faceta[]> {
+  const where = condicionesDe({ soloStock: false }, APLICAR_TODOS, soloVisibles, agrupar, disp);
+  return getDb()
+    .select({ label: marcaSql, count: sql<number>`count(*)::int` })
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+    .leftJoin(crmOverlay, joinOverlay(agrupar))
+    .leftJoin(...joinStock(disp))
+    .where(and(where, sql`nullif(${marcaSql}, '') is not null`))
+    .groupBy(marcaSql)
+    .orderBy(sql`count(*) desc`, sql`${marcaSql} asc`);
+}
+
 export async function getFacetas(
   filtros: FiltrosCatalogo,
   /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */

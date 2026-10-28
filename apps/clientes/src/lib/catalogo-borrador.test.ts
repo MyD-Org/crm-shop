@@ -3,7 +3,9 @@ import {
   borradorAlElegirCategoria,
   cambiarBorrador,
   hrefAlAplicar,
+  hrefAlCambiarStock,
   hrefAlElegirCategoria,
+  hrefAlQuitarBusqueda,
   limpiarBorrador,
 } from "./catalogo-borrador";
 import { STOCK_INCLUYE_SIN_STOCK, type EstadoCatalogo } from "./catalogo-url";
@@ -255,5 +257,46 @@ describe("categoría en el acto en la hoja (spec R13)", () => {
 
   it("\"Limpiar filtros\" de la hoja también limpia las características", () => {
     expect(limpiarBorrador(estado).caracteristicas).toEqual([]);
+  });
+});
+
+describe("hrefAlCambiarStock (el stock se aplica en el acto en la hoja)", () => {
+  it("apagar 'Solo con stock' navega sin esperar Aplicar", () => {
+    expect(hrefAlCambiarStock(base, base, { soloStock: false })).toBe(
+      `/catalogo?stock=${STOCK_INCLUYE_SIN_STOCK}`
+    );
+  });
+
+  it("lleva el borrador completo: lo que ya se había tocado viaja con el cambio de stock", () => {
+    const b = cambiarBorrador(base, { marcas: ["DCK"] });
+    expect(hrefAlCambiarStock(base, b, { soloStock: false })).toBe(
+      `/catalogo?marca=DCK&stock=${STOCK_INCLUYE_SIN_STOCK}`
+    );
+  });
+
+  it("elegir un local navega con el local", () => {
+    expect(hrefAlCambiarStock(base, base, { retiroEn: "igz", soloStock: true })).toBe("/catalogo?retiro=igz");
+  });
+
+  it("sin cambios respecto de la URL no navega", () => {
+    expect(hrefAlCambiarStock(base, base, { soloStock: true })).toBeNull();
+  });
+});
+
+describe("hrefAlQuitarBusqueda (la X de la búsqueda en la hoja)", () => {
+  const conBusqueda: EstadoCatalogo = { ...base, query: "luz cálida para el living", ia: "1", orden: "relevancia" };
+
+  it("quita el texto y el plan, y el orden vuelve al default sin búsqueda", () => {
+    expect(hrefAlQuitarBusqueda(conBusqueda, conBusqueda)).toBe("/catalogo");
+  });
+
+  it("lleva lo que ya se había tocado en la hoja", () => {
+    const b = cambiarBorrador(conBusqueda, { marcas: ["DCK"] });
+    expect(hrefAlQuitarBusqueda(conBusqueda, b)).toBe("/catalogo?marca=DCK");
+  });
+
+  it("respeta un orden elegido en la hoja", () => {
+    const b = cambiarBorrador(conBusqueda, { orden: "precio-asc" });
+    expect(hrefAlQuitarBusqueda(conBusqueda, b)).toBe("/catalogo?orden=precio-asc");
   });
 });

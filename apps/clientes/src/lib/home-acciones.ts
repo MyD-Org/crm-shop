@@ -27,6 +27,9 @@ import { borrarSeccionHome, guardarSeccionHome, leerSeccionHome } from "@/lib/ho
 import { getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
 import { shopTenantId } from "@/lib/tenant";
 import { getMarca } from "@/lib/marca";
+import { precioPrincipal } from "@/lib/promociones/promo";
+import { stockEnSucursal, sucursalesDePromo, type SucursalPromo } from "@/lib/promociones/stock";
+import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 
 export type ResultadoGuardar =
   | { ok: true; updatedAt: string | null }
@@ -331,5 +334,69 @@ export async function resolverProductosHome(skus: string[]): Promise<ResultadoBu
   } catch (err) {
     console.error("[home-acciones] no se pudieron resolver los destacados:", err);
     return { ok: false, errores: [ERROR_BUSQUEDA] };
+  }
+}
+
+/** Lo que el editor de promociones muestra de cada producto (spec 2026-10-26-promociones-home §7). */
+export type ProductoPromoEditor = {
+  sku: string;
+  nombre: string;
+  foto?: string;
+  /** Precio principal con IVA (transferencia si hay, si no lista). */
+  precio: number;
+  esTransferencia: boolean;
+  /** Disponible en la sucursal pedida; null = no inventariable. */
+  stock: number | null;
+};
+
+export type ResultadoProductosPromo = { ok: true; productos: ProductoPromoEditor[] } | { ok: false; errores: string[] };
+
+/**
+ * Precio y stock (en `sucursal`) de los productos de la promo, para el editor: con el stock se
+ * completa `stockBase` al guardar las unidades de promo. Sólo admin.
+ */
+export async function productosParaPromo(skus: string[], sucursal: string): Promise<ResultadoProductosPromo> {
+  if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO] };
+  const pedidos = Array.isArray(skus)
+    ? skus.filter((s): s is string => typeof s === "string" && !!s.trim()).slice(0, LIMITE_SKUS_ELEGIDOS)
+    : [];
+  if (pedidos.length === 0) return { ok: true, productos: [] };
+
+  try {
+    const { soloVisibles, variantes, mediosPrecio } = await flagsPublicos();
+    const [productos, { sucursales }] = await Promise.all([
+      getProductosPorSkus(pedidos, { soloVisibles, ...(variantes ? { agrupar: true } : {}), mediosPrecio }),
+      sucursalesCacheadas(),
+    ]);
+    const predeterminada = sucursalesDePromo(sucursales)[0]?.slug ?? sucursal;
+    const stock = await stockEnSucursal(
+      productos.map((p) => p.id),
+      sucursal,
+      predeterminada,
+    );
+    return {
+      ok: true,
+      productos: productos
+        .filter((p): p is typeof p & { sku: string } => !!p.sku)
+        .map((p) => {
+          const { monto, esTransferencia } = precioPrincipal(p);
+          return { sku: p.sku, nombre: p.name, foto: p.images?.[0]?.url, precio: monto, esTransferencia, stock: stock[p.id] === undefined ? 0 : stock[p.id] };
+        }),
+    };
+  } catch (err) {
+    console.error("[home-acciones] no se pudieron leer los productos de la promo:", err);
+    return { ok: false, errores: [ERROR_BUSQUEDA] };
+  }
+}
+
+/** Sucursales activas para el selector del contador de unidades. Sólo admin. */
+export async function sucursalesParaPromo(): Promise<SucursalPromo[]> {
+  if (!(await esAdmin())) return [];
+  try {
+    const { sucursales } = await sucursalesCacheadas();
+    return sucursalesDePromo(sucursales);
+  } catch (err) {
+    console.error("[home-acciones] no se pudieron leer las sucursales:", err);
+    return [];
   }
 }

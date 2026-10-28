@@ -38,6 +38,30 @@ describe("CatalogoFiltros: categorías", () => {
     expect(html).not.toMatch(/ disabled=/);
   });
 
+  it("con conteos de la búsqueda, las de 0 van deshabilitadas y las que cuentan no", () => {
+    const html = renderToStaticMarkup(
+      createElement(CatalogoFiltros, {
+        facetas: { ...facetas, categoriasEnBusqueda: "foco" },
+        estado: leerEstado({ q: "foco" }),
+        ir: () => {},
+      }),
+    );
+    // Electricidad y Seguridad cuentan 0; Iluminación, 1.
+    expect((html.match(/ disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(html).toMatch(/Iluminación/);
+  });
+
+  it("una categoría tildada con 0 se puede destildar aunque haya búsqueda", () => {
+    const html = renderToStaticMarkup(
+      createElement(CatalogoFiltros, {
+        facetas: { ...facetas, categorias: [{ label: "SEGURIDAD", count: 0, nivel: 1 }], categoriasEnBusqueda: "foco" },
+        estado: leerEstado({ q: "foco", categoria: "SEGURIDAD" }),
+        ir: () => {},
+      }),
+    );
+    expect(html).not.toMatch(/ disabled=/);
+  });
+
   it("sin búsqueda es el mismo árbol", () => {
     const sin = texto(renderizar({}));
     const con = texto(renderizar({ q: "foco" }));
@@ -45,7 +69,7 @@ describe("CatalogoFiltros: categorías", () => {
   });
 });
 
-describe("CatalogoFiltros: marcas (regla de ceros)", () => {
+describe("CatalogoFiltros: marcas (todas, también las de 0)", () => {
   const conFiltros: Facetas = {
     ...facetas,
     marcas: [
@@ -61,10 +85,10 @@ describe("CatalogoFiltros: marcas (regla de ceros)", () => {
   const renderizarCon = (f: Facetas, params: Parameters<typeof leerEstado>[0] = {}) =>
     texto(renderToStaticMarkup(createElement(CatalogoFiltros, { facetas: f, estado: leerEstado(params), ir: () => {} })));
 
-  it("oculta la marca con 0 y muestra la que tiene productos", () => {
+  it("muestra la marca con 0 junto a la que tiene productos", () => {
     const t = renderizarCon(conFiltros);
     expect(t).toContain("Aurora 4");
-    expect(t).not.toContain("Zafiro");
+    expect(t).toContain("Zafiro 0");
   });
 
   it("una marca tildada con 0 se sigue mostrando", () => {
@@ -76,5 +100,25 @@ describe("CatalogoFiltros: marcas (regla de ceros)", () => {
     expect(t).not.toContain("Tono de luz");
     expect(t).not.toContain("Zócalo");
     expect(t).not.toContain("Rosca E27");
+  });
+});
+
+describe("CatalogoFiltros: búsqueda", () => {
+  const html = renderToStaticMarkup(
+    createElement(CatalogoFiltros, {
+      facetas: { ...facetas, categoriasEnBusqueda: "luz cálida" },
+      estado: leerEstado({ q: "luz cálida" }),
+      ir: () => {},
+    }),
+  );
+
+  it("muestra la búsqueda en un chip con la X para quitarla", () => {
+    expect(texto(html)).toContain("Búsqueda «luz cálida»");
+    expect(html).toContain('aria-label="Quitar la búsqueda «luz cálida»"');
+  });
+
+  it("sin texto aclaratorio de los conteos", () => {
+    expect(texto(html)).not.toContain("cuentan");
+    expect(texto(html)).not.toContain("Conteos en");
   });
 });

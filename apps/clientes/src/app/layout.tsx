@@ -15,6 +15,8 @@ import { BloqueoFavoritos } from "@/components/BloqueoFavoritos";
 import { ChatIaServidor } from "@/components/chat/ChatIaServidor";
 import { TrackingServidor } from "@/components/tracking/TrackingServidor";
 import { MarcaProvider } from "@/components/MarcaProvider";
+import { PromoProvider } from "@/components/promociones/PromoProvider";
+import { datosPromoCliente } from "@/lib/promociones/promo";
 import { getMarca } from "@/lib/marca";
 import { metadataDeMarca } from "@/lib/metadata-marca";
 import "./globals.css";
@@ -97,7 +99,9 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Anuncio global: contenido administrable (mismo contrato que la home).
-  const [{ anuncio, visibilidad }, marca, temaTenant] = await Promise.all([getContenidoHome(), getMarca(), getTemaTenant()]);
+  const [{ anuncio, visibilidad, promociones }, marca, temaTenant] = await Promise.all([getContenidoHome(), getMarca(), getTemaTenant()]);
+  // Promo de la home para badges y ficha (la vigencia la decide el cliente). Apagada en el editor: no viaja.
+  const datosPromo = visibilidadDe(visibilidad, "promociones") === "nunca" ? null : datosPromoCliente(promociones);
   // Tema de la tienda (`tenants.shop_tema`): sin paleta propia (Central) no hay `data-tema` ni
   // `<style>` y el HTML es el de siempre; con ella, UNA regla de variables (src/lib/tema-tenant.ts).
   const tema = atributosHtmlTema(temaTenant);
@@ -124,6 +128,7 @@ export default async function RootLayout({
         <ClerkProvider localization={esAR} appearance={aparienciaClerk}>
           <Providers>
            <MarcaProvider marca={{ base: marca.base, nombre: marca.nombre, lema: marca.lema, logoUrl: marca.logoUrl }}>
+           <PromoProvider datos={datosPromo}>
             {/* Anuncio global (contenido administrable): arriba de todo, sobre el header.
                 Dónde se ve lo decide el editor (default: solo desktop, porque en
                 mobile el texto ocupa varias filas hasta que sea un carrusel). */}
@@ -148,6 +153,7 @@ export default async function RootLayout({
             <Suspense fallback={null}>
               <TrackingServidor />
             </Suspense>
+           </PromoProvider>
            </MarcaProvider>
           </Providers>
         </ClerkProvider>

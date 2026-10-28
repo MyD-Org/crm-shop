@@ -14,6 +14,7 @@ const html = (orden = DEFAULTS_HOME.orden) =>
       contenido: { ...DEFAULTS_HOME, orden },
       destacados: createElement("p", null, "MARCA-DESTACADOS"),
       tiendaOficial: createElement("p", null, "MARCA-TIENDA-OFICIAL"),
+      promociones: createElement("p", null, "MARCA-PROMOCIONES"),
       busquedaAsistida: createElement("p", null, "MARCA-BUSQUEDA"),
     }),
   );
@@ -23,6 +24,12 @@ describe("HomeClient en el orden guardado", () => {
     const h = html();
     expect(h.indexOf("MARCA-DESTACADOS")).toBeLessThan(h.indexOf("MARCA-TIENDA-OFICIAL"));
     expect(h.indexOf("MARCA-TIENDA-OFICIAL")).toBeLessThan(h.indexOf("Consultar ahora"));
+  });
+
+  it("por defecto, la promo va justo después del hero", () => {
+    const h = html();
+    expect(h.indexOf("MARCA-PROMOCIONES")).toBeGreaterThan(-1);
+    expect(h.indexOf("MARCA-PROMOCIONES")).toBeLessThan(h.indexOf("MARCA-DESTACADOS"));
   });
 
   it("con otro orden, lo respeta", () => {

@@ -1,4 +1,5 @@
 import { DEFAULTS_HOME, type Enlace, type SeccionHome, type TileContent } from "@/data/home-defaults";
+import { MAX_ITEMS_PROMO } from "./promociones/promo";
 
 /**
  * Lógica pura del editor in-place de la home (home-editable, rebanada B1):
@@ -49,6 +50,7 @@ export const TITULOS_SECCION: Record<SeccionHome, string> = {
   ambientes: "Ambientes",
   destacados: "Destacados",
   tiendaOficial: "Tienda oficial",
+  promociones: "Promociones",
   bannerDeco: "Banner decorativo",
   decoGrid: "Grilla decorativa",
   servicios: "Servicios",
@@ -168,6 +170,16 @@ export function normalizarPayload(seccion: SeccionHome, borrador: unknown): unkn
 
   if (seccion === "tiendaOficial") {
     o.skus = Array.isArray(o.skus) ? (o.skus as string[]).filter(esTextoNoVacio).slice(0, 3) : [];
+  }
+
+  if (seccion === "promociones") {
+    const conSku = (v: unknown): v is { sku: string } => esTextoNoVacio((v as { sku?: unknown } | null)?.sku);
+    const limpio = <T extends { sku: string }>(v: T): T => ({ ...v, sku: v.sku.trim() });
+    o.items = Array.isArray(o.items) ? (o.items as unknown[]).filter(conSku).map(limpio).slice(0, MAX_ITEMS_PROMO) : [];
+    if (o.estrella !== undefined) {
+      if (conSku(o.estrella)) o.estrella = limpio(o.estrella);
+      else delete o.estrella;
+    }
   }
 
   if (seccion === "marquee" && Array.isArray(o.items)) {

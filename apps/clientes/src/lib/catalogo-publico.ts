@@ -46,6 +46,7 @@ import {
   getFacetas,
   getFacetaCategorias,
   getIdAlternativoDeVariante,
+  getMarcasDelCatalogo,
   getPaginaCatalogo,
   getProducto,
   getRutaCategoriaPropia,
@@ -240,6 +241,34 @@ export function categoriasTotalesPublicas(
     "catalogo-categorias-totales",
     () => (agrupar ? categoriasTotalesCacheadas(soloVisibles, disp, true) : categoriasTotalesCacheadas(soloVisibles, disp)),
     directa,
+  );
+}
+
+async function marcasDelCatalogoCacheadas(
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+  agrupar = false,
+): Promise<Faceta[]> {
+  "use cache: remote";
+  cacheTag(TAG_CATALOGO);
+  cacheLife("catalogo");
+  console.info("[cache] catalogo-marcas-todas miss");
+  return getMarcasDelCatalogo(soloVisibles, disp, agrupar);
+}
+
+/**
+ * Todas las marcas del catálogo para el panel de filtros (sin búsqueda, filtros ni stock): una sola
+ * clave de la caché compartida (tag `catalogo`), igual que `categoriasTotalesPublicas`.
+ */
+export function marcasDelCatalogoPublicas(
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+  agrupar = false,
+): Promise<Faceta[]> {
+  return conRespaldoSinCache(
+    "catalogo-marcas-todas",
+    () => (agrupar ? marcasDelCatalogoCacheadas(soloVisibles, disp, true) : marcasDelCatalogoCacheadas(soloVisibles, disp)),
+    () => getMarcasDelCatalogo(soloVisibles, disp, agrupar),
   );
 }
 
@@ -489,6 +518,49 @@ async function leerDestacados(args: ArgsDestacados): Promise<{ productos: Produc
   const vistos = new Set(iluminacion.productos.map((p) => p.id));
   const pool = [...iluminacion.productos, ...curados.filter((p) => !vistos.has(p.id))];
   return { productos: elegirDestacados(pool, skus, cantidad), fallo };
+}
+
+/**
+ * Productos de la promo de la home (spec 2026-10-26-promociones-home §8): SÓLO los SKUs pedidos,
+ * en ese orden, sin el relleno de `destacadosHome`. Misma caché y mismo tag que el catálogo, así un
+ * cambio de precio se ve igual que en el resto de la tienda.
+ */
+type ArgsPromo = Omit<ArgsDestacados, "cantidad" | "base">;
+
+export function productosPromo(args: ArgsPromo): Promise<Product[]> {
+  if (args.skus.length === 0) return Promise.resolve([]);
+  return conRespaldoSinCache(
+    "promociones",
+    () => promoCacheados(args),
+    async () => (await leerPromo(args)).productos,
+  );
+}
+
+async function promoCacheados(args: ArgsPromo): Promise<Product[]> {
+  "use cache: remote";
+  cacheTag(TAG_CATALOGO);
+  console.info("[cache] promociones miss");
+  const { productos, fallo } = await leerPromo(args);
+  if (fallo) cacheLife("degradado");
+  else cacheLife("catalogo");
+  return productos;
+}
+
+async function leerPromo(args: ArgsPromo): Promise<{ productos: Product[]; fallo: boolean }> {
+  const { skus, soloVisibles, disp } = args;
+  const { mediosPrecio } = conMedios(args);
+  try {
+    const pool = await getProductosPorSkus(skus, { soloVisibles, ...conAgrupar(args.agrupar), disp, mediosPrecio });
+    // `elegirDestacados` ordena por los SKUs pedidos y completa con el resto: el relleno se descarta.
+    const pedidos = new Set(skus.map((s) => s.trim().toUpperCase()));
+    const enPromo = pool.filter(
+      (p) => pedidos.has((p.sku ?? "").toUpperCase()) || !!p.codigosElegidos?.some((c) => pedidos.has(c)),
+    );
+    return { productos: elegirDestacados(enPromo, skus, Math.max(1, enPromo.length)).slice(0, enPromo.length), fallo: false };
+  } catch (err) {
+    console.error("[catalogo-publico] no se pudieron cargar los productos de la promo:", err);
+    return { productos: [], fallo: true };
+  }
 }
 
 async function primeraPaginaCategoria(

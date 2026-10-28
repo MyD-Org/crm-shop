@@ -5,6 +5,7 @@ import { ProductCard, cn } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { AccionOpciones } from "./AccionOpciones";
 import { BotonFavorito } from "@/components/BotonFavorito";
+import { BotonCompartir } from "@/components/BotonCompartir";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
 import type { Product } from "@/data/products";
@@ -16,6 +17,7 @@ import { vistaCardVariantes } from "@/lib/variantes-ficha";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { badgeProducto } from "@/components/badge-producto";
+import { badgePromo, useInfoPromo } from "@/components/promociones/PromoProvider";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { LightbulbIcon } from "./iconos";
 import { linkNext } from "./link-next";
@@ -47,6 +49,8 @@ export function CatalogoProductos({
   const reservarCuotas = productos.some((p) => cuotasPorProducto.has(p.id));
   // Igual con "$X con <Medio>": se reserva sólo si algún producto de la página lo muestra.
   const reservarMedio = productos.some((p) => p.precioMedio);
+  // Badge de la promo de la home (vigencia en el cliente, sin mismatch: ver PromoProvider).
+  const promoDe = useInfoPromo();
   return (
     <div
       // 2/3/4 columnas: 24 productos por página entran justo en las tres
@@ -129,9 +133,19 @@ export function CatalogoProductos({
           price={vv.precio}
           priceNote={vv.nota}
           oldPrice={vv.esDesde ? undefined : p.oldPrice}
-          badge={badgeProducto(p)}
+          badge={badgePromo(promoDe(p.sku), p) ?? badgeProducto(p)}
           // El slot queda fuera del enlace estirado de la card: no navega.
-          cornerAction={<BotonFavorito productId={p.id} />}
+          // Favorito arriba y compartir debajo, apilados en la esquina de la foto.
+          cornerAction={
+            <div className="flex flex-col gap-1.5">
+              <BotonFavorito productId={p.id} />
+              <BotonCompartir
+                titulo={nombreParaMostrar}
+                href={`/producto/${p.id}`}
+                className="text-muted hover:text-text"
+              />
+            </div>
+          }
           // Fotos del overlay del CRM servibles (host en SHOP_MEDIA_HOSTS);
           // si no hay ninguna, el placeholder. Con más de una, la card arma la
           // galería y monta de la 2.ª en adelante recién al acercarse.

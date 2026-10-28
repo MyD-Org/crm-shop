@@ -383,6 +383,20 @@ export function indexable(estado: EstadoCatalogo): boolean {
  * (porque, cruzado con los otros filtros, cuenta cero) se agrega primero con
  * cuenta 0: si desapareciera del panel, sólo se podría quitar desde el chip.
  */
+/**
+ * Marcas del panel: las que cuentan con los filtros vigentes (en su orden) y, detrás, el resto de
+ * las marcas del catálogo con 0, así el panel lista siempre todas (una marca sin stock sigue
+ * apareciendo con "Solo con stock" prendido).
+ */
+export function completarMarcas<F extends { label: string; count: number }>(
+  filtradas: F[],
+  todas: readonly { label: string; count: number }[],
+): (F | { label: string; count: number })[] {
+  const presentes = new Set(filtradas.map((m) => m.label));
+  const faltantes = todas.filter((m) => !presentes.has(m.label)).map((m) => ({ label: m.label, count: 0 }));
+  return [...filtradas, ...faltantes];
+}
+
 export function itemsDeFaceta<F extends { label: string; count: number }>(
   facetas: F[],
   tildados: string[],
@@ -398,7 +412,7 @@ export function itemsDeFaceta<F extends { label: string; count: number }>(
 }
 
 /**
- * Regla única de ceros del panel (categorías, marcas y características): un ítem con conteo 0 se
+ * Regla de ceros del panel (no aplica a categorías ni a marcas, que se listan completas): un ítem con conteo 0 se
  * oculta, salvo que esté tildado (`itemsDeFaceta` lo antepone, con su 0, para poder destildarlo) o
  * sea madre de un ítem que se ve (en el árbol de categorías una madre sin productos directos sigue
  * mostrándose si alguna descendiente cuenta). Un ítem sin conteo (medida activa) no se oculta.

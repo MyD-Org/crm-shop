@@ -35,6 +35,7 @@ import {
   idsProductosPublicos,
   paginaCatalogoPublica,
   productoPublico,
+  productosPromo,
   relacionadosProducto,
 } from "./catalogo-publico";
 
@@ -316,5 +317,20 @@ describe("relacionadosProducto: venta sin stock", () => {
       soloVisibles: false,
     });
     expect(r?.productos.map((p) => p.id)).toEqual(["2", "1"]);
+  });
+});
+
+describe("productosPromo", () => {
+  it("sólo los SKUs pedidos, en su orden, sin relleno; perfil catalogo", async () => {
+    cat.getProductosPorSkus.mockResolvedValue([prod("1", "A"), prod("3", "C"), prod("4", "D")]);
+    const out = await productosPromo({ skus: ["C", "A", "NO-EXISTE"], soloVisibles: true });
+    expect(out.map((p) => p.sku)).toEqual(["C", "A"]);
+    expect(cat.getPaginaCatalogo).not.toHaveBeenCalled();
+    expect(cacheTagMock).toHaveBeenCalledWith("catalogo");
+  });
+
+  it("sin SKUs no consulta", async () => {
+    expect(await productosPromo({ skus: [], soloVisibles: true })).toEqual([]);
+    expect(cat.getProductosPorSkus).not.toHaveBeenCalled();
   });
 });

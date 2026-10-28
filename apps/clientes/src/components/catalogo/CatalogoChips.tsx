@@ -2,7 +2,7 @@
 
 import { Chip } from "@myd-org/ui";
 import { TEXTOS_FRANJA } from "@/lib/busqueda-inteligente/textos";
-import { ordenPorDefecto, type EstadoCatalogo, type RangoPrecio } from "@/lib/catalogo-url";
+import { quitarBusqueda, type EstadoCatalogo, type RangoPrecio } from "@/lib/catalogo-url";
 import { chipsActivos } from "@/lib/catalogo-vista";
 
 /**
@@ -52,7 +52,7 @@ export function CatalogoChips({
           clave: "busqueda",
           etiqueta: TEXTOS_FRANJA.texto(estado.query),
           removeLabel: TEXTOS_FRANJA.quitarTexto(estado.query),
-          cambios: { query: undefined, ia: undefined, orden: ordenPorDefecto(undefined), pagina: 1 } as Partial<EstadoCatalogo>,
+          cambios: quitarBusqueda(),
         },
       ]
     : [];
@@ -63,7 +63,15 @@ export function CatalogoChips({
     <div className="mt-4 flex items-center gap-2 overflow-x-auto py-1 lg:flex-wrap lg:overflow-visible">
       {chips.map((c) => (
         <div key={c.clave} className="shrink-0">
-          <Chip variant="removable" removeLabel={c.removeLabel} onRemove={() => ir(c.cambios)}>
+          {/* Filtro aplicado con el acento del tema (fondo y borde) en vez del gris casi transparente
+              del `Chip` del DS; texto en `primary`, que contrasta en todos los temas. Mismo color que
+              la búsqueda del panel (CatalogoFiltros). */}
+          <Chip
+            variant="removable"
+            className="border-accent/50 bg-accent-soft text-primary"
+            removeLabel={c.removeLabel}
+            onRemove={() => ir(c.cambios)}
+          >
             {c.etiqueta}
           </Chip>
         </div>

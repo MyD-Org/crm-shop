@@ -1,6 +1,4 @@
-import Link from "next/link";
 import {
-  AccentText,
   CtaBanner,
   Hero,
   Marquee,
@@ -25,10 +23,10 @@ import {
   type SeccionHome,
   type SeccionOrdenable,
   type SoloEn,
-  type TextosSeccion,
   type TileContent,
 } from "@/data/home-defaults";
 import { SeccionEditable } from "@/components/home/SeccionEditable";
+import { TituloSeccion } from "@/components/home/TituloSeccion";
 import { InteractiveHero } from "@/components/home/InteractiveHero";
 import { isStudioImage, STUDIO_IMAGE } from "@/components/home/hero-lights";
 
@@ -109,35 +107,6 @@ function PorTamano<T extends { visibilidad?: SoloEn }>({
   );
 }
 
-function TituloSeccion({ textos, linkTodos }: { textos: TextosSeccion; linkTodos?: string }) {
-  const { titulo, tituloMobile, bajada, bajadaMobile, visibilidadTextos } = textos;
-  const hayTitulo = !!(titulo || tituloMobile);
-  if (!hayTitulo && !bajada && !bajadaMobile && !linkTodos) return null;
-  return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-6 max-md:flex-col max-md:items-start">
-      <div>
-        {hayTitulo ? (
-          <h2 className={`font-display text-[clamp(28px,3.2vw,42px)] font-bold leading-[1.12] tracking-[-0.02em] text-text ${clasesVisibilidad(visibilidadTextos?.titulo)}`}>
-            <AccentText text={titulo ?? ""} mobileText={tituloMobile} accentClassName="not-italic text-accent" />
-          </h2>
-        ) : null}
-        {bajada || bajadaMobile ? (
-          <p className={`mt-3 max-w-[52ch] text-[15px] leading-[1.6] text-muted ${clasesVisibilidad(visibilidadTextos?.bajada)}`}>
-            <AccentText text={bajada ?? ""} mobileText={bajadaMobile} />
-          </p>
-        ) : null}
-      </div>
-      {linkTodos ? (
-        <Link
-          href={linkTodos}
-          className="border-b-[1.5px] border-text pb-[3px] text-[13px] font-extrabold text-text transition-colors hover:border-accent hover:text-accent"
-        >
-          Ver todos →
-        </Link>
-      ) : null}
-    </div>
-  );
-}
 
 /**
  * Home sobre el design system. Server component: recibe el contenido (DB
@@ -155,6 +124,7 @@ export function HomeClient({
   contenido,
   destacados,
   tiendaOficial = null,
+  promociones = null,
   busquedaAsistida = null,
 }: {
   contenido: HomeContent;
@@ -168,6 +138,11 @@ export function HomeClient({
    * armado en app/page.tsx. `null` si la sección no tiene una página publicada para mostrar.
    */
   tiendaOficial?: ReactNode;
+  /**
+   * Sección "Promociones" (spec 2026-10-26-promociones-home): hueco por request con su
+   * `<Suspense fallback={null}>`, armado en app/page.tsx. Fuera de vigencia no dibuja nada.
+   */
+  promociones?: ReactNode;
   /**
    * "Cuéntenos qué necesita" (flag `busqueda-ia`): hueco por request con su
    * `<Suspense fallback={null}>`, armado en app/page.tsx. Va debajo de la
@@ -197,6 +172,15 @@ export function HomeClient({
   // ("Ordenar secciones" de la barra de edición, `contenido.orden`). La cinta de marcas va a todo
   // el ancho; el resto, dentro del ancho del contenido.
   const secciones: Record<SeccionOrdenable, ReactNode> = {
+    promociones: (
+      <Contenido>
+        <Reveal>
+          <SeccionEditable seccion="promociones" titulo={contenido.promociones.titulo} visibilidad={vis("promociones")} botonTop="top-[calc(clamp(40px,5vw,72px)+0.5rem)]">
+            {promociones}
+          </SeccionEditable>
+        </Reveal>
+      </Contenido>
+    ),
     hero: (
       <Contenido className="pt-[clamp(20px,3vw,36px)]">
         <Reveal>

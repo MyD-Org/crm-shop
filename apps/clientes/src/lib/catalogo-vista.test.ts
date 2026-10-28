@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   esOrden,
   alternarCategoria,
+  completarMarcas,
   itemsDeFaceta,
   anuncioResultados,
   chipsActivos,
@@ -320,6 +321,29 @@ describe("indexable", () => {
     expect(indexable({ ...base, categorias: ["A", "B"] })).toBe(false);
     expect(indexable({ ...base, atributos: ["tono-calido"] })).toBe(false);
     expect(indexable({ ...base, categorias: ["Reflectores"], ia: "reflector para el patio" })).toBe(false);
+  });
+});
+
+describe("completarMarcas", () => {
+  it("suma con 0, al final, las marcas del catálogo que no cuentan con los filtros vigentes", () => {
+    const filtradas = [
+      { label: "MACROLED", count: 628 },
+      { label: "CHINT", count: 395 },
+    ];
+    const todas = [
+      { label: "180", count: 817 },
+      { label: "MACROLED", count: 635 },
+      { label: "CHINT", count: 395 },
+    ];
+    expect(completarMarcas(filtradas, todas)).toEqual([
+      { label: "MACROLED", count: 628 },
+      { label: "CHINT", count: 395 },
+      { label: "180", count: 0 },
+    ]);
+  });
+
+  it("sin marcas filtradas, lista todas con 0", () => {
+    expect(completarMarcas([], [{ label: "180", count: 817 }])).toEqual([{ label: "180", count: 0 }]);
   });
 });
 

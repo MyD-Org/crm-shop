@@ -1,14 +1,14 @@
 "use client";
 
 import { Fragment, useId, useState } from "react";
-import { Button, Card, Divider, FacetGroup, Field, Input, RangeSlider, Select, Switch } from "@myd-org/ui";
+import { Button, Card, Chip, Divider, FacetGroup, Field, Input, RangeSlider, Select, Switch } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
 import { alternarCar, cambiosDeCarRango, rangoDeCar } from "@/lib/catalogo-car";
 import type { FacetaClave } from "@/lib/catalogo-facetas-registro";
 import {
   cambiosDePotencia,
   cambiosDeRango,
-  ordenPorDefecto,
+  quitarBusqueda,
   rangoEfectivo,
   rangoEfectivoPotencia,
   type EstadoCatalogo,
@@ -20,12 +20,12 @@ import {
   hayFiltros,
   itemsDeFaceta,
   itemsDeFacetaClave,
-  itemsVisibles,
   limpiarFiltros,
   panelPorTipo,
 } from "@/lib/catalogo-vista";
 import { enviarFiltroCar } from "@/lib/busqueda-v2/telemetria";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
+import { TEXTOS_FRANJA } from "@/lib/busqueda-inteligente/textos";
 import { POSICION_MAX, POSICION_MIN, posicionAPrecio, precioAPosicion } from "@/lib/escala-precio";
 
 type Ir = (cambios: Partial<EstadoCatalogo>) => void;
@@ -39,8 +39,8 @@ const alternar = (lista: string[], valor: string, tildado: boolean) =>
 
 /**
  * Panel de filtros: categorías, marcas, disponibilidad, características por tipo de producto
- * (`facetas.porClave`, ver `panelPorTipo`) y precio. En marcas y características los ítems con conteo 0
- * se ocultan (ver `itemsVisibles`); categorías muestra siempre el árbol completo.
+ * (`facetas.porClave`, ver `panelPorTipo`) y precio. Categorías muestra siempre el árbol completo y
+ * marcas, todas las del catálogo (las de 0 con su 0, ver `completarMarcas`).
  * Puro: todo
  * lo que toca el visitante sale por `ir` como cambios de estado (que el
  * padre convierte en URL). Sin `dentroDeSheet` va dentro de una `Card` con
@@ -53,6 +53,8 @@ export function CatalogoFiltros({
   ir,
   dentroDeSheet = false,
   alElegirCategoria,
+  alCambiarStock,
+  alQuitarBusqueda,
   sinMarcas = false,
 }: {
   facetas: Facetas;
@@ -64,11 +66,23 @@ export function CatalogoFiltros({
    * La hoja de mobile lo usa, con las facetas por tipo, para aplicar la categoría en el acto.
    */
   alElegirCategoria?: (categorias: string[]) => void;
+  /**
+   * Si se pasa, "Solo con stock" y "Con stock en" llaman a esto en vez de `ir`. La hoja de mobile
+   * lo usa para aplicarlos en el acto: cambian los conteos de todo el panel.
+   */
+  alCambiarStock?: Ir;
+  /**
+   * Si se pasa, la X de la búsqueda llama a esto en vez de `ir`. La hoja de mobile lo usa para
+   * quitarla en el acto: la búsqueda no viaja en el borrador.
+   */
+  alQuitarBusqueda?: () => void;
   /** Sin el grupo "Marcas": en una página de marca la marca la fija la página. */
   sinMarcas?: boolean;
 }) {
   // useId: el panel se monta dos veces (aside y hoja de mobile).
   const idDisponibilidad = useId();
+  const idBusqueda = useId();
+  const irStock = alCambiarStock ?? ir;
   const panel = panelPorTipo(facetas.porClave, estado, facetas.categorias);
   const disponibilidad = (
     <section aria-labelledby={idDisponibilidad} className="flex flex-col gap-3">
@@ -82,7 +96,7 @@ export function CatalogoFiltros({
         label="Solo con stock"
         checked={estado.soloStock || Boolean(estado.retiroEn)}
         // Apagarlo también quita "Con stock en <local>": sin stock no hay local que filtrar.
-        onCheckedChange={(v) => ir(v ? { soloStock: true } : { soloStock: false, retiroEn: undefined })}
+        onCheckedChange={(v) => irStock(v ? { soloStock: true } : { soloStock: false, retiroEn: undefined })}
       />
       {facetas.locales && facetas.locales.length > 1 && (
         <Field label="Con stock en">
@@ -94,7 +108,7 @@ export function CatalogoFiltros({
             ]}
             value={estado.retiroEn ?? TODOS_LOS_LOCALES}
             onValueChange={(v) =>
-              ir(v === TODOS_LOS_LOCALES ? { retiroEn: undefined } : { retiroEn: v, soloStock: true })
+              irStock(v === TODOS_LOS_LOCALES ? { retiroEn: undefined } : { retiroEn: v, soloStock: true })
             }
           />
         </Field>
@@ -103,18 +117,28 @@ export function CatalogoFiltros({
   );
   const grupos = (
     <div className="flex flex-col gap-5">
-      {/* Con búsqueda, los números de las categorías son los de la búsqueda: lo dice y la deja quitar. */}
+      {/* Con búsqueda (los números son los de la búsqueda): un bloque propio, con la búsqueda en un
+          chip que se quita con la X. */}
       {facetas.categoriasEnBusqueda && (
-        <p className="-mb-3 flex flex-wrap items-center gap-x-2 text-xs text-muted">
-          <span>Conteos en «{facetas.categoriasEnBusqueda}»</span>
-          <Button
-            variant="link"
-            size="inline"
-            onClick={() => ir({ query: undefined, ia: undefined, orden: ordenPorDefecto(undefined), pagina: 1 })}
-          >
-            Quitar búsqueda
-          </Button>
-        </p>
+        <>
+          <section aria-labelledby={idBusqueda} className="flex flex-col gap-2">
+            <h3 id={idBusqueda} className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Búsqueda
+            </h3>
+            <div>
+              <Chip
+                variant="removable"
+                // Mismo color que los filtros aplicados de arriba de la grilla (CatalogoChips).
+                className="max-w-full border-accent/50 bg-accent-soft text-primary"
+                removeLabel={TEXTOS_FRANJA.quitarTexto(facetas.categoriasEnBusqueda)}
+                onRemove={alQuitarBusqueda ?? (() => ir(quitarBusqueda()))}
+              >
+                «{facetas.categoriasEnBusqueda}»
+              </Chip>
+            </div>
+          </section>
+          <Divider />
+        </>
       )}
       <FacetGroup
         title="Categorías"
@@ -124,10 +148,12 @@ export function CatalogoFiltros({
           // Las subcategorías van debajo de su madre, corridas un nivel.
           depth: "nivel" in c ? (c.nivel ?? 1) - 1 : 0,
           count: c.count,
-          // Va siempre el árbol completo, con o sin búsqueda: las de 0 se ven con su 0,
-          // sin atenuar, y se pueden tildar igual (la regla de ceros no aplica acá). Sin búsqueda el
-          // número es el total fijo; con búsqueda, lo que la búsqueda deja en esa categoría.
+          // Va siempre el árbol completo: las de 0 se ven con su 0 (la regla de ceros no aplica
+          // acá). Sin búsqueda el número es el total fijo; con búsqueda, lo que la búsqueda deja en
+          // esa categoría, y las de 0 van en gris y sin poder tildarse (llevarían a un "sin
+          // resultados"), salvo una ya tildada, que se tiene que poder destildar.
           checked: c.checked,
+          disabled: Boolean(facetas.categoriasEnBusqueda) && c.count === 0 && !c.checked,
         }))}
         // Tildar una madre saca a sus hijas: la madre ya incluye toda su rama.
         onToggle={(valor, tildado) => {
@@ -142,14 +168,14 @@ export function CatalogoFiltros({
         <Divider />
         <FacetGroup
           title="Marcas"
-          items={itemsVisibles(
-            itemsDeFaceta(facetas.marcas, estado.marcas).map((m) => ({
-              value: m.label,
-              label: formatMarca(m.label),
-              count: m.count,
-              checked: m.checked,
-            })),
-          )}
+          // Todas las marcas del catálogo, siempre: las de 0 se ven con su 0 (la regla de ceros no
+          // aplica acá, igual que en categorías). Ver `completarMarcas`.
+          items={itemsDeFaceta(facetas.marcas, estado.marcas).map((m) => ({
+            value: m.label,
+            label: formatMarca(m.label),
+            count: m.count,
+            checked: m.checked,
+          }))}
           onToggle={(valor, tildado) => ir({ marcas: alternar(estado.marcas, valor, tildado) })}
           searchable
           searchPlaceholder="Buscar marca…"

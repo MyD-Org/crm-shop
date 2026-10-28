@@ -17,6 +17,7 @@ import { vistaCardVariantes } from "@/lib/variantes-ficha";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { Product } from "@/data/products";
 import { badgeProducto } from "@/components/badge-producto";
+import { badgePromo, usePromoProducto } from "@/components/promociones/PromoProvider";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
@@ -38,11 +39,19 @@ function LightbulbIcon({ className }: { className?: string }) {
  * Imagen: la foto real del producto (overlay del CRM) o, si no tiene, el
  * ícono de siempre.
  */
-export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
+export function TarjetaProductoCarrusel({
+  producto,
+  sinBadge = false,
+}: {
+  producto: Product;
+  /** La sección de promociones dibuja su propio sello sobre la foto: la card no lleva badge. */
+  sinBadge?: boolean;
+}) {
   // Precio de la lista privada de la cuenta: todas las tarjetas se piden en una sola tanda.
   const p = aplicarEstadoPrecio(producto, usePreciosCuenta([producto.id]).get(producto.id));
   // Modelo con opciones: el panel para elegirla se monta fuera del `<Link>` (ver `PanelOpciones`).
   const [panelAbierto, setPanelAbierto] = useState(false);
+  const promo = usePromoProducto(producto.sku);
   const fotoReal = p.images?.[0];
   // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
   const marca = p.brand ? formatMarca(p.brand) : undefined;
@@ -95,7 +104,7 @@ export function TarjetaProductoCarrusel({ producto }: { producto: Product }) {
         showStock={mostrarStockEnCard(p)}
         price={vv.precio}
         oldPrice={vv.esDesde ? undefined : p.oldPrice}
-        badge={badgeProducto(p)}
+        badge={sinBadge ? undefined : (badgePromo(promo, p) ?? badgeProducto(p))}
         // La card entera es un <Link>: el corazón corta la navegación.
         cornerAction={<BotonFavorito productId={p.id} dentroDeLink />}
         image={

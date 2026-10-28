@@ -627,10 +627,12 @@ describe("API del panel de catálogo — productos", () => {
       const marcasRoute = await import("@/app/api/admin/catalogo/marcas/route")
       const res = await marcasRoute.GET(req("/api/admin/catalogo/marcas"))
       expect(res.status).toBe(200)
-      expect((await res.json()).marcas).toEqual([
-        { clave: "marca a", nombre: "marca a" },
-        { clave: "marca b", nombre: "Marca B" },
-      ])
+      // `nombre` es el min() de las variantes escritas: cuál gana depende de la collation de la base
+      // ("Marca A" vs "marca a"), así que sólo se fija que sea una de ellas.
+      const marcas = (await res.json()).marcas as { clave: string; nombre: string }[]
+      expect(marcas.map((m) => m.clave)).toEqual(["marca a", "marca b"])
+      expect(["Marca A", "marca a"]).toContain(marcas[0].nombre)
+      expect(marcas[1].nombre).toBe("Marca B")
     })
 
     it("asigna la modalidad por filtro de marca a esa marca solamente, y null la limpia", async () => {

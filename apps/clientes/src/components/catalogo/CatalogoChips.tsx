@@ -34,6 +34,13 @@ import { chipsActivos } from "@/lib/catalogo-vista";
  *
  * `py-1` le da aire al anillo de foco, que si no lo recorta el `overflow`.
  */
+/**
+ * Color de los filtros aplicados (chips de arriba de la grilla y la búsqueda del panel): el acento
+ * de la tienda en vez del gris casi transparente del `Chip` del DS, para que se distingan de un
+ * vistazo. Fondo y borde del acento; el texto en `primary`, que contrasta en todos los temas.
+ */
+export const CHIP_APLICADO = "border-accent/50 bg-accent-soft text-primary";
+
 export function CatalogoChips({
   estado,
   rango,
@@ -60,15 +67,10 @@ export function CatalogoChips({
   if (chips.length === 0) return null;
 
   return (
-    // La clave cambia con los chips: la fila se vuelve a montar desde el principio. Si no, en mobile
-    // conserva el desplazamiento de antes y el primer chip (la búsqueda) puede quedar cortado.
-    <div
-      key={chips.map((c) => c.clave).join("|")}
-      className="mt-4 flex items-center gap-2 overflow-x-auto py-1 lg:flex-wrap lg:overflow-visible"
-    >
+    <div className="mt-4 flex items-center gap-2 overflow-x-auto py-1 lg:flex-wrap lg:overflow-visible">
       {chips.map((c) => (
         <div key={c.clave} className="shrink-0">
-          <Chip variant="removable" removeLabel={c.removeLabel} onRemove={() => ir(c.cambios)}>
+          <Chip variant="removable" className={CHIP_APLICADO} removeLabel={c.removeLabel} onRemove={() => ir(c.cambios)}>
             {c.etiqueta}
           </Chip>
         </div>

@@ -26,6 +26,7 @@ import {
 import { enviarFiltroCar } from "@/lib/busqueda-v2/telemetria";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { TEXTOS_FRANJA } from "@/lib/busqueda-inteligente/textos";
+import { CHIP_APLICADO } from "./CatalogoChips";
 import { POSICION_MAX, POSICION_MIN, posicionAPrecio, precioAPosicion } from "@/lib/escala-precio";
 
 type Ir = (cambios: Partial<EstadoCatalogo>) => void;
@@ -128,7 +129,7 @@ export function CatalogoFiltros({
             <div>
               <Chip
                 variant="removable"
-                className="max-w-full"
+                className={`max-w-full ${CHIP_APLICADO}`}
                 removeLabel={TEXTOS_FRANJA.quitarTexto(facetas.categoriasEnBusqueda)}
                 onRemove={alQuitarBusqueda ?? (() => ir(quitarBusqueda()))}
               >

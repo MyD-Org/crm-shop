@@ -142,7 +142,8 @@
     "grupo_id": "text",
     "etiqueta": "text",
     "es_representante": "boolean",
-    "overlay_alegra_id": "text"
+    "overlay_alegra_id": "text",
+    "campanias_online": "jsonb"
   },
   "public.catalog_categories_shop": {
     "tenant_id": "text",
@@ -272,5 +273,13 @@
     "alegra_account": "text",
     "alegra_price_list_id": "text",
     "lista_id": "uuid"
+  },
+  "public.campanias_shop": {
+    "tenant_id": "text",
+    "id": "uuid",
+    "nombre": "text",
+    "etiqueta": "text",
+    "inicio": "timestamp with time zone",
+    "fin": "timestamp with time zone"
   }
 }

@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { cotizar } from "@/lib/cotizacion";
 import { getProductosPorIds } from "@/lib/catalog";
 import { SIN_MEDIOS_PRECIO } from "@/lib/medios-precio";
-import { crearPedido, type DatosCliente, type DatosPedido } from "@/lib/pedidos";
+import { cambiarMedioPedido, crearPedido, type DatosCliente, type DatosPedido } from "@/lib/pedidos";
 import { campaniasActivasEn } from "@/lib/campanias/vigentes";
 import { UnidadesCampaniaError } from "@/lib/campanias/unidades";
 import { assertLocalTestDb } from "./db-url";
@@ -114,6 +114,28 @@ describe("límite de unidades por regla de campaña", () => {
     const agotado = await leer();
     expect(agotado.campania).toBeUndefined();
     expect(agotado.price).toBe(160);
+  });
+
+  it("cambiar el medio de pago no puede sumarle a un pedido una unidad de campaña que ya no queda", async () => {
+    await sembrar(1);
+    await crearPedido(cliente(1), datos, await cotizarUna("V1", 1)); // se lleva la única unidad
+    const normal = await cotizarUna("V2", 1); // ya agotada: precio normal, sin campaña
+    expect(normal.lineas[0].campaniaReglaId).toBeUndefined();
+    const b = await crearPedido(cliente(2), datos, normal);
+    // Una cotización vieja (o adulterada) con la regla de campaña: la transacción la frena.
+    const conCampania = { ...normal, lineas: normal.lineas.map((l) => ({ ...l, campaniaId: CAMPANIA, campaniaReglaId: REGLA, precioUnitario: 128 })) };
+    await expect(
+      cambiarMedioPedido(b.id, { clerkUserId: "user_2" }, { pagoMetodo: "mercadopago", cuotas: null, idPriceList: null, cotizacion: conCampania }),
+    ).rejects.toBeInstanceOf(UnidadesCampaniaError);
+  });
+
+  it("cambiar el medio de un pedido que ya tiene la última unidad la conserva (no se cuenta a sí mismo)", async () => {
+    await sembrar(1);
+    const a = await crearPedido(cliente(1), datos, await cotizarUna("V1", 1));
+    const recotizada = await cotizar([{ id: "V1", qty: 1 }], { campanias: await activas(), excluirPedidoId: a.id });
+    await expect(
+      cambiarMedioPedido(a.id, { clerkUserId: "user_1" }, { pagoMetodo: "mercadopago", cuotas: null, idPriceList: null, cotizacion: recotizada }),
+    ).resolves.toMatchObject({ ok: true });
   });
 
   it("al recotizar un pedido, sus propias unidades no cuentan (decisión C con la última unidad)", async () => {

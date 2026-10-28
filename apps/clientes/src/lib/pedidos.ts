@@ -2169,6 +2169,10 @@ export async function cambiarMedioPedido(
       actuales.size === cot.lineas.length && cot.lineas.every((l) => actuales.get(l.id) === l.qty);
     if (!mismas) return { ok: false, motivo: "lineas_distintas" };
 
+    // Límite de unidades de campaña: mismo control que al crear (lock por regla y relectura), sin
+    // contar las unidades de este mismo pedido. Una cotización vieja no le suma una unidad que no queda.
+    await validarUnidadesEnTx(tx, cot.lineas, id);
+
     // Reserva: el vencimiento depende del medio (24 h en línea; `reserva_dias` sin cobro en línea).
     let reglasReserva: Pick<ReglasVentaTenant, "reservaDias"> | null = null;
     try {

@@ -90,6 +90,8 @@ export class UnidadesCampaniaError extends Error {
 export async function validarUnidadesEnTx(
   tx: Ejecutor,
   lineas: readonly { id: string; qty: number; campaniaReglaId?: string }[],
+  /** Cambio de medio de un pedido existente: sus propias unidades no cuentan. */
+  excluirPedidoId?: string,
 ): Promise<void> {
   const pedidas = new Map<string, { qty: number; ids: string[] }>();
   for (const l of lineas) {
@@ -116,7 +118,7 @@ export async function validarUnidadesEnTx(
     for (const e of mapCampanias(f.c)) if (pedidas.has(e.reglaId) && e.unidades != null) limites.set(e.reglaId, e.unidades);
   }
   if (limites.size === 0) return;
-  const usadas = await unidadesUsadas(tx, [...limites.keys()]);
+  const usadas = await unidadesUsadas(tx, [...limites.keys()], excluirPedidoId);
   for (const [regla, limite] of limites) {
     const quedan = Math.max(0, limite - (usadas.get(regla) ?? 0));
     const p = pedidas.get(regla)!;

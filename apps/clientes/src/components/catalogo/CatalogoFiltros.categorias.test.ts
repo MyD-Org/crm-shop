@@ -38,6 +38,30 @@ describe("CatalogoFiltros: categorías", () => {
     expect(html).not.toMatch(/ disabled=/);
   });
 
+  it("con conteos de la búsqueda, las de 0 van deshabilitadas y las que cuentan no", () => {
+    const html = renderToStaticMarkup(
+      createElement(CatalogoFiltros, {
+        facetas: { ...facetas, categoriasEnBusqueda: "foco" },
+        estado: leerEstado({ q: "foco" }),
+        ir: () => {},
+      }),
+    );
+    // Electricidad y Seguridad cuentan 0; Iluminación, 1.
+    expect((html.match(/ disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(html).toMatch(/Iluminación/);
+  });
+
+  it("una categoría tildada con 0 se puede destildar aunque haya búsqueda", () => {
+    const html = renderToStaticMarkup(
+      createElement(CatalogoFiltros, {
+        facetas: { ...facetas, categorias: [{ label: "SEGURIDAD", count: 0, nivel: 1 }], categoriasEnBusqueda: "foco" },
+        estado: leerEstado({ q: "foco", categoria: "SEGURIDAD" }),
+        ir: () => {},
+      }),
+    );
+    expect(html).not.toMatch(/ disabled=/);
+  });
+
   it("sin búsqueda es el mismo árbol", () => {
     const sin = texto(renderizar({}));
     const con = texto(renderizar({ q: "foco" }));

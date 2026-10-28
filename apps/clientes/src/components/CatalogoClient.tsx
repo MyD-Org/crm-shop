@@ -24,6 +24,7 @@ import {
   sinCar,
   hrefCatalogo,
   hrefCon,
+  quitarBusqueda,
   type EstadoCatalogo,
 } from "@/lib/catalogo-url";
 import { anuncioResultados, hayFiltros, interpretacionVigente, limpiarFiltros } from "@/lib/catalogo-vista";
@@ -35,7 +36,7 @@ import { fijarCatalogoParaChat } from "@/lib/chat-ia-puente";
 import { anotarBusqueda } from "@/lib/iniciativa/motor";
 import { useChatIa } from "@/hooks/useChatIa";
 import { mejorCuotaProducto, type OpcionCuotas } from "@/lib/cuotas-sin-interes";
-import { sinResultadosPorLocal } from "@/lib/catalogo-sin-resultados";
+import { sinResultadosPorCategoria, sinResultadosPorLocal } from "@/lib/catalogo-sin-resultados";
 import { olvidarLocalRecordado } from "@/lib/local-recordado";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 
@@ -208,6 +209,10 @@ export function CatalogoClient({
   const sinLocal = sinResultadosPorLocal(estado, facetas.locales ?? [], consultaVacia);
   const quitarLocal = () => ir({ retiroEn: undefined });
   const verSinStock = () => ir({ soloStock: false });
+  // Búsqueda + categoría que da 0 (sin local ni sin stock que lo expliquen): lo dice así y ofrece
+  // las dos salidas, quitar la categoría o ver la categoría sin la búsqueda.
+  const sinCategoria =
+    !sinLocal && sinStock === 0 ? sinResultadosPorCategoria(estado, consultaVacia) : null;
 
   // Señales de la invitación proactiva del asesor (src/lib/iniciativa/): cada
   // búsqueda distinta y si terminó sin resultados (después del rescate de la
@@ -290,7 +295,22 @@ export function CatalogoClient({
         </FadeScroll>
 
         <div className="flex min-w-0 flex-1 flex-col gap-6">
-          {productos.length === 0 && busquedaIa && consultaVacia ? (
+          {productos.length === 0 && sinCategoria ? (
+            <EmptyState
+              title={sinCategoria.titulo}
+              description={sinCategoria.descripcion}
+              action={
+                <div className="flex flex-col items-center gap-3">
+                  <Button variant="primary" onClick={() => ir({ categorias: [], caracteristicas: [] })}>
+                    {sinCategoria.quitar}
+                  </Button>
+                  <Button variant="secondary" onClick={() => ir(quitarBusqueda())}>
+                    {sinCategoria.verSinBusqueda}
+                  </Button>
+                </div>
+              }
+            />
+          ) : productos.length === 0 && busquedaIa && consultaVacia ? (
             <CatalogoSinResultados
               consulta={consultaVacia}
               alternativas={busquedaIa.alternativas}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EstadoCatalogo } from "./catalogo-url";
-import { sinResultadosPorLocal } from "./catalogo-sin-resultados";
+import { sinResultadosPorCategoria, sinResultadosPorLocal } from "./catalogo-sin-resultados";
 
 const base: EstadoCatalogo = {
   query: undefined,
@@ -43,5 +43,26 @@ describe("sinResultadosPorLocal", () => {
   it("un local desconocido cae al slug", () => {
     const r = sinResultadosPorLocal({ ...base, retiroEn: "otro" }, locales, undefined);
     expect(r?.titulo).toBe("No hay productos con stock en otro");
+  });
+});
+
+describe("sinResultadosPorCategoria", () => {
+  it("sin búsqueda o sin categorías no aplica", () => {
+    expect(sinResultadosPorCategoria({ ...base, categorias: ["HERRAMIENTAS"] }, undefined)).toBeNull();
+    expect(sinResultadosPorCategoria(base, "Plafón 60x60")).toBeNull();
+  });
+
+  it("dice que el 0 es de la búsqueda en esa categoría y nombra las dos salidas", () => {
+    expect(sinResultadosPorCategoria({ ...base, categorias: ["HERRAMIENTAS"] }, "Plafón 60x60")).toEqual({
+      titulo: "No hay «Plafón 60x60» en Herramientas",
+      descripcion: "Puede quitar la categoría para volver a la búsqueda, o ver la categoría completa sin la búsqueda.",
+      quitar: "Quitar Herramientas",
+      verSinBusqueda: "Ver Herramientas sin la búsqueda",
+    });
+  });
+
+  it("con varias categorías las nombra juntas", () => {
+    const r = sinResultadosPorCategoria({ ...base, categorias: ["HERRAMIENTAS", "SEGURIDAD"] }, "plafón");
+    expect(r?.titulo).toBe("No hay «plafón» en Herramientas o Seguridad");
   });
 });

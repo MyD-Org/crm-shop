@@ -147,10 +147,12 @@ export function CatalogoFiltros({
           // Las subcategorías van debajo de su madre, corridas un nivel.
           depth: "nivel" in c ? (c.nivel ?? 1) - 1 : 0,
           count: c.count,
-          // Va siempre el árbol completo, con o sin búsqueda: las de 0 se ven con su 0,
-          // sin atenuar, y se pueden tildar igual (la regla de ceros no aplica acá). Sin búsqueda el
-          // número es el total fijo; con búsqueda, lo que la búsqueda deja en esa categoría.
+          // Va siempre el árbol completo: las de 0 se ven con su 0 (la regla de ceros no aplica
+          // acá). Sin búsqueda el número es el total fijo; con búsqueda, lo que la búsqueda deja en
+          // esa categoría, y las de 0 van en gris y sin poder tildarse (llevarían a un "sin
+          // resultados"), salvo una ya tildada, que se tiene que poder destildar.
           checked: c.checked,
+          disabled: Boolean(facetas.categoriasEnBusqueda) && c.count === 0 && !c.checked,
         }))}
         // Tildar una madre saca a sus hijas: la madre ya incluye toda su rama.
         onToggle={(valor, tildado) => {

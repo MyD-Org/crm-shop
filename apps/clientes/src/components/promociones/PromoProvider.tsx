@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import type { Product } from "@/data/products";
+import type { CampaniaProducto, Product } from "@/data/products";
 import {
   descuentoPropio,
   infoPromoSku,
@@ -74,6 +74,20 @@ export function usePromoProducto(sku: string | undefined): InfoPromoProducto | n
  * badge de siempre). Sin tachado: la card muestra en grande el precio de lista y el habitual es el de
  * transferencia, mezclarlos confundiría.
  */
+/**
+ * Badge de una campaña de precios en las cards (spec 2026-10-28-campanias-precios-design.md): la
+ * etiqueta (navy) y el % contra nuestro precio normal en verde, igual que `badgePromo`. Nunca el
+ * `discount` del ProductCard, que lo pinta en rojo (el rojo es sólo para la urgencia).
+ */
+export function badgeCampania(c: CampaniaProducto): ReactNode {
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white">{c.etiqueta}</span>
+      <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-bold text-success">{c.pct} % de descuento</span>
+    </span>
+  );
+}
+
 export function badgePromo(info: InfoPromoProducto | null, producto: Pick<Product, "price" | "precioFinal" | "precioMedio">): ReactNode {
   if (!info) return undefined;
   const d = descuentoPropio(precioPrincipal(producto).monto, info.habitual);

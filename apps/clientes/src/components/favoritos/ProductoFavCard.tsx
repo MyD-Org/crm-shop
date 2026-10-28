@@ -9,7 +9,7 @@ import { PrecioMedioCard } from "@/components/PrecioMedio";
 import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
 import { badgeProducto } from "@/components/badge-producto";
-import { badgePromo, usePromoProducto } from "@/components/promociones/PromoProvider";
+import { badgeCampania, badgePromo, usePromoProducto } from "@/components/promociones/PromoProvider";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { IconoLampara } from "@/components/mi-cuenta/iconos";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
@@ -68,7 +68,7 @@ export function ProductoFavCard({ p }: { p: Product }) {
       // Final con IVA si se conoce; si no, el de siempre (igual que el catálogo).
       price={p.precioFinal ?? p.price}
       oldPrice={p.oldPrice}
-      badge={badgePromo(promo, p) ?? badgeProducto(p)}
+      badge={p.campania ? badgeCampania(p.campania) : (badgePromo(promo, p) ?? badgeProducto(p))}
       image={
         p.images?.[0] ? (
           <Image

@@ -38,6 +38,8 @@ export interface JsonLdProduct {
     priceCurrency: "ARS";
     availability: "https://schema.org/InStock" | "https://schema.org/OutOfStock";
     url?: string;
+    /** Campaña de precios: último día de vigencia ("YYYY-MM-DD"). */
+    priceValidUntil?: string;
   };
 }
 
@@ -50,6 +52,11 @@ function descripcionPlana(descripcion: string | undefined): string | undefined {
   return texto.length > LARGO_MAXIMO_DESCRIPCION
     ? `${texto.slice(0, LARGO_MAXIMO_DESCRIPCION).trimEnd()}…`
     : texto;
+}
+
+/** "YYYY-MM-DD" del último instante antes de `fin` (exclusivo), en hora de Argentina (-03:00). */
+function ultimoDiaAR(fin: string): string {
+  return new Date(new Date(fin).getTime() - 1 - 3 * 3_600_000).toISOString().slice(0, 10);
 }
 
 /** Arma el `Product` de JSON-LD. `siteUrl` = `NEXT_PUBLIC_SITE_URL` (sin barra final), undefined si no está configurada. */
@@ -79,6 +86,8 @@ export function jsonLdProducto(producto: Product, siteUrl: string | undefined): 
             availability:
               producto.stock === "out" ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
             ...(url ? { url } : {}),
+            // Precio de campaña: válido hasta el último día de la campaña en Argentina (fin exclusivo).
+            ...(producto.campania ? { priceValidUntil: ultimoDiaAR(producto.campania.fin) } : {}),
           },
         }
       : {}),

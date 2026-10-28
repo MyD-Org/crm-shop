@@ -6,6 +6,7 @@ import { textoConsultaProducto } from "@/lib/contacto-pedido";
 import { Button, QuantityStepper, Skeleton, VariantSelector, type PaymentLogo } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { PromoFicha } from "@/components/promociones/PromoFicha";
+import { CampaniaFicha } from "@/components/promociones/CampaniaFicha";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { CuotasConCarrito, useProgresoCuotasCarrito } from "@/components/producto/CuotasConCarrito";
 import { cuotasFichaConCarrito, cuotasHastaFicha, metaCuotasFicha } from "@/lib/ficha-cuotas-carrito";
@@ -370,7 +371,13 @@ export function ProductoClient({
                   preciosMedios={producto.preciosMedios}
                 />
               )}
-              {!sinPrecio ? <PromoFicha producto={producto} quedan={quedanPromo} slugDestacado={slugDestacadoPromo} /> : null}
+              {!sinPrecio ? (
+                producto.campania ? (
+                  <CampaniaFicha producto={producto} />
+                ) : (
+                  <PromoFicha producto={producto} quedan={quedanPromo} slugDestacado={slugDestacadoPromo} />
+                )
+              ) : null}
               {!sinPrecio && cuotas && producto.precioFinal != null && hayCuotasParaModal(cuotas) && (
                 <div className="mt-3">
                   {cuotasConCarrito ? (

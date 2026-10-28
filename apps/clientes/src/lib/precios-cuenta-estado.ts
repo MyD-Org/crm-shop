@@ -48,7 +48,8 @@ export function sesionPorCookie(cookie: string): boolean {
 
 /**
  * El producto con el precio de la cuenta aplicado. Con precio privado: `price`/`precioFinal` pasan
- * a ser los de su lista (sin tachar el público: se muestra siempre, aunque sea mayor) y se ocultan
+ * a ser los de su lista (sin tachar el público: se muestra siempre, aunque sea mayor; salvo que una
+ * campaña de precios lo deje más barato, que gana y tacha el privado) y se ocultan
  * "$X con medio", cuotas y descuentos por medio. Consulte: sin precio (la ficha ya dice "Consulte" y
  * bloquea el agregado). Sin estado devuelve el mismo objeto.
  */
@@ -62,12 +63,26 @@ export function aplicarEstadoPrecio(p: Product, estado: EstadoPrecioCuenta | und
     cuotasSinInteres: undefined,
     oldPrice: undefined,
     discount: undefined,
+    // Campaña de precios: sólo si gana (abajo); nunca un badge sobre un precio que no se ve.
+    campania: undefined,
   };
   if (estado.tipo === "privado") {
+    // Decisión B (campañas): paga el menor entre su privado y el de campaña de la lista general (el
+    // `price` del producto ya es ése). Si gana la campaña, se tacha SU privado y el % es contra él.
+    const privado = estado.precio.price;
+    if (p.campania && p.price > 0 && p.price < privado) {
+      return {
+        ...p,
+        ...sinMedios,
+        oldPrice: estado.precio.precioFinal ?? privado,
+        campania: { ...p.campania, pct: Math.floor((1 - p.price / privado) * 100 + 1e-9) },
+        precioCuenta: "privado",
+      };
+    }
     return {
       ...p,
       ...sinMedios,
-      price: estado.precio.price,
+      price: privado,
       precioFinal: estado.precio.precioFinal,
       precioCuenta: "privado",
     };

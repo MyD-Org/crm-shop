@@ -9,6 +9,7 @@
  * sólo aplica si trae la versión vigente. Si no, no se toca nada y se devuelve
  * el carrito actual para que el cliente lo adopte.
  */
+import type { Product } from "@/data/products";
 import { campaniasVigentes } from "./campanias/vigentes";
 import { SIN_MEDIOS_PRECIO } from "./medios-precio";
 import { and, eq, sql } from "drizzle-orm";
@@ -185,9 +186,14 @@ export async function enriquecer(
           qty,
           name: nombreDeLinea(p),
           brand: p.brand,
-          price: privados ? (privados.get(id) ?? 0) : p.price,
+          price: privados ? menorConCampania(p, privados.get(id) ?? 0) : p.price,
           image: p.images?.[0]?.url,
         }
       : { id, qty, name: "", brand: "", price: 0, faltante: true };
   });
+}
+
+/** Decisión B (campañas de precios): una cuenta privada paga el menor entre su privado y el de campaña. */
+function menorConCampania(p: Product, privado: number): number {
+  return p.campania && privado > 0 && p.price < privado ? p.price : privado;
 }

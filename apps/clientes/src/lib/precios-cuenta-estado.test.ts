@@ -95,3 +95,35 @@ describe("aplicarEstadoPrecio", () => {
     expect(p.precioMedio).toBeUndefined();
   });
 });
+
+describe("aplicarEstadoPrecio con campaña de precios (decisión B: paga el menor)", () => {
+  // Campaña al 20 %: 128 neto (154,88 final) contra 160 normal. Datos inventados.
+  const enCampania = {
+    ...producto,
+    price: 128,
+    precioFinal: 154.88,
+    oldPrice: 193.6,
+    campania: { id: "c1", nombre: "Black Friday", etiqueta: "BF", fin: "2026-12-01T03:00:00.000Z", pct: 20, unidades: null, quedan: null },
+  } as Product;
+
+  it("privado más caro (140): paga la campaña, tacha su privado y el % es contra su privado", () => {
+    const p = aplicarEstadoPrecio(enCampania, { tipo: "privado", precio: { price: 140, precioFinal: 169.4 } });
+    expect(p.price).toBe(128);
+    expect(p.precioFinal).toBe(154.88);
+    expect(p.oldPrice).toBe(169.4);
+    expect(p.campania?.pct).toBe(8);
+    expect(p.precioCuenta).toBe("privado");
+  });
+
+  it("privado más barato (120): su privado, sin campaña ni tachado", () => {
+    const p = aplicarEstadoPrecio(enCampania, { tipo: "privado", precio: { price: 120, precioFinal: 145.2 } });
+    expect(p.price).toBe(120);
+    expect(p.oldPrice).toBeUndefined();
+    expect(p.campania).toBeUndefined();
+  });
+
+  it("consulte y pendiente: sin campaña (nunca un badge sobre un precio que no se ve)", () => {
+    expect(aplicarEstadoPrecio(enCampania, { tipo: "consulte" }).campania).toBeUndefined();
+    expect(aplicarEstadoPrecio(enCampania, { tipo: "pendiente" }).campania).toBeUndefined();
+  });
+});

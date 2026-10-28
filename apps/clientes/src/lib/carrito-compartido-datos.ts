@@ -56,9 +56,11 @@ export async function productosCompartidos(
         precioExhibido: 0,
       };
     }
-    // Con lista privada: su neto (0 = sin precio en su lista, "Consulte") y su final con IVA.
-    const neto = privados ? (privados.get(id) ?? 0) : p.price;
-    const exhibido = privados ? (precioFinal(neto, p.ivaPorcentaje) ?? neto) : (p.precioFinal ?? p.price);
+    // Con lista privada: su neto (0 = sin precio en su lista, "Consulte") y su final con IVA; si una
+    // campaña de precios lo deja más barato, el de campaña (decisión B: paga el menor).
+    const privado = privados ? (privados.get(id) ?? 0) : undefined;
+    const neto = privado === undefined ? p.price : p.campania && privado > 0 && p.price < privado ? p.price : privado;
+    const exhibido = privados && neto !== p.price ? (precioFinal(neto, p.ivaPorcentaje) ?? neto) : (p.precioFinal ?? p.price);
     return {
       item: { id, qty, name: nombreDeLinea(p), brand: p.brand, price: neto, image: p.images?.[0]?.url },
       precioExhibido: exhibido,

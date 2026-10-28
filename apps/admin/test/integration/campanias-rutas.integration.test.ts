@@ -20,6 +20,7 @@ const lista = await import("@/app/api/admin/campanias/route")
 const una = await import("@/app/api/admin/campanias/[id]/route")
 const terminar = await import("@/app/api/admin/campanias/[id]/terminar/route")
 const previa = await import("@/app/api/admin/campanias/previsualizar/route")
+const grilla = await import("@/app/api/admin/catalogo/precios-online/route")
 
 const A = "tenant-a"
 const NOT_FOUND = { error: "No encontrado", code: "not_found" }
@@ -117,6 +118,20 @@ describe("/api/admin/campanias", () => {
     )
     const del = await una.DELETE(req(`/api/admin/campanias/${prog}`, { method: "DELETE" }), ctx(prog))
     expect(del.status).toBe(204)
+  })
+
+  it("la grilla de Precios online marca el producto en campaña activa con su etiqueta", async () => {
+    const ahora = await ahoraDb()
+    await lista.POST(req("/api/admin/campanias", { body: cuerpo(ahora, { etiqueta: "BF" }) }))
+    const g = await json(await grilla.GET(req("/api/admin/catalogo/precios-online")))
+    expect(g.items.map((f: { alegraId: string; enCampania: string | null }) => [f.alegraId, f.enCampania])).toEqual([["1", "BF"]])
+  })
+
+  it("una campaña programada todavía no marca la grilla", async () => {
+    const ahora = await ahoraDb()
+    await lista.POST(req("/api/admin/campanias", { body: cuerpo(ahora, { inicio: horas(ahora, 5), fin: horas(ahora, 9) }) }))
+    const g = await json(await grilla.GET(req("/api/admin/catalogo/precios-online")))
+    expect(g.items[0].enCampania).toBeNull()
   })
 
   it("id que no es uuid: 404", async () => {

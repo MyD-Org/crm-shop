@@ -4,6 +4,7 @@ import { useCallback, useState } from "react"
 import { Tabs } from "@myd-org/ui"
 import { CategoriasPanel } from "./CategoriasPanel"
 import { PreciosOnlinePanel } from "./PreciosOnlinePanel"
+import { CampaniasPanel } from "./CampaniasPanel"
 import { ProductosPanel } from "./ProductosPanel"
 import { RevisionPanel } from "./RevisionPanel"
 import { TagsPanel } from "./TagsPanel"
@@ -18,7 +19,7 @@ interface Props {
   sucursales: SucursalOpcionDto[]
 }
 
-type Tab = "productos" | "precios" | "categorias" | "etiquetas" | "revision"
+type Tab = "productos" | "precios" | "campanias" | "categorias" | "etiquetas" | "revision"
 
 /**
  * Panel de catálogo: la sección donde se cura lo que la tienda muestra. Vive en la navegación
@@ -55,6 +56,7 @@ export function CatalogoShell({ initialCategorias, initialTags, cuentas, sucursa
         items={[
           { value: "productos", label: "Productos" },
           { value: "precios", label: "Precios online" },
+          { value: "campanias", label: "Campañas" },
           { value: "categorias", label: "Categorías" },
           { value: "etiquetas", label: "Etiquetas" },
           ...(hayVariasCuentas ? [{ value: "revision", label: "Revisión" }] : []),
@@ -74,6 +76,7 @@ export function CatalogoShell({ initialCategorias, initialTags, cuentas, sucursa
         />
       )}
       {tab === "precios" && <PreciosOnlinePanel categorias={categorias} />}
+      {tab === "campanias" && <CampaniasPanel categorias={categorias} />}
       {tab === "categorias" && <CategoriasPanel categorias={categorias} onCambio={recargarTaxonomia} />}
       {tab === "etiquetas" && <TagsPanel tags={tags} onCambio={recargarTaxonomia} />}
       {tab === "revision" && hayVariasCuentas && (

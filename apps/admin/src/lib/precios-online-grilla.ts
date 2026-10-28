@@ -106,6 +106,8 @@ export interface FilaGrilla {
   precioReferencia: string | null
   estado: EstadoGrilla
   retenido: boolean
+  /** Etiqueta de la campaña de precios ACTIVA que lo alcanza (0095); null = ninguna. */
+  enCampania: string | null
   precios: PrecioListaGrilla[]
   referenciaAlegra: ReferenciaAlegra[]
 }
@@ -158,6 +160,7 @@ interface FilaSql {
   precioReferencia: string | null
   retenido: boolean
   nuevo: boolean
+  enCampania: string | null
 }
 
 function estadoDe(f: FilaSql, tienePrecios: boolean): EstadoGrilla {
@@ -206,6 +209,9 @@ export async function listarGrilla(
            p.precio_online_ref::text AS "precioReferencia",
            EXISTS (SELECT 1 FROM precios_online_retenciones r WHERE r.tenant_id = p.tenant_id AND r.alegra_id = p.alegra_id AND r.estado = 'pendiente') AS retenido,
            (o.id IS NULL) AS nuevo,
+           (SELECT c.etiqueta FROM jsonb_array_elements(coalesce(p.campanias_online, '[]'::jsonb)) e
+              JOIN campanias c ON c.id = (e->>'id')::uuid
+             WHERE c.inicio <= now() AND c.fin > now() LIMIT 1) AS "enCampania",
            (p.precios_online <> '[]'::jsonb) AS "tienePrecios"
     ${desde}
     LEFT JOIN shop_categories cat ON cat.id = o.categoria_id
@@ -283,6 +289,7 @@ export async function listarGrilla(
       precioReferencia: f.precioReferencia,
       estado: estadoDe(f, f.tienePrecios),
       retenido: f.retenido,
+      enCampania: f.enCampania,
       precios,
       referenciaAlegra,
     }

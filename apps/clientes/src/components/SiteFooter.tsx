@@ -3,6 +3,7 @@ import { cacheLife } from "next/cache";
 import { SiteFooter as SiteFooterDS } from "@myd-org/ui";
 import { linkFooter } from "@/components/footer/link-footer";
 import { BotonEditarFooterSiAdmin } from "@/components/footer/BotonEditarFooterSiAdmin";
+import { FranjaRedes } from "@/components/footer/FranjaRedes";
 import { textoBarra } from "@/data/footer";
 import { getDatosFooter, getDatosLegales } from "@/lib/home-datos";
 import { getPaginasPublicadas } from "@/lib/institucional/datos";
@@ -32,7 +33,10 @@ import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
  * "Medios de pago": logos de las tarjetas que acepta Mercado Pago en la cuenta (`getTarjetasMercadoPago`,
  * cacheado por días). Si Mercado Pago no responde, la fila no se muestra.
  *
- * Admin: botón "Editar footer" arriba del footer, en un hueco aparte
+ * Arriba del footer, la franja de Instagram (`FranjaRedes`, cuentas de la
+ * misma fila `footer`; sin cuentas no se pinta).
+ *
+ * Admin: botón "Editar footer" arriba de todo, en un hueco aparte
  * (`BotonEditarFooterSiAdmin` dentro de `<Suspense fallback={null}>`).
  */
 export async function SiteFooter() {
@@ -51,6 +55,7 @@ export async function SiteFooter() {
       <Suspense fallback={null}>
         <BotonEditarFooterSiAdmin inicial={footer} />
       </Suspense>
+      <FranjaRedes redes={footer.redes} />
       <SiteFooterDS
         className="site-footer"
         renderLink={linkFooter}

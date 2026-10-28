@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULTS_FOOTER,
   MAX_FOOTER,
+  hrefInstagram,
   hrefMapsDireccion,
   hrefWhatsapp,
   linkLocal,
   nuevoLocal,
   normalizarHrefFooter,
+  normalizarUsuarioInstagram,
   normalizarWhatsapp,
   resolverDatosFooter,
   textoBarra,
@@ -62,6 +64,22 @@ describe("normalizarHrefFooter", () => {
   });
 });
 
+describe("normalizarUsuarioInstagram", () => {
+  it("acepta el usuario con o sin @ y el enlace al perfil", () => {
+    expect(normalizarUsuarioInstagram("comercio_uno")).toBe("comercio_uno");
+    expect(normalizarUsuarioInstagram(" @comercio.uno ")).toBe("comercio.uno");
+    expect(normalizarUsuarioInstagram("https://www.instagram.com/comercio.uno/?hl=es")).toBe("comercio.uno");
+    expect(normalizarUsuarioInstagram("instagram.com/comercio.uno")).toBe("comercio.uno");
+    expect(hrefInstagram("comercio.uno")).toBe("https://www.instagram.com/comercio.uno/");
+  });
+  it("rechaza espacios, otros sitios y más de 30 caracteres", () => {
+    expect(normalizarUsuarioInstagram("comercio uno")).toBeNull();
+    expect(normalizarUsuarioInstagram("https://red.cliente.example/comercio")).toBeNull();
+    expect(normalizarUsuarioInstagram("@")).toBeNull();
+    expect(normalizarUsuarioInstagram("a".repeat(31))).toBeNull();
+  });
+});
+
 describe("validarDatosFooter", () => {
   it("payload que no es objeto", () => {
     expect(validarDatosFooter(null)).toEqual({ ok: false, errores: ["Los datos enviados no son válidos."] });
@@ -82,6 +100,10 @@ describe("validarDatosFooter", () => {
           { label: "", href: "" },
           { label: "Preguntas", href: "/preguntas" },
         ],
+        redes: [
+          { nombre: " Local centro ", usuario: " @comercio.centro " },
+          { nombre: "", usuario: "" },
+        ],
         barraIzquierda: " © {anio} Comercio ",
         barraDerecha: "",
       }),
@@ -96,6 +118,7 @@ describe("validarDatosFooter", () => {
           { label: "Instagram", href: "https://red.cliente.example/tienda" },
           { label: "Preguntas", href: "/preguntas" },
         ],
+        redes: [{ nombre: "Local centro", usuario: "comercio.centro" }],
         barraIzquierda: "© {anio} Comercio",
         barraDerecha: "",
       },
@@ -128,6 +151,28 @@ describe("validarDatosFooter", () => {
         `El texto izquierdo de la barra inferior supera los ${MAX_FOOTER.barra} caracteres.`,
       ],
     });
+  });
+
+  it("cuentas de Instagram: nombre y usuario obligatorios, tope", () => {
+    const r = validarDatosFooter(
+      valido({ redes: [{ nombre: "", usuario: "comercio" }, { nombre: "Local", usuario: "no válido" }] }),
+    );
+    expect(r).toEqual({
+      ok: false,
+      errores: [
+        "Indique el nombre de la cuenta de Instagram 1.",
+        "Indique un usuario de Instagram válido para la cuenta 2 (por ejemplo, @comercio).",
+      ],
+    });
+    const redes = Array.from({ length: MAX_FOOTER.redes + 1 }, (_, i) => ({ nombre: `L${i}`, usuario: `local${i}` }));
+    const tope = validarDatosFooter(valido({ redes }));
+    expect(tope.ok === false && tope.errores).toEqual([`Puede cargar hasta ${MAX_FOOTER.redes} cuentas de Instagram.`]);
+  });
+
+  it("una fila guardada antes de las redes hereda la lista vacía", () => {
+    const viejo: Record<string, unknown> = { ...DEFAULTS_FOOTER };
+    delete viejo.redes;
+    expect(resolverDatosFooter(viejo).redes).toEqual([]);
   });
 
   it("tope de enlaces y largos", () => {

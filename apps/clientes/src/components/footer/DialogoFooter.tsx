@@ -8,13 +8,14 @@ import {
   type DatosFooter,
   type EnlaceFooter,
   type LocalFooter,
+  type RedFooter,
 } from "@/data/footer";
 import { guardarFooter, restablecerFooter } from "@/lib/home-acciones";
 
 /**
  * Editor del footer global (fila `footer` de home_content): descripción,
- * columna "Contacto" (WhatsApp, locales y enlaces extra) y textos de la barra
- * inferior. Se abre desde la barra de edición de la home y desde el botón
+ * columna "Contacto" (WhatsApp, locales y enlaces extra), cuentas de Instagram
+ * (franja arriba del footer) y textos de la barra inferior. Se abre desde la barra de edición de la home y desde el botón
  * "Editar footer" que ven los admins arriba del footer. "Mi cuenta" y
  * "Legales" no se editan. El refresco lo hace `updateTag(TAG_HOME)` en la acción.
  *
@@ -58,6 +59,12 @@ export function DialogoFooter({
     set(
       "enlaces",
       borrador.enlaces.map((e, j) => (j === i ? { ...e, ...cambio } : e)),
+    );
+
+  const setRed = (i: number, cambio: Partial<RedFooter>) =>
+    set(
+      "redes",
+      borrador.redes.map((r, j) => (j === i ? { ...r, ...cambio } : r)),
     );
 
   function guardar() {
@@ -239,6 +246,51 @@ export function DialogoFooter({
           ) : null}
         </div>
 
+        <div className="flex flex-col gap-3">
+          <span className="text-sm font-medium text-text">Cuentas de Instagram</span>
+          <span className="text-xs text-muted">
+            Se muestran en la franja «Síganos en Instagram», arriba del footer. Sin cuentas, la franja no aparece.
+          </span>
+          {borrador.redes.map((red, i) => (
+            <div key={i} className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-end">
+              <div className="sm:flex-[2]">
+                <Field label="Nombre" hint="Por ejemplo, el nombre del local.">
+                  <Input
+                    maxLength={MAX_FOOTER.nombre}
+                    value={red.nombre}
+                    onChange={(e) => setRed(i, { nombre: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <div className="sm:flex-[2]">
+                <Field label="Usuario" hint="Con o sin @, o el enlace al perfil.">
+                  <Input value={red.usuario} onChange={(e) => setRed(i, { usuario: e.target.value })} />
+                </Field>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => set("redes", borrador.redes.filter((_, j) => j !== i))}
+              >
+                Quitar
+              </Button>
+            </div>
+          ))}
+          {borrador.redes.length < MAX_FOOTER.redes ? (
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => set("redes", [...borrador.redes, { nombre: "", usuario: "" }])}
+              >
+                Agregar cuenta
+              </Button>
+            </div>
+          ) : null}
+        </div>
+
         <Field label="Texto de la barra inferior (izquierda)" hint="Escriba {anio} para mostrar el año en curso.">
           <Input
             maxLength={MAX_FOOTER.barra}
@@ -259,5 +311,5 @@ export function DialogoFooter({
 }
 
 function copiar(d: DatosFooter): DatosFooter {
-  return { ...d, locales: d.locales.map((l) => ({ ...l })), enlaces: d.enlaces.map((e) => ({ ...e })) };
+  return { ...d, locales: d.locales.map((l) => ({ ...l })), enlaces: d.enlaces.map((e) => ({ ...e })), redes: d.redes.map((r) => ({ ...r })) };
 }

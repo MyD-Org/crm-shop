@@ -4,6 +4,9 @@
  * igual que los datos legales: NO es una sección de la home (no está en
  * `SECCIONES_HOME` ni en la visibilidad, y `combinarContenidoHome` la ignora).
  *
+ * Las cuentas de Instagram (`redes`) no van en la columna: se muestran en una
+ * franja propia arriba del footer, en todas las páginas (`FranjaRedes`).
+ *
  * Fuera de alcance a propósito: "Mi cuenta" y "Legales" (Legales tiene que
  * estar siempre), la marca y el QR de Data Fiscal.
  *
@@ -32,6 +35,14 @@ export type LocalFooter = {
   horario: string;
 };
 
+/** Una cuenta de Instagram ("Central Led Mar del Plata" → `usuario`). */
+export type RedFooter = {
+  /** Texto visible arriba del usuario. */
+  nombre: string;
+  /** Usuario sin `@`. El link se arma con `hrefInstagram`. */
+  usuario: string;
+};
+
 export type DatosFooter = {
   descripcion: string;
   /** Solo dígitos, con código de país (wa.me). Vacío = sin link de WhatsApp. */
@@ -40,6 +51,8 @@ export type DatosFooter = {
   locales: LocalFooter[];
   /** Enlaces extra de la columna "Contacto", después de WhatsApp y los locales. */
   enlaces: EnlaceFooter[];
+  /** 0..N cuentas de Instagram de la franja de redes. Vacío = sin franja. */
+  redes: RedFooter[];
   /** Admite `{anio}`. Vacío = sin texto. */
   barraIzquierda: string;
   barraDerecha: string;
@@ -65,6 +78,8 @@ export const DEFAULTS_FOOTER: DatosFooter = {
     },
   ],
   enlaces: [],
+  // Vacío = sin franja. Las cuentas reales se cargan en el editor del footer.
+  redes: [],
   barraIzquierda: `© ${MARCADOR_ANIO} Central Led — Puerto Iguazú, Misiones`,
   barraDerecha: "Av. República Argentina · Lun a Sáb",
 };
@@ -81,6 +96,7 @@ export function defaultsFooterDe(marca: Pick<Marca, "base" | "nombre" | "descrip
     whatsapp: "",
     locales: [],
     enlaces: [],
+    redes: [],
     barraIzquierda: `© ${MARCADOR_ANIO} ${marca.nombre}`,
     barraDerecha: "",
   };
@@ -96,6 +112,7 @@ export const MAX_FOOTER = {
   barra: 120,
   enlaces: 4,
   etiqueta: 40,
+  redes: 4,
 } as const;
 
 export function nuevoLocal(): LocalFooter {
@@ -112,6 +129,24 @@ const comoObjeto = (v: unknown): Record<string, unknown> =>
 /** Link de wa.me para un número ya normalizado. */
 export function hrefWhatsapp(numero: string): string {
   return `https://wa.me/${numero}`;
+}
+
+/** Perfil de Instagram de un usuario ya normalizado. */
+export function hrefInstagram(usuario: string): string {
+  return `https://www.instagram.com/${usuario}/`;
+}
+
+/**
+ * Usuario de Instagram a la forma guardada: sin `@` ni espacios. Acepta
+ * también el link al perfil (lo que se copia del navegador). Instagram admite
+ * letras, números, punto y guion bajo, hasta 30. null si no es válido.
+ */
+export function normalizarUsuarioInstagram(raw: string): string | null {
+  let t = raw.trim();
+  const perfil = /^(?:https?:\/\/)?(?:www\.)?instagram\.com\/([^/?#]+)\/?(?:[?#].*)?$/i.exec(t);
+  if (perfil) t = perfil[1];
+  t = t.replace(/^@/, "");
+  return /^[A-Za-z0-9._]{1,30}$/.test(t) ? t : null;
 }
 
 /** Búsqueda de Google Maps para una dirección. */
@@ -244,6 +279,34 @@ function validarEnlaces(crudo: unknown, errores: string[]): EnlaceFooter[] {
   return enlaces;
 }
 
+function validarRedes(crudo: unknown, errores: string[]): RedFooter[] {
+  if (crudo === undefined) return [];
+  if (!Array.isArray(crudo)) {
+    errores.push(NO_VALIDO);
+    return [];
+  }
+  const redes: RedFooter[] = [];
+  let cargadas = 0;
+  crudo.forEach((r, i) => {
+    const o = comoObjeto(r);
+    const nombre = texto(o.nombre);
+    const usuarioCrudo = texto(o.usuario);
+    if (!nombre && !usuarioCrudo) return; // fila vacía del editor
+    cargadas++;
+    const n = i + 1;
+    const antes = errores.length;
+    if (!nombre) errores.push(`Indique el nombre de la cuenta de Instagram ${n}.`);
+    else if (nombre.length > MAX_FOOTER.nombre) {
+      errores.push(`El nombre de la cuenta de Instagram ${n} supera los ${MAX_FOOTER.nombre} caracteres.`);
+    }
+    const usuario = normalizarUsuarioInstagram(usuarioCrudo);
+    if (!usuario) errores.push(`Indique un usuario de Instagram válido para la cuenta ${n} (por ejemplo, @comercio).`);
+    if (errores.length === antes && usuario) redes.push({ nombre, usuario });
+  });
+  if (cargadas > MAX_FOOTER.redes) errores.push(`Puede cargar hasta ${MAX_FOOTER.redes} cuentas de Instagram.`);
+  return redes;
+}
+
 /** Valida y normaliza lo que manda el editor. Errores en usted, sin lanzar. */
 export function validarDatosFooter(
   payload: unknown,
@@ -269,6 +332,7 @@ export function validarDatosFooter(
 
   const locales = validarLocales(o.locales, errores);
   const enlaces = validarEnlaces(o.enlaces, errores);
+  const redes = validarRedes(o.redes, errores);
 
   const barraIzquierda = texto(o.barraIzquierda);
   const barraDerecha = texto(o.barraDerecha);
@@ -280,7 +344,7 @@ export function validarDatosFooter(
   }
 
   if (errores.length > 0) return { ok: false, errores: [...new Set(errores)] };
-  return { ok: true, datos: { descripcion, whatsapp, locales, enlaces, barraIzquierda, barraDerecha } };
+  return { ok: true, datos: { descripcion, whatsapp, locales, enlaces, redes, barraIzquierda, barraDerecha } };
 }
 
 /**

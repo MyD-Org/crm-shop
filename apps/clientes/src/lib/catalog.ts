@@ -79,6 +79,8 @@ import { resumirVariantes } from "./variantes-ficha";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import { armarPreciosMedios, type MediosPrecio } from "./medios-precio";
 import { campaniaParaExhibir } from "./campanias/exhibicion";
+import { mapCampanias } from "./campanias/precio";
+import { quedanParaEntradas } from "./campanias/unidades";
 import { disponibleSucursalSql, joinStock, stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
 import {
   columnasConteoAtributos,
@@ -234,6 +236,26 @@ export function mapFilaToProduct(
     ...(fila.grupoId && fila.etiqueta?.trim() ? { opcion: fila.etiqueta.trim() } : {}),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
   };
+}
+
+/**
+ * Límite de unidades de las campañas de precios: con campañas activas, lo que queda de cada regla con
+ * límite de estas filas (una lectura de los pedidos), para que la ficha diga cuántas quedan y una
+ * regla agotada vuelva sola al precio normal. Corre adentro de las funciones cacheadas: crear o
+ * cancelar un pedido vence el tag del catálogo (`marcarStockCambiado`).
+ */
+async function conQuedanCampania(
+  filas: readonly { campaniasOnline?: unknown }[],
+  medios: MediosPrecio | undefined,
+): Promise<MediosPrecio | undefined> {
+  const activas = medios?.campanias;
+  if (!medios || !activas?.length) return medios;
+  const quedan = await quedanParaEntradas(
+    getDb(),
+    filas.map((f) => mapCampanias(f.campaniasOnline)),
+    new Set(activas.map((c) => c.id)),
+  );
+  return quedan.size ? { ...medios, quedanCampania: Object.fromEntries(quedan) } : medios;
 }
 
 /** Mismo criterio que `urlsDeFotos`: la key se guarda en el CRM, la url se compone al leer. */
@@ -653,7 +675,8 @@ export async function getCatalogo(opts: {
   if (opts.offset != null) query = query.offset(opts.offset);
 
   const filas = await query;
-  return filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, opts.mediosPrecio));
+  const medios = await conQuedanCampania(filas, opts.mediosPrecio);
+  return filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, medios));
 }
 
 /**
@@ -713,7 +736,8 @@ export async function getCategoriaExacta(opts: {
     .orderBy(asc(crmCatalogo.name))
     .limit(opts.limit);
 
-  return { nombre: categoria.nombre, productos: filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, opts.mediosPrecio)) };
+  const medios = await conQuedanCampania(filas, opts.mediosPrecio);
+  return { nombre: categoria.nombre, productos: filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, medios)) };
 }
 
 /**
@@ -778,6 +802,7 @@ export async function getProductosPorIds(
     for (const f of fotos) if (f.fotos?.length) propias.set(f.alegraId, f.fotos);
   }
 
+  const medios = await conQuedanCampania(filas, opts?.mediosPrecio);
   return new Map(
     filas.map((f) => {
       const fotosPropias = propias.get(f.alegraId);
@@ -789,7 +814,7 @@ export async function getProductosPorIds(
           opts?.idPriceList,
           undefined,
           undefined,
-          opts?.mediosPrecio,
+          medios,
         ),
       ];
     }),
@@ -875,7 +900,8 @@ export async function getProductosPorSkus(
       ),
     );
 
-  const productos = filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, opts.mediosPrecio));
+  const medios = await conQuedanCampania(filas, opts.mediosPrecio);
+  const productos = filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, medios));
   if (!opts.agrupar) return productos;
   // Los códigos pedidos que cayeron en el grupo de cada card (para ubicarla en el lugar elegido).
   const grupoDe = new Map(filas.map((f) => [f.alegraId, (f as { grupoId?: string | null }).grupoId ?? null]));
@@ -1040,6 +1066,7 @@ export async function getVariantesDeGrupo(
         visibleEnZonaSql(opts.disp),
       ),
     );
+  const medios = await conQuedanCampania(filas, opts.mediosPrecio);
   const opciones = filas.map((f) => {
     const { etiqueta, esRepresentante, fotosPropias, ...fila } = f; // `tipo` queda en `fila`
     // `grupoId` no se selecciona (es el del pedido): todas las opciones son del mismo grupo.
@@ -1048,7 +1075,7 @@ export async function getVariantesDeGrupo(
       opts.idPriceList,
       undefined,
       undefined,
-      opts.mediosPrecio,
+      medios,
     );
     return { id: fila.alegraId, etiqueta: etiqueta?.trim() || producto.name, producto, esRepresentante };
   });
@@ -1873,8 +1900,9 @@ export async function getPaginaCatalogo(opts: {
         .offset((pagina - 1) * porPagina)
     : [];
 
-  const mapeados = filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, opts.mediosPrecio));
-  const productos = agrupar ? await conResumenDeVariantes(mapeados, opts.idPriceList, opts.mediosPrecio) : mapeados;
+  const medios = await conQuedanCampania(filas, opts.mediosPrecio);
+  const mapeados = filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, medios));
+  const productos = agrupar ? await conResumenDeVariantes(mapeados, opts.idPriceList, medios) : mapeados;
   if (opts.sinConteo) return { productos, total: productos.length, pagina: 1, paginas: 1, totalExacto: false };
   return { productos, total, pagina, paginas, totalExacto: true };
 }

@@ -17,6 +17,8 @@
  * SOLO servidor: usa la DB.
  */
 
+import { quedanParaEntradas } from "./campanias/unidades";
+import { enFrase } from "./promociones/promo";
 import { mapCampanias, resolverPrecioVigente, type ContextoCampania, type EntradaCampania } from "./campanias/precio";
 import type { CampaniaActiva } from "./campanias/vigentes";
 import { and, inArray, sql } from "drizzle-orm";
@@ -52,7 +54,9 @@ export type ProblemaLinea =
   | "inactivo"
   | "sin_stock"
   | "stock_insuficiente"
-  | "sin_precio";
+  | "sin_precio"
+  /** Campaña de precios con límite: se pidieron más unidades de las que quedan a precio de campaña. */
+  | "unidades_campania";
 
 export interface LineaCotizada {
   id: string;
@@ -400,9 +404,16 @@ export async function cotizar(
   const privados = opts.idListaPrivada
     ? await preciosPrivados(opts.idListaPrivada, pedidas.map((p) => p.id))
     : undefined;
+  const activas = new Set((opts.campanias ?? []).map((c) => c.id));
+  // Límite de unidades: lo que queda de cada regla con límite (agotada = precio normal). Al recotizar un
+  // pedido existente, sus propias unidades no cuentan.
+  const quedan = activas.size
+    ? await quedanParaEntradas(getDb(), [...items.values()].map((i) => i.campanias), activas, opts.excluirPedidoId)
+    : undefined;
   const campanias: ContextoCotizacionCampania | undefined = opts.campanias?.length
     ? {
-        activas: new Set(opts.campanias.map((c) => c.id)),
+        activas,
+        ...(quedan?.size ? { quedan } : {}),
         etiquetas: new Map(opts.campanias.map((c) => [c.id, c.etiqueta])),
       }
     : undefined;
@@ -418,6 +429,7 @@ export async function cotizar(
         )
       : lineaRota(pedida, "no_encontrado", "Este producto ya no existe.");
   });
+  if (quedan?.size) marcarExcesoDeUnidades(lineas, quedan);
 
   const validas = lineas.filter((l) => !l.problema);
   const subtotal = redondear(validas.reduce((a, l) => a + l.subtotal, 0));
@@ -433,6 +445,29 @@ export async function cotizar(
     hayProblemas: lineas.some((l) => l.problema),
     listaPrivada: Boolean(opts.idListaPrivada),
   };
+}
+
+/**
+ * Límite de unidades de una campaña: si las líneas de una regla (las variantes de un modelo la
+ * comparten) piden más de lo que queda a precio de campaña, se marcan con `unidades_campania` y el
+ * pedido no se puede confirmar hasta bajar la cantidad (no se parte la línea en dos precios).
+ */
+function marcarExcesoDeUnidades(lineas: LineaCotizada[], quedan: ReadonlyMap<string, number>): void {
+  const porRegla = new Map<string, LineaCotizada[]>();
+  for (const l of lineas) {
+    if (l.problema || !l.campaniaReglaId || !quedan.has(l.campaniaReglaId)) continue;
+    porRegla.set(l.campaniaReglaId, [...(porRegla.get(l.campaniaReglaId) ?? []), l]);
+  }
+  for (const [regla, del] of porRegla) {
+    const q = quedan.get(regla)!;
+    if (del.reduce((a, l) => a + l.qty, 0) <= q) continue;
+    const etiqueta = del[0].campaniaEtiqueta ? enFrase(del[0].campaniaEtiqueta) : "precio de campaña";
+    const texto = `${q === 1 ? "Queda 1 unidad" : `Quedan ${q} unidades`} a ${etiqueta}. Reduzca la cantidad para mantener el precio.`;
+    for (const l of del) {
+      l.problema = "unidades_campania";
+      l.detalle = texto;
+    }
+  }
 }
 
 /**

@@ -6,6 +6,7 @@
  * Cuando eso cambie, el único lugar a tocar es `crearPedido`.
  */
 
+import { validarUnidadesEnTx } from "./campanias/unidades";
 import { cache } from "react";
 import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -427,6 +428,10 @@ export async function crearPedido(
       });
       if (faltan.length > 0) throw new StockInsuficienteError(faltan);
     }
+
+    // Límite de unidades de las campañas de precios: con lock por regla y relectura, en la MISMA
+    // transacción (dos compras simultáneas por la última unidad: una sola se confirma).
+    await validarUnidadesEnTx(tx, lineas);
 
     await tx.insert(orderItems).values(
       lineas.map((l) => ({

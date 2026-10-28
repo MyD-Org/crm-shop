@@ -2,10 +2,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cacheLife } from "next/cache";
 import { ImageResponse } from "next/og";
+import sharp from "sharp";
 import { sora, type Fuente } from "@/lib/fuente-sora";
 import { getMarca } from "@/lib/marca";
 import { MARCA_POR_DEFECTO, type Marca } from "@/lib/marca-base";
-import { coloresPwaDeTema } from "@/lib/tema-tenant";
+import { coloresPwaDeTema, type TemaTenant } from "@/lib/tema-tenant";
 import { getTemaTenant } from "@/lib/tema-tenant-datos";
 
 /**
@@ -29,10 +30,16 @@ import { getTemaTenant } from "@/lib/tema-tenant-datos";
  * otra, sobre fondo liso con su nombre, sus textos y, si la cargó, su imagen (PNG/JPG: Satori no
  * lee SVG ni WebP). OJO: `alt` debe ser un literal (Next lo lee en el build), así que sigue siendo
  * el de Central y no se puede derivar de la marca.
+ *
+ * Sale en JPG, no en PNG: WhatsApp no muestra la vista previa cuando la imagen pasa ~300 KB, y la
+ * de Central (foto del hero dentro) pesaba 301 KB en PNG; en JPG calidad 85, unos 110 KB. Satori
+ * sólo genera PNG, así que se dibuja en PNG y `sharp` lo convierte. El JPG queda cacheado por
+ * marca y tema (`jpegDe`): sin eso cada pedido lo volvía a dibujar (~2 s), y WhatsApp tampoco
+ * espera mucho a la imagen.
  */
 export const alt = "Central Led — Iluminación y electricidad";
 export const size = { width: 1200, height: 630 };
-export const contentType = "image/png";
+export const contentType = "image/jpeg";
 
 const COLOR_CENTRAL = {
   fondo: "#f8f8f6",
@@ -82,6 +89,17 @@ function imagenPropia(marca: Marca): string | null {
 
 export default async function OpengraphImage() {
   const [marca, tema] = await Promise.all([getMarca(), getTemaTenant()]);
+  return new Response(await jpegDe(marca, tema), { headers: { "Content-Type": contentType } });
+}
+
+/** El dibujo en JPG. Cacheado: la clave son la marca y el tema que recibe. */
+async function jpegDe(marca: Marca, tema: TemaTenant): Promise<Uint8Array<ArrayBuffer>> {
+  "use cache";
+  const png = await (await dibujo(marca, tema)).arrayBuffer();
+  return new Uint8Array(await sharp(Buffer.from(png)).jpeg({ quality: 85, mozjpeg: true }).toBuffer());
+}
+
+async function dibujo(marca: Marca, tema: TemaTenant): Promise<ImageResponse> {
   const central = esCentral(marca);
   // Paleta propia del tenant (`tenants.shop_tema`): fondo, tinta y acento de su tema. Sin ella, los
   // de Central de siempre.

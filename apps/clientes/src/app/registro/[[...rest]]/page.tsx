@@ -1,4 +1,5 @@
-import { SignUp } from "@clerk/nextjs";
+import { ClerkLoaded, ClerkLoading, SignUp } from "@clerk/nextjs";
+import { FormularioClerkCargando } from "@/components/FormularioClerkCargando";
 import { getMarca } from "@/lib/marca";
 
 /** Alta de cuenta. Ver la nota sobre el catch-all en /ingresar. */
@@ -14,7 +15,12 @@ export default async function RegistroPage() {
             para comprar con sus precios y condiciones de cliente.
           </p>
         </div>
-        <SignUp fallbackRedirectUrl="/" signInFallbackRedirectUrl="/" />
+        <ClerkLoading>
+          <FormularioClerkCargando />
+        </ClerkLoading>
+        <ClerkLoaded>
+          <SignUp fallbackRedirectUrl="/" signInFallbackRedirectUrl="/" />
+        </ClerkLoaded>
       </main>
     </>
   );

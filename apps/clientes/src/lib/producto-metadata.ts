@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import type { Product } from "@/data/products";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
+import { fmtPrecio } from "@/lib/format";
+import { IMAGEN_SITIO, openGraphDelSitio } from "@/lib/metadata-marca";
 
 /**
  * Metadata de la ficha: lo que muestran WhatsApp, Google y compañía al pegar el
@@ -13,16 +15,22 @@ import { formatMarca } from "@/lib/formato-rubro";
  *
  * Sin foto, la imagen general del sitio (src/app/opengraph-image.tsx): el
  * `openGraph` de la ficha reemplaza entero al del layout, así que si no se la
- * nombra acá el link se comparte sin imagen. También pide la base.
+ * nombra acá el link se comparte sin imagen. También pide la base. Por lo mismo
+ * repite `og:site_name` y `og:locale` del sitio (`openGraphDelSitio`).
+ *
+ * La descripción empieza por el precio: es lo primero que quiere ver quien recibe
+ * el link, y WhatsApp muestra sólo el comienzo de la descripción. Es el mismo precio
+ * que la card y el JSON-LD (`precioFinal ?? price`, con IVA si se conoce); sin
+ * precio publicado ("Consulte el precio") no se pone ninguno. Ojo: el que comparte
+ * y Meta guardan la vista previa un tiempo, así que un link viejo puede mostrar un
+ * precio anterior.
  */
-/** Ruta de la imagen general del sitio (src/app/opengraph-image.tsx). */
-export const IMAGEN_SITIO = "/opengraph-image";
-
-export function metadataProducto(producto: Product, conBase: boolean): Metadata {
+export function metadataProducto(producto: Product, conBase: boolean, nombreTienda: string): Metadata {
   // Un modelo con variantes tiene UNA dirección canónica: la de su representante (las demás
   // opciones comparten ficha; ver `variantes-selector`).
   const ruta = `/producto/${encodeURIComponent(producto.grupo?.representanteId ?? producto.id)}`;
-  const partes = [producto.brand, producto.sku && `Código ${producto.sku}`].filter(Boolean);
+  const precio = producto.price > 0 ? fmtPrecio(producto.precioFinal ?? producto.price) : undefined;
+  const partes = [precio, producto.brand, producto.sku && `Código ${producto.sku}`].filter(Boolean);
   const description = partes.length > 0 ? partes.join(" · ") : undefined;
   const portada = producto.images?.[0];
   // Sólo para mostrar: `producto.name` (el dato real) no se toca.
@@ -36,7 +44,7 @@ export function metadataProducto(producto: Product, conBase: boolean): Metadata 
     description,
     ...(conBase ? { alternates: { canonical: ruta } } : {}),
     openGraph: {
-      type: "website",
+      ...openGraphDelSitio(nombreTienda),
       title: nombre,
       description,
       ...(conBase ? { url: ruta } : {}),

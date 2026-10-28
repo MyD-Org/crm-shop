@@ -7,6 +7,7 @@ import { idDeRuta } from "@/lib/id-producto";
 import { alternativaDeVariantePublica, productoPublico, rutaCategoriaPublica } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { metadataProducto } from "@/lib/producto-metadata";
+import { getMarca } from "@/lib/marca";
 import { jsonLdProductoHtml } from "@/lib/producto-jsonld";
 import { ProductoClient } from "@/components/ProductoClient";
 import { CONFIG_ENVIO_DEFAULT, textoEnvioFicha } from "@/lib/envio";
@@ -46,9 +47,9 @@ const productoDe = cache(async (id: string) => {
 
 /** Vista previa del link (WhatsApp, Google…). Ver src/lib/producto-metadata.ts. */
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const producto = await productoDe(idDeRuta((await params).id));
+  const [producto, marca] = await Promise.all([productoDe(idDeRuta((await params).id)), getMarca()]);
   if (!producto) return {};
-  return metadataProducto(producto, Boolean(process.env.NEXT_PUBLIC_SITE_URL));
+  return metadataProducto(producto, Boolean(process.env.NEXT_PUBLIC_SITE_URL), marca.nombre);
 }
 
 export default async function ProductoPage({ params }: Props) {

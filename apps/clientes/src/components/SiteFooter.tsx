@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { cacheLife } from "next/cache";
 import { SiteFooter as SiteFooterDS } from "@myd-org/ui";
-import { linkNext } from "@/components/catalogo/link-next";
+import { linkFooter } from "@/components/footer/link-footer";
 import { BotonEditarFooterSiAdmin } from "@/components/footer/BotonEditarFooterSiAdmin";
 import { textoBarra } from "@/data/footer";
 import { getDatosFooter, getDatosLegales } from "@/lib/home-datos";
@@ -53,7 +53,7 @@ export async function SiteFooter() {
       </Suspense>
       <SiteFooterDS
         className="site-footer"
-        renderLink={linkNext}
+        renderLink={linkFooter}
         brandName={principal}
         brandAccent={acento}
         description={footer.descripcion}

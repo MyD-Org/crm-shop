@@ -109,7 +109,10 @@ function alcanceDeFila(r: typeof campaniaReglas.$inferSelect): AlcanceRegla {
  * unidades vendidas por `campania_regla_id`; si una edición cambiara los ids, el contador volvería a 0.
  */
 async function sincronizarReglas(tx: Tx, tenantId: string, campaniaId: string, reglas: ReglaEntrada[]): Promise<void> {
-  const actuales = await tx.select().from(campaniaReglas).where(eq(campaniaReglas.campaniaId, campaniaId))
+  const actuales = await tx
+    .select()
+    .from(campaniaReglas)
+    .where(and(eq(campaniaReglas.tenantId, tenantId), eq(campaniaReglas.campaniaId, campaniaId)))
   const porClave = new Map(actuales.map((r) => [claveAlcance(alcanceDeFila(r)), r]))
   const quedan = new Set<string>()
   for (const r of reglas) {
@@ -126,6 +129,22 @@ async function sincronizarReglas(tx: Tx, tenantId: string, campaniaId: string, r
   }
   const borrar = actuales.filter((r) => !quedan.has(r.id)).map((r) => r.id)
   if (borrar.length) await tx.delete(campaniaReglas).where(inArray(campaniaReglas.id, borrar))
+}
+
+/**
+ * Las categorías de las reglas tienen que ser del tenant: la FK a shop_categories no mira el tenant
+ * y sola no alcanza (mismo criterio que `categoriaPropia` del overlay).
+ */
+async function validarCategorias(tx: Tx, tenantId: string, reglas: ReglaEntrada[]): Promise<void> {
+  const ids = [...new Set(reglas.flatMap((r) => (r.alcance.tipo === "categoria" ? [r.alcance.categoriaId] : [])))]
+  if (ids.length === 0) return
+  const propias = await tx
+    .select({ id: shopCategories.id })
+    .from(shopCategories)
+    .where(and(eq(shopCategories.tenantId, tenantId), inArray(shopCategories.id, ids)))
+  if (propias.length !== ids.length) {
+    throw new PreciosOnlineError(422, "categoria_invalida", "Seleccione una categoría válida.")
+  }
 }
 
 async function cargar(tx: Tx, tenantId: string, id: string) {
@@ -213,6 +232,7 @@ export async function guardarCampania(
       }
       antes = await snapshot(tx, id)
     }
+    await validarCategorias(tx, tenantId, e.reglas)
     if (fin.getTime() <= ahora.getTime()) {
       throw new PreciosOnlineError(422, "fin_pasado", "La fecha de fin debe ser posterior al momento actual.")
     }
@@ -281,6 +301,8 @@ export async function previsualizarCampania(
   try {
     await getDb().transaction(async (tx) => {
       await lockTenant(tx, tenantId)
+      if (exceptoId) await cargar(tx, tenantId, exceptoId) // 404 si no es del tenant
+      await validarCategorias(tx, tenantId, e.reglas)
       const choque = await choqueDe(tx, tenantId, e.inicio, e.fin, exceptoId)
       // La previa no se cruza con el choque: se mide en una campaña temporal sin otras alrededor.
       let campaniaId = exceptoId
@@ -390,8 +412,11 @@ export async function leerCampania(tenantId: string, id: string): Promise<Campan
       catalogProducts,
       and(eq(catalogProducts.tenantId, campaniaReglas.tenantId), eq(catalogProducts.alegraId, campaniaReglas.alegraId)),
     )
-    .leftJoin(shopCategories, eq(shopCategories.id, campaniaReglas.categoriaId))
-    .where(eq(campaniaReglas.campaniaId, id))
+    .leftJoin(
+      shopCategories,
+      and(eq(shopCategories.tenantId, campaniaReglas.tenantId), eq(shopCategories.id, campaniaReglas.categoriaId)),
+    )
+    .where(and(eq(campaniaReglas.tenantId, tenantId), eq(campaniaReglas.campaniaId, id)))
     .orderBy(asc(campaniaReglas.tipo), asc(campaniaReglas.createdAt))
   return {
     ...c,

@@ -13,7 +13,7 @@ import {
 import { previsualizarReversion, PreciosOnlineError } from "@/lib/precios-online-repo"
 import type { CampaniaEntrada } from "@/lib/campanias-validar"
 import { seedTenant, truncateAll } from "./helpers"
-import { aplicar, seedLista, seedProducto } from "./precios-online-helpers"
+import { aplicar, seedCategoria, seedLista, seedProducto } from "./precios-online-helpers"
 
 // Repositorio de campañas (spec 2026-10-28-campanias-precios-design.md) contra Postgres real.
 // Datos inventados.
@@ -137,6 +137,29 @@ describe("guardarCampania", () => {
       guardarCampania(T, entrada(ahora, { inicio: horas(ahora, -10), fin: horas(ahora, 5) }), ACTOR, id),
     )
     expect(e2.status).toBe(409)
+  })
+})
+
+describe("aislamiento por tenant", () => {
+  it("una regla con una categoría de otro tenant se rechaza (al guardar y en la vista previa)", async () => {
+    const ahora = await ahoraDb()
+    await seedTenant("tenant-ajeno")
+    const ajena = await seedCategoria("tenant-ajeno", "ajena")
+    const e = entrada(ahora, { reglas: [{ alcance: { tipo: "categoria", categoriaId: ajena }, pct: 20 }] })
+    const err = await rechaza(guardarCampania(T, e, ACTOR))
+    expect(err.status).toBe(422)
+    expect(err.message).toBe("Seleccione una categoría válida.")
+    expect((await rechaza(previsualizarCampania(T, e))).status).toBe(422)
+    expect(await getDb().select().from(campanias)).toHaveLength(0)
+  })
+
+  it("la vista previa con exceptoId de una campaña de otro tenant da 404 y no toca sus reglas", async () => {
+    const ahora = await ahoraDb()
+    await seedTenant("tenant-ajeno")
+    const { id: ajena } = await guardarCampania("tenant-ajeno", entrada(ahora), ACTOR)
+    const err = await rechaza(previsualizarCampania(T, entrada(ahora), ajena))
+    expect(err.status).toBe(404)
+    expect(await getDb().select().from(campaniaReglas).where(eq(campaniaReglas.campaniaId, ajena))).toHaveLength(1)
   })
 })
 

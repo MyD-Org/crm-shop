@@ -5,6 +5,7 @@ import {
   hrefAlAplicar,
   hrefAlCambiarStock,
   hrefAlElegirCategoria,
+  hrefAlQuitarBusqueda,
   limpiarBorrador,
 } from "./catalogo-borrador";
 import { STOCK_INCLUYE_SIN_STOCK, type EstadoCatalogo } from "./catalogo-url";
@@ -279,5 +280,23 @@ describe("hrefAlCambiarStock (el stock se aplica en el acto en la hoja)", () => 
 
   it("sin cambios respecto de la URL no navega", () => {
     expect(hrefAlCambiarStock(base, base, { soloStock: true })).toBeNull();
+  });
+});
+
+describe("hrefAlQuitarBusqueda (la X de la búsqueda en la hoja)", () => {
+  const conBusqueda: EstadoCatalogo = { ...base, query: "luz cálida para el living", ia: "1", orden: "relevancia" };
+
+  it("quita el texto y el plan, y el orden vuelve al default sin búsqueda", () => {
+    expect(hrefAlQuitarBusqueda(conBusqueda, conBusqueda)).toBe("/catalogo");
+  });
+
+  it("lleva lo que ya se había tocado en la hoja", () => {
+    const b = cambiarBorrador(conBusqueda, { marcas: ["DCK"] });
+    expect(hrefAlQuitarBusqueda(conBusqueda, b)).toBe("/catalogo?marca=DCK");
+  });
+
+  it("respeta un orden elegido en la hoja", () => {
+    const b = cambiarBorrador(conBusqueda, { orden: "precio-asc" });
+    expect(hrefAlQuitarBusqueda(conBusqueda, b)).toBe("/catalogo?orden=precio-asc");
   });
 });

@@ -2,7 +2,7 @@
 
 import { Chip } from "@myd-org/ui";
 import { TEXTOS_FRANJA } from "@/lib/busqueda-inteligente/textos";
-import { ordenPorDefecto, type EstadoCatalogo, type RangoPrecio } from "@/lib/catalogo-url";
+import { quitarBusqueda, type EstadoCatalogo, type RangoPrecio } from "@/lib/catalogo-url";
 import { chipsActivos } from "@/lib/catalogo-vista";
 
 /**
@@ -52,7 +52,7 @@ export function CatalogoChips({
           clave: "busqueda",
           etiqueta: TEXTOS_FRANJA.texto(estado.query),
           removeLabel: TEXTOS_FRANJA.quitarTexto(estado.query),
-          cambios: { query: undefined, ia: undefined, orden: ordenPorDefecto(undefined), pagina: 1 } as Partial<EstadoCatalogo>,
+          cambios: quitarBusqueda(),
         },
       ]
     : [];

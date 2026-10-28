@@ -638,6 +638,13 @@
       "when": 1793380010000,
       "tag": "0093_despacho_configurable",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1793380030000,
+      "tag": "0095_campanias",
+      "breakpoints": true
     }
   ]
 }

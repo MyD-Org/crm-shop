@@ -319,6 +319,12 @@ export const catalogProducts = pgTable(
     /** Precio online de la lista de referencia (para ordenar y filtrar en el admin). */
     precioOnlineRef: numeric("precio_online_ref", { precision: 14, scale: 2 }),
     preciosOnlineAt: timestamp("precios_online_at", { withTimezone: true }),
+    /**
+     * Campañas no terminadas (o terminadas hace < 24 h) que alcanzan al producto, con su precio por
+     * lista PÚBLICA (neto sin IVA). [{id, reglaId, inicio, fin, pct, unidades, precios:[{idPriceList,
+     * price}]}], ordenadas por inicio; NULL = ninguna. La escribe `aplicar_campanias_online` (0095).
+     */
+    campaniasOnline: jsonb("campanias_online"),
     /** El ítem COMPLETO como lo devuelve Alegra. Nada se descarta. ~2,5 KB por ítem. */
     raw: jsonb("raw").$type<Record<string, unknown>>(),
     /**
@@ -1616,6 +1622,54 @@ export const listaPrecioOverrides = pgTable(
       .on(t.listaId, t.alegraId)
       .where(sql`${t.tipo} = 'producto'`),
     index("lista_precio_overrides_tenant_idx").on(t.tenantId, t.tipo),
+  ],
+)
+
+// Campañas de precios (0095, spec 2026-10-28-campanias-precios-design.md): un % de descuento con
+// ventana horaria (fin exclusivo) encima del precio online normal. Sin estado manual: programada /
+// activa / terminada sale de las fechas. Drift solo-SQL: CHECK de la ventana.
+export const campanias = pgTable(
+  "campanias",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    nombre: text("nombre").notNull(),
+    etiqueta: text("etiqueta").notNull(),
+    inicio: timestamp("inicio", { withTimezone: true }).notNull(),
+    fin: timestamp("fin", { withTimezone: true }).notNull(),
+    creadoPor: text("creado_por"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("campanias_tenant_fin_idx").on(t.tenantId, t.fin)],
+)
+
+// Reglas de una campaña (0095): 'producto' (alegra_id; alcanza a todo el modelo) | 'marca'
+// (normalizada lower+trim) | 'categoria'. `pct` 0..90 (0 = excluido); `unidades` sólo en producto.
+// El id es estable entre ediciones: el Shop cuenta las unidades vendidas por regla. Drift solo-SQL:
+// CHECK de forma, de pct y de unidades.
+export const campaniaReglas = pgTable(
+  "campania_reglas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    campaniaId: uuid("campania_id")
+      .notNull()
+      .references(() => campanias.id, { onDelete: "cascade" }),
+    tipo: text("tipo").notNull(),
+    alegraId: text("alegra_id"),
+    marca: text("marca"),
+    categoriaId: uuid("categoria_id").references(() => shopCategories.id, { onDelete: "cascade" }),
+    pct: smallint("pct").notNull(),
+    unidades: integer("unidades"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("campania_reglas_producto_uniq").on(t.campaniaId, t.alegraId).where(sql`${t.tipo} = 'producto'`),
+    uniqueIndex("campania_reglas_marca_uniq").on(t.campaniaId, t.marca).where(sql`${t.tipo} = 'marca'`),
+    uniqueIndex("campania_reglas_categoria_uniq").on(t.campaniaId, t.categoriaId).where(sql`${t.tipo} = 'categoria'`),
+    index("campania_reglas_tenant_tipo_idx").on(t.tenantId, t.tipo),
   ],
 )
 

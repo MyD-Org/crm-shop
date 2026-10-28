@@ -98,6 +98,12 @@ describe("PromoFicha", () => {
     expect(t).not.toContain("9 % de descuento");
   });
 
+  it("unidades y agotado siguen a la etiqueta configurada", () => {
+    info.valor = { ...vigente, etiquetaBadge: "Precio de lanzamiento" };
+    expect(texto(renderToStaticMarkup(<PromoFicha producto={producto} quedan={3} />))).toContain("¡Últimas 3 unidades a precio de lanzamiento!");
+    expect(texto(renderToStaticMarkup(<PromoFicha producto={producto} quedan={0} />))).toContain("Agotadas las unidades a precio de lanzamiento");
+  });
+
   it("sin promo: nada", () => {
     info.valor = null;
     expect(renderToStaticMarkup(<PromoFicha producto={producto} quedan={3} />)).toBe("");

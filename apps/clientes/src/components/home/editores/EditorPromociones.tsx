@@ -235,7 +235,7 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
       </fieldset>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Etiqueta de las ofertas">
+        <Field label="Etiqueta de las ofertas" hint="Ej.: «Precio de lanzamiento». También arma «¡Últimas 5 unidades a precio de lanzamiento!».">
           <Input value={valor.etiquetaBadge} onChange={(ev) => onChange({ ...valor, etiquetaBadge: ev.target.value })} />
         </Field>
         <Field label="Título de la comparación (opcional)" hint="Va sobre la escalera de precios de la estrella y de la ficha. Vacío: sin título.">

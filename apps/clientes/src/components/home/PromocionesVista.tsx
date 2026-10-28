@@ -15,6 +15,7 @@ import { CuentaRegresiva } from "@/components/promociones/CuentaRegresiva";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import {
+  enFrase,
   fechaCortaAR,
   precioPrincipal,
   textoLegales,
@@ -79,7 +80,7 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
         </span>
         {agotada ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-text/85 px-4 py-2.5 text-center text-sm font-bold text-white">
-            Agotado a precio de apertura
+            Agotado a {enFrase(contenido.etiquetaBadge)}
           </div>
         ) : null}
       </div>
@@ -94,7 +95,7 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
 
         <PrecioPromo precio={monto} habitual={e.precioHabitual} esTransferencia={esTransferencia} />
 
-        {conContador ? <UnidadesPromo quedan={quedan!} total={e.unidadesPromo!} /> : null}
+        {conContador ? <UnidadesPromo quedan={quedan!} total={e.unidadesPromo!} etiqueta={contenido.etiquetaBadge} /> : null}
 
         <EscaleraPrecios
           precio={monto}
@@ -104,7 +105,7 @@ function Estrella({ contenido, producto, quedan, edicion }: { contenido: Promoci
           className="border-t border-black/5 pt-4"
         />
 
-        {agotada ? <p className="text-sm font-semibold text-text">Agotadas las unidades a precio de apertura</p> : null}
+        {agotada ? <p className="text-sm font-semibold text-text">Agotadas las unidades a {enFrase(contenido.etiquetaBadge)}</p> : null}
         {agotada && edicion ? <p className="rounded-md bg-warning/90 px-3 py-2 text-xs font-medium text-black">{AVISO_AJUSTE_CRM}</p> : null}
 
         <div className="mt-auto flex flex-wrap items-center gap-3">

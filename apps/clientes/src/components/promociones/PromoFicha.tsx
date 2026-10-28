@@ -3,7 +3,7 @@
 import type { PrecioMedio, Product } from "@/data/products";
 import { useMarca } from "@/components/MarcaProvider";
 import { fmtPrecioCorto } from "@/lib/format";
-import { descuentoPropio, fechaCortaAR, precioPrincipal, textoLegales } from "@/lib/promociones/promo";
+import { descuentoPropio, enFrase, fechaCortaAR, precioPrincipal, textoLegales } from "@/lib/promociones/promo";
 import { EscaleraPrecios, UnidadesPromo } from "./piezas";
 import { CuentaRegresiva } from "./CuentaRegresiva";
 import { usePromoProducto } from "./PromoProvider";
@@ -61,9 +61,9 @@ export function PromoFicha({
       <EscaleraPrecios precio={monto} referencias={info.referencias} tienda={tienda} titulo={info.tituloComparador} />
       {conContador ? (
         quedanVista! > 0 ? (
-          <UnidadesPromo quedan={quedanVista!} total={info.unidadesPromo!} />
+          <UnidadesPromo quedan={quedanVista!} total={info.unidadesPromo!} etiqueta={info.etiquetaBadge} />
         ) : (
-          <p className="text-sm font-semibold text-text">Agotadas las unidades a precio de apertura</p>
+          <p className="text-sm font-semibold text-text">Agotadas las unidades a {enFrase(info.etiquetaBadge)}</p>
         )
       ) : null}
       <CuentaRegresiva fin={info.fin} className="text-sm text-text" />

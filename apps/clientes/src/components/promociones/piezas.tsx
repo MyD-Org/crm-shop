@@ -1,7 +1,7 @@
 import { cn } from "@myd-org/ui";
 import type { Referencia } from "@/data/home-defaults";
 import { fmtPrecioCorto } from "@/lib/format";
-import { descuentoPropio, escaleraPrecios } from "@/lib/promociones/promo";
+import { descuentoPropio, enFrase, escaleraPrecios } from "@/lib/promociones/promo";
 
 /*
  * Piezas visuales de la promo, compartidas por la home y la ficha para que digan lo mismo.
@@ -110,9 +110,9 @@ const MAX_PUNTOS = 12;
 
 /**
  * Unidades a precio de apertura en una línea: un punto por unidad (rojos los disponibles, grises los
- * vendidos) y "¡Últimas N unidades a precio de apertura!". Siempre en clave de escasez, sin el total.
+ * vendidos) y "¡Últimas N unidades a <etiqueta>!". Siempre en clave de escasez, sin el total.
  */
-export function UnidadesPromo({ quedan, total }: { quedan: number; total: number }) {
+export function UnidadesPromo({ quedan, total, etiqueta }: { quedan: number; total: number; /** "Precio de apertura": va en la frase. */ etiqueta: string }) {
   return (
     <div data-sello="unidades" className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {total <= MAX_PUNTOS ? (
@@ -127,7 +127,7 @@ export function UnidadesPromo({ quedan, total }: { quedan: number; total: number
         </span>
       ) : null}
       <p className="text-sm text-text">
-        <strong className="text-danger">{quedan === 1 ? "¡Última unidad" : `¡Últimas ${quedan} unidades`}</strong> a precio de apertura!
+        <strong className="text-danger">{quedan === 1 ? "¡Última unidad" : `¡Últimas ${quedan} unidades`}</strong> a {enFrase(etiqueta)}!
       </p>
     </div>
   );

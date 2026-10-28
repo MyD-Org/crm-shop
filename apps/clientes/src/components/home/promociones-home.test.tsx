@@ -156,6 +156,15 @@ describe("PromocionesVista", () => {
     expect(t).not.toContain("Agregar");
   });
 
+  it("los textos de unidades y agotado siguen a la etiqueta configurada", () => {
+    const conEtiqueta = { ...contenido, etiquetaBadge: "Precio de lanzamiento" };
+    expect(texto(vista({ contenido: conEtiqueta }))).toContain("¡Últimas 3 unidades a precio de lanzamiento!");
+    const agotada = texto(vista({ contenido: conEtiqueta, estrella: { producto: estrellaProd, quedan: 0 }, items: [] }));
+    expect(agotada).toContain("Agotadas las unidades a precio de lanzamiento");
+    expect(agotada).toContain("Agotado a precio de lanzamiento");
+    expect(agotada).not.toContain("a precio de apertura"); // la bajada por defecto dice "apertura" y es editable
+  });
+
   it("quedan 0 en edición: avisa que hay que quitar el ajuste en el CRM", () => {
     expect(texto(vista({ estrella: { producto: estrellaProd, quedan: 0 }, edicion: true }))).toContain(
       "Quite el ajuste de precio del producto en Precios online del CRM.",

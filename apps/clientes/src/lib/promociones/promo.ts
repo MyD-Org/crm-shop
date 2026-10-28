@@ -252,3 +252,14 @@ export function infoPromoSku(datos: DatosPromoCliente | null, sku: string | unde
     esEstrella: datos.estrellaSku === k,
   };
 }
+
+/**
+ * La etiqueta de la promo ("Precio de lanzamiento") dentro de una oración: "¡Últimas 5 unidades a
+ * precio de lanzamiento!". Baja la inicial salvo que la primera palabra sea una sigla ("LED").
+ */
+export function enFrase(etiqueta: string): string {
+  const t = etiqueta.trim();
+  const primera = t.split(/\s+/)[0] ?? "";
+  if (primera.length > 1 && primera === primera.toUpperCase()) return t;
+  return t.charAt(0).toLowerCase() + t.slice(1);
+}

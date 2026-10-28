@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LEGALES_DEFAULT,
   aIsoArgentina,
+  enFrase,
   descuentoPropio,
   escaleraPrecios,
   ahorroPesos,
@@ -261,5 +262,15 @@ describe("ahorroPesos", () => {
     expect(ahorroPesos(150000, 150000)).toBeNull();
     expect(ahorroPesos(160000, 150000)).toBeNull();
     expect(ahorroPesos(100000)).toBeNull();
+  });
+});
+
+describe("enFrase (la etiqueta dentro de una oración)", () => {
+  it("baja la inicial para que siga a \"a\": «a precio de lanzamiento»", () => {
+    expect(enFrase("Precio de lanzamiento")).toBe("precio de lanzamiento");
+  });
+  it("respeta siglas y espacios", () => {
+    expect(enFrase("  Precio CyberMonday ")).toBe("precio CyberMonday");
+    expect(enFrase("LED a precio")).toBe("LED a precio");
   });
 });

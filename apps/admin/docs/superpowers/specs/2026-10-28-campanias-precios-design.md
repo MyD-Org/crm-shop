@@ -62,7 +62,7 @@ Acciones disponibles:
 - El **% exhibido es el de la regla**. Es honesto porque el precio sale exactamente de aplicarlo al precio normal.
   - Respeta lo aprobado en el spec de la promo: % sólo contra nuestro precio habitual, en verde.
 - **Listas privadas** (cuentas con precio propio, decisión B de Emanuel): durante una campaña activa el cliente paga el **menor** entre su precio privado y el público de campaña.
-  - El público de campaña se toma de la lista que le tocaría al medio elegido, con la misma regla de `precioDeLista`.
+  - El público de campaña es el de la **lista general** (`main`), que es lo único que ve una cuenta privada (no tiene precios por medio). Así coinciden exhibición y cobro, sin importar el medio (decisión mía).
   - Badge, tachado y % se muestran **sólo cuando gana el de campaña**. En ese caso el tachado es su precio privado, que es lo que paga normalmente, y el % se recalcula contra ese precio (redondeado hacia abajo, `porcentajeAhorro`).
   - Si gana su precio privado, todo queda como hoy: sin badge y sin consumir unidades del límite.
   - Hoy `cotizarItem` toma la lista privada e ignora la del medio (`cotizacion.ts:155-163`). La función única de precio recibe también el precio privado y elige el menor; exhibición y cobro siguen usando la misma.

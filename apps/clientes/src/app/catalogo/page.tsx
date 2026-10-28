@@ -1,3 +1,4 @@
+import { campaniasVigentes } from "@/lib/campanias/vigentes";
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { categoriasTotalesPublicas, facetasPublicas, marcasDelCatalogoPublicas } from "@/lib/catalogo-publico";
@@ -170,6 +171,7 @@ async function CatalogoResultados({ searchParams }: Props) {
     disp,
     destacado: mediosPrecio?.destacado,
     cuotas: mediosPrecio?.cuotas,
+    campanias: await campaniasVigentes(),
     conPlanDeUrl: estado.ia === IA_PLAN,
     busquedaIa: conBusquedaIa,
   };

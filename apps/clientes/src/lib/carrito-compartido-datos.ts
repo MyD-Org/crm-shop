@@ -8,6 +8,8 @@
  * de otro algo que la tienda ya no vende.
  */
 
+import { campaniasVigentes } from "./campanias/vigentes";
+import { SIN_MEDIOS_PRECIO } from "./medios-precio";
 import { identidadActual } from "@/lib/auth";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { preciosPrivados } from "@/lib/precios-privados-repo";
@@ -29,15 +31,21 @@ export async function productosCompartidos(
   lineas: readonly LineaCarrito[],
 ): Promise<ProductoCompartido[]> {
   if (lineas.length === 0) return [];
-  const [{ cliente }, soloVisibles, agrupar] = await Promise.all([
+  const [{ cliente }, soloVisibles, agrupar, campanias] = await Promise.all([
     identidadActual(),
     catalogoSoloVisibles(),
     variantesSelector(),
+    campaniasVigentes(),
   ]);
   const idListaPrivada = cliente ? await listaPrivadaDelComprador() : null;
   const ids = lineas.map((l) => l.id);
   const [productos, privados] = await Promise.all([
-    getProductosPorIds(ids, { soloActivos: true, soloVisibles, ...(agrupar ? { agrupar: true } : {}) }),
+    getProductosPorIds(ids, {
+      soloActivos: true,
+      soloVisibles,
+      ...(agrupar ? { agrupar: true } : {}),
+      ...(campanias.length ? { mediosPrecio: { ...SIN_MEDIOS_PRECIO, campanias } } : {}),
+    }),
     idListaPrivada ? preciosPrivados(idListaPrivada, ids) : Promise.resolve(null),
   ]);
   return lineas.map(({ id, qty }) => {

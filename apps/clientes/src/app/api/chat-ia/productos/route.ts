@@ -1,3 +1,5 @@
+import { campaniasVigentes } from "@/lib/campanias/vigentes";
+import { SIN_MEDIOS_PRECIO } from "@/lib/medios-precio";
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { esIdProducto } from "@/lib/id-producto";
@@ -49,16 +51,18 @@ export async function GET(req: Request) {
   if (ids.length === 0) return json([]);
 
   try {
-    const [{ soloVisibles, variantes }, disp, idListaPrivada, estructurados] = await Promise.all([
+    const [{ soloVisibles, variantes }, disp, idListaPrivada, estructurados, campanias] = await Promise.all([
       flagsPublicos(),
       dispCatalogo(),
       identidad.cliente ? listaPrivadaDelComprador() : Promise.resolve(null),
       // Misma regla que el catálogo y la ficha: flag `busqueda-ia` y tabla disponible.
       usarAtributosEstructurados(),
+      campaniasVigentes(),
     ]);
     const productos = await getProductosPorIds(ids, {
       soloActivos: true,
       soloVisibles,
+      ...(campanias.length ? { mediosPrecio: { ...SIN_MEDIOS_PRECIO, campanias } } : {}),
       ...(variantes ? { agrupar: true } : {}),
       disp,
       // Card `spec`: valores técnicos estructurados si la tabla del CRM está disponible.

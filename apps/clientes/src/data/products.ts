@@ -85,6 +85,22 @@ export interface GrupoFicha {
   opciones: OpcionFicha[];
 }
 
+/** La campaña de precios que rige un producto (ver `Product.campania`). */
+export interface CampaniaProducto {
+  id: string;
+  nombre: string;
+  /** Texto del badge. */
+  etiqueta: string;
+  /** ISO; fin exclusivo (cuenta regresiva). */
+  fin: string;
+  /** % de descuento contra el normal que se tacha. */
+  pct: number;
+  /** Límite de unidades de la regla; null = sin límite. */
+  unidades: number | null;
+  /** Unidades que quedan a precio de campaña; null = sin límite o sin contar. */
+  quedan: number | null;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -161,6 +177,12 @@ export interface Product {
    * overlay todavía no llegó (se muestra un marcador). Ausente = precio público.
    */
   precioCuenta?: "privado" | "consulte" | "pendiente";
+  /**
+   * Campaña de precios que rige este producto (spec 2026-10-28-campanias-precios-design.md): `price`
+   * y `precioFinal` ya son los de campaña y `oldPrice` es el normal de la misma lista (con IVA).
+   * Ausente = precio normal. El % se muestra en el badge, en verde (nunca en `discount`).
+   */
+  campania?: CampaniaProducto;
   discount?: string;
   badgeTone?: "danger" | "info" | "warning" | "neutral";
   badgeText?: string;

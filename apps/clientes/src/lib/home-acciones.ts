@@ -1,5 +1,6 @@
 "use server";
 
+import { campaniasVigentes } from "./campanias/vigentes";
 import { randomUUID } from "node:crypto";
 import { updateTag } from "next/cache";
 import { TAG_HOME } from "@/lib/cache-tags";
@@ -363,9 +364,13 @@ export async function productosParaPromo(skus: string[], sucursal: string): Prom
   if (pedidos.length === 0) return { ok: true, productos: [] };
 
   try {
-    const { soloVisibles, variantes, mediosPrecio } = await flagsPublicos();
+    const [{ soloVisibles, variantes, mediosPrecio }, campanias] = await Promise.all([flagsPublicos(), campaniasVigentes()]);
     const [productos, { sucursales }] = await Promise.all([
-      getProductosPorSkus(pedidos, { soloVisibles, ...(variantes ? { agrupar: true } : {}), mediosPrecio }),
+      getProductosPorSkus(pedidos, {
+        soloVisibles,
+        ...(variantes ? { agrupar: true } : {}),
+        mediosPrecio: campanias.length ? { ...mediosPrecio, campanias } : mediosPrecio,
+      }),
       sucursalesCacheadas(),
     ]);
     const predeterminada = sucursalesDePromo(sucursales)[0]?.slug ?? sucursal;

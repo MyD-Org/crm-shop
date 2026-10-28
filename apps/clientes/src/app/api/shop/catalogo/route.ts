@@ -1,3 +1,4 @@
+import { campaniasVigentes } from "@/lib/campanias/vigentes";
 import { NextRequest, NextResponse } from "next/server";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
@@ -37,12 +38,13 @@ export async function GET(req: NextRequest) {
   );
 
   try {
-    const [{ soloVisibles, variantes }, disp, conBusquedaIa, estructurados] = await Promise.all([
+    const [{ soloVisibles, variantes }, disp, conBusquedaIa, estructurados, campanias] = await Promise.all([
       flagsPublicos(),
       dispCatalogo(),
       busquedaIaHabilitada(),
       // Sólo lo usa el camino con plan (los atributos estructurados de cada producto).
       usarAtributosEstructurados(),
+      campaniasVigentes(),
     ]);
     const resultado = await buscarEnShop(
       {
@@ -52,7 +54,7 @@ export async function GET(req: NextRequest) {
         pagina: 1,
         porPagina: limit,
       },
-      { superficie: "autocompletar", soloVisibles, ...(variantes ? { agrupar: true } : {}), disp, busquedaIa: conBusquedaIa },
+      { superficie: "autocompletar", soloVisibles, ...(variantes ? { agrupar: true } : {}), disp, busquedaIa: conBusquedaIa, ...(campanias.length ? { campanias } : {}) },
     );
     return NextResponse.json(resultado.productos);
   } catch (err) {

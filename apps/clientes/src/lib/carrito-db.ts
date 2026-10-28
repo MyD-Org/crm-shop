@@ -9,6 +9,8 @@
  * sólo aplica si trae la versión vigente. Si no, no se toca nada y se devuelve
  * el carrito actual para que el cliente lo adopte.
  */
+import { campaniasVigentes } from "./campanias/vigentes";
+import { SIN_MEDIOS_PRECIO } from "./medios-precio";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { carts } from "@/db/schema";
@@ -168,9 +170,11 @@ export async function enriquecer(
   if (lineas.length === 0) return [];
   const ids = lineas.map((l) => l.id);
   // Flag `variantes-selector`: la línea de una variante se llama "Modelo / Opción", con su foto si tiene.
-  const agrupar = await variantesSelector();
+  const [agrupar, campanias] = await Promise.all([variantesSelector(), campaniasVigentes()]);
+  // Campañas activas: el precio de referencia de la línea es el de campaña (el que se cobra).
+  const conCampanias = campanias.length ? { mediosPrecio: { ...SIN_MEDIOS_PRECIO, campanias } } : {};
   const [productos, privados] = await Promise.all([
-    agrupar ? getProductosPorIds(ids, { agrupar: true }) : getProductosPorIds(ids),
+    agrupar || campanias.length ? getProductosPorIds(ids, { ...(agrupar ? { agrupar: true } : {}), ...conCampanias }) : getProductosPorIds(ids),
     idListaPrivada ? preciosPrivados(idListaPrivada, ids) : Promise.resolve(null),
   ]);
   return lineas.map(({ id, qty }) => {

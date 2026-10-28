@@ -1,3 +1,4 @@
+import { campaniasVigentes } from "@/lib/campanias/vigentes";
 import { connection } from "next/server";
 import type { PromocionesContent } from "@/data/home-defaults";
 import { productosPromo } from "@/lib/catalogo-publico";
@@ -17,7 +18,11 @@ export async function PromocionesHome({ contenido }: { contenido: PromocionesCon
   const estado = estadoPromo(contenido, ahoraServidor());
   const skus = skusPromo(contenido);
 
-  const [{ soloVisibles, variantes, mediosPrecio }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
+  const [{ soloVisibles, variantes, mediosPrecio }, disp, campanias] = await Promise.all([
+    flagsPublicos(),
+    dispCatalogo(),
+    campaniasVigentes(),
+  ]);
   const productos = await productosPromo({
     skus,
     soloVisibles,
@@ -25,6 +30,7 @@ export async function PromocionesHome({ contenido }: { contenido: PromocionesCon
     disp,
     destacado: mediosPrecio?.destacado,
     cuotas: mediosPrecio?.cuotas,
+    campanias,
   });
   const porSku = new Map(productos.map((p) => [(p.sku ?? "").toUpperCase(), p]));
   const skuEstrella = contenido.estrella?.sku.trim().toUpperCase();

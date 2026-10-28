@@ -7,6 +7,7 @@
  * aparece si su precio en esa lista es MENOR que el de la lista por defecto (misma regla que la
  * cotización: `precioDeLista`), así lo que se exhibe coincide con lo que cotiza el checkout.
  */
+import type { CampaniaActiva } from "./campanias/vigentes";
 import { precioDeLista, precioGeneral, type AlegraPrice } from "./alegra";
 import type { PrecioMedio, PrecioOffline } from "@/data/products";
 import { cuotasNoAlcanzadas, opcionesCuotas, type CuotasProducto, type MedioCuotas } from "./cuotas-sin-interes";
@@ -31,6 +32,15 @@ export interface MedioPrecio {
 }
 
 export interface MediosPrecio {
+  /**
+   * Campañas de precios ACTIVAS en el request (`campaniasVigentes()`, spec
+   * 2026-10-28-campanias-precios-design.md). Viajan acá porque estos medios ya llegan a cada lectura
+   * del catálogo y son parte de la clave de las cachés: la caché cambia sola en el inicio y el fin.
+   * Ausente o vacío = ninguna.
+   */
+  campanias?: CampaniaActiva[];
+  /** Unidades que quedan a precio de campaña por regla (`reglaId`), sólo las reglas con límite. */
+  quedanCampania?: Record<string, number>;
   /** Medio de las cards; `null` = ninguno. */
   destacado: MedioPrecio | null;
   /** Medios de la ficha, ya ordenados. */

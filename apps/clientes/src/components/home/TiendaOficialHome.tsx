@@ -1,3 +1,4 @@
+import { campaniasVigentes } from "@/lib/campanias/vigentes";
 import Link from "next/link";
 import { connection } from "next/server";
 import type { TiendaOficialContent } from "@/data/home-defaults";
@@ -25,7 +26,11 @@ export async function TiendaOficialHome({ contenido }: { contenido: TiendaOficia
   const pagina = await getPaginaMarca(contenido.slug);
   if (!pagina || !pagina.publicada || pagina.nivel !== "oficial") return null;
 
-  const [{ soloVisibles, variantes, mediosPrecio }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
+  const [{ soloVisibles, variantes, mediosPrecio }, disp, campanias] = await Promise.all([
+    flagsPublicos(),
+    dispCatalogo(),
+    campaniasVigentes(),
+  ]);
   const productos = await destacadosHome({
     skus: contenido.skus,
     cantidad: 3,
@@ -34,6 +39,7 @@ export async function TiendaOficialHome({ contenido }: { contenido: TiendaOficia
     disp,
     destacado: mediosPrecio?.destacado,
     cuotas: mediosPrecio?.cuotas,
+    campanias,
     base: filtrosDeMarca(pagina),
   });
   const titulo = contenido.titulo || pagina.bajada;

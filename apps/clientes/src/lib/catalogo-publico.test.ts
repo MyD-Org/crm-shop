@@ -307,3 +307,35 @@ describe("productosPromo", () => {
     expect(cat.getProductosPorSkus).not.toHaveBeenCalled();
   });
 });
+
+describe("campañas de precios activas (parte de la clave de la caché)", () => {
+  const BF = { id: "c1", nombre: "Black Friday", etiqueta: "BF", fin: "2026-12-01T03:00:00.000Z" };
+
+  it("la página las pasa a la lectura dentro de mediosPrecio", async () => {
+    cat.getPaginaCatalogo.mockResolvedValue({ productos: [] });
+    await paginaCatalogoPublica({ filtros: {}, orden: "nombre", pagina: 1, soloVisibles: false, campanias: [BF] });
+    expect(cat.getPaginaCatalogo).toHaveBeenCalledWith(
+      expect.objectContaining({ mediosPrecio: expect.objectContaining({ campanias: [BF] }) }),
+    );
+  });
+
+  it("la ficha las pasa a getProducto; sin campañas, la llamada de siempre", async () => {
+    cat.getProducto.mockResolvedValue(prod("42", "A"));
+    await productoPublico("42", true, undefined, false, [], null, [], false, [BF]);
+    expect(cat.getProducto).toHaveBeenLastCalledWith(
+      "42",
+      expect.objectContaining({ mediosPrecio: expect.objectContaining({ campanias: [BF] }) }),
+    );
+    await productoPublico("42", true);
+    expect(cat.getProducto).toHaveBeenLastCalledWith("42", { soloVisibles: true, disp: undefined });
+  });
+
+  it("los destacados las pasan a la página y a los SKUs", async () => {
+    cat.getPaginaCatalogo.mockResolvedValue({ productos: [] });
+    cat.getProductosPorSkus.mockResolvedValue([]);
+    await destacadosHome({ skus: ["Z"], cantidad: 2, soloVisibles: true, campanias: [BF] });
+    const conCampanias = expect.objectContaining({ mediosPrecio: expect.objectContaining({ campanias: [BF] }) });
+    expect(cat.getPaginaCatalogo).toHaveBeenCalledWith(conCampanias);
+    expect(cat.getProductosPorSkus).toHaveBeenCalledWith(["Z"], conCampanias);
+  });
+});

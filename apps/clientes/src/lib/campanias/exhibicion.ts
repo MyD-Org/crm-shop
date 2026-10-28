@@ -5,6 +5,8 @@
 import type { AlegraPrice } from "../alegra";
 import type { CampaniaProducto } from "@/data/products";
 import type { MediosPrecio } from "../medios-precio";
+import { armarPreciosMedios } from "../medios-precio";
+import { precioFinal } from "../precio-final";
 import { mapCampanias, resolverPrecioVigente, type EntradaCampania } from "./precio";
 
 /** Los precios con los de campaña puestos en cada lista que la campaña trae (> 0). */
@@ -23,8 +25,10 @@ export function preciosConCampania(prices: AlegraPrice[], entrada: EntradaCampan
 export function campaniaParaExhibir(
   prices: AlegraPrice[],
   campaniasOnline: unknown,
-  medios: Pick<MediosPrecio, "campanias" | "quedanCampania"> | undefined,
+  medios: Pick<MediosPrecio, "campanias" | "quedanCampania" | "destacado"> | undefined,
   idPriceList?: string,
+  /** IVA del producto: para el normal con IVA del medio destacado (`habitualMedio`). */
+  iva: number | null = null,
 ): { precios: AlegraPrice[]; normal: number; campania: CampaniaProducto } | null {
   const activas = medios?.campanias;
   if (!activas?.length) return null;
@@ -32,6 +36,12 @@ export function campaniaParaExhibir(
   const r = resolverPrecioVigente(prices, mapCampanias(campaniasOnline), { activas: new Set(activas.map((c) => c.id)), quedan }, { idListaMedio: idPriceList });
   const meta = r.campania ? activas.find((c) => c.id === r.campania!.id) : undefined;
   if (!r.campania || !meta || r.pct === null) return null;
+  // El normal del medio destacado, con la misma regla de la card ("$X con <Medio>") sobre los precios
+  // normales: es lo que se tacha cuando el precio grande es el del medio.
+  const normalMedio = medios?.destacado
+    ? armarPreciosMedios(prices, iva, { destacado: medios.destacado, ficha: [] }).precioMedio
+    : undefined;
+  const habitualMedio = normalMedio ? (normalMedio.precioFinal ?? precioFinal(normalMedio.price, iva) ?? normalMedio.price) : undefined;
   return {
     precios: preciosConCampania(prices, r.campania),
     normal: r.normal,
@@ -43,6 +53,7 @@ export function campaniaParaExhibir(
       pct: r.pct,
       unidades: r.campania.unidades,
       quedan: r.campania.unidades != null ? (quedan.get(r.campania.reglaId) ?? null) : null,
+      ...(habitualMedio !== undefined ? { habitualMedio } : {}),
     },
   };
 }

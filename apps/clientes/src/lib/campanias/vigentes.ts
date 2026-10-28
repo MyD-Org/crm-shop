@@ -82,6 +82,12 @@ async function campaniasSinFallar(): Promise<CampaniaShop[]> {
   }
 }
 
+/**
+ * Todas las ventanas de `campanias_shop` (programadas, activas y terminadas hace < 24 h), cacheadas:
+ * para asociar la sección Promociones de la home a una campaña y armar su selector.
+ */
+export const campaniasShop = cache(async (): Promise<CampaniaShop[]> => campaniasSinFallar());
+
 /** Las campañas activas AHORA. Nunca llamar adentro de `'use cache'`: lee el reloj del request. */
 export const campaniasVigentes = cache(async (): Promise<CampaniaActiva[]> => {
   const campanias = await campaniasSinFallar();

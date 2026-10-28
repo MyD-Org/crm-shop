@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Field, Input, Select, Textarea } from "@myd-org/ui";
 import type { EstrellaPromo, ItemPromo, PromocionesContent, Referencia } from "@/data/home-defaults";
-import { productosParaPromo, sucursalesParaPromo, type ProductoPromoEditor } from "@/lib/home-acciones";
+import { campaniasParaPromo, productosParaPromo, sucursalesParaPromo, type ProductoPromoEditor } from "@/lib/home-acciones";
+import type { CampaniaShop } from "@/lib/campanias/vigentes";
 import { fmtPrecioCorto } from "@/lib/format";
 import {
   aIsoArgentina,
@@ -20,6 +21,8 @@ import { aplicarUnidades, cambiarEstrella, completarHabituales, enteroPesos, nec
 import type { EditorProps } from "./index";
 
 const clave = (sku: string) => sku.trim().toUpperCase();
+/** Valor del selector para "sin campaña" (el Select del DS no admite el valor vacío). */
+const SIN_CAMPANIA = "ninguna";
 
 /** Precio de hoy y descuento contra el habitual: confirma si el ajuste de promo del CRM ya está cargado. */
 export function ResumenPrecio({ precio, esTransferencia, habitual }: { precio: number; esTransferencia: boolean; habitual?: number }) {
@@ -39,15 +42,26 @@ export function ResumenPrecio({ precio, esTransferencia, habitual }: { precio: n
 const LISTA_SUGERENCIAS = "promo-referencias-sugeridas";
 
 /** Precio habitual (el que se tacha) y hasta 3 referencias de otros canales para la escalera. */
-function CamposPrecios({ item, onChange }: { item: ItemPromo; onChange: (cambios: Partial<ItemPromo>) => void }) {
+function CamposPrecios({
+  item,
+  onChange,
+  conHabitual = true,
+}: {
+  item: ItemPromo;
+  onChange: (cambios: Partial<ItemPromo>) => void;
+  /** false = la sección está asociada a una campaña de precios: el habitual sale de la campaña. */
+  conHabitual?: boolean;
+}) {
   const refs = item.referencias ?? [];
   const setRef = (n: number, cambios: Partial<Referencia>) =>
     onChange({ referencias: refs.map((r, i) => (i === n ? { ...r, ...cambios } : r)) });
   return (
     <div className="flex flex-col gap-3">
-      <Field label="Precio habitual por transferencia (con IVA)" hint="Es el que se tacha. Se completa solo con el precio de hoy al agregar el producto.">
-        <Input inputMode="numeric" value={item.precioHabitual ? String(item.precioHabitual) : ""} onChange={(e) => onChange({ precioHabitual: enteroPesos(e.target.value) })} />
-      </Field>
+      {conHabitual ? (
+        <Field label="Precio habitual por transferencia (con IVA)" hint="Es el que se tacha. Se completa solo con el precio de hoy al agregar el producto.">
+          <Input inputMode="numeric" value={item.precioHabitual ? String(item.precioHabitual) : ""} onChange={(e) => onChange({ precioHabitual: enteroPesos(e.target.value) })} />
+        </Field>
+      ) : null}
       <div className="flex flex-col gap-2">
         <p className="text-sm font-medium">Precios en otros canales (para la comparación)</p>
         {refs.map((r, n) => (
@@ -88,6 +102,9 @@ function CamposPrecios({ item, onChange }: { item: ItemPromo; onChange: (cambios
  */
 export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesContent>) {
   const [sucursales, setSucursales] = useState<SucursalPromo[]>([]);
+  const [campanias, setCampanias] = useState<CampaniaShop[]>([]);
+  // Asociada a una campaña de precios: fechas, habitual y unidades salen de la campaña.
+  const conCampania = Boolean(valor.campaniaId);
   const [productos, setProductos] = useState<Record<string, ProductoPromoEditor>>({});
   // Sucursal de la que se leyó el stock de `productos`: el stock base sólo se toma de la vigente.
   const [productosEn, setProductosEn] = useState("");
@@ -101,6 +118,7 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
   useEffect(() => {
     let vigente = true;
     sucursalesParaPromo().then((s) => vigente && setSucursales(s), () => {});
+    campaniasParaPromo().then((c) => vigente && setCampanias(c), () => {});
     return () => {
       vigente = false;
     };
@@ -125,11 +143,13 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
   }, [skusClave, sucursal]);
 
   // El precio habitual (el que se tacha) se completa con el precio de hoy al agregar el producto.
+  // Con campaña de precios no: el habitual sale de la campaña.
   useEffect(() => {
+    if (conCampania) return;
     const precios = Object.fromEntries(Object.entries(productos).map(([k, p]) => [k, p.precio]));
     const completo = completarHabituales(valor, precios);
     if (completo !== valor) onChange(completo);
-  }, [productos, valor, onChange]);
+  }, [productos, valor, onChange, conCampania]);
 
   // Al cambiar estrella, sucursal o unidades se vuelve a tomar el stock base del contador.
   useEffect(() => {
@@ -159,6 +179,30 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
       {error ? <Alert tone="danger">{error}</Alert> : null}
       <CamposTitulo valor={valor} onChange={onChange} conEyebrow />
 
+      <Field
+        label="Campaña de precios"
+        hint="Con una campaña, las fechas, el precio que se tacha y las unidades de la estrella salen de la campaña (Catálogo › Campañas del CRM)."
+      >
+        <Select
+          options={[
+            { value: SIN_CAMPANIA, label: "Ninguna: fechas y precios cargados a mano" },
+            ...campanias.map((c) => ({ value: c.id, label: c.nombre })),
+            // Una campaña guardada que ya no está en la lista (terminada hace más de 24 h).
+            ...(valor.campaniaId && !campanias.some((c) => c.id === valor.campaniaId)
+              ? [{ value: valor.campaniaId, label: "Campaña terminada" }]
+              : []),
+          ]}
+          value={valor.campaniaId ?? SIN_CAMPANIA}
+          onValueChange={(v) => onChange({ ...valor, campaniaId: v === SIN_CAMPANIA ? undefined : v })}
+          aria-label="Campaña de precios"
+        />
+      </Field>
+
+      {conCampania ? (
+        <Alert tone="neutral">
+          Las fechas, el precio habitual que se tacha y las unidades de la estrella salen de la campaña de precios.
+        </Alert>
+      ) : (
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Empieza" hint="Hora de Argentina. Vacío: ya empezó.">
           <Input
@@ -175,6 +219,7 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
           />
         </Field>
       </div>
+      )}
 
       <fieldset className="flex flex-col gap-3 rounded-lg border border-black/10 p-4">
         <legend className="px-1 text-sm font-semibold">Producto estrella</legend>
@@ -182,10 +227,11 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
         {e?.sku ? (
           <>
             {resumen(e.sku, e.precioHabitual)}
-            <CamposPrecios item={e} onChange={(cambios) => setEstrella(cambios)} />
+            <CamposPrecios item={e} onChange={(cambios) => setEstrella(cambios)} conHabitual={!conCampania} />
             <Field label="Video (YouTube o Vimeo)" hint="Un Short no listado sirve. Vacío: la foto del producto.">
               <Input value={e.video ?? ""} onChange={(ev) => setEstrella({ video: ev.target.value.trim() || undefined })} placeholder="https://www.youtube.com/shorts/…" />
             </Field>
+            {conCampania ? null : (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Unidades a precio de apertura" hint="Vacío: sin contador.">
                 <Input inputMode="numeric" value={e.unidadesPromo ? String(e.unidadesPromo) : ""} onChange={(ev) => setEstrella({ unidadesPromo: enteroPesos(ev.target.value) })} />
@@ -199,7 +245,8 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
                 />
               </Field>
             </div>
-            {e.unidadesPromo && productos[clave(e.sku)] ? (
+            )}
+            {!conCampania && e.unidadesPromo && productos[clave(e.sku)] ? (
               <p className="text-xs text-muted">
                 Stock actual en la sucursal: {productos[clave(e.sku)].stock ?? "sin control de stock"}.
               </p>
@@ -229,7 +276,7 @@ export function EditorPromociones({ valor, onChange }: EditorProps<PromocionesCo
           <div key={it.sku} className="flex flex-col gap-1 border-t border-black/5 pt-3">
             <p className="text-sm font-medium">{productos[clave(it.sku)]?.nombre ?? it.sku}</p>
             {resumen(it.sku, it.precioHabitual)}
-            <CamposPrecios item={it} onChange={(cambios) => setItem(n, cambios)} />
+            <CamposPrecios item={it} onChange={(cambios) => setItem(n, cambios)} conHabitual={!conCampania} />
           </div>
         ))}
       </fieldset>

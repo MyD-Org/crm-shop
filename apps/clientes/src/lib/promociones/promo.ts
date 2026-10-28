@@ -263,3 +263,37 @@ export function enFrase(etiqueta: string): string {
   if (primera.length > 1 && primera === primera.toUpperCase()) return t;
   return t.charAt(0).toLowerCase() + t.slice(1);
 }
+
+/**
+ * La sección asociada a una campaña de precios (spec 2026-10-28-campanias-precios-design.md): las
+ * fechas son las de la campaña y, en cada producto que la campaña alcanza, el precio habitual que se
+ * tacha es el NORMAL de la misma lista que se muestra grande (el del medio destacado si lo hay; si no,
+ * el de lista) y las unidades de la estrella son las de la regla. Lo cargado a mano queda para los
+ * productos sin campaña. Sin campaña asociada (o inexistente) devuelve el mismo contenido.
+ */
+export function contenidoConCampania(
+  contenido: PromocionesContent,
+  campania: { id: string; inicio: string; fin: string } | undefined,
+  productos: readonly Product[],
+): PromocionesContent {
+  if (!contenido.campaniaId || !campania || campania.id !== contenido.campaniaId) return contenido;
+  const porSku = new Map(productos.map((p) => [normalizar(p.sku ?? ""), p]));
+  const habitual = (sku: string): number | undefined => {
+    const p = porSku.get(normalizar(sku));
+    if (!p?.campania) return undefined;
+    return p.precioMedio ? p.campania.habitualMedio : p.oldPrice;
+  };
+  const conHabitual = <T extends { sku: string; precioHabitual?: number }>(i: T): T => {
+    const h = habitual(i.sku);
+    return h !== undefined ? { ...i, precioHabitual: h } : i;
+  };
+  const estrella = contenido.estrella ? conHabitual(contenido.estrella) : undefined;
+  const unidades = estrella ? porSku.get(normalizar(estrella.sku))?.campania?.unidades : undefined;
+  return {
+    ...contenido,
+    inicio: campania.inicio,
+    fin: campania.fin,
+    ...(estrella ? { estrella: unidades != null ? { ...estrella, unidadesPromo: unidades } : estrella } : {}),
+    items: contenido.items.map(conHabitual),
+  };
+}

@@ -200,7 +200,7 @@ export function mapFilaToProduct(
   const iva = fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null;
   // Campaña activa: los precios efectivos son los de campaña (también "$X con <Medio>") y el normal
   // de la misma lista se tacha. La misma regla que el cobro (`resolverPrecioVigente`).
-  const enCampania = campaniaParaExhibir(mapPrecios(fila.prices), fila.campaniasOnline, mediosPrecio, idPriceList);
+  const enCampania = campaniaParaExhibir(mapPrecios(fila.prices), fila.campaniasOnline, mediosPrecio, idPriceList, iva);
   const precios = enCampania ? enCampania.precios : mapPrecios(fila.prices);
   const price = precioDeLista(precios, idPriceList);
   const atributosEstructurados = leerAtributosEstructurados(fila.atributos);

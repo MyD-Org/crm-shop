@@ -1,6 +1,6 @@
 "use server";
 
-import { campaniasVigentes } from "./campanias/vigentes";
+import { campaniasShop, campaniasVigentes, type CampaniaShop } from "./campanias/vigentes";
 import { randomUUID } from "node:crypto";
 import { updateTag } from "next/cache";
 import { TAG_HOME } from "@/lib/cache-tags";
@@ -395,6 +395,12 @@ export async function productosParaPromo(skus: string[], sucursal: string): Prom
 }
 
 /** Sucursales activas para el selector del contador de unidades. Sólo admin. */
+/** Las campañas de precios para asociar la sección Promociones (sólo admin; vacío si falla). */
+export async function campaniasParaPromo(): Promise<CampaniaShop[]> {
+  if (!(await esAdmin())) return [];
+  return campaniasShop();
+}
+
 export async function sucursalesParaPromo(): Promise<SucursalPromo[]> {
   if (!(await esAdmin())) return [];
   try {

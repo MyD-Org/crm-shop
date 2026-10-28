@@ -99,6 +99,11 @@ export interface CampaniaProducto {
   unidades: number | null;
   /** Unidades que quedan a precio de campaña; null = sin límite o sin contar. */
   quedan: number | null;
+  /**
+   * Precio NORMAL con IVA del medio destacado de las cards (transferencia): lo que se tacha cuando el
+   * precio grande es el del medio (sección Promociones de la home). Ausente = sin medio destacado.
+   */
+  habitualMedio?: number;
 }
 
 export interface Product {

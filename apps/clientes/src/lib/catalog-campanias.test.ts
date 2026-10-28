@@ -56,6 +56,11 @@ describe("mapFilaToProduct con campaña activa", () => {
     expect(p.preciosMedios).toEqual([{ slug: "transf", nombre: "Transferencia", price: 104, precioFinal: 125.84 }]);
   });
 
+  it("con medio destacado, el normal de esa lista con IVA (para tachar en la home)", () => {
+    const p = mapFilaToProduct(fila, undefined, sinHosts, null, { destacado: transf, ficha: [], campanias: [BF] });
+    expect(p.campania?.habitualMedio).toBe(157.3);
+  });
+
   it("sin campañas activas: el producto de siempre", () => {
     const sin = mapFilaToProduct(fila, undefined, sinHosts, null, { destacado: transf, ficha: [transf] });
     const conOtra = mapFilaToProduct(fila, undefined, sinHosts, null, {

@@ -28,6 +28,7 @@ const MIGRACION_0037 = fileURLToPath(new URL("../../drizzle/0037_catalogo_shop_d
 const MIGRACION_0038 = fileURLToPath(new URL("../../drizzle/0038_grants_overlay_shop.sql", import.meta.url))
 const MIGRACION_0065 = fileURLToPath(new URL("../../drizzle/0065_shop_precios_online.sql", import.meta.url))
 const MIGRACION_0083 = fileURLToPath(new URL("../../drizzle/0083_vista_shop_variantes.sql", import.meta.url))
+const MIGRACION_0095 = fileURLToPath(new URL("../../drizzle/0095_campanias.sql", import.meta.url))
 
 /** El bloque de GRANTs tal cual está en la migración (último statement). */
 function bloqueDeGrants(archivo = MIGRACION): string {
@@ -87,6 +88,7 @@ describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB r
       await sql.unsafe(bloqueDeGrants(MIGRACION_0038))
       await sql.unsafe(bloqueDeGrants(MIGRACION_0065))
       await sql.unsafe(bloqueDeGrants(MIGRACION_0083))
+      await sql.unsafe(bloqueDeGrants(MIGRACION_0095))
       await sql.unsafe("CREATE ROLE shop_app NOLOGIN")
       rolCreadoAca = true
     }
@@ -95,6 +97,7 @@ describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB r
     await sql.unsafe(bloqueDeGrants(MIGRACION_0038))
     await sql.unsafe(bloqueDeGrants(MIGRACION_0065))
     await sql.unsafe(bloqueDeGrants(MIGRACION_0083))
+    await sql.unsafe(bloqueDeGrants(MIGRACION_0095))
 
     await limpiar()
     await sql`
@@ -140,7 +143,7 @@ describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB r
     await sql.end()
   })
 
-  it("la vista tiene las 12 columnas originales, en orden, y las 5 de variantes (0083) al final (sin raw ni imágenes)", async () => {
+  it("la vista tiene las 12 columnas originales, en orden, las 5 de variantes (0083) y campanias_online (0095) al final (sin raw ni imágenes)", async () => {
     const cols = await sql`
       SELECT column_name, data_type FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'catalog_products_shop'
@@ -164,7 +167,19 @@ describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB r
       ["etiqueta", "text"],
       ["es_representante", "boolean"],
       ["overlay_alegra_id", "text"],
+      ["campanias_online", "jsonb"],
     ])
+  })
+
+  it("0095: shop_app lee campanias_online por la vista y las campañas por campanias_shop, no las tablas", async () => {
+    expect(
+      await comoShopApp("SELECT campanias_online FROM public.catalog_products_shop WHERE tenant_id = 'tenant-cps'"),
+    ).toMatchObject({ ok: true })
+    expect(
+      await comoShopApp("SELECT tenant_id, id, nombre, etiqueta, inicio, fin FROM public.campanias_shop"),
+    ).toMatchObject({ ok: true })
+    expect(await comoShopApp("SELECT * FROM public.campanias")).toEqual(SIN_PERMISO)
+    expect(await comoShopApp("SELECT * FROM public.campania_reglas")).toEqual(SIN_PERMISO)
   })
 
   it("shop_app no puede pedir costo por la vista: la columna no existe", async () => {
@@ -299,5 +314,6 @@ describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB r
     await expect(sql.unsafe(bloqueDeGrants(MIGRACION_0038))).resolves.toBeDefined()
     await expect(sql.unsafe(bloqueDeGrants(MIGRACION_0065))).resolves.toBeDefined()
     await expect(sql.unsafe(bloqueDeGrants(MIGRACION_0083))).resolves.toBeDefined()
+    await expect(sql.unsafe(bloqueDeGrants(MIGRACION_0095))).resolves.toBeDefined()
   })
 })

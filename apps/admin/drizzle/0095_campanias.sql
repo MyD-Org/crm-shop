@@ -11,9 +11,17 @@
 --
 -- Drift que vive SOLO en SQL: los CHECK de forma, de pct y de unidades, y las funciones.
 --
--- Reversa (en una migración nueva, SOLO después de sacar el código que lo usa):
---   DROP FUNCTION calcular_campanias_online(text, text[]);
---   DROP TABLE campania_reglas; DROP TABLE campanias;
+-- aplicar_campanias_online materializa catalog_products.campanias_online; aplicar_precios_online
+-- (cuerpo de 0068) la llama al final, así la sync de costos y los ajustes también la recalculan.
+-- El Shop lee la columna por catalog_products_shop (agregada AL FINAL) y la ventana por
+-- campanias_shop; nunca las tablas.
+--
+-- Reversa (en una migración nueva, SOLO después de sacar el código del Shop que lo usa):
+--   DROP VIEW campanias_shop; DROP VIEW catalog_products_shop + CREATE VIEW con el SELECT de 0083 y
+--   su bloque GRANT; restaurar aplicar_precios_online con el cuerpo de 0068 y el CHECK de tipo de
+--   0068; DROP FUNCTION aplicar_campanias_online(text, text[]); DROP FUNCTION
+--   calcular_campanias_online(text, text[]); ALTER TABLE catalog_products DROP COLUMN
+--   campanias_online; DROP TABLE campania_reglas; DROP TABLE campanias.
 CREATE TABLE "campanias" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -133,3 +141,201 @@ LANGUAGE sql STABLE AS $fn$
 	FROM elegida e
 	WHERE e.pct > 0
 $fn$;
+
+--> statement-breakpoint
+-- Escribe catalog_products.campanias_online: por cada campaña que alcanza al producto, el precio de
+-- cada lista PÚBLICA de precios_online con el descuento (round al centavo, neto sin IVA). Un
+-- producto sin precios públicos no recibe entrada (nunca un precio de campaña <= 0). Mismo lock que
+-- aplicar_precios_online (pg_advisory_xact_lock es reentrante en la misma transacción).
+CREATE OR REPLACE FUNCTION public.aplicar_campanias_online(p_tenant text, p_ids text[] DEFAULT NULL)
+RETURNS integer
+LANGUAGE plpgsql AS $fn$
+DECLARE
+	v_act integer := 0;
+BEGIN
+	PERFORM pg_advisory_xact_lock(hashtext('precios_online:' || p_tenant));
+
+	WITH calc AS (
+		SELECT * FROM calcular_campanias_online(p_tenant, p_ids)
+	), entradas AS (
+		SELECT cc.alegra_id, c.inicio,
+		       jsonb_build_object(
+		         'id', c.id, 'reglaId', cc.regla_id, 'inicio', c.inicio, 'fin', c.fin,
+		         'pct', cc.pct, 'unidades', cc.unidades,
+		         'precios', (
+		           SELECT jsonb_agg(jsonb_build_object(
+		                    'idPriceList', e->>'idPriceList',
+		                    'price', round((e->>'price')::numeric * (100 - cc.pct) / 100, 2))
+		                  ORDER BY ord)
+		           FROM jsonb_array_elements(p.precios_online) WITH ORDINALITY AS x(e, ord)
+		           WHERE (e->>'price')::numeric > 0
+		         )
+		       ) AS entrada
+		FROM calc cc
+		JOIN campanias c ON c.id = cc.campania_id
+		JOIN catalog_products p ON p.tenant_id = p_tenant AND p.alegra_id = cc.alegra_id
+		WHERE jsonb_typeof(p.precios_online) = 'array'
+		  AND EXISTS (SELECT 1 FROM jsonb_array_elements(p.precios_online) e WHERE (e->>'price')::numeric > 0)
+	), nuevo AS (
+		SELECT en.alegra_id, jsonb_agg(en.entrada ORDER BY en.inicio, en.entrada->>'id') AS lista
+		FROM entradas en
+		GROUP BY en.alegra_id
+	), destino AS (
+		SELECT p0.id, n.lista
+		FROM catalog_products p0
+		LEFT JOIN nuevo n ON n.alegra_id = p0.alegra_id
+		WHERE p0.tenant_id = p_tenant AND (p_ids IS NULL OR p0.alegra_id = ANY (p_ids))
+	)
+	UPDATE catalog_products p
+	SET campanias_online = d.lista
+	FROM destino d
+	WHERE p.id = d.id AND p.campanias_online IS DISTINCT FROM d.lista;
+	GET DIAGNOSTICS v_act = ROW_COUNT;
+
+	RETURN v_act;
+END
+$fn$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.aplicar_precios_online(p_tenant text, p_ids text[] DEFAULT NULL, p_modo text DEFAULT 'config')
+RETURNS TABLE (actualizados integer, retenidos integer)
+LANGUAGE plpgsql AS $fn$
+DECLARE
+	v_umbral numeric;
+	v_ret integer := 0;
+	v_act integer := 0;
+BEGIN
+	IF p_modo NOT IN ('config', 'costo') THEN
+		RAISE EXCEPTION 'modo invalido: %', p_modo;
+	END IF;
+	-- Un solo escritor de precios por tenant a la vez (la vista previa, el aplicar, la sync y el webhook).
+	PERFORM pg_advisory_xact_lock(hashtext('precios_online:' || p_tenant));
+
+	IF p_modo = 'costo' THEN
+		SELECT coalesce((SELECT c.umbral_retencion_pct FROM precios_online_config c WHERE c.tenant_id = p_tenant), 10)
+		INTO v_umbral;
+
+		-- to_regclass y no DROP ... IF EXISTS: éste emite un NOTICE en cada llamada (ruido en los logs).
+		IF to_regclass('pg_temp._po_cand') IS NOT NULL THEN
+			DROP TABLE _po_cand;
+		END IF;
+		CREATE TEMP TABLE _po_cand ON COMMIT DROP AS
+		SELECT p.id, p.alegra_id, p.costo, p.costo_aplicado,
+		       CASE
+		         WHEN p.costo_aplicado IS NULL OR p.costo_aplicado <= 0 THEN false
+		         WHEN p.costo IS NULL OR p.costo <= 0 THEN true
+		         ELSE abs(p.costo - p.costo_aplicado) / p.costo_aplicado * 100 > v_umbral
+		       END AS retener,
+		       CASE
+		         WHEN p.costo_aplicado IS NULL OR p.costo_aplicado <= 0 THEN NULL
+		         WHEN p.costo IS NULL OR p.costo <= 0 THEN NULL
+		         ELSE round(abs(p.costo - p.costo_aplicado) / p.costo_aplicado * 100, 2)
+		       END AS variacion
+		FROM catalog_products p
+		WHERE p.tenant_id = p_tenant
+		  AND (p_ids IS NULL OR p.alegra_id = ANY (p_ids))
+		  AND p.costo IS DISTINCT FROM p.costo_aplicado;
+
+		-- Retener: queda el precio vigente y el costo propuesto pendiente. Un costo ya rechazado no reabre.
+		INSERT INTO precios_online_retenciones (tenant_id, alegra_id, costo_vigente, costo_propuesto, variacion_pct)
+		SELECT p_tenant, c.alegra_id, c.costo_aplicado, c.costo, c.variacion
+		FROM _po_cand c
+		WHERE c.retener
+		  AND NOT EXISTS (
+		    SELECT 1 FROM precios_online_retenciones r
+		    WHERE r.tenant_id = p_tenant AND r.alegra_id = c.alegra_id AND r.estado = 'rechazada'
+		      AND r.costo_propuesto IS NOT DISTINCT FROM c.costo
+		  )
+		ON CONFLICT (tenant_id, alegra_id) WHERE estado = 'pendiente' DO UPDATE SET
+		  costo_vigente = excluded.costo_vigente,
+		  costo_propuesto = excluded.costo_propuesto,
+		  variacion_pct = excluded.variacion_pct;
+		GET DIAGNOSTICS v_ret = ROW_COUNT;
+
+		-- Aplicar: el costo nuevo pasa a ser el vigente.
+		UPDATE catalog_products p SET costo_aplicado = c.costo
+		FROM _po_cand c WHERE p.id = c.id AND NOT c.retener;
+
+		-- Un retenido cuyo costo volvió dentro del umbral (o al valor vigente) se resuelve solo.
+		UPDATE precios_online_retenciones r SET estado = 'resuelta', resuelto_at = now(), resuelto_por = 'sistema'
+		FROM catalog_products p
+		WHERE r.tenant_id = p_tenant AND r.estado = 'pendiente'
+		  AND p.tenant_id = p_tenant AND p.alegra_id = r.alegra_id
+		  AND (p_ids IS NULL OR p.alegra_id = ANY (p_ids))
+		  AND p.costo IS NOT DISTINCT FROM p.costo_aplicado;
+	END IF;
+
+	-- 0068: las listas PRIVADAS no entran a precios_online (lo lee shop_app por la vista pública):
+	-- van a precios_online_privados, sin `main`. Un solo recálculo escribe las dos columnas.
+	WITH nuevo AS (
+		SELECT c.alegra_id,
+		       coalesce(jsonb_agg(jsonb_build_object('idPriceList', c.lista_id, 'name', l.nombre, 'price', c.precio, 'main', l.es_referencia)
+		                          ORDER BY l.orden, l.nombre) FILTER (WHERE c.precio IS NOT NULL AND NOT l.privada), '[]'::jsonb) AS lista,
+		       coalesce(jsonb_agg(jsonb_build_object('idPriceList', c.lista_id, 'name', l.nombre, 'price', c.precio)
+		                          ORDER BY l.orden, l.nombre) FILTER (WHERE c.precio IS NOT NULL AND l.privada), '[]'::jsonb) AS privadas,
+		       max(c.precio) FILTER (WHERE l.es_referencia) AS ref
+		FROM calcular_precios_online(p_tenant, p_ids) c
+		JOIN listas_precio_online l ON l.id = c.lista_id
+		GROUP BY c.alegra_id
+	), destino AS (
+		SELECT p0.id, coalesce(n.lista, '[]'::jsonb) AS lista, coalesce(n.privadas, '[]'::jsonb) AS privadas, n.ref
+		FROM catalog_products p0
+		LEFT JOIN nuevo n ON n.alegra_id = p0.alegra_id
+		WHERE p0.tenant_id = p_tenant AND (p_ids IS NULL OR p0.alegra_id = ANY (p_ids))
+	)
+	UPDATE catalog_products p
+	SET precios_online = d.lista, precios_online_privados = d.privadas, precio_online_ref = d.ref, precios_online_at = now()
+	FROM destino d
+	WHERE p.id = d.id AND (p.precios_online IS DISTINCT FROM d.lista
+	                       OR p.precios_online_privados IS DISTINCT FROM d.privadas
+	                       OR p.precio_online_ref IS DISTINCT FROM d.ref);
+	GET DIAGNOSTICS v_act = ROW_COUNT;
+
+	-- 0095: el precio de campaña depende del normal: se recalcula en el mismo paso (mismo lock).
+	PERFORM aplicar_campanias_online(p_tenant, p_ids);
+
+	RETURN QUERY SELECT v_act, v_ret;
+END
+$fn$;
+--> statement-breakpoint
+ALTER TABLE "precios_online_cambios" DROP CONSTRAINT "precios_online_cambios_tipo_chk";
+--> statement-breakpoint
+ALTER TABLE "precios_online_cambios" ADD CONSTRAINT "precios_online_cambios_tipo_chk" CHECK ("tipo" IN ('lista_alta','lista_edicion','lista_baja','referencia','override_alta','override_edicion','override_baja','umbral','condicion','revertir','costo_aprobado','costo_rechazado','mapeo','campania'));
+--> statement-breakpoint
+-- Lo que el Shop lee de las campañas: las no terminadas o terminadas hace menos de 24 h (recotizar
+-- un pedido pendiente creado durante la campaña). Sin las reglas: el Shop sólo necesita la ventana.
+CREATE VIEW "public"."campanias_shop" AS
+SELECT tenant_id, id, nombre, etiqueta, inicio, fin
+FROM "public"."campanias"
+WHERE fin > now() - interval '24 hours';
+--> statement-breakpoint
+-- catalog_products_shop: el SELECT de 0083 + campanias_online AL FINAL (CREATE OR REPLACE sólo
+-- admite agregar columnas al final). Aplicar en prod ANTES de mergear el Shop que la declara.
+CREATE OR REPLACE VIEW "public"."catalog_products_shop" AS
+SELECT tenant_id,
+       alegra_id,
+       stock,
+       precios_online AS precios_alegra,
+       (status = 'active' AND coalesce(alegra_status, 'active') <> 'inactive' AND tipo <> 'padre') AS activo,
+       alegra_leido_at,
+       name,
+       description,
+       code,
+       brand,
+       category_alegra_id,
+       iva_porcentaje,
+       tipo,
+       grupo_id,
+       etiqueta,
+       es_representante,
+       coalesce(grupo_id, alegra_id) AS overlay_alegra_id,
+       campanias_online
+FROM "public"."catalog_products";
+--> statement-breakpoint
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'shop_app') THEN
+    GRANT USAGE ON SCHEMA public TO shop_app;
+    GRANT SELECT ON "public"."catalog_products_shop" TO shop_app;
+    GRANT SELECT ON "public"."campanias_shop" TO shop_app;
+  END IF;
+END $$;

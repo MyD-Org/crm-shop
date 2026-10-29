@@ -491,7 +491,8 @@ día sin esperar al webhook ni a la sync. Devuelve:
 
 `EXECUTE` sólo para `shop_app` (PUBLIC revocado); `shop_app` sigue sin UPDATE sobre la tabla.
 
-**Permisos de `shop_app` sobre `public`** (0031–0038), mínimos y por columna; sin DELETE en
+**Permisos de `shop_app` sobre `public`** (0031–0038 y los que sumaron migraciones posteriores, ver la
+tabla), mínimos y por columna; sin DELETE en
 ninguna tabla. Es TODO lo que el Shop lee o escribe de `public` (lo declara
 `apps/clientes/src/db/crm.ts` y lo congela `apps/clientes/src/db/__fixtures__/crm-contrato.json`);
 cualquier otro objeto de `public` le da 42501:
@@ -504,7 +505,7 @@ cualquier otro objeto de `public` le da 42501:
 | `catalog_products_shop` | vista del espejo de productos | SELECT (12 columnas; ver [Vista de catálogo para el Shop](#vista-de-catálogo-para-el-shop)) | 0035, re-concedido en 0037 y 0065 |
 | `lista_precio_condiciones` | tabla (qué lista online rige para un medio de pago y cuotas) | SELECT | 0065 |
 | `catalog_categories_shop` | vista del espejo de categorías de Alegra | SELECT (5 columnas) | 0037 |
-| `catalog_overlay` | tabla (overlay comercial por producto) | SELECT | 0038 (en prod estaba dado a mano) |
+| `catalog_overlay` | tabla (overlay comercial por producto) | SELECT; 0094 suma el SELECT por columna de `modalidad_sin_stock_id` (redundante con el de tabla; explícito para no depender del de 0038) | 0038 (en prod estaba dado a mano), 0094 |
 | `shop_categories` | tabla (árbol de categorías de la tienda) | SELECT | 0038 (en prod estaba dado a mano) |
 | `tenants` | tabla | SELECT sólo `id, name, whatsapp_number, receipts_email` | 0032 |
 | `client_commercial_conditions` | tabla | SELECT | 0032 |
@@ -513,6 +514,7 @@ cualquier otro objeto de `public` le da 42501:
 | `catalog_atributos` | tabla (atributos técnicos estructurados por producto) | SELECT sólo `tenant_id, alegra_id, clave, valor_num, valor_texto` (sin `fuente` ni `updated_at`) | 0048 |
 | `sucursales` | tabla | SELECT por columna: las de 0041 (`tenant_id, slug, nombre, direccion, ciudad, provincia, whatsapp, horario, acepta_retiro, acepta_envio, envio_ciudades, orden, activa, predeterminada`) más `schedule, schedule_exceptions` (0051). Siguen afuera `id`, `deposito_alegra_id`, `cuenta_alegra_id` y los timestamps | 0041, 0051 |
 | `cuentas_bancarias_shop` | tabla (cuentas a las que el Shop pide transferir) | SELECT por columna: `id, tenant_id, alias, cbu, banco, titular, cuit, todas_las_sucursales, sucursal_slugs, monto_min, monto_max, activa, predeterminada, orden`. Sin `created_at` ni `updated_at`; sin escritura | 0055 |
+| `modalidades_sin_stock` | tabla (modalidades de venta sin stock por tenant) | SELECT; sin escritura. El Shop lee las activas (`apps/clientes/src/lib/venta-sin-stock-repo.ts`) y, sin el permiso, se comporta como si no hubiera ninguna | 0094 |
 
 Sin permiso, a propósito: las tablas base `catalog_products`, `catalog_categories` y
 `alegra_contacts` (el Shop las ve sólo por sus vistas), `contactos_acceso_facturacion` (guarda
@@ -534,7 +536,10 @@ el de `drizzle/0037_catalogo_shop_desde_crm.sql` (las dos vistas de catálogo) y
 `schedule_exceptions`: el de 0041 es por columna y NO se hereda; lo verifica
 `test/integration/horarios-sucursal-0051.integration.test.ts`) y el de
 `drizzle/0055_cuentas_bancarias_shop.sql` (SELECT por columna de `cuentas_bancarias_shop`; lo
-verifica `test/integration/cuentas-bancarias-shop.integration.test.ts`). Todos son
+verifica `test/integration/cuentas-bancarias-shop.integration.test.ts`) y el de
+`drizzle/0094_modalidades_sin_stock.sql` (SELECT de `modalidades_sin_stock` y por columna de
+`catalog_overlay.modalidad_sin_stock_id`; lo verifica
+`test/integration/modalidades-sin-stock-0094.integration.test.ts`). Todos son
 idempotentes. Las reversas están en el encabezado de cada archivo. Los tests
 `test/integration/shop-cuenta-corriente-grants.integration.test.ts`,
 `test/integration/shop-contacto-write-through.integration.test.ts`,

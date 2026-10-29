@@ -2,7 +2,7 @@
  * Límite de unidades a precio de campaña (spec apps/admin/docs/superpowers/specs/
  * 2026-10-28-campanias-precios-design.md, "Límite de unidades"). Una regla de producto puede llevar
  * `unidades`; se cuentan las de los pedidos de la tienda con esa regla (`order_items.campania_regla_id`,
- * migración 0039 del Shop): pagados y pendientes con la reserva viva, con el mismo criterio que
+ * migración 0040 del Shop): pagados y pendientes con la reserva viva, con el mismo criterio que
  * `shop.stock_reservado`, pero SIN filtrar los facturados (un pedido facturado sigue contando). Un
  * pedido cancelado o vencido libera sus unidades. No cuenta ventas del local (decisión de la spec).
  *

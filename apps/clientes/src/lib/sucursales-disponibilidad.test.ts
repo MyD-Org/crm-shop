@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import casos from "./__fixtures__/sucursales-lineas-casos.json";
 import type { SucursalDato } from "./sucursales";
 import { armarStockPorSucursal, disponibilidadPorSucursal, disponibleNeto } from "./sucursales-disponibilidad";
+import type { VentaSinStock } from "./venta-sin-stock";
 
 const sucursales = casos.dataset.sucursales as SucursalDato[];
 const reglas = { trasladoDias: 7 };
@@ -210,6 +211,84 @@ describe("reglas de respaldo (respaldo_envio y retiro_sin_stock)", () => {
     expect(envio.productos.P.envio?.estado).toBe("a_traer");
     const retiro = disponibilidadPorSucursal({ ...base, modalidad: "retiro", stockPorSucursal });
     expect(retiro.productos.P.retiro?.["sede-a"].estado).toBe("con_demora");
+  });
+});
+
+describe("venta sin stock por modalidad (por_pedido)", () => {
+  const M: VentaSinStock = { id: "m1", texto: "Modalidad 48 h", plazoDias: 2, flujo: "en_linea" };
+  const ENTRADA = { ...base, stockPorSucursal: { p1: { "sede-a": 0, "sede-b": 0 } } };
+
+  it("envío sin stock con modalidad → por_pedido con el plazo (null → 0)", () => {
+    const r = disponibilidadPorSucursal({ ...ENTRADA, ventaSinStock: { p1: { ...M, plazoDias: null } } });
+    expect(r.productos.p1.envio).toMatchObject({ estado: "por_pedido", demoraDias: 0 });
+    expect(r.lineasATraer).toEqual([]);
+  });
+
+  it("envío por_pedido: sale de la zona, con el plazo de la modalidad y el despacho", () => {
+    const r = disponibilidadPorSucursal({ ...ENTRADA, ventaSinStock: { p1: M } });
+    expect(r.productos.p1.envio).toEqual({ estado: "por_pedido", origen: "sede-a", demoraDias: 2, despachoDias: 1 });
+    expect(r.productos.p1.servible).toBe(true);
+  });
+
+  it("sin modalidad: sin_stock, igual que hoy", () => {
+    const r = disponibilidadPorSucursal({ ...ENTRADA, ventaSinStock: {} });
+    expect(r.productos.p1.envio).toEqual({ estado: "sin_stock", origen: null, demoraDias: null });
+    expect(disponibilidadPorSucursal(ENTRADA)).toEqual(r);
+  });
+
+  it("con stock en otra sucursal y respaldo, manda el traslado; sin respaldo, por_pedido", () => {
+    const stockPorSucursal = { p1: { "sede-a": 0, "sede-b": 4 } };
+    const con = disponibilidadPorSucursal({ ...base, stockPorSucursal, ventaSinStock: { p1: M } });
+    expect(con.productos.p1.envio?.estado).toBe("a_traer");
+    expect(con.lineasATraer).toEqual(["p1"]);
+    const sin = disponibilidadPorSucursal({
+      ...base,
+      stockPorSucursal,
+      reglas: { trasladoDias: 7, respaldoEnvio: false },
+      ventaSinStock: { p1: M },
+    });
+    expect(sin.productos.p1.envio?.estado).toBe("por_pedido");
+    expect(sin.lineasATraer).toEqual([]);
+  });
+
+  it("con stock propio la modalidad no cambia nada", () => {
+    const r = disponibilidadPorSucursal({ ...base, stockPorSucursal: { p1: { "sede-a": 3 } }, ventaSinStock: { p1: M } });
+    expect(r.productos.p1.envio).toEqual({ estado: "disponible", origen: "sede-a", demoraDias: null, despachoDias: 1 });
+  });
+
+  it("la cantidad pedida mayor al stock pasa la línea a pedido", () => {
+    const r = disponibilidadPorSucursal({
+      ...base,
+      stockPorSucursal: { p1: { "sede-a": 2, "sede-b": 2 } },
+      cantidades: { p1: 3 },
+      ventaSinStock: { p1: M },
+    });
+    expect(r.productos.p1.envio?.estado).toBe("por_pedido");
+  });
+
+  it("retiro: por local; con traslado manda con_demora, sin él por_pedido; oculto sigue oculto", () => {
+    const retiro = { ...base, modalidad: "retiro" as const, ventaSinStock: { p1: M } };
+    const r = disponibilidadPorSucursal({ ...retiro, stockPorSucursal: { p1: { "sede-b": 3 } } });
+    expect(r.productos.p1.retiro).toEqual({
+      "sede-a": { estado: "con_demora", desde: "sede-b", demoraDias: 7 },
+      "sede-b": { estado: "disponible", desde: null, demoraDias: null },
+    });
+    const bloqueado = disponibilidadPorSucursal({
+      ...retiro,
+      reglas: { trasladoDias: 7, retiroSinStock: "bloquear" },
+      stockPorSucursal: { p1: { "sede-b": 3 } },
+    });
+    expect(bloqueado.productos.p1.retiro?.["sede-a"]).toEqual({ estado: "por_pedido", desde: null, demoraDias: 2 });
+    const oculto = disponibilidadPorSucursal({ ...retiro, stockPorSucursal: { p1: {} }, ocultoEn: { p1: ["sede-a"] } });
+    expect(oculto.productos.p1.retiro).toEqual({
+      "sede-a": { estado: "oculto", desde: null, demoraDias: null },
+      "sede-b": { estado: "por_pedido", desde: null, demoraDias: 2 },
+    });
+  });
+
+  it("un id que sólo viene en la modalidad no inventa un producto", () => {
+    const r = disponibilidadPorSucursal({ ...base, stockPorSucursal: {}, ventaSinStock: { p9: M } });
+    expect(r.productos).toEqual({});
   });
 });
 

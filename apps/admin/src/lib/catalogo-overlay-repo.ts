@@ -31,6 +31,7 @@ import {
 } from "@/lib/catalogo-overlay"
 import { ORDEN_DESTACADO_SIN_POSICION } from "@/components/admin/catalogo/destacado"
 import { sonSlugsDeSucursal } from "@/lib/sucursales-repo"
+import { modalidadPropia } from "@/lib/modalidades-sin-stock-repo"
 
 // Acceso a datos del catálogo comercial. TODO filtra por el `tenantId` del guard, nunca por uno
 // que venga del body: un id de otro tenant se comporta igual que uno inexistente (not_found).
@@ -377,6 +378,8 @@ export interface FiltrosAdmin {
   stockEn?: string
   /** "si" = solo los destacados (`catalog_overlay.orden` no nulo). Combinable con `categoria` (subárbol). */
   destacado?: "si"
+  /** Clave normalizada de la marca (`lower(btrim(brand))`, la de `listarMarcas`). */
+  marca?: string
 }
 
 /** `visible:<slug>` u `oculto:<slug>`, con el formato del slug de sucursal. */
@@ -491,6 +494,8 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
 
   if (f.destacado === "si") cond.push(sql`o.orden IS NOT NULL`)
 
+  if (f.marca) cond.push(sql`lower(btrim(p.brand)) = ${f.marca}`)
+
   if (f.tag && esUuid(f.tag)) {
     cond.push(sql`EXISTS (
       SELECT 1 FROM ${catalogOverlayTags} cot WHERE cot.overlay_id = o.id AND cot.tag_id = ${f.tag}
@@ -520,6 +525,8 @@ export interface CamposOverlay {
   ocultoEnSucursales?: string[]
   /** false = el Shop no exhibe la marca del producto. */
   mostrarMarca?: boolean
+  /** Modalidad de venta sin stock; null = ninguna. */
+  modalidadSinStockId?: string | null
 }
 
 /**
@@ -544,6 +551,7 @@ export async function guardarOverlay(
   if (campos.fichaTecnica !== undefined) set.fichaTecnica = campos.fichaTecnica
   if (campos.ocultoEnSucursales !== undefined) set.ocultoEnSucursales = campos.ocultoEnSucursales
   if (campos.mostrarMarca !== undefined) set.mostrarMarca = campos.mostrarMarca
+  if (campos.modalidadSinStockId !== undefined) set.modalidadSinStockId = campos.modalidadSinStockId
 
   const [row] = await ejecutor
     .insert(catalogOverlay)
@@ -624,6 +632,7 @@ export async function masivaOverlay(
   accion:
     | { tipo: "visible"; valor: boolean }
     | { tipo: "categoria"; categoriaId: string | null }
+    | { tipo: "modalidad"; modalidadId: string | null }
     | { tipo: "destacado"; valor: boolean },
   updatedBy: string | null = null,
   ejecutor: Ejecutor = getDb(),
@@ -637,9 +646,20 @@ export async function masivaOverlay(
     return { kind: "invalid", campo: "categoriaId", error: "Seleccione una categoría válida" }
   }
 
+  // Ídem para la modalidad sin stock: la FK no mira el tenant.
+  if (accion.tipo === "modalidad" && accion.modalidadId !== null && !(await modalidadPropia(tenantId, accion.modalidadId))) {
+    return { kind: "invalid", campo: "modalidadId", error: "Seleccione una modalidad válida." }
+  }
+
   const sel = seleccionSql(tenantId, seleccion)
-  const columna = accion.tipo === "visible" ? sql`visible` : sql`categoria_id`
-  const valor = accion.tipo === "visible" ? sql`${accion.valor}` : sql`${accion.categoriaId}::uuid`
+  const columna =
+    accion.tipo === "visible" ? sql`visible` : accion.tipo === "modalidad" ? sql`modalidad_sin_stock_id` : sql`categoria_id`
+  const valor =
+    accion.tipo === "visible"
+      ? sql`${accion.valor}`
+      : accion.tipo === "modalidad"
+        ? sql`${accion.modalidadId}::uuid`
+        : sql`${accion.categoriaId}::uuid`
 
   const filas = await ejecutor.execute(sql`
     INSERT INTO ${catalogOverlay} (tenant_id, alegra_id, ${columna}, updated_by, updated_at)
@@ -1025,6 +1045,8 @@ export interface ProductoAdmin {
   ocultoEnSucursales: string[]
   /** false = el Shop no exhibe la marca. Sin overlay, true. */
   mostrarMarca: boolean
+  /** Modalidad de venta sin stock asignada (null = ninguna). */
+  modalidadSinStockId: string | null
   actualizadoEn: string | null
   motivos: MotivoNoPublicado[]
   /**
@@ -1099,6 +1121,7 @@ interface FilaListadoCruda {
   ficha_tecnica: FichaTecnicaOverlay | null
   oculto_en_sucursales: string[] | null
   mostrar_marca: boolean | null
+  modalidad_sin_stock_id: string | null
   updated_at: Date | string | null
   nombre_efectivo: string
   sku: string
@@ -1160,6 +1183,7 @@ function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
     fichaTecnica: f.ficha_tecnica ?? null,
     ocultoEnSucursales: f.oculto_en_sucursales ?? [],
     mostrarMarca: f.mostrar_marca ?? true,
+    modalidadSinStockId: f.modalidad_sin_stock_id ?? null,
     actualizadoEn: iso(f.updated_at),
     // Orientativo: el Shop vuelve a evaluar la regla sobre SU copia y su evaluación es la que manda.
     motivos: motivoNoPublicado({ visible, status: f.status, alegraStatus: f.alegra_status, prices: f.prices }),
@@ -1204,7 +1228,7 @@ async function stockPorSucursal(
 /** Las columnas del listado y de la ficha son las mismas: una sola definición, un solo orden. */
 const columnasListado = sql`
   p.alegra_id, p.code, p.name, p.description, p.status, p.alegra_status, p.prices, p.stock, p.synced_at,
-  o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, o.oculto_en_sucursales, o.mostrar_marca, o.updated_at,
+  o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, o.oculto_en_sucursales, o.mostrar_marca, o.modalidad_sin_stock_id, o.updated_at,
   c.nombre AS categoria_nombre,
   ac.slug AS cuenta_slug, ac.nombre AS cuenta_nombre,
   p.tipo, p.grupo_id, p.etiqueta, (p.tipo = 'padre' OR p.grupo_id = p.alegra_id) AS es_ancla,

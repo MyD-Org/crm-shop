@@ -8,9 +8,10 @@ import { cuotasElegidas } from "./cuotas-sin-interes";
 import { cuotasHabilitadas } from "./cuotas-flag";
 import { idListaDelMedio, resolverForma } from "./lista-medio";
 import type { OpcionCobro } from "./pagos/opciones-cobro";
-import { mediosParaModalidad, type MedioPago, type OpcionesMedios } from "./medios-pago";
+import { SLUG_A_COORDINAR, mediosParaModalidad, type MedioPago, type OpcionesMedios } from "./medios-pago";
 import type { EntregaTipo } from "./envio";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
+import type { FlujoPedido } from "./venta-sin-stock";
 
 export interface OpcionesCotizarMedio {
   idListaPrivada: string | null;
@@ -20,6 +21,11 @@ export interface OpcionesCotizarMedio {
   soloVisibles: boolean;
   /** Flag `variantes-selector` (overlay del ancla del grupo). Ausente = apagado. */
   agrupar?: boolean;
+  /**
+   * Venta sin stock con el flag `disponibilidad-sucursal`: ids que el motor dejó "por pedido" para la
+   * entrega del pedido. Viaja a las recotizaciones del 409 para que marquen las mismas líneas.
+   */
+  aPedido?: ReadonlySet<string>;
 }
 
 export type ResultadoMedio =
@@ -31,6 +37,8 @@ export type ResultadoMedio =
       formaCobro: OpcionCobro | null;
       opcionesCotizar: OpcionesCotizarMedio;
       cotizacion: Cotizacion;
+      /** `a_confirmar` si alguna línea va a pedido con una modalidad a confirmar. */
+      flujo: FlujoPedido;
     }
   | { ok: false; motivo: "cuotas_no_disponibles" | "forma_no_disponible" };
 
@@ -38,6 +46,12 @@ export type ResultadoMedio =
  * Cuotas sin interés (flag `cuotas-cobro`, sólo cobro en línea y sin lista privada) y lista del medio,
  * y la cotización que sale de ellas. `pagoMetodo` ya tiene que estar validado contra los medios.
  * `ignorarStock`: pedido que ya reserva sus unidades (ver `ignorarProblemasDeStock`).
+ *
+ * Pedido a confirmar por modalidad de venta sin stock: con `pagoMetodo` "a_coordinar", sin lista
+ * privada ni cuenta corriente, una cotización con flujo `a_confirmar` se rehace con
+ * `idListaAConfirmar` (la lista que muestran las cards) y esa lista es la del pedido. Nunca para un
+ * pedido existente (`ignorarStock`): su reserva propia puede hacer leer "a pedido" una línea que no
+ * lo era, y eso no le cambia ni el flujo ni la lista.
  */
 export async function cotizarConMedio(a: {
   lineas: LineaPedida[];
@@ -61,6 +75,10 @@ export async function cotizarConMedio(a: {
   /** Recotizar un pedido existente: sus propias unidades no cuentan contra el límite de una campaña. */
   excluirPedidoId?: string;
   ignorarStock?: boolean;
+  /** Venta sin stock (flag `disponibilidad-sucursal`): ids que van a pedido (`idsAPedido`). */
+  aPedido?: ReadonlySet<string>;
+  /** Lista de un pedido a confirmar por modalidad (`listaAConfirmar`); ausente = no se recotiza. */
+  idListaAConfirmar?: string;
   /** Para los logs. */
   origen?: string;
 }): Promise<ResultadoMedio> {
@@ -103,6 +121,7 @@ export async function cotizarConMedio(a: {
         disp: a.disp,
         soloVisibles: a.soloVisibles,
         ...(a.agrupar ? { agrupar: true } : {}),
+        ...(a.aPedido ? { aPedido: a.aPedido } : {}),
         ...conCampanias,
       });
       totalBase = cotBase.hayProblemas ? 0 : cotBase.total;
@@ -116,15 +135,37 @@ export async function cotizarConMedio(a: {
     if (formaCobro && formaCobro !== "credito" && cuotasPedido >= 2) return { ok: false, motivo: "cuotas_no_disponibles" };
   }
   const idListaMedio = conMedio ? idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotasPedido, formaCobro) : undefined;
-  const opcionesCotizar = {
+  const opcionesCotizar: OpcionesCotizarMedio = {
     idListaPrivada: a.idListaPrivada,
     idListaMedio,
     entregaTipo,
     disp: a.disp,
     soloVisibles: a.soloVisibles,
     ...(a.agrupar ? { agrupar: true } : {}),
+    ...(a.aPedido ? { aPedido: a.aPedido } : {}),
     ...conCampanias,
   };
   const cotizacion = await cotizarEstas(opcionesCotizar);
-  return { ok: true, cuotasPedido, idListaMedio, formaCobro, opcionesCotizar, cotizacion };
+  const aConfirmar =
+    pagoMetodo === SLUG_A_COORDINAR &&
+    conMedio &&
+    !a.opcionesMedios.esCuentaCorriente &&
+    !a.ignorarStock &&
+    Boolean(a.idListaAConfirmar) &&
+    cotizacion.flujo === "a_confirmar";
+  if (aConfirmar) {
+    // "a_coordinar" no es un medio: no tiene cuotas ni forma (ya quedaron en null más arriba).
+    const opcionesAConfirmar: OpcionesCotizarMedio = { ...opcionesCotizar, idListaMedio: a.idListaAConfirmar };
+    const recotizada = await cotizarEstas(opcionesAConfirmar);
+    return {
+      ok: true,
+      cuotasPedido: null,
+      idListaMedio: a.idListaAConfirmar,
+      formaCobro: null,
+      opcionesCotizar: opcionesAConfirmar,
+      cotizacion: recotizada,
+      flujo: recotizada.flujo,
+    };
+  }
+  return { ok: true, cuotasPedido, idListaMedio, formaCobro, opcionesCotizar, cotizacion, flujo: cotizacion.flujo };
 }

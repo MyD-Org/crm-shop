@@ -106,6 +106,7 @@ export function EntregaProducto({
   localElegido = null,
   envioElegido = null,
   consultaWhatsapp,
+  aPedido,
 }: {
   configEnvio: ConfigEnvio;
   provincia?: string | null;
@@ -127,6 +128,11 @@ export function EntregaProducto({
   envioElegido?: string | null;
   /** Ficha: mensaje precargado del WhatsApp de los locales (qué producto se consulta). */
   consultaWhatsapp?: string;
+  /**
+   * Texto de la modalidad de venta sin stock (producto a pedido). Sólo cuando no hay `disponibilidad`
+   * (flag apagado): se muestra como única línea de plazo. Con `disponibilidad`, el plazo sale del motor.
+   */
+  aPedido?: string;
 }) {
   const retiro = disponibilidad?.producto.retiro;
   // Primero el local elegido y, después, el que mejor sirve: lo primero que se lee es lo que importa.
@@ -137,6 +143,21 @@ export function EntregaProducto({
   const envioDomicilio = disponibilidad?.producto.envio ? estadoEnvio(disponibilidad.producto.envio) : null;
   const textoEnvio = textoEnvioFicha(configEnvio, provincia, localidad);
   const enFicha = !detallePorLocal;
+
+  if (aPedido && !disponibilidad) {
+    return (
+      <ul className="space-y-4 border-t border-border pt-5" data-entrega="a-pedido">
+        <Fila icono={<IconoLocal />} titulo="Retiro gratis en el local">
+          <span className={`block font-semibold ${CLASE_TONO.demora}`}>{aPedido}</span>
+        </Fila>
+        {textoEnvio && (
+          <Fila icono={<IconoEnvio />} titulo="Envío a domicilio">
+            <span className="block text-muted">{textoEnvio}</span>
+          </Fila>
+        )}
+      </ul>
+    );
+  }
 
   const estadoDe = (l: LocalDisponibilidad) => estadoRetiroLocal(retiro![l.slug]);
   const verLocal = (l: LocalDisponibilidad) =>

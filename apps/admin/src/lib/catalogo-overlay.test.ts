@@ -315,6 +315,22 @@ describe("validarCamposOverlay", () => {
     expect(r.ok).toBe(false)
   })
 
+  it("modalidadSinStockId acepta un uuid y null", () => {
+    const UUID = "3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b"
+    expect(validarCamposOverlay({ modalidadSinStockId: UUID })).toEqual({ ok: true, value: { modalidadSinStockId: UUID } })
+    expect(validarCamposOverlay({ modalidadSinStockId: null })).toEqual({ ok: true, value: { modalidadSinStockId: null } })
+  })
+
+  it("modalidadSinStockId rechaza un id que no es uuid", () => {
+    for (const malo of ["x", "", 5, true, {}]) {
+      expect(validarCamposOverlay({ modalidadSinStockId: malo }), JSON.stringify(malo)).toMatchObject({
+        ok: false,
+        campo: "modalidadSinStockId",
+        error: "Seleccione una modalidad válida.",
+      })
+    }
+  })
+
   it("ocultoEnSucursales: rechaza formatos que no son un slug, con el mensaje en usted", () => {
     for (const malo of ["mdp", [1], ["MDP"], ["a"], ["con espacio"], [""], null]) {
       const r = validarCamposOverlay({ ocultoEnSucursales: malo })

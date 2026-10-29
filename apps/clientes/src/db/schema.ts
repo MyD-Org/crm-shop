@@ -18,6 +18,7 @@ import type { PlanDeCuotas, PlanPedido } from "../lib/pagos/cuotas-tipos";
 import type { InfoPago, PagoInfoOrden } from "../lib/pagos/tipos";
 import type { ReglaAplicada } from "../lib/sucursales";
 import type { CuentaPagoSnapshot } from "../lib/cuentas-bancarias";
+import type { SnapshotVentaSinStock } from "../lib/venta-sin-stock";
 
 /**
  * Todas las tablas del Shop viven en el esquema `shop` de la base del CRM.
@@ -755,7 +756,12 @@ export const orderItems = shop.table(
      */
     aTraerDe: text("a_traer_de"),
     /**
-     * Campaña de precios con la que se cotizó la línea (migración 0039 del Shop; id de
+     * Snapshot de la modalidad de venta sin stock con la que se vendió la línea (migración 0039).
+     * NULL = línea normal.
+     */
+    ventaSinStock: jsonb("venta_sin_stock").$type<SnapshotVentaSinStock | null>(),
+    /**
+     * Campaña de precios con la que se cotizó la línea (migración 0040 del Shop; id de
      * `public.campanias`, CRM 0095; sin FK: es otro esquema y la campaña puede borrarse). NULL = precio normal. Con
      * `campania_regla_id` se cuentan las unidades vendidas de una regla con límite.
      */

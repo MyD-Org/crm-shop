@@ -20,7 +20,8 @@
     "oculto_en_sucursales": "text[]",
     "mostrar_marca": "boolean",
     "orden": "integer",
-    "oculta_en_tienda": "boolean"
+    "oculta_en_tienda": "boolean",
+    "modalidad_sin_stock_id": "uuid"
   },
   "public.alegra_contacts_shop": {
     "tenant_id": "text",
@@ -273,6 +274,15 @@
     "alegra_account": "text",
     "alegra_price_list_id": "text",
     "lista_id": "uuid"
+  },
+  "public.modalidades_sin_stock": {
+    "id": "uuid",
+    "tenant_id": "text",
+    "nombre": "text",
+    "texto": "text",
+    "plazo_dias": "integer",
+    "flujo": "text",
+    "activa": "boolean"
   },
   "public.campanias_shop": {
     "tenant_id": "text",

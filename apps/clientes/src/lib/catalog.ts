@@ -76,7 +76,9 @@ import {
 } from "./catalogo-busqueda";
 import type { OpcionFicha, Product } from "@/data/products";
 import { resumirVariantes } from "./variantes-ficha";
-import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
+import { contextoUnion, type ContextoDisponibilidad } from "./disponibilidad-contexto";
+import { modalidadPorId, type VentaSinStock } from "./venta-sin-stock";
+import { modalidadesActivas } from "./venta-sin-stock-repo";
 import { armarPreciosMedios, type MediosPrecio } from "./medios-precio";
 import { campaniaParaExhibir } from "./campanias/exhibicion";
 import { mapCampanias } from "./campanias/precio";
@@ -170,6 +172,16 @@ interface FilaCatalogo {
   grupoId?: string | null;
   /** 'simple' | 'padre' | 'variante': con `agrupar`, para quitar la opción del nombre del modelo. */
   tipo?: string | null;
+  /**
+   * Modalidad de venta sin stock asignada (`catalog_overlay.modalidad_sin_stock_id`, del overlay del
+   * join: con variantes, la del ancla). Sólo viene con modalidades activas (ver `columnasCatalogo`).
+   */
+  overlayModalidadId?: string | null;
+  /**
+   * Con modalidades activas y un contexto con traslado (`ContextoDisponibilidad.traslado`): alguna
+   * sucursal alcanzable tiene stock disponible. Entonces el producto sin stock NO pasa a pedido.
+   */
+  overlayCubreOtra?: boolean | null;
   /** Campañas de precios del CRM (0095), crudas: ver `campaniaParaExhibir`. Ausente = ninguna. */
   campaniasOnline?: unknown;
 }
@@ -195,9 +207,15 @@ export function mapFilaToProduct(
   baseMedios: string | null = basePublicaMedios(),
   /** Medios con "$X con <Medio>" (ver `flagsPublicos().mediosPrecio`). Sin él, el producto de siempre. */
   mediosPrecio?: MediosPrecio,
+  /** Modalidades de venta sin stock activas (`modalidadesActivas()`). Vacía = el producto de siempre. */
+  modalidades: readonly VentaSinStock[] = [],
 ): Product {
   const qty = fila.stock != null ? Number(fila.stock) : null;
   const iva = fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null;
+  const stock = derivarStock(qty);
+  const modalidad = modalidadPorId(modalidades, fila.overlayModalidadId);
+  // Sin stock en las sucursales que cuentan pero otra alcanzable lo trae: se ve como hoy (traslado).
+  const ventaSinStock = modalidad && !(stock === "out" && fila.overlayCubreOtra === true) ? modalidad : undefined;
   // Campaña activa: los precios efectivos son los de campaña (también "$X con <Medio>") y el normal
   // de la misma lista se tacha. La misma regla que el cobro (`resolverPrecioVigente`).
   const enCampania = campaniaParaExhibir(mapPrecios(fila.prices), fila.campaniasOnline, mediosPrecio, idPriceList, iva);
@@ -225,7 +243,7 @@ export function mapFilaToProduct(
               : enCampania.campania,
         }
       : {}),
-    stock: derivarStock(qty),
+    stock,
     stockQty: qty ?? undefined,
     // `reference` de Alegra; si falta, `name`, que en esta cuenta ES el
     // código (y es con lo que el CRM elige destacados, ver destacados.ts).
@@ -241,6 +259,7 @@ export function mapFilaToProduct(
     ...(atributosEstructurados ? { atributosEstructurados } : {}),
     ...(especificaciones.length ? { especificaciones } : {}),
     ...(fila.grupoId && fila.etiqueta?.trim() ? { opcion: fila.etiqueta.trim() } : {}),
+    ...(ventaSinStock ? { ventaSinStock } : {}),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
   };
 }
@@ -372,16 +391,30 @@ const atributosFilaSql = () =>
  * sucursales del contexto menos su reserva (`stockSucursalSql`); sin él, el de siempre. Con
  * `estructurados`, además los atributos de `catalog_atributos` (ver `atributosFilaSql`).
  */
-const columnasCatalogo = (disp?: ContextoDisponibilidad, estructurados = false, agrupar = false) => {
+const columnasCatalogo = (
+  disp?: ContextoDisponibilidad,
+  estructurados = false,
+  agrupar = false,
+  /** Modalidades de venta sin stock activas: sólo con alguna se nombra la columna (lectura tolerante). */
+  modalidades: readonly VentaSinStock[] = [],
+) => {
   const base = disp ? { ...COLUMNAS_CATALOGO_BASE, stock: stockSucursalSql(disp) } : COLUMNAS_CATALOGO_BASE;
   const conAtributos = estructurados ? { ...base, atributos: sql<unknown>`${atributosFilaSql()}` } : base;
   // Con el flag `variantes-selector`: la opción de la variante, para nombrar la línea "Modelo / Opción".
-  const conGrupo = agrupar
+  const conVariantes = agrupar
     ? { ...conAtributos, etiqueta: crmCatalogo.etiqueta, grupoId: crmCatalogo.grupoId, tipo: crmCatalogo.tipo }
     : conAtributos;
+  const traslado = modalidades.length ? conTraslado(disp) : undefined;
+  const conModalidad = modalidades.length
+    ? {
+        ...conVariantes,
+        overlayModalidadId: crmOverlay.modalidadSinStockId,
+        ...(traslado ? { overlayCubreOtra: cubreOtraSql(traslado) } : {}),
+      }
+    : conVariantes;
   // Campañas de precios (CRM 0095), siempre AL FINAL: una fila sin la columna (fixtures posicionales
   // de los tests) queda sin campañas, que es el precio de siempre.
-  return { ...conGrupo, campaniasOnline: crmCatalogo.campaniasOnline };
+  return { ...conModalidad, campaniasOnline: crmCatalogo.campaniasOnline };
 };
 
 /**
@@ -659,8 +692,9 @@ export async function getCatalogo(opts: {
    */
   atributosEstructurados?: boolean;
 }): Promise<Product[]> {
+  const modalidades = await modalidadesActivas();
   let query = getDb()
-    .select(columnasCatalogo(opts.disp, opts.atributosEstructurados, opts.agrupar ?? false))
+    .select(columnasCatalogo(opts.disp, opts.atributosEstructurados, opts.agrupar ?? false, modalidades))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
@@ -683,7 +717,7 @@ export async function getCatalogo(opts: {
 
   const filas = await query;
   const medios = await conQuedanCampania(filas, opts.mediosPrecio);
-  return filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, medios));
+  return filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, medios, modalidades));
 }
 
 /**
@@ -722,8 +756,9 @@ export async function getCategoriaExacta(opts: {
     .limit(1);
   if (!categoria) return null;
 
+  const modalidades = await modalidadesActivas();
   const filas = await getDb()
-    .select(columnasCatalogo(opts.disp, false, opts.agrupar ?? false))
+    .select(columnasCatalogo(opts.disp, false, opts.agrupar ?? false, modalidades))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
@@ -737,14 +772,17 @@ export async function getCategoriaExacta(opts: {
         soloVisiblesSql(opts.soloVisibles),
         visibleEnZonaSql(opts.disp),
         eq(crmOverlay.categoriaId, opts.categoriaId),
-        conStock(opts.disp),
+        conStock(opts.disp, modalidades),
       ),
     )
     .orderBy(asc(crmCatalogo.name))
     .limit(opts.limit);
 
   const medios = await conQuedanCampania(filas, opts.mediosPrecio);
-  return { nombre: categoria.nombre, productos: filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, medios)) };
+  return {
+    nombre: categoria.nombre,
+    productos: filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, medios, modalidades)),
+  };
 }
 
 /**
@@ -783,8 +821,9 @@ export async function getProductosPorIds(
 ): Promise<Map<string, Product>> {
   if (alegraIds.length === 0) return new Map();
 
+  const modalidades = await modalidadesActivas();
   const filas = await getDb()
-    .select(columnasCatalogo(opts?.disp, opts?.atributosEstructurados, opts?.agrupar ?? false))
+    .select(columnasCatalogo(opts?.disp, opts?.atributosEstructurados, opts?.agrupar ?? false, modalidades))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts?.agrupar ?? false))
@@ -822,6 +861,7 @@ export async function getProductosPorIds(
           undefined,
           undefined,
           medios,
+          modalidades,
         ),
       ];
     }),
@@ -884,8 +924,9 @@ export async function getProductosPorSkus(
     .select({ g: sql<string>`${crmCatalogo.grupoId}` })
     .from(crmCatalogo)
     .where(and(enTenantCatalogo(), coincideCodigo));
+  const modalidades = await modalidadesActivas();
   const filas = await db
-    .select(columnasCatalogo(opts.disp, false, opts.agrupar ?? false))
+    .select(columnasCatalogo(opts.disp, false, opts.agrupar ?? false, modalidades))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
@@ -908,7 +949,7 @@ export async function getProductosPorSkus(
     );
 
   const medios = await conQuedanCampania(filas, opts.mediosPrecio);
-  const productos = filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, medios));
+  const productos = filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, medios, modalidades));
   if (!opts.agrupar) return productos;
   // Los códigos pedidos que cayeron en el grupo de cada card (para ubicarla en el lugar elegido).
   const grupoDe = new Map(filas.map((f) => [f.alegraId, (f as { grupoId?: string | null }).grupoId ?? null]));
@@ -1048,7 +1089,8 @@ export async function getVariantesDeGrupo(
   },
 ): Promise<(OpcionFicha & { esRepresentante: boolean })[]> {
   const propio = alias(crmOverlay, "overlay_propio");
-  const { campaniasOnline, ...columnas } = columnasCatalogo(opts.disp, opts.atributosEstructurados);
+  const modalidades = await modalidadesActivas();
+  const { campaniasOnline, ...columnas } = columnasCatalogo(opts.disp, opts.atributosEstructurados, false, modalidades);
   const filas = await getDb()
     .select({
       ...columnas,
@@ -1083,6 +1125,7 @@ export async function getVariantesDeGrupo(
       undefined,
       undefined,
       medios,
+      modalidades,
     );
     return { id: fila.alegraId, etiqueta: etiqueta?.trim() || producto.name, producto, esRepresentante };
   });
@@ -1355,11 +1398,38 @@ export const conPrecioSql = sql`${precioSql} > 0`;
  * "Solo con stock", en SQL. Replica `derivarStock`: null = no inventariable
  * = disponible; `<= 0` = sin stock.
  */
-export const conStock = (disp?: ContextoDisponibilidad) => {
+export const conStock = (disp?: ContextoDisponibilidad, modalidades: readonly VentaSinStock[] = []) => {
   // Con `disp`, del join lateral (`joinStock`): calculado una vez por fila, no dos.
   const stock = disp ? disponibleSucursalSql : stockSql;
-  return sql`(${stock} is null or ${stock} > 0)`;
+  if (!modalidades.length) return sql`(${stock} is null or ${stock} > 0)`;
+  // Venta sin stock: un producto a pedido cuenta como "con stock" (se puede comprar). En TS es
+  // `esAPedido` (stock "out" + `ventaSinStock`), que `derivarStock` no expresa.
+  return sql`(${stock} is null or ${stock} > 0 or ${aPedidoSql(modalidades, disp)})`;
 };
+
+/** El contexto si admite traslado (ver `ContextoDisponibilidad.traslado`); si no, undefined. */
+const conTraslado = (disp?: ContextoDisponibilidad) => (disp?.traslado ? disp : undefined);
+
+/**
+ * ¿Alguna sucursal alcanzable (la unión de `contextoUnion`) tiene stock disponible? Expresión por
+ * fila CON parámetros (tenant y slugs): sólo se emite con modalidades activas y un contexto con
+ * traslado, y cuesta las subconsultas por sucursal de `stockSucursalSql` (un caso: retiro con
+ * `retiro_sin_stock = ofrecer`). NULL (no inventariable) cuenta como false: ese producto ya tiene stock.
+ */
+const cubreOtraSql = (disp: ContextoDisponibilidad) =>
+  sql<boolean>`coalesce(${stockSucursalSql(contextoUnion(disp))} > 0, false)`;
+
+/**
+ * El producto tiene asignada una modalidad de venta sin stock ACTIVA. Los ids van como LITERAL, no
+ * parámetro: `ordenDestacadosSql` repite la expresión y exige que sea idéntica (ver su comentario).
+ * Con un contexto con traslado, además ninguna sucursal alcanzable lo cubre (si no, el pedido lo
+ * trae de otra y no es "a pedido"); esa parte sí lleva parámetros.
+ */
+function aPedidoSql(modalidades: readonly VentaSinStock[], disp?: ContextoDisponibilidad) {
+  const asignada = sql`${crmOverlay.modalidadSinStockId} = any(${literal(literalUuids(modalidades.map((m) => m.id)))}::uuid[])`;
+  const traslado = conTraslado(disp);
+  return traslado ? sql`(${asignada} and not ${cubreOtraSql(traslado)})` : asignada;
+}
 
 /**
  * ¿El tenant ya armó su árbol de categorías en el CRM? Mientras no tenga
@@ -1555,7 +1625,15 @@ export async function getFacetaCategorias(
   /** Flag `variantes-selector`: cuenta un producto por modelo (ver `enListado`). */
   agrupar = false,
 ): Promise<Faceta[]> {
-  const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false }, soloVisibles, agrupar, disp);
+  const modalidades = await modalidadesActivas();
+  const whereCategorias = condicionesDe(
+    filtros,
+    { ...APLICAR_TODOS, categorias: false },
+    soloVisibles,
+    agrupar,
+    disp,
+    modalidades,
+  );
   const arbol = await getArbolCategorias();
   // Lo que no acota el conjunto sólo cambia qué se calcula.
   const sinFiltros = Object.entries(filtros).every(
@@ -1569,7 +1647,7 @@ export async function getFacetaCategorias(
   );
   if (arbol.length) {
     const [base, filtrado] = await Promise.all([
-      conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, agrupar, disp), agrupar, disp),
+      conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, agrupar, disp, modalidades), agrupar, disp),
       conteoPorCategoriaPropia(whereCategorias, agrupar, disp),
     ]);
     return arbolCompletoConConteo(arbol, base, filtrado);
@@ -1578,7 +1656,11 @@ export async function getFacetaCategorias(
     // Sin filtros el conteo ya es el del catálogo entero: no hace falta la segunda consulta.
     sinFiltros
       ? null
-      : conteoPorCategoriaAlegra(condicionesDe({}, APLICAR_TODOS, soloVisibles, agrupar, disp), agrupar, disp),
+      : conteoPorCategoriaAlegra(
+          condicionesDe({}, APLICAR_TODOS, soloVisibles, agrupar, disp, modalidades),
+          agrupar,
+          disp,
+        ),
     conteoPorCategoriaAlegra(whereCategorias, agrupar, disp),
   ]);
   return base ? categoriasPlanasConConteo(base, filtrado) : filtrado;
@@ -1611,10 +1693,15 @@ const APLICAR_TODOS: AplicarFiltros = {
  * palabras eran contexto: "luz cálida para el living" son las lámparas cálidas); sin ellos,
  * cualquiera de sus términos aunque sean de contexto (`condicionAmplia`). Sin plan, la clásica.
  */
-function textoSinPlan(filtros: FiltrosCatalogo, texto: TextoBusqueda, disp?: ContextoDisponibilidad) {
+function textoSinPlan(
+  filtros: FiltrosCatalogo,
+  texto: TextoBusqueda,
+  disp?: ContextoDisponibilidad,
+  modalidades: readonly VentaSinStock[] = [],
+) {
   if (texto.plan) {
     if (filtros.categorias?.length || filtros.atributos?.length) return undefined;
-    const amplia = condicionAmplia(texto.plan, piezasBusqueda(filtros, disp));
+    const amplia = condicionAmplia(texto.plan, piezasBusqueda(filtros, disp, modalidades));
     if (amplia) return amplia;
   }
   return texto.q ? textoClasico(texto) : undefined;
@@ -1624,7 +1711,12 @@ function textoSinPlan(filtros: FiltrosCatalogo, texto: TextoBusqueda, disp?: Con
  * Piezas SQL del catálogo para la búsqueda v2 (busqueda-v2/piezas.ts): el texto buscable, dónde
  * pesa un término, categorías con su subárbol, atributos y stock del contexto de sucursal.
  */
-function piezasBusqueda(filtros: FiltrosCatalogo, disp?: ContextoDisponibilidad): PiezasBusqueda {
+function piezasBusqueda(
+  filtros: FiltrosCatalogo,
+  disp?: ContextoDisponibilidad,
+  /** Con modalidades activas, "con stock" incluye los a pedido (el mismo predicado que el filtro). */
+  modalidades: readonly VentaSinStock[] = [],
+): PiezasBusqueda {
   const ctx = contextoAtributos(filtros);
   return {
     texto: textoBuscableSql(),
@@ -1634,7 +1726,7 @@ function piezasBusqueda(filtros: FiltrosCatalogo, disp?: ContextoDisponibilidad)
     enCategorias: filtroCategoriasSql,
     cumpleAtributo: (id) => cumpleAtributoSql(ctx, id),
     contradiceAtributo: (id) => contradiceIdAtributoSql(ctx, id),
-    conStock: conStock(disp),
+    conStock: conStock(disp, modalidades),
     potencia: potenciaSql(),
   };
 }
@@ -1652,16 +1744,18 @@ function condicionesDe(
   /** Flag `variantes-selector`: sólo el representante de cada modelo (ver `enListado`). */
   agrupar: boolean,
   disp?: ContextoDisponibilidad,
+  /** Modalidades de venta sin stock activas: "con stock" incluye los a pedido (ver `conStock`). */
+  modalidades: readonly VentaSinStock[] = [],
 ) {
   const texto = textoDe(filtros);
   // Con plan (búsqueda v2) el texto recupera en vez de filtrar; sin nada que recupere, la clásica.
-  const piezas = texto.plan ? piezasBusqueda(filtros, disp) : undefined;
+  const piezas = texto.plan ? piezasBusqueda(filtros, disp, modalidades) : undefined;
   const recuperarPlan = texto.plan && piezas ? condicionRecuperar(texto.plan, piezas) : undefined;
   // Segundo intento con plan: lo que recupera el plan o se le parece (los duros siguen siendo filtros).
   const recuperarSinAcotar = texto.plan && texto.tolerante && piezas ? recuperarTolerante(texto.plan, recuperarPlan, piezas) : recuperarPlan;
   // Lo que el plan dedujo como categoría acota (sin chip): ver `acotarPorDeducidas`.
   const recuperar = texto.plan && piezas ? acotarPorDeducidas(texto.plan, piezas, recuperarSinAcotar) : recuperarSinAcotar;
-  const nombre = filtros.nombreConTodos?.length ? (piezas ?? piezasBusqueda(filtros, disp)).nombre : undefined;
+  const nombre = filtros.nombreConTodos?.length ? (piezas ?? piezasBusqueda(filtros, disp, modalidades)).nombre : undefined;
   return and(
     enTenantCatalogo(),
     activoSql,
@@ -1669,7 +1763,7 @@ function condicionesDe(
     conPrecioSql,
     soloVisiblesSql(soloVisibles),
     visibleEnZonaSql(disp),
-    recuperar ?? textoSinPlan(filtros, texto, disp),
+    recuperar ?? textoSinPlan(filtros, texto, disp, modalidades),
     aplicar.categorias && filtros.categorias?.length
       ? filtroCategoriasSql(filtros.categorias)
       : undefined,
@@ -1693,7 +1787,7 @@ function condicionesDe(
     aplicar.precio && filtros.precioMax != null
       ? sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} <= ${filtros.precioMax}`
       : undefined,
-    aplicar.stock && filtros.soloStock ? conStock(disp) : undefined,
+    aplicar.stock && filtros.soloStock ? conStock(disp, modalidades) : undefined,
   );
 }
 
@@ -1743,7 +1837,11 @@ function literal(texto: string) {
 /** Unidades desde las que el stock de un destacado se considera holgado (ver `ordenDestacadosSql`). */
 const STOCK_HOLGADO = 3;
 
-function ordenDestacadosSql(ctx: ContextoDestacados, disp?: ContextoDisponibilidad) {
+function ordenDestacadosSql(
+  ctx: ContextoDestacados,
+  disp?: ContextoDisponibilidad,
+  modalidades: readonly VentaSinStock[] = [],
+) {
   // Postgres calcula UNA vez las expresiones idénticas que se repiten (la clave del PARTITION BY y el
   // argumento de `first_value`), y dos parámetros ($6 y $9) no son idénticos. Por eso todo va como
   // literal: las constantes propias con `literal`. El stock por sucursal es la columna del join
@@ -1766,7 +1864,9 @@ function ordenDestacadosSql(ctx: ContextoDestacados, disp?: ContextoDisponibilid
   // Escalón como UNA clave: sin stock (8) > sin foto (4) > accesorio (2) > stock corto (1). La
   // ventana lo calcula una vez por fila y el ORDER BY lo lee de ella (`first_value`): repetir las
   // expresiones afuera hacía que Postgres las evaluara de nuevo.
-  const escalon = sql`((case ${nivelStock} when 0 then 8 when ${holgado} then 0 else 1 end) + ${sinFoto} * 4 + ${accesorio} * 2)`;
+  // Venta sin stock: un producto a pedido (sin stock, con modalidad activa) pesa como stock corto (1).
+  const sinStock = modalidades.length ? sql`(case when ${aPedidoSql(modalidades, disp)} then 1 else 8 end)` : sql`8`;
+  const escalon = sql`((case ${nivelStock} when 0 then ${sinStock} when ${holgado} then 0 else 1 end) + ${sinFoto} * 4 + ${accesorio} * 2)`;
   const ventana = sql`over (
     partition by ${escalon}, ${grupo}
     order by ${tramoPrecio} desc, ${crmCatalogo.name}, ${crmCatalogo.alegraId})`;
@@ -1808,6 +1908,7 @@ function ordenDe(
   filtros: FiltrosCatalogo,
   disp?: ContextoDisponibilidad,
   destacados?: ContextoDestacados,
+  modalidades: readonly VentaSinStock[] = [],
 ) {
   switch (orden) {
     case "relevancia": {
@@ -1816,7 +1917,7 @@ function ordenDe(
       if (texto.plan) {
         // Las deducidas también "cubren" lo que nombran (como cuando eran filtro): en "Lámparas", todo es un foco.
         const categoriasFiltro = [...(filtros.categorias ?? []), ...(texto.plan.deducidas ?? [])];
-        const puntaje = puntajeBusqueda(texto.plan, piezasBusqueda(filtros, disp), { categoriasFiltro });
+        const puntaje = puntajeBusqueda(texto.plan, piezasBusqueda(filtros, disp, modalidades), { categoriasFiltro });
         // Segundo intento con plan: el puntaje del plan más el parecido de cada término que recupera.
         const parecido = texto.tolerante
           ? terminosParecidos(texto.plan).map((t) => sql`public.word_similarity(${raizPlural(t)}, ${sinTildes(nombreExhibidoSql)}) * 4`)
@@ -1833,7 +1934,7 @@ function ordenDe(
     case "precio-desc":
       return [sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} desc`, asc(crmCatalogo.name)];
     case "destacados":
-      return ordenDestacadosSql(destacados ?? contextoDestacados([]), disp);
+      return ordenDestacadosSql(destacados ?? contextoDestacados([]), disp, modalidades);
     default:
       return [asc(crmCatalogo.name)];
   }
@@ -1885,7 +1986,8 @@ export async function getPaginaCatalogo(opts: {
       : (opts.filtros ?? {});
   const porPagina = opts.porPagina ?? PRODUCTOS_POR_PAGINA;
   const agrupar = opts.agrupar ?? false;
-  const where = condicionesDe(filtros, APLICAR_TODOS, opts.soloVisibles, agrupar, opts.disp);
+  const modalidades = await modalidadesActivas();
+  const where = condicionesDe(filtros, APLICAR_TODOS, opts.soloVisibles, agrupar, opts.disp, modalidades);
 
   const [conteo] = opts.sinConteo
     ? []
@@ -1908,19 +2010,19 @@ export async function getPaginaCatalogo(opts: {
 
   const filas = hayFilas
     ? await getDb()
-        .select(columnasCatalogo(opts.disp, filtros.atributosEstructurados, agrupar))
+        .select(columnasCatalogo(opts.disp, filtros.atributosEstructurados, agrupar, modalidades))
         .from(crmCatalogo)
         .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
         .leftJoin(crmOverlay, joinOverlay(agrupar))
         .leftJoin(...joinStock(opts.disp))
         .where(where)
-        .orderBy(...ordenDe(orden, filtros, opts.disp, destacados))
+        .orderBy(...ordenDe(orden, filtros, opts.disp, destacados, modalidades))
         .limit(porPagina)
         .offset((pagina - 1) * porPagina)
     : [];
 
   const medios = await conQuedanCampania(filas, opts.mediosPrecio);
-  const mapeados = filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, medios));
+  const mapeados = filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, medios, modalidades));
   const productos = agrupar ? await conResumenDeVariantes(mapeados, opts.idPriceList, medios) : mapeados;
   if (opts.sinConteo) return { productos, total: productos.length, pagina: 1, paginas: 1, totalExacto: false };
   return { productos, total, pagina, paginas, totalExacto: true };
@@ -1937,13 +2039,14 @@ export async function contarCatalogo(opts: {
   filtros: FiltrosCatalogo;
   disp?: ContextoDisponibilidad;
 }): Promise<number> {
+  const modalidades = await modalidadesActivas();
   const [conteo] = await getDb()
     .select({ total: sql<number>`count(*)::int` })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay(opts.agrupar ?? false))
     .leftJoin(...joinStock(opts.disp))
-    .where(condicionesDe(opts.filtros, APLICAR_TODOS, opts.soloVisibles, opts.agrupar ?? false, opts.disp));
+    .where(condicionesDe(opts.filtros, APLICAR_TODOS, opts.soloVisibles, opts.agrupar ?? false, opts.disp, modalidades));
   return conteo?.total ?? 0;
 }
 
@@ -2129,6 +2232,7 @@ async function consultaFacetasPorTipo(
   soloVisibles: boolean,
   agrupar: boolean,
   disp?: ContextoDisponibilidad,
+  modalidades: readonly VentaSinStock[] = [],
 ): Promise<FacetaClave[] | undefined> {
   try {
     const condiciones = condicionesPorClave(contextoCar, filtros.caracteristicas, {
@@ -2145,7 +2249,9 @@ async function consultaFacetasPorTipo(
       .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
       .leftJoin(crmOverlay, joinOverlay(agrupar))
       .leftJoin(...joinStock(disp))
-      .where(condicionesDe(filtros, { ...APLICAR_TODOS, car: false, potencia: false }, soloVisibles, agrupar, disp));
+      .where(
+        condicionesDe(filtros, { ...APLICAR_TODOS, car: false, potencia: false }, soloVisibles, agrupar, disp, modalidades),
+      );
     const filas = (await getDb().execute(
       consultaFacetasPorTipoSql({ base: base.getSQL(), activas, tenant: shopTenantId() }),
     )) as unknown as FilaFacetasPorTipo[];
@@ -2166,11 +2272,14 @@ function facetasPorTipoDe(
   soloVisibles: boolean,
   agrupar: boolean,
   disp?: ContextoDisponibilidad,
+  modalidades: readonly VentaSinStock[] = [],
 ) {
   if (!conFacetasPorTipo(filtros)) return Promise.resolve(undefined);
   const texto = textoDe(filtros);
   const enContexto = Boolean(filtros.categorias?.length || texto.q || texto.plan || filtros.caracteristicas?.length);
-  return enContexto ? consultaFacetasPorTipo(filtros, soloVisibles, agrupar, disp) : Promise.resolve([] as FacetaClave[]);
+  return enContexto
+    ? consultaFacetasPorTipo(filtros, soloVisibles, agrupar, disp, modalidades)
+    : Promise.resolve([] as FacetaClave[]);
 }
 
 /**
@@ -2241,9 +2350,11 @@ export async function getFacetas(
   /** Flag `variantes-selector`: las facetas cuentan un producto por modelo (ver `enListado`). */
   agrupar = false,
 ): Promise<Facetas> {
-  const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false }, soloVisibles, agrupar, disp);
-  const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false }, soloVisibles, agrupar, disp);
-  const whereAtributos = condicionesDe(filtros, { ...APLICAR_TODOS, atributos: false }, soloVisibles, agrupar, disp);
+  const modalidades = await modalidadesActivas();
+  const where = (aplicar: AplicarFiltros) => condicionesDe(filtros, aplicar, soloVisibles, agrupar, disp, modalidades);
+  const whereMarcas = where({ ...APLICAR_TODOS, marcas: false });
+  const wherePrecio = where({ ...APLICAR_TODOS, precio: false });
+  const whereAtributos = where({ ...APLICAR_TODOS, atributos: false });
 
   const [categorias, marcas, [rango], [conteoAtributos], porClave] = await Promise.all([
     filtros.sinFacetaCategorias ? Promise.resolve([]) : getFacetaCategorias(filtros, soloVisibles, disp, agrupar),
@@ -2271,7 +2382,7 @@ export async function getFacetas(
     filtros.sinFacetaAtributos
       ? Promise.resolve([])
       : consultaConteoAtributos(whereAtributos, filtros.atributos, filtros.atributosEstructurados, medidasPositivasDe(filtros), disp, agrupar),
-    facetasPorTipoDe(filtros, soloVisibles, agrupar, disp),
+    facetasPorTipoDe(filtros, soloVisibles, agrupar, disp, modalidades),
   ]);
 
   const precio =

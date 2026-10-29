@@ -1,5 +1,5 @@
 {
-  "id": "107603fc-5ee8-41f2-93af-b2a24652adbb",
+  "id": "00419381-afdf-4be6-958b-19f9ae3fab1b",
   "prevId": "48f8a7be-a2dd-4e29-8740-9cb2f71add00",
   "version": "7",
   "dialect": "postgresql",
@@ -1196,21 +1196,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "campania_id": {
-          "name": "campania_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "campania_regla_id": {
-          "name": "campania_regla_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "precio_normal": {
-          "name": "precio_normal",
-          "type": "numeric(14, 2)",
+        "venta_sin_stock": {
+          "name": "venta_sin_stock",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         }

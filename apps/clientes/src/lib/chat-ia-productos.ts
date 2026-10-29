@@ -15,6 +15,7 @@ import type { Product } from "@/data/products";
 import { atributosDeProducto } from "./catalogo-atributos";
 import { atributosParaAgente, etiquetasTecnicas } from "./catalogo-caracteristicas";
 import { maxCantidad } from "./catalogo-vista";
+import { agotadoSinModalidad, esAPedido } from "./venta-sin-stock";
 import { formatMarca, formatRubro } from "./formato-rubro";
 
 /** Largo de la descripción que ve el modelo. Más es ruido y costo. */
@@ -32,7 +33,9 @@ export interface ProductoAgente {
   categoria?: string;
   /** Precio final de la lista general, sólo para comparar opciones. No se cita. */
   precioReferencia: number;
-  stock: "disponible" | "pocas unidades" | "sin stock";
+  stock: "disponible" | "pocas unidades" | "sin stock" | "a pedido";
+  /** Texto de la modalidad de venta sin stock, sólo si el producto está a pedido. */
+  entrega?: string;
   descripcion?: string;
   /**
    * Datos técnicos estructurados del CRM (fichas estructuradas, fase 2), compactos:
@@ -91,7 +94,8 @@ export function aProductoAgente(p: Product): ProductoAgente {
     ...(p.brand ? { marca: p.brand } : {}),
     ...(p.category ? { categoria: p.category } : {}),
     precioReferencia: p.precioFinal ?? p.price,
-    stock: STOCK_TEXTO[p.stock] ?? "disponible",
+    stock: esAPedido(p) ? "a pedido" : (STOCK_TEXTO[p.stock] ?? "disponible"),
+    ...(esAPedido(p) ? { entrega: p.ventaSinStock!.texto } : {}),
     ...(recortar(p.description, DESCRIPCION_MAX) ? { descripcion: recortar(p.description, DESCRIPCION_MAX) } : {}),
     ...(atributosParaAgente(p.atributosEstructurados) ? { atributos: atributosParaAgente(p.atributosEstructurados) } : {}),
   };
@@ -107,7 +111,7 @@ export function aProductoResuelto(p: Product): ProductoResuelto {
     // Un producto a $ 0 no se puede agregar al carrito (CartContext lo descarta):
     // sin precio la card muestra el nombre y no un "$ 0" engañoso.
     ...(precio > 0 ? { price: precio } : {}),
-    available: p.stock !== "out" && precio > 0,
+    available: !agotadoSinModalidad(p) && precio > 0,
     ...(p.sku && p.sku !== p.name ? { sku: p.sku } : {}),
     maxQuantity: maxCantidad(p),
     ...(p.stock === "low" && p.stockQty != null && p.stockQty > 0 ? { stock: p.stockQty } : {}),

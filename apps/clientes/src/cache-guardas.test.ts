@@ -33,7 +33,10 @@ const DIRECTIVA = /^\s*["']use cache(?::\s*(?:remote|private))?["'];?\s*$/m;
  * buscador (iguales para todos; salen de la caché de interpretaciones). Y la lista
  * de tarjetas que acepta Mercado Pago (footer y checkout): igual para todos, no cotiza. Y la marca
  * de la tienda (nombre, textos, logos) y `lib/tema-tenant-datos.ts` su tema (paleta): una por
- * proyecto, no dependen del visitante.
+ * proyecto, no dependen del visitante. Y las modalidades de venta sin stock activas
+ * (`lib/venta-sin-stock-repo.ts`, tag `catalogo`): configuración del CRM, no precio ni stock; la
+ * cotización las usa para decidir qué líneas van a pedido y `crearPedido` las relee sin caché en
+ * la transacción (si difieren, no crea el pedido y vence la caché).
  */
 const CON_CACHE = [
   "app/opengraph-image.tsx",
@@ -49,6 +52,7 @@ const CON_CACHE = [
   "lib/medios-pago-datos.ts",
   "lib/cuentas-bancarias-datos.ts",
   "lib/pagos/tarjetas-aceptadas-mp.ts",
+  "lib/venta-sin-stock-repo.ts",
   // Las VENTANAS de las campañas de precios (iguales para todos). Qué campaña rige se decide afuera,
   // con el reloj del request; el checkout las lee sin caché (`campaniasActivasEn`).
   "lib/campanias/vigentes.ts",

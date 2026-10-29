@@ -96,7 +96,7 @@ describe.skipIf(process.env.CAMPANIAS_SQL !== "1")("precio de campaña en orden,
       id: "cientoCincuenta", code: null, name: "Lampara", brand: "", qty: 1, precioUnitario: 75, ivaPorcentaje: 21,
       subtotal: 75, iva: 15.75, total: 90.75, stockDisponible: 10, campaniaId: CAMPANIA, campaniaReglaId: CAMPANIA, precioNormal: 150,
     };
-    const cot: Cotizacion = { lineas: [linea], subtotal: 75, iva: 15.75, costoEnvio: 0, total: 90.75, hayProblemas: false, listaPrivada: false };
+    const cot: Cotizacion = { lineas: [linea], subtotal: 75, iva: 15.75, costoEnvio: 0, total: 90.75, hayProblemas: false, listaPrivada: false, flujo: "normal" };
     await crearPedido({ clerkUserId: "user_1", email: "c@cliente.example" }, { contactoNombre: "C", contactoTelefono: "1100000000", entregaTipo: "retiro", pagoMetodo: "transferencia" }, cot);
     expect(await ids("precio-asc", conCampania)).toEqual(["cien", "cientoCincuenta", "doscientos"]);
     expect(await ids("precio-asc", { ...conCampania, precioMax: 95 })).toEqual([]);

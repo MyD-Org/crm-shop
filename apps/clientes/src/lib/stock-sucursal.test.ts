@@ -14,7 +14,7 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
 import { contarCatalogo, getCatalogo, getFacetas, getPaginaCatalogo } from "./catalog";
 import { cotizar } from "./cotizacion";
-import { leerDisponibilidadBruta } from "./stock-sucursal";
+import { disponibilidadDe, leerDisponibilidadBruta } from "./stock-sucursal";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 
 const disp: ContextoDisponibilidad = {
@@ -196,7 +196,75 @@ describe("leerDisponibilidadBruta", () => {
       stockPorSucursal: {},
       reservadoPorSucursal: {},
       ocultoEn: {},
+      ventaSinStock: {},
     });
     expect(grabadora.consultas).toHaveLength(0);
+  });
+
+  it("sin modalidades el select de productos es el de hoy (no nombra la columna)", async () => {
+    const r = await leerDisponibilidadBruta(["5"], ["sede-a"], "sede-a", grabadora.db as never);
+    const productos = grabadora.consultas.find((c) => c.sql.includes('from "public"."catalog_products_shop"'))!;
+    expect(productos.sql).not.toContain("modalidad_sin_stock_id");
+    expect(r.ventaSinStock).toEqual({});
+  });
+
+  it("con modalidades activas lleva la columna y arma `ventaSinStock` (sólo las activas)", async () => {
+    const M = { id: "m1", texto: "Modalidad 48 h", plazoDias: 2, flujo: "en_linea" as const };
+    grabadora = dbGrabadora((c) => {
+      if (c.sql.includes('from "public"."catalog_products_shop"'))
+        return [
+          ["5", "0", null, "m1"],
+          ["6", "0", null, "m-inactiva"],
+          ["7", "0", null, null],
+        ];
+      return [];
+    });
+    const r = await leerDisponibilidadBruta(
+      ["5", "6", "7"],
+      ["sede-a"],
+      "sede-a",
+      grabadora.db as never,
+      false,
+      [M],
+    );
+    const productos = grabadora.consultas.find((c) => c.sql.includes('from "public"."catalog_products_shop"'))!;
+    expect(productos.sql).toContain('"public"."catalog_overlay"."modalidad_sin_stock_id"');
+    expect(r.ventaSinStock).toEqual({ "5": M });
+    expect(r.stockPorSucursal).toEqual({ "5": { "sede-a": 0 }, "6": { "sede-a": 0 }, "7": { "sede-a": 0 } });
+  });
+});
+
+describe("disponibilidadDe con modalidades", () => {
+  const SUCS = ["sede-a", "sede-b"].map((slug, i) => ({
+    slug,
+    aceptaRetiro: true,
+    aceptaEnvio: true,
+    envioCiudades: [],
+    orden: i + 1,
+    activa: true,
+    predeterminada: i === 0,
+  }));
+  const M = { id: "m1", texto: "Modalidad 48 h", plazoDias: 2, flujo: "en_linea" as const };
+
+  it("la modalidad llega al motor (no la pisa la modalidad de entrega): sin stock en ninguna, por_pedido", async () => {
+    grabadora = dbGrabadora((c) =>
+      c.sql.includes('from "public"."catalog_products_shop"') ? [["5", "0", null, "m1"]] : [],
+    );
+    const r = await disponibilidadDe("5", "sede-a", "ambas", {
+      sucursales: SUCS,
+      reglas: { trasladoDias: 7 },
+      modalidades: [M],
+    });
+    expect(r.productos["5"].envio).toEqual({ estado: "por_pedido", origen: "sede-a", demoraDias: 2, despachoDias: 1 });
+    expect(r.productos["5"].retiro?.["sede-b"]).toEqual({ estado: "por_pedido", desde: null, demoraDias: 2 });
+    expect(r.lineasATraer).toEqual([]);
+  });
+
+  it("sin modalidades: sin_stock como hoy", async () => {
+    grabadora = dbGrabadora((c) =>
+      c.sql.includes('from "public"."catalog_products_shop"') ? [["5", "0", null]] : [],
+    );
+    const r = await disponibilidadDe("5", "sede-a", "envio", { sucursales: SUCS, reglas: { trasladoDias: 7 } });
+    expect(r.productos["5"].envio?.estado).toBe("sin_stock");
   });
 });

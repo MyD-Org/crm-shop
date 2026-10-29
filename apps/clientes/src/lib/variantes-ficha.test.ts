@@ -8,6 +8,15 @@ import {
   vistaCardVariantes,
 } from "./variantes-ficha";
 
+describe("opcionInicial con venta sin stock", () => {
+  it("una opción a pedido es elegible", () => {
+    const M = { id: "m1", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea" as const };
+    expect(
+      opcionInicial([{ id: "a", stock: "out" }, { id: "b", stock: "out", ventaSinStock: M }], "a")?.id,
+    ).toBe("b");
+  });
+});
+
 describe("resumirVariantes", () => {
   it("un solo precio (o ninguno) no es un modelo con opciones", () => {
     expect(resumirVariantes([])).toBeUndefined();

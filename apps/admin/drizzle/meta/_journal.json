@@ -640,6 +640,13 @@
       "breakpoints": true
     },
     {
+      "idx": 94,
+      "version": "7",
+      "when": 1793380020000,
+      "tag": "0094_modalidades_sin_stock",
+      "breakpoints": true
+    },
+    {
       "idx": 95,
       "version": "7",
       "when": 1793380030000,

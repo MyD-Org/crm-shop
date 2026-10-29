@@ -26,6 +26,10 @@ import { procesadorConfigurado } from "@/lib/pagos";
 import { esCompradorCuentaCorriente, mediosParaModalidad } from "@/lib/medios-pago";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { listaDeOpcion, opcionesDePago } from "@/lib/opciones-pago";
+import { idsAPedido } from "@/lib/venta-sin-stock";
+import { localDeRetiro } from "@/lib/sucursales-pedido";
+import { sinProcesadoresNoConfigurados } from "@/lib/medios-pago-datos";
+import { listaAConfirmar } from "@/lib/medios-precio";
 
 /**
  * Techo por usuario.
@@ -76,6 +80,12 @@ function ipDe(req: Request): string | null {
  * el catálogo y la misma que usa un cliente todavía no vinculado. Así el
  * visitante ve el IVA y el total final antes de iniciar sesión; para comprar
  * la sesión sigue siendo obligatoria (checkout y `POST /api/pedidos`).
+ *
+ * Venta sin stock por modalidad: la respuesta suma `flujo`. Con el flag `disponibilidad-sucursal`
+ * la disponibilidad se calcula ANTES de cotizar y decide qué líneas van a pedido (`aPedido`, el
+ * mismo motor que el pedido). Un carrito `a_confirmar` (sin cuenta corriente ni lista privada) se
+ * cotiza con la lista que muestran las cards (`listaAConfirmar`) y no trae cuotas, totales por
+ * opción, barra de cuotas ni cuenta de transferencia: no se cobra en línea.
  */
 export async function POST(req: Request) {
   const { clerkUserId, cliente } = await identidadActual();
@@ -124,6 +134,7 @@ export async function POST(req: Request) {
       costoEnvio: 0,
       total: 0,
       hayProblemas: false,
+      flujo: "normal",
       envio: evaluarEnvio(0, provinciaTexto, await leerConfigEnvio()),
     });
   }
@@ -176,6 +187,27 @@ export async function POST(req: Request) {
     const soloVisibles = await catalogoSoloVisibles();
     // Flag `variantes-selector`: el overlay (visibilidad) es el del ancla del grupo. Apagado = como siempre.
     const agrupar = await variantesSelector();
+    const sucursalRetiro =
+      entregaTipo === "retiro" && typeof body.sucursalRetiro === "string"
+        ? body.sucursalRetiro.trim().slice(0, 20) || null
+        : null;
+    // Con el flag, la disponibilidad va PRIMERO: decide qué líneas van a pedido con las reglas reales
+    // (`origenDeLinea`), no con la unión permisiva. null (flag apagado o falla) = decide el stock.
+    const disponibilidad = await disponibilidadParaMostrar(
+      lineas.map((l) => l.id),
+      disp,
+      Object.fromEntries(lineas.map((l) => [l.id, l.qty])),
+      agrupar,
+    );
+    let aPedido: Set<string> | undefined;
+    if (disponibilidad) {
+      const local =
+        entregaTipo === "retiro"
+          ? (sucursalRetiro ??
+            localDeRetiro({ entregaTipo, provincia: provincia || null, sucursalRetiro }, await sucursalesCacheadas()))
+          : null;
+      aPedido = idsAPedido(disponibilidad.productos, { tipo: entregaTipo, local });
+    }
     // Campañas de precios activas AHORA, leídas sin caché (lo que cotiza va siempre en vivo).
     const campanias = await campaniasActivasEn(new Date());
     const opcionesCotizar = {
@@ -184,6 +216,7 @@ export async function POST(req: Request) {
       idListaPrivada,
       entregaTipo,
       disp: disp ? contextoUnion(disp) : undefined,
+      ...(aPedido ? { aPedido } : {}),
       ...(campanias.length ? { campanias } : {}),
     };
     // Monto mínimo por cantidad de cuotas: la base es el total con impuestos a la lista del PAGO ÚNICO
@@ -218,12 +251,19 @@ export async function POST(req: Request) {
       cuotas = elegidas.cuotas;
     }
     const idListaMedio = conMedio ? idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotas, forma) : undefined;
-    const cotizacion = await cotizar(lineas, { ...opcionesCotizar, idListaMedio });
+    let cotizacion = await cotizar(lineas, { ...opcionesCotizar, idListaMedio });
+    // Pedido a confirmar por modalidad: no se cobra en línea y el precio es el de las cards (también
+    // en las líneas con stock). Cuenta corriente y lista privada siguen con su precio.
+    const aConfirmar = cotizacion.flujo === "a_confirmar" && !esCuentaCorriente && !idListaPrivada;
+    if (aConfirmar) {
+      const lista = listaAConfirmar(sinProcesadoresNoConfigurados(await leerMediosPagoTolerante()));
+      cotizacion = await cotizar(lineas, { ...opcionesCotizar, idListaMedio: lista });
+    }
     // Selector del checkout: el total de cada cantidad de cuotas es el de SU lista (varias cotizaciones
     // en paralelo, sólo con `conCuotas`). Los montos salen del servidor, nunca del navegador. Sólo las
     // cantidades cuyo mínimo alcanza la base.
     const cuotasOpciones =
-      conCuotas && body.conCuotas === true && medioCobro
+      !aConfirmar && conCuotas && body.conCuotas === true && medioCobro
         ? await opcionesSinInteresCotizadas({
             condiciones: medioCobro.condicionesCuotas,
             // Un pago: la lista del pago único del medio (o la de referencia si no tiene).
@@ -234,14 +274,15 @@ export async function POST(req: Request) {
         : undefined;
     // "Le faltan $X para N cuotas": sólo con las opciones pedidas (checkout) y algún mínimo sin alcanzar.
     const escalon =
-      conCuotas && body.conCuotas === true && baseValida && totalBase !== undefined
+      !aConfirmar && conCuotas && body.conCuotas === true && baseValida && totalBase !== undefined
         ? proximoEscalon(medioCobro?.condicionesCuotas, totalBase)
         : null;
     // Barra del carrito: sin medio elegido, el progreso combinado entre los medios de cobro en línea
     // elegibles (cada uno con su base). Sin cuenta corriente, lista privada ni flag: nada.
     let progreso: ReturnType<typeof progresoCuotas> = null;
     let mediosProgreso: { condiciones: typeof mediosCrm[number]["condicionesCuotas"]; base: number }[] = [];
-    if (body.progresoCuotas === true && !conMedio && !esCuentaCorriente && !idListaPrivada && (await cuotasHabilitadas())) {
+    // A confirmar: sin cobro en línea no hay cuotas que promover.
+    if (!aConfirmar && body.progresoCuotas === true && !conMedio && !esCuentaCorriente && !idListaPrivada && (await cuotasHabilitadas())) {
       const todos = await leerMediosPagoTolerante();
       const medios = mediosParaModalidad(todos, entregaTipo, { procesadorDisponible: procesadorConfigurado }).filter(
         (m) => m.cobroOnline && (m.condicionesCuotas ?? []).some((c) => c.montoMinimo != null),
@@ -257,7 +298,7 @@ export async function POST(req: Request) {
           progreso = progresoCuotas(bases);
         }
       }
-    } else if (conCuotas && body.conCuotas === true && baseValida && totalBase !== undefined) {
+    } else if (!aConfirmar && conCuotas && body.conCuotas === true && baseValida && totalBase !== undefined) {
       mediosProgreso = [{ condiciones: medioCobro?.condicionesCuotas, base: totalBase }];
       progreso = progresoCuotas(mediosProgreso);
     }
@@ -283,27 +324,16 @@ export async function POST(req: Request) {
         }
       }
     }
-    const disponibilidad = await disponibilidadParaMostrar(
-      lineas.map((l) => l.id),
-      disp,
-      Object.fromEntries(lineas.map((l) => [l.id, l.qty])),
-      agrupar,
-    );
-
     // Vista previa de la cuenta de la transferencia (sólo con identidad: el checkout exige
     // sesión). Se resuelve con lecturas cacheadas y el total cotizado; el pedido la vuelve a
     // resolver sin caché y la congela.
     let cuentaTransferencia: Awaited<ReturnType<typeof cuentaParaVistaPrevia>> | undefined;
-    if (body.conCuenta === true && !esCuentaCorriente && (clerkUserId || cliente)) {
+    if (!aConfirmar && body.conCuenta === true && !esCuentaCorriente && (clerkUserId || cliente)) {
       const [cuentas, datos, sucursalesActivas] = await Promise.all([
         cuentasBancariasCacheadas(),
         sucursalesCacheadas(),
         sucursalesHabilitadas(),
       ]);
-      const sucursalRetiro =
-        entregaTipo === "retiro" && typeof body.sucursalRetiro === "string"
-          ? body.sucursalRetiro.trim().slice(0, 20) || null
-          : null;
       cuentaTransferencia = cuentaParaVistaPrevia({
         cuentas,
         datos,
@@ -320,7 +350,7 @@ export async function POST(req: Request) {
     // Paso Pago del checkout (`totalesOpciones: true`): el total de cada card (forma de pago), una
     // cotización por lista distinta. Cuenta corriente y lista privada no eligen medio: nada.
     let totalesOpciones: Record<string, number | null> | undefined;
-    if (body.totalesOpciones === true && !esCuentaCorriente && !idListaPrivada) {
+    if (!aConfirmar && body.totalesOpciones === true && !esCuentaCorriente && !idListaPrivada) {
       const medios = mediosParaModalidad(mediosCrm.length > 0 ? mediosCrm : await leerMediosPagoTolerante(), entregaTipo, {
         procesadorDisponible: procesadorConfigurado,
       });

@@ -56,7 +56,7 @@ const cotizacion: Cotizacion = {
   costoEnvio: 0,
   total: 121,
   hayProblemas: false,
-  listaPrivada: false,
+  listaPrivada: false, flujo: "normal",
 };
 
 const datos = (soloVisibles: boolean) => ({

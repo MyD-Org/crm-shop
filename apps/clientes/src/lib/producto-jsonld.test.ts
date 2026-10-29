@@ -12,7 +12,15 @@ const base: Product = {
   sku: "02141N",
 };
 
+const M = { id: "m1", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea" as const };
+
 describe("jsonLdProducto", () => {
+  it("a pedido: BackOrder; agotado sin modalidad: OutOfStock", () => {
+    expect(jsonLdProducto({ ...base, stock: "out", ventaSinStock: M }, undefined).offers?.availability).toBe("https://schema.org/BackOrder");
+    expect(jsonLdProducto({ ...base, stock: "out" }, undefined).offers?.availability).toBe("https://schema.org/OutOfStock");
+    expect(jsonLdProducto({ ...base, ventaSinStock: M }, undefined).offers?.availability).toBe("https://schema.org/InStock");
+  });
+
   it("producto con precio: offers, sku/mpn, brand y disponibilidad", () => {
     const jsonLd = jsonLdProducto(base, undefined);
     expect(jsonLd["@type"]).toBe("Product");

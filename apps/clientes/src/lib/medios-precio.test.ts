@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MedioPago } from "./medios-pago";
 import { preciosFormaDelModal } from "./precios-forma-modal";
-import { armarPreciosMedios, seleccionarMediosPrecio } from "./medios-precio";
+import { armarPreciosMedios, listaAConfirmar, seleccionarMediosPrecio } from "./medios-precio";
 
 function medio(slug: string, extra: Partial<MedioPago> = {}): MedioPago {
   return {
@@ -447,5 +447,21 @@ describe("medios sin cobro en línea en el modal", () => {
   it("sin medios offline el resultado no suma el campo", () => {
     const sel = seleccionarMediosPrecio([medio("mercadopago", { cobroOnline: true, listasPorForma: { debito: "L5" } })], false);
     expect(sel.offline).toBeUndefined();
+  });
+});
+
+describe("listaAConfirmar (precio de un pedido a confirmar por modalidad)", () => {
+  it("listaAConfirmar: la del destacado; sin destacado o sólo por forma → undefined", () => {
+    expect(listaAConfirmar([medio("aa", { idListaPrecios: "L2" }), medio("bb", { destacarEnCatalogo: true, idListaPrecios: "L3" })])).toBe("L3");
+    expect(listaAConfirmar([medio("aa", { idListaPrecios: "L2" })])).toBeUndefined();
+    expect(listaAConfirmar([])).toBeUndefined();
+    // Destacado con listas por forma y sin lista propia: la general (no se sigue el "más barato" de la card).
+    expect(
+      listaAConfirmar([medio("mp", { cobroOnline: true, destacarEnCatalogo: true, idListaPrecios: null, listasPorForma: { debito: "L5" } })]),
+    ).toBeUndefined();
+  });
+
+  it("un destacado inactivo no cuenta", () => {
+    expect(listaAConfirmar([medio("bb", { destacarEnCatalogo: true, activo: false, idListaPrecios: "L3" })])).toBeUndefined();
   });
 });

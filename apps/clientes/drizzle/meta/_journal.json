@@ -278,8 +278,15 @@
     {
       "idx": 39,
       "version": "7",
-      "when": 1793228720756,
-      "tag": "0039_order_items_campania",
+      "when": 1793073164188,
+      "tag": "0039_order_items_venta_sin_stock",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793232838575,
+      "tag": "0040_order_items_campania",
       "breakpoints": true
     }
   ]

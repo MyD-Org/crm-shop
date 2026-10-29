@@ -42,6 +42,14 @@ import { nombreConOpcion } from "./nombre-linea";
 import { costoEnvio, type EntregaTipo } from "./envio";
 import { preciosPrivados } from "./precios-privados-repo";
 import { MAX_LINEAS, QTY_MAX } from "./carrito-cliente";
+import {
+  flujoDelPedido,
+  lineaAPedido,
+  modalidadPorId,
+  type FlujoPedido,
+  type VentaSinStock,
+} from "./venta-sin-stock";
+import { modalidadesActivas } from "./venta-sin-stock-repo";
 
 /** Lo único que el cliente tiene derecho a elegir. */
 export interface LineaPedida {
@@ -81,6 +89,16 @@ export interface LineaCotizada {
   /** Texto listo para mostrar cuando hay `problema`. */
   detalle?: string;
   /**
+   * Venta sin stock: la línea va "a pedido" con esta modalidad (activa). Nunca lleva `problema` y
+   * suma en los totales. Sin el `nombre` interno.
+   */
+  ventaSinStock?: VentaSinStock;
+  /**
+   * El producto tiene una modalidad activa, aunque la línea tenga stock: la cantidad no se topea
+   * con el stock (ver `topeCantidad`).
+   */
+  aceptaSinStock?: true;
+  /**
    * Campaña de precios que rige la línea (spec 2026-10-28-campanias-precios-design.md): el unitario
    * NORMAL sin IVA que se tacha, la campaña, su regla (para contar unidades) y su etiqueta. Ausentes =
    * precio normal.
@@ -101,6 +119,8 @@ export interface Cotizacion {
   hayProblemas: boolean;
   /** true si el comprador cotizó con una lista privada (cuenta corriente con lista enlazada). */
   listaPrivada: boolean;
+  /** `a_confirmar` si alguna línea va a pedido con una modalidad a confirmar (`flujoDelPedido`). */
+  flujo: FlujoPedido;
 }
 
 // Máximo de unidades por línea y techo de líneas por pedido: los mismos del
@@ -178,6 +198,12 @@ export function cotizarItem(
    */
   precioPrivado?: number | null,
   /**
+   * Modalidad de venta sin stock ACTIVA del producto. `aPedido` = lo que decidió el motor de
+   * disponibilidad por sucursal (flag `disponibilidad-sucursal`); ausente = se decide con el stock
+   * de la línea (`lineaAPedido`).
+   */
+  venta?: { modalidad: VentaSinStock; aPedido?: boolean },
+  /**
    * Campañas activas (la MISMA regla que la exhibición, `resolverPrecioVigente`). Ausente = precio
    * normal. Con lista privada rige el menor entre su privado y el de campaña de la lista general.
    */
@@ -235,12 +261,21 @@ export function cotizarItem(
     // Precio 0 no es "gratis": es un ítem sin precio cargado en la lista.
     linea.problema = "sin_precio";
     linea.detalle = "Este producto no tiene precio publicado. Consúltenos.";
-  } else if (stockDisponible !== null && stockDisponible <= 0) {
-    linea.problema = "sin_stock";
-    linea.detalle = "Sin stock por el momento.";
-  } else if (stockDisponible !== null && stockDisponible < pedida.qty) {
-    linea.problema = "stock_insuficiente";
-    linea.detalle = `Quedan ${stockDisponible} unidades disponibles.`;
+  } else {
+    if (venta) linea.aceptaSinStock = true;
+    const aPedido = venta
+      ? (venta.aPedido ?? lineaAPedido({ stockDisponible, qty: pedida.qty, modalidad: venta.modalidad }))
+      : false;
+    if (venta && aPedido) {
+      // La línea entera va a pedido (no se parte): sin problema, suma en los totales.
+      linea.ventaSinStock = venta.modalidad;
+    } else if (stockDisponible !== null && stockDisponible <= 0) {
+      linea.problema = "sin_stock";
+      linea.detalle = "Sin stock por el momento.";
+    } else if (stockDisponible !== null && stockDisponible < pedida.qty) {
+      linea.problema = "stock_insuficiente";
+      linea.detalle = `Quedan ${stockDisponible} unidades disponibles.`;
+    }
   }
 
   return linea;
@@ -265,6 +300,11 @@ export interface FilaEspejo {
    */
   etiqueta?: string | null;
   grupoId?: string | null;
+  /**
+   * `catalog_overlay.modalidad_sin_stock_id` (del ancla con `agrupar`). Sólo se lee con alguna
+   * modalidad activa: sin la migración del CRM la columna no existe.
+   */
+  modalidadId?: string | null;
   /** Campañas de precios del CRM (0095), crudas: ver `mapCampanias`. Ausente = ninguna. */
   campanias?: unknown;
 }
@@ -307,6 +347,9 @@ export function itemDesdeEspejo(fila: FilaEspejo): ItemCotizable {
  * visitante vio es lo que se cotiza, y `POST /api/pedidos` valida y calcula con
  * esta misma cotización (y revalida el disponible dentro de la transacción del
  * pedido, ver `crearPedido`).
+ *
+ * Cada ítem viene con su modalidad de venta sin stock ACTIVA, si tiene: la columna del overlay sólo
+ * se nombra con alguna modalidad activa (lectura tolerante, como el catálogo).
  */
 async function leerEspejo(
   ids: string[],
@@ -317,8 +360,9 @@ async function leerEspejo(
    * filtra por representante: la variante que está en el carrito se cotiza siempre.
    */
   agrupar = false,
-): Promise<Map<string, ItemCotizable>> {
+): Promise<Map<string, { item: ItemCotizable; modalidad?: VentaSinStock }>> {
   if (ids.length === 0) return new Map();
+  const modalidades = await modalidadesActivas();
   const filas: FilaEspejo[] = await getDb()
     .select({
       alegraId: crmCatalogo.alegraId,
@@ -345,6 +389,8 @@ async function leerEspejo(
       mostrarMarca: crmOverlay.mostrarMarca,
       // Con el flag: la opción de la variante, para nombrar la línea "Modelo / Opción".
       ...(agrupar ? { etiqueta: crmCatalogo.etiqueta, grupoId: crmCatalogo.grupoId } : {}),
+      // Última: con `agrupar`, `joinOverlay` trae el overlay del ancla, y la modalidad es la suya.
+      ...(modalidades.length ? { modalidadId: crmOverlay.modalidadSinStockId } : {}),
       // Campañas de precios (0095): al final, como en el catálogo.
       campanias: crmCatalogo.campaniasOnline,
     })
@@ -353,7 +399,9 @@ async function leerEspejo(
     .leftJoin(stockReservado, joinReserva())
     .leftJoin(crmOverlay, joinOverlay(agrupar))
     .where(and(enTenantCatalogo(), inArray(crmCatalogo.alegraId, ids)));
-  return new Map(filas.map((f) => [f.alegraId, itemDesdeEspejo(f)]));
+  return new Map(
+    filas.map((f) => [f.alegraId, { item: itemDesdeEspejo(f), modalidad: modalidadPorId(modalidades, f.modalidadId) }]),
+  );
 }
 
 /**
@@ -385,6 +433,12 @@ export async function cotizar(
     /** Flag `variantes-selector`: overlay del ancla del grupo (ver `leerEspejo`). Ausente = apagado. */
     agrupar?: boolean;
     /**
+     * Flag `disponibilidad-sucursal`: ids que el motor dejó "por pedido" para la entrega elegida
+     * (`idsAPedido`). Con él, una línea con modalidad activa va a pedido sii su id está acá (el stock
+     * de la unión no decide). Ausente = decide `lineaAPedido` con el stock de la línea.
+     */
+    aPedido?: ReadonlySet<string>;
+    /**
      * Campañas de precios activas en el instante que se cotiza: `campaniasActivasEn(new Date())` para
      * el carrito y el pedido nuevo, o con la fecha de creación al recotizar un pedido ya creado
      * (decisión C). Ausente o vacío = precio normal.
@@ -408,7 +462,7 @@ export async function cotizar(
   // Límite de unidades: lo que queda de cada regla con límite (agotada = precio normal). Al recotizar un
   // pedido existente, sus propias unidades no cuentan.
   const quedan = activas.size
-    ? await quedanParaEntradas(getDb(), [...items.values()].map((i) => i.campanias), activas, opts.excluirPedidoId)
+    ? await quedanParaEntradas(getDb(), [...items.values()].map((i) => i.item.campanias), activas, opts.excluirPedidoId)
     : undefined;
   const campanias: ContextoCotizacionCampania | undefined = opts.campanias?.length
     ? {
@@ -418,16 +472,19 @@ export async function cotizar(
       }
     : undefined;
   const lineas = pedidas.map((pedida) => {
-    const item = items.get(pedida.id);
-    return item
-      ? cotizarItem(
-          pedida,
-          item,
-          opts.idListaMedio,
-          privados ? (privados.get(pedida.id) ?? null) : undefined,
-          campanias,
-        )
-      : lineaRota(pedida, "no_encontrado", "Este producto ya no existe.");
+    const leido = items.get(pedida.id);
+    if (!leido) return lineaRota(pedida, "no_encontrado", "Este producto ya no existe.");
+    const { item, modalidad } = leido;
+    return cotizarItem(
+      pedida,
+      item,
+      opts.idListaMedio,
+      privados ? (privados.get(pedida.id) ?? null) : undefined,
+      modalidad
+        ? { modalidad, ...(opts.aPedido ? { aPedido: opts.aPedido.has(pedida.id) } : {}) }
+        : undefined,
+      campanias,
+    );
   });
   if (quedan?.size) marcarExcesoDeUnidades(lineas, quedan);
 
@@ -444,6 +501,7 @@ export async function cotizar(
     total: redondear(subtotal + iva + envio),
     hayProblemas: lineas.some((l) => l.problema),
     listaPrivada: Boolean(opts.idListaPrivada),
+    flujo: flujoDelPedido(lineas),
   };
 }
 

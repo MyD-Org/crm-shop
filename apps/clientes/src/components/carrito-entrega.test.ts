@@ -16,7 +16,9 @@ describe("carrito según la elección", () => {
 
   it("cotiza con el entregaTipo recibido (default retiro) y sólo manda provincia en envío", () => {
     expect(cliente).toMatch(/entregaTipo = "retiro"/);
-    expect(cliente).toMatch(/useCotizacion\(\{\s*entregaTipo,\s*conProgresoCuotas: true,\s*\.\.\.\(entregaTipo === "envio" && provincia \? \{ provincia \} : \{\}\),\s*\}\)/);
+    expect(cliente).toMatch(
+      /useCotizacion\(\{\s*entregaTipo,\s*conProgresoCuotas: true,\s*\.\.\.\(entregaTipo === "envio" && provincia \? \{ provincia \} : \{\}\),\s*\.\.\.\(entregaTipo === "retiro" && sucursalRetiro \? \{ sucursalRetiro \} : \{\}\),\s*\}\)/,
+    );
     expect(cliente).not.toMatch(/useCotizacion\(\{\s*entregaTipo: "retiro"/);
   });
 
@@ -29,5 +31,15 @@ describe("carrito según la elección", () => {
     expect(page).toContain("entregaDelCarrito(eleccion)");
     expect(page).toContain("entregaTipo={entregaTipo}");
     expect(page).not.toContain("?.ubicacion?.provincia");
+  });
+
+  it("con retiro cotiza con el mismo local que el checkout (venta sin stock: las mismas líneas a pedido)", () => {
+    const page = leer("app", "carrito", "page.tsx");
+    expect(page).toContain(
+      'entregaTipo === "retiro" ? ((await opcionesCheckoutDelVisitante().catch(() => null))?.localInicial ?? null) : null;',
+    );
+    expect(page).toContain("sucursalRetiro={sucursalRetiro}");
+    // El checkout arranca con ese mismo `localInicial` (salvo una elección válida, que ya es la zona).
+    expect(leer("lib", "checkout-ubicacion.ts")).toContain('localRetiro: sucursalElegida ?? e.localInicial ?? "",');
   });
 });

@@ -8,11 +8,12 @@ import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
 import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
+import { agotadoSinModalidad } from "@/lib/venta-sin-stock";
 import { badgeProducto } from "@/components/badge-producto";
 import { badgeCampania, badgePromo, usePromoProducto } from "@/components/promociones/PromoProvider";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { IconoLampara } from "@/components/mi-cuenta/iconos";
-import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
+import { etiquetaStock, maxCantidad, mostrarStockEnCard, stockParaCard } from "@/lib/catalogo-vista";
 import { mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
@@ -62,7 +63,7 @@ export function ProductoFavCard({ p }: { p: Product }) {
       brand={marca}
       name={nombreParaMostrar}
       code={esCodigo ? undefined : p.sku}
-      stock={p.stock}
+      stock={stockParaCard(p)}
       stockLabel={etiquetaStock(p)}
       showStock={mostrarStockEnCard(p)}
       // Final con IVA si se conoce; si no, el de siempre (igual que el catálogo).
@@ -91,7 +92,7 @@ export function ProductoFavCard({ p }: { p: Product }) {
       cornerAction={<BotonFavorito productId={p.id} size="sm" />}
       action={
         <AddToCartButton
-          disabled={p.stock === "out"}
+          disabled={agotadoSinModalidad(p)}
           max={maxCantidad(p)}
           product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url, ...(p.campania ? { precioHasta: p.campania.fin } : {}) }}
         />

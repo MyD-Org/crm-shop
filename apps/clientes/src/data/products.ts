@@ -1,6 +1,7 @@
 import type { AtributosEstructurados } from "@/lib/catalogo-caracteristicas";
 import type { CuotasProducto } from "@/lib/cuotas-sin-interes";
 import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
+import type { VentaSinStock } from "@/lib/venta-sin-stock";
 import type { ProductStock } from "@myd-org/ui";
 
 /**
@@ -120,6 +121,8 @@ export interface Product {
    */
   precioFinal?: number;
   stock: ProductStock;
+  /** Modalidad de venta sin stock; presente sólo con modalidad ACTIVA. `stock` sigue siendo el real. */
+  ventaSinStock?: VentaSinStock;
   /** Unidades disponibles segun Alegra. undefined = item sin inventario. */
   stockQty?: number;
   /** `reference` en Alegra. */

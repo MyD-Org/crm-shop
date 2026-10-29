@@ -1,3 +1,4 @@
+import { esAPedido } from "./venta-sin-stock";
 import type { Product } from "@/data/products";
 
 /**
@@ -36,7 +37,7 @@ export interface JsonLdProduct {
     "@type": "Offer";
     price: number;
     priceCurrency: "ARS";
-    availability: "https://schema.org/InStock" | "https://schema.org/OutOfStock";
+    availability: "https://schema.org/InStock" | "https://schema.org/OutOfStock" | "https://schema.org/BackOrder";
     url?: string;
     /** Campaña de precios: último día de vigencia ("YYYY-MM-DD"). */
     priceValidUntil?: string;
@@ -83,8 +84,11 @@ export function jsonLdProducto(producto: Product, siteUrl: string | undefined): 
             "@type": "Offer",
             price: precioFinal,
             priceCurrency: "ARS",
-            availability:
-              producto.stock === "out" ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
+            availability: esAPedido(producto)
+              ? "https://schema.org/BackOrder"
+              : producto.stock === "out"
+                ? "https://schema.org/OutOfStock"
+                : "https://schema.org/InStock",
             ...(url ? { url } : {}),
             // Precio de campaña: válido hasta el último día de la campaña en Argentina (fin exclusivo).
             ...(producto.campania ? { priceValidUntil: ultimoDiaAR(producto.campania.fin) } : {}),

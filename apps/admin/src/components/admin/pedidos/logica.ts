@@ -325,7 +325,7 @@ export function mensajeAvisoFactura(aviso: AvisoFacturaDto): { texto: string; ok
 }
 
 /**
- * Leyenda de una línea vendida con campaña de precios (`shop.order_items.precio_normal`, 0039 del
+ * Leyenda de una línea vendida con campaña de precios (`shop.order_items.precio_normal`, 0040 del
  * Shop): "Black Friday −20 %", con el % contra el precio normal redondeado hacia abajo (como en la
  * tienda). null = la línea no tuvo campaña.
  */

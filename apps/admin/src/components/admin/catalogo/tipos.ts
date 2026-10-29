@@ -55,6 +55,7 @@ export interface ProductoDto {
   ocultoEnSucursales: string[]
   /** false = el Shop no exhibe la marca. */
   mostrarMarca: boolean
+  modalidadSinStockId: string | null
   actualizadoEn: string | null
   motivos: MotivoNoPublicado[]
   /** Cuenta de Alegra de origen cuando NO es la principal (producto solo de esa cuenta). null = principal. */
@@ -159,6 +160,8 @@ export interface Filtros {
   sucursal?: string
   /** Slug de sucursal: solo productos con stock en ella. */
   stockEn?: string
+  /** Clave normalizada de la marca (la de `/api/admin/catalogo/marcas`). */
+  marca?: string
 }
 
 /** Sucursal del tenant, para el campo "Visible en" del producto y el filtro del listado. */

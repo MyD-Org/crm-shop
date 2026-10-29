@@ -38,7 +38,7 @@ const linea = (precio: number): LineaCotizada => ({
 });
 const cot = (precio: number): Cotizacion => {
   const l = linea(precio);
-  return { lineas: [l], subtotal: l.subtotal, iva: l.iva, costoEnvio: 0, total: l.total, hayProblemas: false, listaPrivada: false };
+  return { lineas: [l], subtotal: l.subtotal, iva: l.iva, costoEnvio: 0, total: l.total, hayProblemas: false, listaPrivada: false, flujo: "normal" };
 };
 
 async function limpiar() {

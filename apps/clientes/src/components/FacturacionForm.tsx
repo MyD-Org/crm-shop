@@ -147,6 +147,8 @@ export function FacturacionForm({
   onCambio,
   extraDomicilio,
   antesDeGuardar,
+  textoGuardar,
+  ocupado = false,
 }: {
   perfil: PerfilFacturacionUI | null;
   /** Precarga "Nombre y apellido" cuando todavía no hay perfil guardado. */
@@ -177,6 +179,10 @@ export function FacturacionForm({
   extraDomicilio?: ReactNode;
   /** Validación de `extraDomicilio`: false frena el guardado. */
   antesDeGuardar?: () => boolean;
+  /** Texto del botón final por pasos (el checkout de un pedido a confirmar guarda y confirma). */
+  textoGuardar?: string;
+  /** Quien lo usa está ocupado con lo que sigue al guardado (el pedido se está enviando). */
+  ocupado?: boolean;
 }) {
   const [form, setForm] = useState<DatosFacturacion>(desdePerfil(perfil, nombreSugerido));
   /**
@@ -654,8 +660,8 @@ export function FacturacionForm({
           {paso < ultimo ? (
             <Button className="ml-auto" onClick={siguiente}>Continuar</Button>
           ) : (
-            <Button className="ml-auto" onClick={guardar} disabled={guardando}>
-              {guardando ? "Guardando…" : onPaso ? "Guardar y continuar" : "Guardar datos de facturación"}
+            <Button className="ml-auto" onClick={guardar} disabled={guardando || ocupado}>
+              {guardando ? "Guardando…" : (textoGuardar ?? (onPaso ? "Guardar y continuar" : "Guardar datos de facturación"))}
             </Button>
           )}
         </div>

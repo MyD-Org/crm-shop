@@ -201,3 +201,60 @@ describe("armarOrder", () => {
     expect(order.facturaId).toBeUndefined();
   });
 });
+
+describe("armarOrder: venta sin stock", () => {
+  const fila = {
+    id: "p-1",
+    numero: 1042,
+    createdAt: new Date("2026-09-01T12:00:00Z"),
+    estado: "pendiente",
+    pagoEstado: "pendiente",
+    pagoMetodo: "a_coordinar",
+    entregaTipo: "retiro",
+    entregaCiudad: null,
+    entregaDireccion: null,
+    subtotal: "1000.00",
+    iva: "210.00",
+    costoEnvio: "0.00",
+    total: "1210.00",
+  } as unknown as FilaOrder;
+  const linea = (ventaSinStock: unknown) =>
+    ({
+      id: "l-1",
+      orderId: "p-1",
+      alegraItemId: "42",
+      code: null,
+      name: "02141N",
+      brand: "Marca Ejemplo",
+      qty: "2.000",
+      precioUnitario: "500.00",
+      ivaPorcentaje: "21.00",
+      subtotal: "1000.00",
+      iva: "210.00",
+      total: "1210.00",
+      ventaSinStock,
+    }) as FilaItem;
+  const SNAPSHOT = { modalidadId: "m-borrada", nombre: "Modalidad 48 h", texto: "A pedido", plazoDias: 2, flujo: "a_confirmar" };
+
+  it("armarOrder: modalidad borrada → el texto sale del snapshot; jsonb roto → sin aPedido", () => {
+    const order = armarOrder(fila, [linea(SNAPSHOT)], new Map());
+    expect(order.items[0].aPedido).toBe("A pedido");
+    expect(order.aConfirmar).toBe(true);
+
+    const roto = armarOrder(fila, [linea({ texto: 3 })], new Map());
+    expect(roto.items[0]).not.toHaveProperty("aPedido");
+    expect(roto).not.toHaveProperty("aConfirmar");
+  });
+
+  it("sin modalidad: como hoy", () => {
+    const order = armarOrder(fila, [linea(null)], new Map());
+    expect(order.items[0]).not.toHaveProperty("aPedido");
+    expect(order).not.toHaveProperty("aConfirmar");
+  });
+
+  it("con un medio (cuenta corriente o en línea) la línea lleva su texto pero el pedido no es a confirmar por modalidad", () => {
+    const order = armarOrder({ ...fila, pagoMetodo: "transferencia" } as FilaOrder, [linea(SNAPSHOT)], new Map());
+    expect(order.items[0].aPedido).toBe("A pedido");
+    expect(order).not.toHaveProperty("aConfirmar");
+  });
+});

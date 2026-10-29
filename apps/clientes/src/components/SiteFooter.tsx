@@ -3,14 +3,13 @@ import { cacheLife } from "next/cache";
 import { SiteFooter as SiteFooterDS } from "@myd-org/ui";
 import { linkFooter } from "@/components/footer/link-footer";
 import { BotonEditarFooterSiAdmin } from "@/components/footer/BotonEditarFooterSiAdmin";
+import { RedesSociales } from "@/components/footer/RedesSociales";
 import { textoBarra } from "@/data/footer";
 import { getDatosFooter, getDatosLegales } from "@/lib/home-datos";
 import { getPaginasPublicadas } from "@/lib/institucional/datos";
 import { getMarca } from "@/lib/marca";
 import { partesNombre } from "@/lib/marca-base";
 import { columnasFooter } from "@/lib/legales/footer";
-import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
-import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
 
 /**
  * Footer global del layout. "Led" con el color de marca del tema sobre oscuro
@@ -29,23 +28,26 @@ import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
  * En mobile no se muestra en las páginas con una barra fija abajo (ficha,
  * carrito, checkout): ver `[data-sin-footer-mobile]` en globals.css.
  *
- * "Medios de pago": logos de las tarjetas que acepta Mercado Pago en la cuenta (`getTarjetasMercadoPago`,
- * cacheado por días). Si Mercado Pago no responde, la fila no se muestra.
+ * Sin la fila "Medios de pago" del DS (logos de tarjetas): se sacó a pedido
+ * de la tienda. Los logos siguen en la ficha, "Ver medios de pago" y el checkout.
+ *
+ * Cuentas de Instagram (`redes` de la misma fila) en la barra inferior, junto
+ * al QR de Data Fiscal (el DS no tiene lugar para íconos bajo la marca). En
+ * mobile no: la barra es angosta y el copyright se partía en tres líneas; ahí
+ * las cuentas ya están siempre en la barra superior (layout).
  *
  * Admin: botón "Editar footer" arriba del footer, en un hueco aparte
  * (`BotonEditarFooterSiAdmin` dentro de `<Suspense fallback={null}>`).
  */
 export async function SiteFooter() {
-  const [anio, legal, footer, tarjetas, marca, paginas] = await Promise.all([
+  const [anio, legal, footer, marca, paginas] = await Promise.all([
     anioActual(),
     getDatosLegales(),
     getDatosFooter(),
-    getTarjetasMercadoPago(),
     getMarca(),
     getPaginasPublicadas(),
   ]);
   const { principal, acento } = partesNombre(marca);
-  const logos = logosTarjetas(tarjetas);
   return (
     <div className="footer-global">
       <Suspense fallback={null}>
@@ -60,14 +62,18 @@ export async function SiteFooter() {
         columns={columnasFooter({ arrepentimiento: true, footer, paginas })}
         barLeft={textoBarra(footer.barraIzquierda, anio)}
         barRight={textoBarra(footer.barraDerecha, anio)}
-        payments={{ title: "Medios de pago", logos }}
         barExtra={
-          legal.dataFiscalUrl ? (
-            <a href={legal.dataFiscalUrl} target="_blank" rel="noopener noreferrer">
-              {/* Imagen genérica de ARCA, local (public/images). */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/data-fiscal.jpg" alt="Data Fiscal" width={40} height={54} />
-            </a>
+          footer.redes.length > 0 || legal.dataFiscalUrl ? (
+            <div className="flex items-center gap-5">
+              <RedesSociales redes={footer.redes} className="justify-end max-md:hidden" />
+              {legal.dataFiscalUrl ? (
+                <a href={legal.dataFiscalUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                  {/* Imagen genérica de ARCA, local (public/images). */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/images/data-fiscal.jpg" alt="Data Fiscal" width={40} height={54} />
+                </a>
+              ) : null}
+            </div>
           ) : undefined
         }
       />

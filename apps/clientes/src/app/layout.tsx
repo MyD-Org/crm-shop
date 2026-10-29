@@ -6,7 +6,8 @@ import { Nunito_Sans, Sora } from "next/font/google";
 import { Providers } from "@/components/Providers";
 import { Header } from "@/components/HeaderServer";
 import { SiteFooter } from "@/components/SiteFooter";
-import { getContenidoHome } from "@/lib/home-datos";
+import { RedesSociales } from "@/components/footer/RedesSociales";
+import { getContenidoHome, getDatosFooter } from "@/lib/home-datos";
 import { clasesVisibilidad, visibilidadDe } from "@/data/home-defaults";
 import { scriptTema } from "@/lib/tema-ip";
 import { atributosHtmlTema } from "@/lib/tema-tenant";
@@ -99,13 +100,19 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Anuncio global: contenido administrable (mismo contrato que la home).
-  const [{ anuncio, visibilidad, promociones }, marca, temaTenant] = await Promise.all([getContenidoHome(), getMarca(), getTemaTenant()]);
+  const [{ anuncio, visibilidad, promociones }, marca, temaTenant, { redes }] = await Promise.all([
+    getContenidoHome(),
+    getMarca(),
+    getTemaTenant(),
+    getDatosFooter(),
+  ]);
   // Promo de la home para badges y ficha (la vigencia la decide el cliente). Apagada en el editor: no viaja.
   const datosPromo = visibilidadDe(visibilidad, "promociones") === "nunca" ? null : datosPromoCliente(promociones);
   // Tema de la tienda (`tenants.shop_tema`): sin paleta propia (Central) no hay `data-tema` ni
   // `<style>` y el HTML es el de siempre; con ella, UNA regla de variables (src/lib/tema-tenant.ts).
   const tema = atributosHtmlTema(temaTenant);
   const vAnuncio = visibilidadDe(visibilidad, "anuncio");
+  const hayAnuncio = vAnuncio !== "nunca" && !!anuncio.texto;
 
   return (
     // Tema: el shell trae el de la tienda (base de `shop_tema`; geo-IP apagada, ver
@@ -129,12 +136,28 @@ export default async function RootLayout({
           <Providers>
            <MarcaProvider marca={{ base: marca.base, nombre: marca.nombre, lema: marca.lema, logoUrl: marca.logoUrl }}>
            <PromoProvider datos={datosPromo}>
-            {/* Anuncio global (contenido administrable): arriba de todo, sobre el header.
-                Dónde se ve lo decide el editor (default: solo desktop, porque en
-                mobile el texto ocupa varias filas hasta que sea un carrusel). */}
-            {vAnuncio === "nunca" || !anuncio.texto ? null : (
-              <div className={`bg-primary px-4 py-2.5 text-center text-[12.5px] font-semibold tracking-wide text-on-primary ${clasesVisibilidad(vAnuncio)}`}>
-                {anuncio.texto}
+            {/* Barra superior: anuncio global (contenido administrable) al medio y
+                cuentas de Instagram (`redes` del footer) a la derecha. Dónde se ve el
+                anuncio lo decide el editor (default: solo desktop, porque en mobile el
+                texto ocupa varias filas hasta que sea un carrusel); las redes se ven
+                siempre: en mobile, centradas debajo del anuncio. Sin anuncio visible
+                ni redes, no hay barra. Grilla: con un anuncio largo, el texto se achica
+                y parte línea; las redes conservan su ancho a la derecha. */}
+            {!hayAnuncio && redes.length === 0 ? null : (
+              <div
+                className={`bg-primary text-on-primary ${redes.length === 0 ? clasesVisibilidad(vAnuncio) : ""}`}
+              >
+                <div className="mx-auto flex max-w-contenido flex-col items-center gap-1.5 px-[clamp(18px,4vw,48px)] py-2.5 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] md:gap-4">
+                  <span aria-hidden className="max-md:hidden" />
+                  {hayAnuncio ? (
+                    <p className={`text-center text-[12.5px] font-semibold tracking-wide ${clasesVisibilidad(vAnuncio)}`}>
+                      {anuncio.texto}
+                    </p>
+                  ) : (
+                    <span aria-hidden className="max-md:hidden" />
+                  )}
+                  <RedesSociales redes={redes} className="justify-center md:flex-nowrap md:justify-end" />
+                </div>
               </div>
             )}
             <Header />

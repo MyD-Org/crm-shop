@@ -469,6 +469,7 @@ describe("guardarFooter / restablecerFooter", () => {
     whatsapp: "+54 9 11 1234-5678",
     locales: [{ nombre: "", direccion: "Calle Falsa 123", mapsUrl: "", horario: "" }],
     enlaces: [],
+    redes: [{ nombre: "Centro", usuario: "@comercio.centro" }],
     barraIzquierda: "© {anio} Comercio",
     barraDerecha: "",
   };
@@ -497,6 +498,7 @@ describe("guardarFooter / restablecerFooter", () => {
       ...FOOTER,
       descripcion: "Descripción",
       whatsapp: "5491112345678",
+      redes: [{ nombre: "Centro", usuario: "comercio.centro" }],
     });
     expect(revalidateMock).toHaveBeenCalledWith("home");
   });

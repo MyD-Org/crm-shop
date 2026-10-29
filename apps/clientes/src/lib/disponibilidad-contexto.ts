@@ -31,6 +31,12 @@ export interface ContextoDisponibilidad {
   stockHeredado: string;
   /** Local de retiro elegido; sólo en modalidad retiro. */
   local?: string;
+  /**
+   * Otra sucursal activa fuera de `contarEn` puede cubrir una línea trayéndola (retiro con
+   * `retiro_sin_stock = ofrecer`). Sólo presente cuando es true. Lo usa el catálogo para no mostrar
+   * la modalidad de venta sin stock en un producto que el pedido resolverá con un traslado.
+   */
+  traslado?: true;
 }
 
 /**
@@ -87,11 +93,15 @@ export function contextoDisponibilidad(entrada: {
       : permiteRespaldo("envio", entrada.reglas)
         ? activas
         : [zona];
+  // Retiro sin local válido cuenta como el envío: la regla que vale es la del envío.
+  const traslado =
+    contarEn.length < activas.length && permiteRespaldo(local ? "retiro" : "envio", entrada.reglas);
   return {
     zona,
     activas,
     contarEn,
     stockHeredado: activas[0],
     ...(local ? { local } : {}),
+    ...(traslado ? { traslado: true as const } : {}),
   };
 }

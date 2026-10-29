@@ -7,6 +7,7 @@ import { getPedido } from "@/lib/pedidos";
 import { esIdPedido } from "@/lib/pedido-vista";
 import { mediosPagoCacheados } from "@/lib/medios-pago-datos";
 import { instruccionesDelPago, nombreDelPago } from "@/lib/medios-pago";
+import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 
 export default async function PedidoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -31,7 +32,10 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
     };
   }
 
+  // Pedido a confirmar por modalidad (venta sin stock): el bloque de contacto de la sucursal.
+  const contacto = pedido.aConfirmar ? await contactoDelPedido(pedido.id, pedido.numero) : null;
+
   return (
-    <PedidoDetalle pedido={pedido} medioPago={medioPago} />
+    <PedidoDetalle pedido={pedido} medioPago={medioPago} contacto={contacto} />
   );
 }

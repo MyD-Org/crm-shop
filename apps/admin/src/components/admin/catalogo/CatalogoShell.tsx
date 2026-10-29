@@ -1,7 +1,8 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Tabs } from "@myd-org/ui"
+import type { ModalidadSinStock } from "@/lib/modalidades-sin-stock-validacion"
 import { CategoriasPanel } from "./CategoriasPanel"
 import { PreciosOnlinePanel } from "./PreciosOnlinePanel"
 import { ProductosPanel } from "./ProductosPanel"
@@ -36,6 +37,14 @@ export function CatalogoShell({ initialCategorias, initialTags, cuentas, sucursa
   const hayVariasCuentas = cuentas.length > 1
   const [categorias, setCategorias] = useState(initialCategorias)
   const [tags, setTags] = useState(initialTags)
+  const [modalidades, setModalidades] = useState<ModalidadSinStock[]>([])
+
+  // Sólo alimentan el selector del diálogo del producto: si falla la carga, el selector queda en "Ninguna".
+  useEffect(() => {
+    api<{ modalidades: ModalidadSinStock[] }>("/api/admin/modalidades-sin-stock")
+      .then((r) => setModalidades(r.modalidades))
+      .catch(() => {})
+  }, [])
 
   const recargarTaxonomia = useCallback(async () => {
     const [cats, tgs] = await Promise.all([
@@ -66,6 +75,7 @@ export function CatalogoShell({ initialCategorias, initialTags, cuentas, sucursa
           key={busquedaInicial.n}
           categorias={categorias}
           tags={tags}
+          modalidades={modalidades}
           cuentas={cuentas}
           sucursales={sucursales}
           busquedaInicial={busquedaInicial.q}

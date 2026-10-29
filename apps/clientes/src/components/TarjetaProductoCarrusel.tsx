@@ -11,7 +11,7 @@ import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
 import { mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
-import { etiquetaStock, mostrarStockEnCard } from "@/lib/catalogo-vista";
+import { etiquetaStock, mostrarStockEnCard, stockParaCard } from "@/lib/catalogo-vista";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { vistaCardVariantes } from "@/lib/variantes-ficha";
 import { formatMarca } from "@/lib/formato-rubro";
@@ -99,7 +99,7 @@ export function TarjetaProductoCarrusel({
         data-card-producto=""
         name={nombreParaMostrar}
         brand={marca}
-        stock={p.stock}
+        stock={stockParaCard(p)}
         stockLabel={etiquetaStock(p)}
         showStock={mostrarStockEnCard(p)}
         price={vv.precio}

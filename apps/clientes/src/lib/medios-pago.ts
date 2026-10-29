@@ -94,8 +94,14 @@ export const SLUG_MERCADOPAGO = "mercadopago";
 /** Slug de la fila fija de Payway (cobro en línea; el adaptador llega en otra rebanada). */
 export const SLUG_PAYWAY = "payway";
 
+/**
+ * Pago a coordinar con un asesor: el respaldo cuando ningún medio aplica y el medio de un pedido a
+ * confirmar por modalidad de venta sin stock. Nunca es un medio cargable.
+ */
+export const SLUG_A_COORDINAR = "a_coordinar";
+
 /** Slug que el admin no puede usar: es el valor de respaldo cuando ningún medio aplica. */
-export const SLUGS_RESERVADOS: readonly string[] = ["a_coordinar"];
+export const SLUGS_RESERVADOS: readonly string[] = [SLUG_A_COORDINAR];
 
 /**
  * Qué procesador de cobro atiende a cada medio de pago con cobro en línea (id del registro de
@@ -219,15 +225,19 @@ export function medioElegido(
  * ¿Es válido ese `pago_metodo` para el pedido? Con medios aplicables, sólo uno de ellos. Si NINGUNO
  * aplica a la modalidad (el operador no cargó ninguno para ella), el pedido sale "a_coordinar":
  * dejar el checkout sin salida sería peor que coordinar el pago con un asesor.
+ * `aConfirmar`: el servidor resolvió que el pedido queda a confirmar por una modalidad de venta sin
+ * stock; entonces "a_coordinar" vale aunque haya medios aplicables (no se cobra en línea).
  */
 export function pagoValidoConMedios(
   medios: readonly MedioPago[],
   entrega: EntregaTipo,
   pagoMetodo: string,
-  opts?: OpcionesMedios,
+  opts?: OpcionesMedios & { aConfirmar?: boolean },
 ): boolean {
-  const aplicables = mediosParaModalidad(medios, entrega, opts);
-  if (aplicables.length === 0) return pagoMetodo === "a_coordinar";
+  const { aConfirmar, ...opcionesMedios } = opts ?? {};
+  if (aConfirmar && pagoMetodo === SLUG_A_COORDINAR) return true;
+  const aplicables = mediosParaModalidad(medios, entrega, opcionesMedios);
+  if (aplicables.length === 0) return pagoMetodo === SLUG_A_COORDINAR;
   return aplicables.some((m) => m.slug === pagoMetodo);
 }
 

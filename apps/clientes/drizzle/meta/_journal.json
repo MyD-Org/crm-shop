@@ -274,6 +274,13 @@
       "when": 1791941090192,
       "tag": "0038_home_content_pk_tenant",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1793073164188,
+      "tag": "0039_order_items_venta_sin_stock",
+      "breakpoints": true
     }
   ]
 }

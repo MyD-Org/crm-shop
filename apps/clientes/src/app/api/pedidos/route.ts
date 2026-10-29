@@ -7,7 +7,7 @@ import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
 import { provinciaCanonica } from "@/lib/provincias";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
-import { marcarStockCambiado } from "@/lib/cache-invalidar";
+import { marcarModalidadesCambiadas, marcarStockCambiado } from "@/lib/cache-invalidar";
 import { ProductoNoDisponibleError, StockInsuficienteError } from "@/lib/stock-disponible";
 import { admiteEnvio } from "@/lib/facturacion";
 import { guardarTelefonoSiFalta } from "@/lib/facturacion-db";
@@ -17,7 +17,9 @@ import { datosDelContacto, type DatosLeidos } from "@/lib/datos-del-contacto";
 import { cotizarConMedio } from "@/lib/pedido-medio";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
-import { esCompradorCuentaCorriente, pagoValidoConMedios } from "@/lib/medios-pago";
+import { SLUG_A_COORDINAR, esCompradorCuentaCorriente, pagoValidoConMedios } from "@/lib/medios-pago";
+import { sinProcesadoresNoConfigurados } from "@/lib/medios-pago-datos";
+import { listaAConfirmar } from "@/lib/medios-precio";
 import { procesadorConfigurado } from "@/lib/pagos";
 import { configMpPara } from "@/lib/pagos/mp-public-key";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
@@ -27,11 +29,14 @@ import { avisarPedidoSiFalta, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
 import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
 import { permitirAsync } from "@/lib/rate-limit";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
-import { SucursalPedidoError } from "@/lib/sucursales-pedido";
+import { SucursalPedidoError, localDeRetiro } from "@/lib/sucursales-pedido";
+import { sucursalesCacheadas } from "@/lib/sucursales-datos";
+import { idsAPedido, VentaSinStockCambioError } from "@/lib/venta-sin-stock";
+import { modalidadesActivas } from "@/lib/venta-sin-stock-repo";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { contextoUnion } from "@/lib/disponibilidad-contexto";
-import { contextoParaProvincia } from "@/lib/disponibilidad-vista";
+import { contextoParaProvincia, disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
 import { claveProvincia } from "@/lib/sucursales";
 
 /**
@@ -91,6 +96,13 @@ interface BodyPedido {
   cuotas?: unknown;
   /** Forma de pago (`credito`, `debito`, `cuenta_mp`): solo cuenta con un medio de Mercado Pago o Payway con precios por forma. */
   forma?: unknown;
+  /**
+   * Venta sin stock: el flujo con el que el checkout armó el pedido ("a_confirmar" = salteó Pago y
+   * manda "a_coordinar"). NO decide nada (el flujo lo resuelve el servidor al cotizar): sólo elige
+   * cómo se rechaza un "a_coordinar" que ya no corresponde (409 para volver a Pago en vez del 400 de
+   * siempre, que siguen recibiendo los clientes que no lo mandan).
+   */
+  flujoVisto?: unknown;
 }
 
 /**
@@ -109,6 +121,13 @@ const productosCambiaron = (cotizacion: Cotizacion) =>
       cotizacion,
     },
     { status: 409 },
+  );
+
+/** Medio no aplicable a la entrega elegida (también el "a_coordinar" pendiente de un pedido normal). */
+const medioNoDisponible = () =>
+  NextResponse.json(
+    { error: "Ese medio de pago no está disponible para la entrega elegida." },
+    { status: 400 },
   );
 
 const texto = (v: unknown, max = 200) =>
@@ -235,13 +254,20 @@ export async function POST(req: Request) {
   // Cuenta corriente: la identidad sale del servidor (nunca del body). Quien la tiene SÓLO puede
   // pagar con el medio de audiencia `cuenta_corriente` (sin cobro en línea ni cuotas); si ese medio
   // no está activo, el pedido sale "a_coordinar". Quien no la tiene no puede usar ese medio.
+  //
+  // Venta sin stock: "a_coordinar" con medios aplicables queda PENDIENTE del flujo del pedido, que se
+  // conoce recién al cotizar: vale si el pedido queda a confirmar por una modalidad; si no, es el
+  // mismo 400 de siempre (o un 409 si el checkout lo armó a confirmar, ver más abajo). Cuenta
+  // corriente: sin cambios (su medio, o "a_coordinar" si no está activo).
   const mediosCrm = await leerMediosPagoTolerante();
   const opcionesMedios = {
     procesadorDisponible: procesadorConfigurado,
     esCuentaCorriente: esCompradorCuentaCorriente(cliente),
   };
   const pagoValido = pagoValidoConMedios(mediosCrm, entregaTipo, pagoMetodo, opcionesMedios);
-  if (!pagoValido) {
+  const aCoordinarPendiente =
+    !pagoValido && pagoMetodo === SLUG_A_COORDINAR && !opcionesMedios.esCuentaCorriente;
+  if (!pagoValido && !aCoordinarPendiente) {
     // El medio aplica pero su procesador no tiene NINGUNA cuenta con credenciales en el Shop. (Que la
     // cuenta de la sucursal del pedido no esté configurada no se decide acá: lo resuelve el cobro.)
     const sinCuentas = pagoValidoConMedios(mediosCrm, entregaTipo, pagoMetodo, {
@@ -257,10 +283,7 @@ export async function POST(req: Request) {
         { status: 409 },
       );
     }
-    return NextResponse.json(
-      { error: "Ese medio de pago no está disponible para la entrega elegida." },
-      { status: 400 },
-    );
+    return medioNoDisponible();
   }
 
   const lineas = normalizarLineas(body.items);
@@ -368,9 +391,36 @@ export async function POST(req: Request) {
     const soloVisibles = await catalogoSoloVisibles();
     // Flag `variantes-selector`: el overlay (visibilidad) es el del ancla del grupo. Apagado = como siempre.
     const agrupar = await variantesSelector();
+    // Venta sin stock con el flag: la disponibilidad va ANTES de cotizar y decide qué líneas van a
+    // pedido con las reglas reales (`origenDeLinea`), el mismo motor y el mismo local que el carrito.
+    // null (flag apagado o falla) = decide el stock de la cotización. Nunca hace fallar el pedido.
+    // Sin modalidades activas ninguna línea puede ir a pedido: no se consulta el motor (la cotización
+    // lee la misma lista cacheada, así que el resultado es idéntico).
+    let aPedido: Set<string> | undefined;
+    if (disp && sucursalEntrada && (await modalidadesActivas()).length > 0) {
+      try {
+        const disponibilidad = await disponibilidadParaMostrar(
+          lineas.map((l) => l.id),
+          disp,
+          Object.fromEntries(lineas.map((l) => [l.id, l.qty])),
+          agrupar,
+        );
+        if (disponibilidad) {
+          const local =
+            entregaTipo === "retiro"
+              ? (sucursalEntrada.sucursalRetiro ?? localDeRetiro(sucursalEntrada, await sucursalesCacheadas()))
+              : null;
+          aPedido = idsAPedido(disponibilidad.productos, { tipo: entregaTipo, local });
+        }
+      } catch (err) {
+        console.error("[/api/pedidos] disponibilidad para las líneas a pedido:", err);
+        aPedido = undefined;
+      }
+    }
     // Precio por medio de pago, cuotas y lista: una sola resolución para crear y para cambiar el medio
     // (`cotizarConMedio`). La lista sale del slug ya validado (medios releídos sin caché más arriba),
-    // nunca del body.
+    // nunca del body. Un pedido a confirmar por modalidad (sin cuenta corriente) se cotiza con la lista
+    // que muestran las cards, como en el carrito.
     const resuelto = await cotizarConMedio({
       lineas,
       entregaTipo,
@@ -383,6 +433,10 @@ export async function POST(req: Request) {
       disp: dispCotizacion,
       soloVisibles,
       ...(agrupar ? { agrupar: true } : {}),
+      ...(aPedido ? { aPedido } : {}),
+      ...(opcionesMedios.esCuentaCorriente
+        ? {}
+        : { idListaAConfirmar: listaAConfirmar(sinProcesadoresNoConfigurados(mediosCrm)) }),
     });
     if (!resuelto.ok) {
       if (resuelto.motivo === "forma_no_disponible") {
@@ -418,6 +472,49 @@ export async function POST(req: Request) {
         );
       }
       return productosCambiaron(cotizacion);
+    }
+
+    // Flujo del pedido (venta sin stock). Cuenta corriente: sin cambios, sigue con su medio.
+    // - A confirmar: sólo "a_coordinar"; un medio en línea nunca se pisa en silencio (409, el checkout
+    //   vuelve a mostrar el pedido).
+    // - Normal: un "a_coordinar" pendiente es el 400 de siempre. Salvo que el checkout lo haya armado a
+    //   confirmar (`flujoVisto`) y el pedido dejó de serlo con el checkout abierto (entró stock o la
+    //   modalidad pasó a en línea): 409 con la cotización, para que el checkout recotice y vuelva a
+    //   mostrar el paso Pago. Sin `flujoVisto` (un cliente que no pasó por ese flujo), el 400.
+    // Un reintento cuyo primer intento ya se creó puede leer su propia reserva y cambiar de flujo: si la
+    // clave ya tiene pedido, es ése.
+    const aConfirmar = cotizacion.flujo === "a_confirmar" && !opcionesMedios.esCuentaCorriente;
+    if (aConfirmar && pagoMetodo !== SLUG_A_COORDINAR) {
+      const creadoEnElMedio = await pedidoYaCreado();
+      if (creadoEnElMedio) return creadoEnElMedio;
+      return NextResponse.json(
+        {
+          error: "Su pedido incluye productos que se confirman por contacto. Revise el pedido para continuar.",
+          motivo: "pedido_a_confirmar",
+          cotizacion,
+        },
+        { status: 409 },
+      );
+    }
+    if (aCoordinarPendiente && !aConfirmar && body.flujoVisto === "a_confirmar") {
+      const creadoEnElMedio = await pedidoYaCreado();
+      if (creadoEnElMedio) return creadoEnElMedio;
+      return NextResponse.json(
+        {
+          error: "Su pedido ya no se confirma por contacto: elija un medio de pago.",
+          motivo: "pedido_ya_no_a_confirmar",
+          cotizacion,
+        },
+        { status: 409 },
+      );
+    }
+    if (
+      aCoordinarPendiente &&
+      !(aConfirmar && pagoValidoConMedios(mediosCrm, entregaTipo, pagoMetodo, { ...opcionesMedios, aConfirmar: true }))
+    ) {
+      const creadoEnElMedio = await pedidoYaCreado();
+      if (creadoEnElMedio) return creadoEnElMedio;
+      return medioNoDisponible();
     }
 
     // El comprador confirma lo que vio: si el total recotizado difiere (el precio
@@ -510,10 +607,14 @@ export async function POST(req: Request) {
         const recotizada = await cotizar(lineas, opcionesCotizar);
         return NextResponse.json({ error: err.message, cotizacion: recotizada, ids: err.ids }, { status: 409 });
       }
-      if (!(err instanceof StockInsuficienteError)) throw err;
-      // Otro checkout se llevó las unidades entre la cotización y el pedido (la
-      // transacción ya se deshizo). Se re-cotiza, que ya descuenta su reserva,
-      // para que el checkout marque qué línea no alcanza.
+      if (!(err instanceof StockInsuficienteError) && !(err instanceof VentaSinStockCambioError)) throw err;
+      // Otro checkout se llevó las unidades entre la cotización y el pedido, o la modalidad de venta
+      // sin stock de una línea se desactivó o cambió de flujo (la transacción ya se deshizo). Se
+      // re-cotiza (con las mismas líneas a pedido y la misma lista), que ya descuenta su reserva y lee
+      // la modalidad de ahora, para que el checkout marque qué línea cambió. Si fue la modalidad, la
+      // lista cacheada quedó vieja (p. ej. se perdió el aviso del CRM): se vence para que el
+      // reintento cotice con la de ahora y no choque igual hasta el TTL.
+      if (err instanceof VentaSinStockCambioError) marcarModalidadesCambiadas();
       return productosCambiaron(await cotizar(lineas, opcionesCotizar));
     }
 

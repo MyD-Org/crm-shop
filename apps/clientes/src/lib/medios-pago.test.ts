@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   SLUGS_RESERVADOS,
+  SLUG_A_COORDINAR,
   SLUG_MERCADOPAGO,
   PIE_A_COORDINAR,
   PIE_GENERICO,
@@ -170,6 +171,18 @@ describe("pagoValidoConMedios", () => {
     const soloRetiro = [medio({ slug: "efectivo", aplicaEnvio: false })];
     expect(pagoValidoConMedios(soloRetiro, "envio", "a_coordinar")).toBe(true);
     expect(pagoValidoConMedios(soloRetiro, "envio", "efectivo")).toBe(false);
+  });
+  it("a_coordinar con medios aplicables sólo con aConfirmar", () => {
+    expect(SLUG_A_COORDINAR).toBe("a_coordinar");
+    expect(SLUGS_RESERVADOS).toContain(SLUG_A_COORDINAR);
+    expect(pagoValidoConMedios(MEDIOS, "retiro", "a_coordinar")).toBe(false);
+    expect(pagoValidoConMedios(MEDIOS, "retiro", "a_coordinar", { aConfirmar: true })).toBe(true);
+  });
+  it("aConfirmar no cambia nada para los demás medios", () => {
+    expect(pagoValidoConMedios(MEDIOS, "retiro", "xyz", { aConfirmar: true })).toBe(false);
+    expect(pagoValidoConMedios(MEDIOS, "retiro", "transferencia", { aConfirmar: true })).toBe(
+      pagoValidoConMedios(MEDIOS, "retiro", "transferencia"),
+    );
   });
 });
 

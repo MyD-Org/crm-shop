@@ -109,7 +109,10 @@ export function useCotizacion(opts: {
    * retiro, recotiza: la cuenta depende de la sucursal y del total.
    */
   conCuenta?: boolean;
-  /** Local de retiro elegido (slug); sólo cuenta con `conCuenta` y retiro. */
+  /**
+   * Local de retiro elegido (slug); sólo cuenta con retiro. Decide qué líneas van a pedido (venta
+   * sin stock) y, con `conCuenta`, la cuenta para transferir: es el mismo que viaja al pedido.
+   */
   sucursalRetiro?: string;
   /**
    * Lista de precios del medio de pago elegido ('' si no tiene). Es lo que dispara el refetch al
@@ -142,7 +145,7 @@ export function useCotizacion(opts: {
   const ciudad = opts.ciudad ?? "";
   const provincia = opts.provincia ?? "";
   const conCuenta = opts.conCuenta ?? false;
-  const sucursalRetiro = conCuenta && opts.entregaTipo === "retiro" ? (opts.sucursalRetiro ?? "") : "";
+  const sucursalRetiro = opts.entregaTipo === "retiro" ? (opts.sucursalRetiro ?? "") : "";
   const listaKey = opts.listaKey ?? "";
   const pagoMetodo = listaKey ? (opts.pagoMetodo ?? "") : "";
   const forma = pagoMetodo ? (opts.forma ?? "") : "";

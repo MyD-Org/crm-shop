@@ -8,7 +8,7 @@ const linea = (o: Partial<LineaCotizada> = {}): LineaCotizada => ({
 });
 const cot = (lineas: LineaCotizada[], o: Partial<Cotizacion> = {}): Cotizacion => ({
   lineas, subtotal: 0, iva: 0, costoEnvio: 0, total: 0, hayProblemas: lineas.some((l) => l.problema),
-  listaPrivada: false, ...o,
+  listaPrivada: false, flujo: "normal", ...o,
 });
 
 describe("baseParaCuotas", () => {

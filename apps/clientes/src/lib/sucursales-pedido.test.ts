@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   decidirSucursalDePedido,
+  localDeRetiro,
   SucursalPedidoError,
 } from "./sucursales-pedido";
 import type { DatosSucursales, SucursalVista } from "./sucursales-repo";
@@ -172,5 +173,28 @@ describe("decidirSucursalDePedido", () => {
     expect(decidirSucursalDePedido(e, datos)).toEqual(
       decidirSucursalDePedido(e, datos),
     );
+  });
+});
+
+describe("localDeRetiro", () => {
+  it("el local elegido manda; sin él, el de la zona si admite retiro, si no la predeterminada", () => {
+    expect(localDeRetiro({ entregaTipo: "retiro", sucursalRetiro: "sede-b", provincia: "misiones" }, datos)).toBe("sede-b");
+    expect(localDeRetiro({ entregaTipo: "retiro", provincia: "misiones" }, datos)).toBe("sede-a");
+    expect(localDeRetiro({ entregaTipo: "retiro" }, datos)).toBe("sede-b");
+    const zonaSinRetiro: DatosSucursales = {
+      ...datos,
+      sucursales: [suc("sede-a", { aceptaRetiro: false }), suc("sede-b", { orden: 2, predeterminada: true })],
+    };
+    expect(localDeRetiro({ entregaTipo: "retiro", provincia: "misiones" }, zonaSinRetiro)).toBe("sede-b");
+  });
+
+  it("envío, o ningún local que admita retiro: null", () => {
+    expect(localDeRetiro({ entregaTipo: "envio", provincia: "misiones" }, datos)).toBeNull();
+    expect(localDeRetiro({ entregaTipo: "retiro" }, { sucursales: [], zonas: [] })).toBeNull();
+    const sinRetiro: DatosSucursales = {
+      ...datos,
+      sucursales: datos.sucursales.map((s) => ({ ...s, aceptaRetiro: false })),
+    };
+    expect(localDeRetiro({ entregaTipo: "retiro", provincia: "misiones" }, sinRetiro)).toBeNull();
   });
 });

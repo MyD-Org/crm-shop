@@ -19,6 +19,7 @@ import { estadoContacto, predicadoSinContactar } from "@/lib/pedidos-contacto-re
 import { reservaDePendiente, type ReservaPedido } from "@/lib/pedido-reserva"
 import type { ReglaAplicada } from "@/lib/sucursales-zona"
 import { VENTANA_PAGO_MS, motivosNoCancelable, type EntregaTipo, type EstadoPedido, type MotivoNoCancelable } from "@/lib/pedidos-transiciones"
+import { leerVentaSinStock, type VentaSinStockLinea } from "@/lib/pedido-venta-sin-stock"
 import { cuentaDeCobroDto, parseInfoPago, type FormaElegida, type PagoEnLineaDto } from "@/lib/pago-en-linea"
 
 // Ejecutor de consultas: `getDb()` fuera de una transacción, o el `tx` que da `db.transaction`
@@ -1502,6 +1503,8 @@ export interface PedidoItemDto {
   /** Slug de la sucursal de la que se TRAE esta línea (no sale de la que despacha el pedido);
    *  null = sale de la sucursal del pedido. */
   aTraerDe: string | null
+  /** Modalidad sin stock con la que se vendió la línea (snapshot del Shop); null = línea normal. */
+  ventaSinStock: VentaSinStockLinea | null
   /** Costo unitario cargado en Alegra (`inventory.unitCost`). SÓLO viaja para admin y
    *  superadmin (`incluirCosto` en `toPedidoDetalleDto`): para operator la clave no existe en
    *  la respuesta. `null` = sin costo cargado en Alegra, o producto fuera del espejo. */
@@ -1656,6 +1659,7 @@ function toItemDto(item: ItemParaDto, incluirCosto: boolean): PedidoItemDto {
     total: num(item.total),
     stockActual: numONull(item.catalogoStock),
     aTraerDe: item.aTraerDe,
+    ventaSinStock: leerVentaSinStock(item.ventaSinStock),
   }
   // La clave se AGREGA sólo con permiso (nunca `costoUnitario: undefined`): así ni siquiera el
   // nombre del campo aparece en la respuesta que ve un operador.

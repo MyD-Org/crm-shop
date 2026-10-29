@@ -16,6 +16,7 @@ describe("disponibleEnSucursal", () => {
     stockPorSucursal: { "1": { mdp: 10, igz: 3 }, "2": null },
     reservadoPorSucursal: { "1": { mdp: 2 } },
     ocultoEn: {},
+    ventaSinStock: {},
   };
 
   it("stock menos lo reservado en esa sucursal", () => {
@@ -56,7 +57,7 @@ describe("quedanEstrella", () => {
       sucursales: [{ slug: "mdp", nombre: "Mar del Plata", activa: true, orden: 0 }],
       zonas: [],
     });
-    bruta.mockResolvedValue({ stockPorSucursal: { "7": { mdp: 8 } }, reservadoPorSucursal: {}, ocultoEn: {} });
+    bruta.mockResolvedValue({ stockPorSucursal: { "7": { mdp: 8 } }, reservadoPorSucursal: {}, ocultoEn: {}, ventaSinStock: {} });
     expect(await quedanEstrella({ sku: "NK-1", unidadesPromo: 5, stockBase: 10 }, "7")).toBe(3);
     expect(bruta).toHaveBeenCalledWith(["7"], ["mdp"], "mdp");
     expect(leerSinCache).not.toHaveBeenCalled();

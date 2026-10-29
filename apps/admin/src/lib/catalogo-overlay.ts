@@ -185,7 +185,12 @@ export interface CamposOverlayValidos {
   ocultoEnSucursales?: string[]
   /** false = el Shop no exhibe la marca del producto. */
   mostrarMarca?: boolean
+  /** Modalidad de venta sin stock (uuid) o null = ninguna. El servidor valida que sea del tenant. */
+  modalidadSinStockId?: string | null
 }
+
+const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+export const MSG_MODALIDAD_INVALIDA = "Seleccione una modalidad válida."
 
 /** Mismo formato que el slug de `sucursales` (`^[a-z0-9-]{2,20}$`). */
 const RE_SLUG_SUCURSAL = /^[a-z0-9-]{2,20}$/
@@ -266,6 +271,12 @@ export function validarCamposOverlay(body: unknown): Resultado<CamposOverlayVali
   if (presente(body, "mostrarMarca")) {
     if (typeof body.mostrarMarca !== "boolean") return fail("mostrarMarca", "Indique si se muestra la marca")
     campos.mostrarMarca = body.mostrarMarca
+  }
+
+  if (presente(body, "modalidadSinStockId")) {
+    const v = body.modalidadSinStockId
+    if (v !== null && (typeof v !== "string" || !RE_UUID.test(v))) return fail("modalidadSinStockId", MSG_MODALIDAD_INVALIDA)
+    campos.modalidadSinStockId = v
   }
 
   return { ok: true, value: campos }

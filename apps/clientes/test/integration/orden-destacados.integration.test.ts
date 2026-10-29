@@ -223,6 +223,70 @@ describe.skipIf(process.env.ORDEN_SQL !== "1")("orden destacados en Postgres", (
     });
   });
 
+  describe("venta sin stock (modalidad activa asignada a aSinStock y b2)", () => {
+    const MOD = "00000000-0000-4000-8000-0000000000d1";
+    beforeAll(async () => {
+      await getDb().execute(
+        sql`insert into public.modalidades_sin_stock (id, tenant_id, nombre, texto, plazo_dias, flujo)
+            values (${MOD}, ${TENANT}, 'Modalidad 48 h', 'Modalidad 48 h', 2, 'en_linea')`,
+      );
+      await getDb().execute(
+        sql`update public.catalog_overlay set modalidad_sin_stock_id = ${MOD}
+            where tenant_id = ${TENANT} and alegra_id in ('aSinStock', 'b2')`,
+      );
+    });
+    afterAll(async () => {
+      await getDb().execute(sql`update public.catalog_overlay set modalidad_sin_stock_id = null where tenant_id = ${TENANT}`);
+      await getDb().execute(sql`delete from public.modalidades_sin_stock where tenant_id = ${TENANT}`);
+    });
+
+    it("sin contexto: el a pedido pesa como stock corto y entra en 'sólo con stock'", async () => {
+      expect(await ids(ILUMINACION)).toEqual([
+        "a1", "b1", "a2", "b2", "a3", "a4",
+        "aPocoStock", "aSinStock", // escalón "stock corto": el a pedido después del más caro
+        "aAcc", "c1",
+        "aSinFoto",
+      ]);
+      const r = await pagina({ filtros: { ...ILUMINACION, soloStock: true } });
+      const aPedido = r.productos.find((p) => p.id === "aSinStock");
+      expect(aPedido?.stock).toBe("out");
+      expect(aPedido?.ventaSinStock?.texto).toBe("Modalidad 48 h");
+      // b2 tiene stock: lleva la modalidad pero no es a pedido.
+      expect(r.productos.find((p) => p.id === "b2")?.stock).not.toBe("out");
+    });
+
+    // Retiro en "otra": ningún producto tiene filas por sucursal, así que el stock de la vista es de
+    // "igz" (`stockHeredado`) y en "otra" todo vale 0. b2 (stock 5 en igz) lo cubre otra sucursal;
+    // aSinStock no lo tiene nadie.
+    const retiroOtra: ContextoDisponibilidad = {
+      zona: "igz",
+      activas: ["igz", "otra"],
+      contarEn: ["otra"],
+      stockHeredado: "igz",
+      local: "otra",
+    };
+
+    it("retiro con traslado: lo que otra sucursal cubre no es a pedido (escalón y filtro con la unión)", async () => {
+      const disp: ContextoDisponibilidad = { ...retiroOtra, traslado: true };
+      const todo = await ids(ILUMINACION, disp);
+      expect(todo).toHaveLength(11);
+      expect(todo[0]).toBe("aSinStock");
+      const r = await pagina({ filtros: { ...ILUMINACION, soloStock: true }, disp });
+      expect(r.productos.map((p) => p.id)).toEqual(["aSinStock"]);
+      expect(r.total).toBe(1);
+      expect(r.productos[0].ventaSinStock?.texto).toBe("Modalidad 48 h");
+      const b2 = (await pagina({ filtros: { categorias: ["Reflectores"] }, disp })).productos.find((p) => p.id === "b2");
+      expect(b2?.stock).toBe("out");
+      expect(b2?.ventaSinStock).toBeUndefined();
+    });
+
+    it("retiro sin traslado (bloquear): la modalidad aplica aunque otra sucursal lo tenga", async () => {
+      const r = await pagina({ filtros: { ...ILUMINACION, soloStock: true }, disp: retiroOtra });
+      expect(r.productos.map((p) => p.id)).toEqual(["aSinStock", "b2"]);
+      expect(r.productos.every((p) => p.stock === "out" && p.ventaSinStock)).toBe(true);
+    });
+  });
+
   it("el patrón de nombre de accesorio da lo mismo en Postgres que en JS", async () => {
     const nombres = [
       "Acoplador de rieles negro",

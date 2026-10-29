@@ -1,4 +1,5 @@
 import type { ReglaAplicada } from "@/lib/sucursales-zona"
+import type { VentaSinStockLinea } from "@/lib/pedido-venta-sin-stock"
 import { boolean, date, integer, jsonb, numeric, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
@@ -169,6 +170,9 @@ export const shopOrderItems = shop.table("order_items", {
   // Slug de la sucursal desde la que sale ESTA línea cuando es "a traer" de otra (0024 del Shop;
   // NULL = la del pedido). Lo escribe el Shop; el CRM solo lo lee.
   aTraerDe: text("a_traer_de"),
+  // Snapshot de la modalidad sin stock con la que se vendió la línea (0039 del Shop; NULL = línea
+  // normal). Lo escribe el Shop; el CRM solo lo lee.
+  ventaSinStock: jsonb("venta_sin_stock").$type<VentaSinStockLinea | null>(),
 })
 
 export type ShopOrderRow = typeof shopOrders.$inferSelect

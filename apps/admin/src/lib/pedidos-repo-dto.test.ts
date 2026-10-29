@@ -88,3 +88,19 @@ describe("esPagoManual con medios configurables", () => {
     expect(esPagoManual({ pagoMetodo: "efectivo", pagoProveedor: "modo" })).toBe(false)
   })
 })
+
+describe("toPedidoDetalleDto: venta sin stock", () => {
+  const snap = { modalidadId: "m1", nombre: "Modalidad 48 h", texto: "Retiro en ~48 h", plazoDias: 2, flujo: "en_linea" }
+  it("lleva el snapshot y null en una línea normal o con jsonb roto", () => {
+    const [conSnap, normal, roto, sinCampo] = toPedidoDetalleDto(pedido, [
+      item({ ventaSinStock: snap }),
+      item({ id: "i2", ventaSinStock: null }),
+      item({ id: "i3", ventaSinStock: { modalidadId: 5 } }),
+      item({ id: "i4" }),
+    ]).items
+    expect(conSnap.ventaSinStock).toEqual(snap)
+    expect(normal.ventaSinStock).toBeNull()
+    expect(roto.ventaSinStock).toBeNull()
+    expect(sinCampo.ventaSinStock).toBeNull()
+  })
+})

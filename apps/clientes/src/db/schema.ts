@@ -18,6 +18,7 @@ import type { PlanDeCuotas, PlanPedido } from "../lib/pagos/cuotas-tipos";
 import type { InfoPago, PagoInfoOrden } from "../lib/pagos/tipos";
 import type { ReglaAplicada } from "../lib/sucursales";
 import type { CuentaPagoSnapshot } from "../lib/cuentas-bancarias";
+import type { SnapshotVentaSinStock } from "../lib/venta-sin-stock";
 
 /**
  * Todas las tablas del Shop viven en el esquema `shop` de la base del CRM.
@@ -754,6 +755,11 @@ export const orderItems = shop.table(
      * (línea "a traer"; migración 0024). Sin FK. NULL = sale de `orders.sucursal`.
      */
     aTraerDe: text("a_traer_de"),
+    /**
+     * Snapshot de la modalidad de venta sin stock con la que se vendió la línea (migración 0039).
+     * NULL = línea normal.
+     */
+    ventaSinStock: jsonb("venta_sin_stock").$type<SnapshotVentaSinStock | null>(),
   },
   (t) => [index("order_items_order").on(t.orderId)],
 );

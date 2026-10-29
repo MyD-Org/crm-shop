@@ -33,7 +33,8 @@ describe("CheckoutClient con medios de pago de la tabla", () => {
     expect(fuente).toContain(
       '"El pago se coordina con un asesor después de confirmar su pedido."',
     );
-    expect(fuente).toContain('medioSel?.slug ?? "a_coordinar"');
+    // El fallback a "a_coordinar" vive en `pagoAEnviar` (lib/checkout-flujo.ts, con tests).
+    expect(fuente).toContain("pagoAEnviar({ flujo: flujoCheckout, esCuentaCorriente, medioSlug: medioSel?.slug ?? null })");
   });
 
   it("el pedido viaja con el slug del medio elegido", () => {

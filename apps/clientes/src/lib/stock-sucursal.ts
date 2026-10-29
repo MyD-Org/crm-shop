@@ -34,6 +34,7 @@ import {
   type StockPorSucursal,
 } from "./sucursales-disponibilidad";
 import type { ReglasVenta, SucursalDato } from "./sucursales";
+import { modalidadPorId, type VentaSinStock } from "./venta-sin-stock";
 
 const arreglo = (slugs: string[]) =>
   sql`ARRAY[${sql.join(
@@ -157,6 +158,8 @@ export interface DisponibilidadBruta {
   stockPorSucursal: StockPorSucursal;
   reservadoPorSucursal: Record<string, Record<string, number>>;
   ocultoEn: Record<string, string[]>;
+  /** Modalidad de venta sin stock ACTIVA por producto (sólo los que tienen una). */
+  ventaSinStock: Record<string, VentaSinStock>;
 }
 
 /**
@@ -165,6 +168,9 @@ export interface DisponibilidadBruta {
  * la transacción de `crearPedido`, después de los locks por ítem — la asignación de sucursal: por
  * eso recibe el ejecutor. Un id que no está en la vista no vuelve en `stockPorSucursal` (quien
  * llama lo trata como inexistente). Sin caché.
+ *
+ * `modalidades` (las activas): sólo con alguna se nombra `catalog_overlay.modalidad_sin_stock_id`
+ * (lectura tolerante: sin la migración del CRM la columna no existe y la lista llega vacía).
  */
 export async function leerDisponibilidadBruta(
   ids: string[],
@@ -173,9 +179,10 @@ export async function leerDisponibilidadBruta(
   db: Lector = getDb(),
   /** Flag `variantes-selector`: el ocultamiento por sucursal es el del overlay del ancla del grupo. */
   agrupar = false,
+  modalidades: readonly VentaSinStock[] = [],
 ): Promise<DisponibilidadBruta> {
   if (ids.length === 0)
-    return { stockPorSucursal: {}, reservadoPorSucursal: {}, ocultoEn: {} };
+    return { stockPorSucursal: {}, reservadoPorSucursal: {}, ocultoEn: {}, ventaSinStock: {} };
   const tenant = shopTenantId();
   const [productos, filas, reservas] = await Promise.all([
     db
@@ -183,6 +190,7 @@ export async function leerDisponibilidadBruta(
         alegraId: crmCatalogo.alegraId,
         stock: crmCatalogo.stock,
         oculto: crmOverlay.ocultoEnSucursales,
+        ...(modalidades.length ? { modalidadId: crmOverlay.modalidadSinStockId } : {}),
       })
       .from(crmCatalogo)
       .leftJoin(crmOverlay, joinOverlay(agrupar))
@@ -233,9 +241,14 @@ export async function leerDisponibilidadBruta(
     (reservadoPorSucursal[r.alegraId] ??= {})[r.sucursal] = Number(r.qty);
   }
   const ocultoEn: Record<string, string[]> = {};
-  for (const p of productos)
+  const ventaSinStock: Record<string, VentaSinStock> = {};
+  for (const p of productos) {
     if (p.oculto?.length) ocultoEn[p.alegraId] = p.oculto;
-  return { stockPorSucursal, reservadoPorSucursal, ocultoEn };
+    const modalidad =
+      "modalidadId" in p ? modalidadPorId(modalidades, p.modalidadId as string | null) : undefined;
+    if (modalidad) ventaSinStock[p.alegraId] = modalidad;
+  }
+  return { stockPorSucursal, reservadoPorSucursal, ocultoEn, ventaSinStock };
 }
 
 /**
@@ -255,6 +268,8 @@ export async function disponibilidadDe(
     cantidades?: Record<string, number>;
     /** Flag `variantes-selector`: el ocultamiento por sucursal es el del overlay del ancla del grupo. */
     agrupar?: boolean;
+    /** Modalidades de venta sin stock activas (`modalidadesActivas()`); vacía = como siempre. */
+    modalidades?: readonly VentaSinStock[];
   },
 ): Promise<ResultadoDisponibilidad> {
   const lista = [...new Set(Array.isArray(ids) ? ids : [ids])];
@@ -264,7 +279,14 @@ export async function disponibilidadDe(
     .map((s) => s.slug);
   if (activas.length === 0 || lista.length === 0)
     return { productos: {}, lineasATraer: [] };
-  const bruta = await leerDisponibilidadBruta(lista, activas, activas[0], undefined, datos.agrupar);
+  const bruta = await leerDisponibilidadBruta(
+    lista,
+    activas,
+    activas[0],
+    undefined,
+    datos.agrupar,
+    datos.modalidades,
+  );
   const calcular = (m: "envio" | "retiro") =>
     disponibilidadPorSucursal({
       ...bruta,

@@ -8,7 +8,8 @@ import {
   rechazarSiVarianteAgrupada,
   validacionResponse,
 } from "@/lib/catalogo-admin"
-import { MSG_SUCURSAL_INVALIDA, validarCamposOverlay } from "@/lib/catalogo-overlay"
+import { MSG_MODALIDAD_INVALIDA, MSG_SUCURSAL_INVALIDA, validarCamposOverlay } from "@/lib/catalogo-overlay"
+import { modalidadPropia } from "@/lib/modalidades-sin-stock-repo"
 import { sonSlugsDeSucursal } from "@/lib/sucursales-repo"
 import {
   asignarTagsProducto,
@@ -59,6 +60,10 @@ export async function PATCH(req: Request, { params }: Params) {
   const { tagIds, ...campos } = v.value
   if (campos.categoriaId != null && !(await categoriaPropia(guard.tenantId, campos.categoriaId))) {
     return validacionResponse("Seleccione una categoría válida", "categoriaId")
+  }
+
+  if (campos.modalidadSinStockId != null && !(await modalidadPropia(guard.tenantId, campos.modalidadSinStockId))) {
+    return validacionResponse(MSG_MODALIDAD_INVALIDA, "modalidadSinStockId")
   }
 
   // "Visible en": cada slug tiene que ser una sucursal de ESTE tenant (el array no tiene FK).

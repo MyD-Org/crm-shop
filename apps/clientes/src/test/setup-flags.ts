@@ -1,4 +1,5 @@
 import { beforeEach, vi } from "vitest";
+import { leerModalidadesActivas, modalidadesActivas } from "@/lib/venta-sin-stock-repo";
 import { estadoFlags, reiniciarFlags } from "./flags";
 
 vi.mock("@/flags", () => ({
@@ -36,6 +37,16 @@ vi.mock("@/lib/tema-tenant-datos", async () => {
   return { getTemaTenant: vi.fn(async () => base.sanearTemaTenant(null)) };
 });
 
+// Por defecto no hay modalidades de venta sin stock (como `marca`: no dependen de la DB). Los tests que
+// las necesitan hacen `vi.mocked(modalidadesActivas).mockResolvedValue([...])`; `venta-sin-stock-repo.test.ts`
+// prueba la lectura real con `vi.unmock`.
+vi.mock("@/lib/venta-sin-stock-repo", () => ({
+  leerModalidadesActivas: vi.fn(async () => []),
+  modalidadesActivas: vi.fn(async () => []),
+}));
+
 beforeEach(() => {
   reiniciarFlags();
+  vi.mocked(leerModalidadesActivas).mockResolvedValue([]);
+  vi.mocked(modalidadesActivas).mockResolvedValue([]);
 });

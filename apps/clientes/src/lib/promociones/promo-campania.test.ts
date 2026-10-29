@@ -58,3 +58,17 @@ describe("contenidoConCampania", () => {
     expect(contenidoConCampania(contenido, undefined, [])).toBe(contenido);
   });
 });
+
+describe("frasePrecio (etiqueta de campaña en una frase)", () => {
+  it("una etiqueta que ya es \"Precio de …\" no se duplica", async () => {
+    const { frasePrecio } = await import("./promo");
+    expect(frasePrecio("Precio de apertura")).toBe("precio de apertura");
+    expect(frasePrecio("Precio de apertura", true)).toBe("Precio de apertura");
+  });
+  it("un nombre (\"Black Friday\") lleva \"precio de\" y conserva sus mayúsculas", async () => {
+    const { frasePrecio } = await import("./promo");
+    expect(frasePrecio("Black Friday")).toBe("precio de Black Friday");
+    expect(frasePrecio("Black Friday", true)).toBe("Precio de Black Friday");
+    expect(frasePrecio("BF")).toBe("precio de BF");
+  });
+});

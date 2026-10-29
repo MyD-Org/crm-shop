@@ -76,6 +76,17 @@ describe("mapFilaToProduct con campaña activa", () => {
     }
   });
 
+  it("lo que queda nunca supera el stock disponible (no se inflan unidades)", () => {
+    const conLimite = { ...fila, stock: "2", campaniasOnline: [{ ...fila.campaniasOnline[0], unidades: 5 }] };
+    const p = mapFilaToProduct(conLimite, undefined, sinHosts, null, {
+      destacado: null,
+      ficha: [],
+      campanias: [BF],
+      quedanCampania: { r1: 5 },
+    });
+    expect(p.campania?.quedan).toBe(2);
+  });
+
   it("unidades: el producto lleva el límite y lo que queda; agotado vuelve al normal", () => {
     const conLimite = {
       ...fila,

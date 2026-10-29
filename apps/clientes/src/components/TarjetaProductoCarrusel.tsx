@@ -133,7 +133,7 @@ export function TarjetaProductoCarrusel({
             />
           ) : (
             <AddToCartButton
-              product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
+              product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url, ...(p.campania ? { precioHasta: p.campania.fin } : {}) }}
             />
           )
         }

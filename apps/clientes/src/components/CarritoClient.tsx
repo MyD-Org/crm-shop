@@ -1,5 +1,6 @@
 "use client";
 
+import { frasePrecio } from "@/lib/promociones/promo";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -398,7 +399,7 @@ export function CarritoClient({
                           {campania && (
                             <p className="text-xs tabular-nums">
                               <span className="text-muted line-through">{fmtPrecio(campania.normalFinal)}</span>{" "}
-                              <span className="font-semibold text-success">Precio de {campania.etiqueta}</span>
+                              <span className="font-semibold text-success">{frasePrecio(campania.etiqueta, true)}</span>
                             </p>
                           )}
                           {/* Mobile: el unitario va acá; al lado del stepper no entra con el total. */}

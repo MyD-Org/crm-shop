@@ -297,3 +297,14 @@ export function contenidoConCampania(
     items: contenido.items.map(conHabitual),
   };
 }
+
+/**
+ * La etiqueta de una campaña dentro de una frase ("a precio de Black Friday", "Precio de apertura"):
+ * si ya empieza con "Precio" se usa tal cual (sin duplicar "Precio de Precio de…"); si no, se le
+ * antepone "precio de" y conserva sus mayúsculas. `mayuscula` = al principio de un rótulo.
+ */
+export function frasePrecio(etiqueta: string, mayuscula = false): string {
+  const t = etiqueta.trim();
+  const frase = /^precio\b/i.test(t) ? enFrase(t) : `precio de ${t}`;
+  return mayuscula ? frase.charAt(0).toUpperCase() + frase.slice(1) : frase;
+}

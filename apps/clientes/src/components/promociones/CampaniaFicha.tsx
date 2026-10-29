@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import type { Product } from "@/data/products";
 import { fmtPrecioCorto } from "@/lib/format";
-import { enFrase, fechaCortaAR } from "@/lib/promociones/promo";
+import { esUltimas, fechaCortaAR, frasePrecio } from "@/lib/promociones/promo";
 import { CuentaRegresiva } from "./CuentaRegresiva";
 import { UnidadesPromo } from "./piezas";
 
@@ -38,9 +38,16 @@ export function CampaniaFicha({ producto }: { producto: Product }) {
       ) : null}
       {c.unidades != null && quedan != null ? (
         quedan > 0 ? (
-          <UnidadesPromo quedan={quedan} total={c.unidades} etiqueta={c.etiqueta} />
+          // La urgencia (rojo, "¡Últimas…!") sólo cuando quedan pocas; si no, el dato neutro.
+          esUltimas(quedan) ? (
+            <UnidadesPromo quedan={quedan} total={c.unidades} etiqueta={frasePrecio(c.etiqueta, true)} />
+          ) : (
+            <p className="text-sm text-text">
+              Quedan <span className="font-semibold tabular-nums">{quedan}</span> de {c.unidades} a {frasePrecio(c.etiqueta)}
+            </p>
+          )
         ) : (
-          <p className="text-sm font-semibold text-text">Agotadas las unidades a {enFrase(c.etiqueta)}</p>
+          <p className="text-sm font-semibold text-text">Agotadas las unidades a {frasePrecio(c.etiqueta)}</p>
         )
       ) : null}
       <CuentaRegresiva fin={c.fin} className="text-sm text-text" onFin={() => router.refresh()} />

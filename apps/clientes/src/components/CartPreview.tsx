@@ -1,5 +1,7 @@
 "use client";
 
+import { useAhoraSi } from "@/components/promociones/reloj";
+import { precioDeReferenciaVigente } from "@/lib/carrito-cliente";
 import { type PointerEvent, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -109,6 +111,11 @@ export function CartPreview({
   const hidratado = useHidratado();
   const items = hidratado ? carrito.items : SIN_ITEMS;
   const total = hidratado ? carrito.total : 0;
+  // Un precio de campaña ya vencido no se muestra: el carrito lo vuelve a cotizar en el servidor.
+  // El reloj sólo corre si alguna línea se agregó con precio de campaña.
+  const ahora = useAhoraSi(hidratado && carrito.items.some((i) => i.precioHasta));
+  const vencido = (item: CartItem) => ahora !== null && !precioDeReferenciaVigente(item, ahora);
+  const hayVencidos = hidratado && carrito.items.some(vencido);
   const count = hidratado ? carrito.count : 0;
 
   /**
@@ -230,9 +237,11 @@ export function CartPreview({
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-medium text-text">{nombreConMarca(item.name, item.brand ? formatMarca(item.brand) : undefined).nombre}</p>
-                        <p className="text-xs text-muted">{item.qty} u. · {fmt(item.price)} c/u</p>
+                        <p className="text-xs text-muted">
+                          {item.qty} u.{vencido(item) ? " · Precio a confirmar" : ` · ${fmt(item.price)} c/u`}
+                        </p>
                       </div>
-                      <p className="shrink-0 text-xs font-bold text-text">{fmt(item.price * item.qty)}</p>
+                      {vencido(item) ? null : <p className="shrink-0 text-xs font-bold text-text">{fmt(item.price * item.qty)}</p>}
                     </Link>
                   </li>
                 ))}
@@ -242,7 +251,7 @@ export function CartPreview({
             <div className="border-t border-border px-4 py-3">
               <div className="mb-3 flex items-center justify-between text-sm">
                 <span className="text-muted">Total</span>
-                <span className="font-extrabold text-text">{fmt(total)}</span>
+                <span className="font-extrabold text-text">{hayVencidos ? "A confirmar" : fmt(total)}</span>
               </div>
               <Link href="/carrito" className="block">
                 <Button className="w-full">Ver carrito</Button>

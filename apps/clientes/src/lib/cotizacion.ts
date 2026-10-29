@@ -18,7 +18,7 @@
  */
 
 import { quedanParaEntradas } from "./campanias/unidades";
-import { enFrase } from "./promociones/promo";
+import { frasePrecio } from "./promociones/promo";
 import { mapCampanias, resolverPrecioVigente, type ContextoCampania, type EntradaCampania } from "./campanias/precio";
 import type { CampaniaActiva } from "./campanias/vigentes";
 import { and, inArray, sql } from "drizzle-orm";
@@ -461,7 +461,7 @@ function marcarExcesoDeUnidades(lineas: LineaCotizada[], quedan: ReadonlyMap<str
   for (const [regla, del] of porRegla) {
     const q = quedan.get(regla)!;
     if (del.reduce((a, l) => a + l.qty, 0) <= q) continue;
-    const etiqueta = del[0].campaniaEtiqueta ? enFrase(del[0].campaniaEtiqueta) : "precio de campaña";
+    const etiqueta = del[0].campaniaEtiqueta ? frasePrecio(del[0].campaniaEtiqueta) : "precio de campaña";
     const texto = `${q === 1 ? "Queda 1 unidad" : `Quedan ${q} unidades`} a ${etiqueta}. Reduzca la cantidad para mantener el precio.`;
     for (const l of del) {
       l.problema = "unidades_campania";

@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { getFacetas, getPaginaCatalogo, type FiltrosCatalogo } from "@/lib/catalog";
+import { crearPedido } from "@/lib/pedidos";
+import type { Cotizacion } from "@/lib/cotizacion";
 import { assertLocalTestDb } from "./db-url";
 
 /**
@@ -26,7 +28,7 @@ async function limpiar() {
   assertLocalTestDb(process.env.DATABASE_URL || "");
   await getDb().transaction(async (tx) => {
     await tx.execute(sql`set local client_min_messages = warning`);
-    await tx.execute(sql`truncate table public.tenants restart identity cascade`);
+    await tx.execute(sql`truncate table public.tenants, shop.order_items, shop.orders, shop.carts restart identity cascade`);
   });
 }
 
@@ -83,5 +85,20 @@ describe.skipIf(process.env.CAMPANIAS_SQL !== "1")("precio de campaña en orden,
     expect(f.precio).toEqual({ min: 90, max: 242 });
     const sin = await getFacetas({}, false);
     expect(sin.precio).toEqual({ min: 121, max: 242 });
+  });
+  it("una regla con límite agotada deja de ordenar y filtrar por el precio de campaña", async () => {
+    // El de 150 pasa a tener límite 1 y se vende esa unidad: su card ya muestra el normal (181,5).
+    await getDb().execute(
+      sql`update public.catalog_products set campanias_online = jsonb_set(campanias_online, '{0,unidades}', '1'::jsonb)
+          where tenant_id = ${TENANT} and alegra_id = 'cientoCincuenta'`,
+    );
+    const linea = {
+      id: "cientoCincuenta", code: null, name: "Lampara", brand: "", qty: 1, precioUnitario: 75, ivaPorcentaje: 21,
+      subtotal: 75, iva: 15.75, total: 90.75, stockDisponible: 10, campaniaId: CAMPANIA, campaniaReglaId: CAMPANIA, precioNormal: 150,
+    };
+    const cot: Cotizacion = { lineas: [linea], subtotal: 75, iva: 15.75, costoEnvio: 0, total: 90.75, hayProblemas: false, listaPrivada: false };
+    await crearPedido({ clerkUserId: "user_1", email: "c@cliente.example" }, { contactoNombre: "C", contactoTelefono: "1100000000", entregaTipo: "retiro", pagoMetodo: "transferencia" }, cot);
+    expect(await ids("precio-asc", conCampania)).toEqual(["cien", "cientoCincuenta", "doscientos"]);
+    expect(await ids("precio-asc", { ...conCampania, precioMax: 95 })).toEqual([]);
   });
 });

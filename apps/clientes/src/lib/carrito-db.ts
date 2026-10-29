@@ -187,6 +187,8 @@ export async function enriquecer(
           name: nombreDeLinea(p),
           brand: p.brand,
           price: privados ? menorConCampania(p, privados.get(id) ?? 0) : p.price,
+          // Precio de campaña: vale hasta el fin de la campaña (el mini-carrito no lo muestra después).
+          ...(p.campania && (!privados || menorConCampania(p, privados.get(id) ?? 0) === p.price) ? { precioHasta: p.campania.fin } : {}),
           image: p.images?.[0]?.url,
         }
       : { id, qty, name: "", brand: "", price: 0, faltante: true };

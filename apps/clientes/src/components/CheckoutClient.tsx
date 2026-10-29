@@ -1,5 +1,6 @@
 "use client";
 
+import { frasePrecio } from "@/lib/promociones/promo";
 import { ahorroCampania } from "@/lib/carrito-precios";
 import { MetaCuotas } from "@/components/checkout/MetaCuotas";
 import { resumenCuotas, type EleccionCuotas } from "@/lib/cuotas-formulario";
@@ -2047,7 +2048,7 @@ export function CheckoutClient({
                   {nombreConMarca(linea.name, linea.brand ? formatMarca(linea.brand) : undefined).nombre}
                   <span className="ml-1 text-xs">x{linea.qty}</span>
                   {!linea.problema && linea.campaniaEtiqueta && (
-                    <span className="mt-0.5 block text-xs font-semibold text-success">Precio de {linea.campaniaEtiqueta}</span>
+                    <span className="mt-0.5 block text-xs font-semibold text-success">{frasePrecio(linea.campaniaEtiqueta, true)}</span>
                   )}
                   {linea.problema && (
                     <span className="mt-0.5 block text-xs">{linea.detalle}</span>

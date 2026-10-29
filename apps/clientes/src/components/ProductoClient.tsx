@@ -174,7 +174,15 @@ export function ProductoClient({
 
   function agregar() {
     // Una variante entra al carrito como "Modelo / Opción" (flag `variantes-selector`).
-    addItem({ ...producto, name: nombreDeLinea(producto), image: producto.images?.[0]?.url }, qty);
+    addItem(
+      {
+        ...producto,
+        name: nombreDeLinea(producto),
+        image: producto.images?.[0]?.url,
+        ...(producto.campania ? { precioHasta: producto.campania.fin } : {}),
+      },
+      qty,
+    );
     setAgregado(true);
     if (timerAgregado.current) clearTimeout(timerAgregado.current);
     timerAgregado.current = setTimeout(() => setAgregado(false), MS_AGREGADO);

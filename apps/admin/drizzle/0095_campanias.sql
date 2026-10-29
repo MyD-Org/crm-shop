@@ -1,5 +1,12 @@
 -- Campañas de precios (spec apps/admin/docs/superpowers/specs/2026-10-28-campanias-precios-design.md).
 --
+-- ORDEN DE MERGE con crm-shop#695 (trae CRM 0094, `when` 1793380020000, y Shop 0039): el migrador de
+-- drizzle sólo aplica una migración si su `when` es MAYOR que el de la última aplicada; una más vieja
+-- se saltea en silencio. Si esta rama llega primero a prod, renumerar las de #695 DESPUÉS de éstas
+-- (CRM 0096, Shop 0040) y subirles el `when` por encima de 1793380030000 / 1793228720756. Si #695
+-- llega primero, sólo hay que renumerar la Shop 0039 de esta rama a 0040 (su `when` ya es posterior)
+-- y cerrar el hueco 0094 del journal del CRM.
+--
 -- Una campaña es un % de descuento con nombre y ventana horaria que se aplica ENCIMA del precio
 -- online normal sin modificarlo. Reglas por producto (alcanza a todo el modelo), marca o categoría
 -- (la del overlay del ancla del modelo y sus ancestros). Precedencia: producto > marca > categoría

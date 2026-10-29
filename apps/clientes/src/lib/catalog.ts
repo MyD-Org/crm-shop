@@ -216,7 +216,14 @@ export function mapFilaToProduct(
     ...camposIva(price, iva),
     ...armarPreciosMedios(precios, iva, mediosPrecio),
     ...(enCampania
-      ? { oldPrice: precioFinal(enCampania.normal, iva) ?? enCampania.normal, campania: enCampania.campania }
+      ? {
+          oldPrice: precioFinal(enCampania.normal, iva) ?? enCampania.normal,
+          // Lo que queda a precio de campaña nunca supera el stock disponible (no se inflan unidades).
+          campania:
+            enCampania.campania.quedan != null && qty != null
+              ? { ...enCampania.campania, quedan: Math.max(0, Math.min(enCampania.campania.quedan, qty)) }
+              : enCampania.campania,
+        }
       : {}),
     stock: derivarStock(qty),
     stockQty: qty ?? undefined,
@@ -1294,8 +1301,8 @@ const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${crmCatalogo
  * con campañas activas, el de campaña de la lista general (`main`, si no la primera) de la primera
  * entrada de `campanias_online` cuya id está activa; si no, `precioSql`. Es el equivalente de
  * `campaniaParaExhibir` para ORDENAR, filtrar por rango y armar el slider, así el catálogo ordena
- * por el precio que muestra la card. No descuenta unidades agotadas (límite aceptado: la card y el
- * cobro sí; el orden lo corrige el vencimiento de la caché).
+ * por el precio que muestra la card. Una regla con límite de unidades agotada no rige (cuenta los
+ * pedidos sólo en las filas con límite, que son pocas).
  */
 function precioVigenteSql(idsCampanias: readonly string[] | undefined) {
   if (!idsCampanias?.length) return precioSql;
@@ -1307,6 +1314,18 @@ function precioVigenteSql(idsCampanias: readonly string[] | undefined) {
     cross join jsonb_array_elements(case when jsonb_typeof(e->'precios') = 'array' then e->'precios' else '[]'::jsonb end) pe
     where e->>'id' = any(${ids})
       and (pe->>'price')::numeric > 0
+      -- Regla con límite de unidades agotada: rige el precio normal (mismo criterio de conteo que
+      -- \`unidadesUsadas\`, lib/campanias/unidades.ts).
+      and (e->>'unidades' is null or (
+        select coalesce(sum(oi.qty), 0)
+        from shop.order_items oi
+        join shop.orders o on o.id = oi.order_id
+        where o.tenant_id = ${crmCatalogo.tenantId}
+          and oi.campania_regla_id::text = e->>'reglaId'
+          and o.estado <> 'cancelado'
+          and (o.estado <> 'pendiente' or o.pago_estado = 'pagado'
+               or coalesce(o.reserva_vence_en, o.created_at + interval '24 hours') > now())
+      ) < (e->>'unidades')::numeric)
       and pe->>'idPriceList' = coalesce(
         case when jsonb_typeof(${preciosSql}) = 'array' then (
           select m->>'idPriceList' from jsonb_array_elements(${preciosSql}) m where (m->>'main')::boolean limit 1

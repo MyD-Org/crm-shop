@@ -76,7 +76,7 @@ describe("getProductosPorIds", () => {
     vi.stubEnv("SHOP_MEDIA_HOSTS", "media.plataforma.example");
     vi.stubEnv("R2_SHOP_MEDIA_PUBLIC_URL", "https://media.plataforma.example");
     // Fila en el orden de COLUMNAS_CATALOGO: alegraId, name, code, description,
-    // brand, prices, stock, ivaPorcentaje, categoryName, overlayNombre, overlayFotos.
+    // brand, prices, stock, ivaPorcentaje, categoryName, overlayNombre, overlayDescripcion, overlayFotos.
     grabadora = dbGrabadora(() => [
       [
         "42",
@@ -89,6 +89,7 @@ describe("getProductosPorIds", () => {
         "21",
         "Iluminación",
         "Lámpara LED A60 9W E27",
+        null,
         [{ key: "t1/42.jpg", w: 800 }],
       ],
     ]);

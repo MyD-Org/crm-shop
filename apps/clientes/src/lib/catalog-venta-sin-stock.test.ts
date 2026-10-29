@@ -238,7 +238,7 @@ describe("retiro en un local sin stock, otro con stock (overlayCubreOtra)", () =
   const fila = (cubreOtra?: boolean) => [
     "7", "Producto genérico", "GEN-1", null, "Marca",
     [{ idPriceList: "1", name: "General", price: 1000, main: true }],
-    "0", null, "Rubro", null, null, null, null, null,
+    "0", null, "Rubro", null, null, null, null, null, null,
     U1,
     ...(cubreOtra === undefined ? [] : [cubreOtra]),
   ];

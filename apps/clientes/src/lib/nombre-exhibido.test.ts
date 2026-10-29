@@ -57,6 +57,33 @@ describe("descripcionExhibida", () => {
       descripcionExhibida({ overlayNombre: "Termica 2x16", description: "TERMICA 2X16", name: "COD-1", code: "COD-1" })
     ).toBeUndefined();
   });
+
+  it("la descripción curada en el CRM pisa la de Alegra", () => {
+    expect(
+      descripcionExhibida({
+        overlayNombre: null,
+        overlayDescripcion: "  Kit de 3 veladores.\n- Luz cálida  ",
+        description: "DC5V, 2700K, IP44, 50LM",
+        name: "KIT DE 3 VELADOR",
+        code: "CANDLE-N-MCL",
+      })
+    ).toBe("Kit de 3 veladores.\n- Luz cálida");
+  });
+
+  it("se muestra aunque Alegra no tenga descripción o la de Alegra sea el nombre exhibido", () => {
+    expect(
+      descripcionExhibida({ overlayNombre: null, overlayDescripcion: "Térmica bipolar", description: null, name: "COD-1", code: "COD-1" })
+    ).toBe("Térmica bipolar");
+    expect(
+      descripcionExhibida({ overlayNombre: null, overlayDescripcion: "Térmica bipolar", description: "TERMICA 2X16", name: "JDSDA261", code: "JDSDA261-JDV" })
+    ).toBe("Térmica bipolar");
+  });
+
+  it("una descripción curada vacía no pisa: queda la de Alegra", () => {
+    expect(
+      descripcionExhibida({ overlayNombre: null, overlayDescripcion: "   ", description: "2 PIEZAS/JUEGO", name: "PUNTAS PH2 X 50MM", code: "JDSV2K12-JDV" })
+    ).toBe("2 PIEZAS/JUEGO");
+  });
 });
 
 describe("nombreExhibido con variantes (flag variantes-selector)", () => {

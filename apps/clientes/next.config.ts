@@ -82,7 +82,16 @@ const nextConfig: NextConfig = {
   env: { HOSTS_IMAGENES: hostsDeMedios().join(",") },
   // URLs viejas de Mi cuenta (pestañas y detalle en singular) a las rutas por
   // sección. Se resuelven antes que el filesystem: no se renderiza nada.
-  redirects: async () => [...REDIRECTS_MI_CUENTA],
+  redirects: async () => [
+    ...REDIRECTS_MI_CUENTA,
+    // Link corto de la bio de Instagram: la visita queda atribuida por las UTM.
+    // Temporal (307) para poder cambiar el destino sin que los navegadores lo cacheen.
+    {
+      source: "/ig",
+      destination: "/?utm_source=instagram&utm_medium=social&utm_campaign=bio",
+      permanent: false,
+    },
+  ],
   // Headers de seguridad en todas las respuestas. La CSP va en Report-Only:
   // el paso a enforcing se hace después de mirar los reportes (ver
   // src/lib/headers-seguridad.ts). Se evalúa en build: cambiar las variables

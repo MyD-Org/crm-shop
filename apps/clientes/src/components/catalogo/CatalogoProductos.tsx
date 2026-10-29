@@ -17,7 +17,7 @@ import { vistaCardVariantes } from "@/lib/variantes-ficha";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { badgeProducto } from "@/components/badge-producto";
-import { badgePromo, useInfoPromo } from "@/components/promociones/PromoProvider";
+import { badgeCampania, badgePromo, useInfoPromo } from "@/components/promociones/PromoProvider";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { LightbulbIcon } from "./iconos";
 import { linkNext } from "./link-next";
@@ -133,7 +133,7 @@ export function CatalogoProductos({
           price={vv.precio}
           priceNote={vv.nota}
           oldPrice={vv.esDesde ? undefined : p.oldPrice}
-          badge={badgePromo(promoDe(p.sku), p) ?? badgeProducto(p)}
+          badge={p.campania ? badgeCampania(p.campania) : (badgePromo(promoDe(p.sku), p) ?? badgeProducto(p))}
           // El slot queda fuera del enlace estirado de la card: no navega.
           // Favorito arriba y compartir debajo, apilados en la esquina de la foto.
           cornerAction={
@@ -186,7 +186,7 @@ export function CatalogoProductos({
               <AddToCartButton
                 disabled={agotadoSinModalidad(p)}
                 max={maxCantidad(p)}
-                product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
+                product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url, ...(p.campania ? { precioHasta: p.campania.fin } : {}) }}
               />
             )
           }

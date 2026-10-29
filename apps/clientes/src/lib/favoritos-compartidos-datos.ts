@@ -7,6 +7,7 @@
  * precio es el público; quien tiene una lista privada lo ve cambiar en el
  * navegador (`usePreciosCuenta`), igual que en Mi cuenta.
  */
+import { campaniasVigentes } from "./campanias/vigentes";
 import type { Product } from "@/data/products";
 import { getProductosPorIds, representantesDePadres } from "./catalog";
 import { catalogoSoloVisibles } from "./catalogo-flag";
@@ -17,7 +18,11 @@ export async function productosFavoritosCompartidos(
   ids: readonly string[],
 ): Promise<{ productos: Product[]; noDisponibles: number }> {
   if (ids.length === 0) return { productos: [], noDisponibles: 0 };
-  const [soloVisibles, { mediosPrecio, variantes }] = await Promise.all([catalogoSoloVisibles(), flagsPublicos()]);
+  const [soloVisibles, { mediosPrecio, variantes }, campanias] = await Promise.all([
+    catalogoSoloVisibles(),
+    flagsPublicos(),
+    campaniasVigentes(),
+  ]);
   // Un id de modelo (padre) se muestra como su representante.
   const reales = variantes ? await representantesDePadres(ids) : new Map<string, string>();
   const idsReales = [...new Set(ids.map((id) => reales.get(id) ?? id))];
@@ -30,6 +35,7 @@ export async function productosFavoritosCompartidos(
       destacado: mediosPrecio.destacado,
       ficha: [],
       ...(mediosPrecio.cuotas ? { cuotas: mediosPrecio.cuotas } : {}),
+      ...(campanias.length ? { campanias } : {}),
     },
   });
   const productos = idsReales.flatMap((id) => {

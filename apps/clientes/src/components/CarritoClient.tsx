@@ -1,5 +1,6 @@
 "use client";
 
+import { frasePrecio } from "@/lib/promociones/promo";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -14,7 +15,7 @@ import { useCotizacion } from "@/hooks/useCotizacion";
 import { MetasCarrito } from "@/components/carrito/MetasCarrito";
 import { metaCuotas, metaEnvio, ordenarMetas } from "@/lib/metas-carrito";
 import { fmtPrecio } from "@/lib/format";
-import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
+import { ahorroCampania, campaniaDeLinea, precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
@@ -218,6 +219,8 @@ export function CarritoClient({
       )
     : null;
   const confirmado = estado === "ok" && cotizacion;
+  // Campañas de precios: cuánto ahorra con impuestos (sólo con la cotización vigente).
+  const ahorro = confirmado ? ahorroCampania(cotizacion.lineas) : 0;
 
   if (!ready) {
     return (
@@ -353,6 +356,7 @@ export function CarritoClient({
                 ultimasLineas?.find((l) => l.id === item.id),
               );
 
+              const campania = linea ? campaniaDeLinea(linea) : null;
               const marca = linea?.brand || item.brand;
               const nombre = linea && !linea.problema ? linea.name : item.name;
               // Sólo para mostrar: el nombre que viaja en el pedido no se toca.
@@ -402,6 +406,13 @@ export function CarritoClient({
                             {nombreParaMostrar}
                           </Link>
                           {item.variant && <p className="text-xs text-muted">{item.variant}</p>}
+                          {/* Campaña de precios: el unitario normal tachado y la campaña (ahorro en verde). */}
+                          {campania && (
+                            <p className="text-xs tabular-nums">
+                              <span className="text-muted line-through">{fmtPrecio(campania.normalFinal)}</span>{" "}
+                              <span className="font-semibold text-success">{frasePrecio(campania.etiqueta, true)}</span>
+                            </p>
+                          )}
                           {/* Mobile: el unitario va acá; al lado del stepper no entra con el total. */}
                           {precio && (
                             <p className="text-[13px] tabular-nums text-muted lg:hidden">
@@ -524,6 +535,9 @@ export function CarritoClient({
               </p>
             )}
 
+            {ahorro > 0 && (
+              <p className="-mt-2 text-right text-[13px] font-bold text-success">Usted ahorra {fmtPrecio(ahorro)}</p>
+            )}
             <div className="flex items-baseline justify-between gap-3 border-t border-border pt-4">
               <span className="font-bold text-text">Total</span>
               {total === null ? (

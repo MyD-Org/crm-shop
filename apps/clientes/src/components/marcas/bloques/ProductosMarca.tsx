@@ -1,3 +1,4 @@
+import { campaniasVigentes } from "@/lib/campanias/vigentes";
 import { connection } from "next/server";
 import { ProductCardSkeleton } from "@myd-org/ui";
 import { ProductosCarrusel } from "@/components/ProductosCarrusel";
@@ -23,13 +24,18 @@ import { SeccionMarca, TituloBloque } from "./BloquesMarca";
 
 async function contexto() {
   await connection();
-  const [{ soloVisibles, variantes, mediosPrecio }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
+  const [{ soloVisibles, variantes, mediosPrecio }, disp, campanias] = await Promise.all([
+    flagsPublicos(),
+    dispCatalogo(),
+    campaniasVigentes(),
+  ]);
   return {
     soloVisibles,
     ...(variantes ? { agrupar: true } : {}),
     disp,
     destacado: mediosPrecio?.destacado,
     cuotas: mediosPrecio?.cuotas,
+    campanias,
   };
 }
 
@@ -105,6 +111,8 @@ export async function ProductosMarcaBloque({
     ...filtrosDeMarca(pagina, linea),
     marcas: [],
     sinFacetaAtributos: true as const,
+    // Campañas activas: el orden y el rango de precio con el precio vigente (como la página).
+    ...(ctx.campanias.length ? { precioCampanias: ctx.campanias.map((c) => c.id) } : {}),
   };
   const [resultado, facetas] = await Promise.all([
     paginaMarcaPublica({ ...ctx, filtros, orden: estado.orden, pagina: estado.pagina }),

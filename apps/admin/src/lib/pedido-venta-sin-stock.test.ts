@@ -18,6 +18,8 @@ const item = (over: Partial<PedidoItemDto>): PedidoItemDto => ({
   iva: 0,
   total: 1,
   stockActual: 5,
+  precioNormal: null,
+  campaniaNombre: null,
   aTraerDe: null,
   ventaSinStock: null,
   ...over,

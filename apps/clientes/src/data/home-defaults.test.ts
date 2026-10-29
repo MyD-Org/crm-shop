@@ -586,6 +586,19 @@ describe("tiendaOficial (spec 2026-10-20-marcas-tienda-oficial §9)", () => {
   });
 });
 
+describe("promociones asociadas a una campaña de precios (spec 2026-10-28-campanias-precios §Sección)", () => {
+  const conProductos = { etiquetaBadge: "Precio de apertura", items: [{ sku: "A1" }] };
+  it("con campaña, las fechas salen de ella: fin no es obligatorio", () => {
+    expect(erroresSeccion("promociones", { ...conProductos, campaniaId: "00000000-0000-4000-8000-0000000000c1" })).toEqual([]);
+  });
+  it("sin campaña sigue siendo obligatorio", () => {
+    expect(erroresSeccion("promociones", conProductos)).toContain("fin es obligatorio si la promo tiene productos");
+  });
+  it("campaniaId tiene que ser un uuid", () => {
+    expect(erroresSeccion("promociones", { ...conProductos, campaniaId: "bf" })).toContain("campaniaId debe ser el id de una campaña");
+  });
+});
+
 describe("promociones (spec 2026-10-26-promociones-home §1)", () => {
   const FIN = "2026-11-13T23:59:00-03:00";
   const base = {

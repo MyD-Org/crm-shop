@@ -1,3 +1,4 @@
+import { campaniasVigentes } from "@/lib/campanias/vigentes";
 import { NextResponse } from "next/server";
 import type { Product } from "@/data/products";
 import { productoPublico } from "@/lib/catalogo-publico";
@@ -44,7 +45,7 @@ export async function GET(req: Request) {
   try {
     const { soloVisibles, variantes, mediosPrecio } = await flagsPublicos();
     if (!variantes) return json({ error: "Este producto no tiene opciones." }, 404);
-    const disp = await dispCatalogo();
+    const [disp, campanias] = await Promise.all([dispCatalogo(), campaniasVigentes()]);
     const producto = await productoPublico(
       id,
       soloVisibles,
@@ -54,6 +55,7 @@ export async function GET(req: Request) {
       mediosPrecio?.cuotas,
       mediosPrecio?.modal,
       true,
+      campanias,
     );
     const grupo = producto?.grupo;
     if (!producto || !grupo) return json({ error: "Este producto no tiene opciones." }, 404);

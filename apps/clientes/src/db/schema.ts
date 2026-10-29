@@ -760,6 +760,15 @@ export const orderItems = shop.table(
      * NULL = línea normal.
      */
     ventaSinStock: jsonb("venta_sin_stock").$type<SnapshotVentaSinStock | null>(),
+    /**
+     * Campaña de precios con la que se cotizó la línea (migración 0040 del Shop; id de
+     * `public.campanias`, CRM 0095; sin FK: es otro esquema y la campaña puede borrarse). NULL = precio normal. Con
+     * `campania_regla_id` se cuentan las unidades vendidas de una regla con límite.
+     */
+    campaniaId: uuid("campania_id"),
+    campaniaReglaId: uuid("campania_regla_id"),
+    /** Unitario NORMAL sin IVA (el que se tachó) cuando la línea va con campaña; NULL sin campaña. */
+    precioNormal: numeric("precio_normal", { precision: 14, scale: 2 }),
   },
   (t) => [index("order_items_order").on(t.orderId)],
 );

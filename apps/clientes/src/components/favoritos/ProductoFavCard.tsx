@@ -10,7 +10,7 @@ import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
 import { agotadoSinModalidad } from "@/lib/venta-sin-stock";
 import { badgeProducto } from "@/components/badge-producto";
-import { badgePromo, usePromoProducto } from "@/components/promociones/PromoProvider";
+import { badgeCampania, badgePromo, usePromoProducto } from "@/components/promociones/PromoProvider";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { IconoLampara } from "@/components/mi-cuenta/iconos";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard, stockParaCard } from "@/lib/catalogo-vista";
@@ -69,7 +69,7 @@ export function ProductoFavCard({ p }: { p: Product }) {
       // Final con IVA si se conoce; si no, el de siempre (igual que el catálogo).
       price={p.precioFinal ?? p.price}
       oldPrice={p.oldPrice}
-      badge={badgePromo(promo, p) ?? badgeProducto(p)}
+      badge={p.campania ? badgeCampania(p.campania) : (badgePromo(promo, p) ?? badgeProducto(p))}
       image={
         p.images?.[0] ? (
           <Image
@@ -94,7 +94,7 @@ export function ProductoFavCard({ p }: { p: Product }) {
         <AddToCartButton
           disabled={agotadoSinModalidad(p)}
           max={maxCantidad(p)}
-          product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
+          product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url, ...(p.campania ? { precioHasta: p.campania.fin } : {}) }}
         />
       }
     />

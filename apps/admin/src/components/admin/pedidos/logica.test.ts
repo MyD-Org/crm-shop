@@ -379,3 +379,26 @@ describe("ofreceCancelar y la opción Cancelar", () => {
     expect(opcionesOtroEstado("pendiente", "envio", false)).toEqual([])
   })
 })
+
+describe("textoCampaniaLinea (campañas de precios)", () => {
+  it("nombre de la campaña y % contra el precio normal, redondeado hacia abajo", async () => {
+    const { textoCampaniaLinea } = await import("./logica")
+    expect(textoCampaniaLinea({ precioUnitario: 128, precioNormal: 160, campaniaNombre: "Black Friday" })).toBe(
+      "Black Friday −20 %",
+    )
+    expect(textoCampaniaLinea({ precioUnitario: 128, precioNormal: 140, campaniaNombre: "Black Friday" })).toBe(
+      "Black Friday −8 %",
+    )
+  })
+
+  it("sin campaña o sin precio normal: null", async () => {
+    const { textoCampaniaLinea } = await import("./logica")
+    expect(textoCampaniaLinea({ precioUnitario: 160, precioNormal: null, campaniaNombre: null })).toBeNull()
+    expect(textoCampaniaLinea({ precioUnitario: 128, precioNormal: null, campaniaNombre: "Black Friday" })).toBeNull()
+  })
+
+  it("campaña borrada (sin nombre): igual muestra el descuento", async () => {
+    const { textoCampaniaLinea } = await import("./logica")
+    expect(textoCampaniaLinea({ precioUnitario: 128, precioNormal: 160, campaniaNombre: null })).toBe("Campaña −20 %")
+  })
+})

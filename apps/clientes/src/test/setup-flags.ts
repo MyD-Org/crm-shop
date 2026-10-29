@@ -45,6 +45,19 @@ vi.mock("@/lib/venta-sin-stock-repo", () => ({
   modalidadesActivas: vi.fn(async () => []),
 }));
 
+// Por defecto no hay campañas de precios activas: leerlas va a la base y pide `connection()`, que fuera
+// de un request de Next no existe. Las funciones puras siguen siendo las reales; los tests que
+// necesitan una campaña activa mockean `campaniasVigentes` / `campaniasActivasEn` con su propia fábrica.
+vi.mock("@/lib/campanias/vigentes", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/campanias/vigentes")>();
+  return {
+    ...real,
+    campaniasVigentes: vi.fn(async () => []),
+    campaniasActivasEn: vi.fn(async () => []),
+    campaniasShop: vi.fn(async () => []),
+  };
+});
+
 beforeEach(() => {
   reiniciarFlags();
   vi.mocked(leerModalidadesActivas).mockResolvedValue([]);

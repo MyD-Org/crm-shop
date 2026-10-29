@@ -7,6 +7,7 @@ vi.mock("@/lib/home-acciones", () => ({
   sucursalesParaPromo: vi.fn(async () => []),
   resolverProductosHome: vi.fn(async () => ({ ok: true, productos: [] })),
   buscarProductosHome: vi.fn(async () => ({ ok: true, productos: [] })),
+  campaniasParaPromo: vi.fn(async () => []),
 }));
 
 import { EditorPromociones, ResumenPrecio } from "./EditorPromociones";
@@ -79,6 +80,25 @@ describe("EditorPromociones", () => {
     const html = renderToStaticMarkup(<EditorPromociones valor={base} onChange={() => {}} />);
     expect(html).toContain('type="datetime-local"');
     expect(html).toContain('value="2026-11-13T23:59"');
+  });
+});
+
+describe("EditorPromociones asociado a una campaña de precios", () => {
+  const conCampania: PromocionesContent = {
+    ...base,
+    campaniaId: "00000000-0000-4000-8000-0000000000c1",
+    estrella: { sku: "NK-1" },
+    items: [{ sku: "A1" }],
+  };
+  it("muestra el selector de campaña", () => {
+    expect(renderToStaticMarkup(<EditorPromociones valor={base} onChange={() => {}} />)).toContain("Campaña de precios");
+  });
+  it("con campaña oculta las fechas, el precio habitual y las unidades (salen de la campaña)", () => {
+    const html = renderToStaticMarkup(<EditorPromociones valor={conCampania} onChange={() => {}} />);
+    expect(html).not.toContain('type="datetime-local"');
+    expect(html).not.toContain("Precio habitual por transferencia");
+    expect(html).not.toContain("Unidades a precio de apertura");
+    expect(html).toContain("salen de la campaña");
   });
 });
 

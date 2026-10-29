@@ -8,6 +8,8 @@
  * de otro algo que la tienda ya no vende.
  */
 
+import { campaniasVigentes } from "./campanias/vigentes";
+import { SIN_MEDIOS_PRECIO } from "./medios-precio";
 import { identidadActual } from "@/lib/auth";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { preciosPrivados } from "@/lib/precios-privados-repo";
@@ -29,15 +31,21 @@ export async function productosCompartidos(
   lineas: readonly LineaCarrito[],
 ): Promise<ProductoCompartido[]> {
   if (lineas.length === 0) return [];
-  const [{ cliente }, soloVisibles, agrupar] = await Promise.all([
+  const [{ cliente }, soloVisibles, agrupar, campanias] = await Promise.all([
     identidadActual(),
     catalogoSoloVisibles(),
     variantesSelector(),
+    campaniasVigentes(),
   ]);
   const idListaPrivada = cliente ? await listaPrivadaDelComprador() : null;
   const ids = lineas.map((l) => l.id);
   const [productos, privados] = await Promise.all([
-    getProductosPorIds(ids, { soloActivos: true, soloVisibles, ...(agrupar ? { agrupar: true } : {}) }),
+    getProductosPorIds(ids, {
+      soloActivos: true,
+      soloVisibles,
+      ...(agrupar ? { agrupar: true } : {}),
+      ...(campanias.length ? { mediosPrecio: { ...SIN_MEDIOS_PRECIO, campanias } } : {}),
+    }),
     idListaPrivada ? preciosPrivados(idListaPrivada, ids) : Promise.resolve(null),
   ]);
   return lineas.map(({ id, qty }) => {
@@ -48,9 +56,11 @@ export async function productosCompartidos(
         precioExhibido: 0,
       };
     }
-    // Con lista privada: su neto (0 = sin precio en su lista, "Consulte") y su final con IVA.
-    const neto = privados ? (privados.get(id) ?? 0) : p.price;
-    const exhibido = privados ? (precioFinal(neto, p.ivaPorcentaje) ?? neto) : (p.precioFinal ?? p.price);
+    // Con lista privada: su neto (0 = sin precio en su lista, "Consulte") y su final con IVA; si una
+    // campaña de precios lo deja más barato, el de campaña (decisión B: paga el menor).
+    const privado = privados ? (privados.get(id) ?? 0) : undefined;
+    const neto = privado === undefined ? p.price : p.campania && privado > 0 && p.price < privado ? p.price : privado;
+    const exhibido = privados && neto !== p.price ? (precioFinal(neto, p.ivaPorcentaje) ?? neto) : (p.precioFinal ?? p.price);
     return {
       item: { id, qty, name: nombreDeLinea(p), brand: p.brand, price: neto, image: p.images?.[0]?.url },
       precioExhibido: exhibido,

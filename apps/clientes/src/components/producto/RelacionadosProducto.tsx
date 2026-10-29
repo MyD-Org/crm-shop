@@ -1,3 +1,4 @@
+import type { CampaniaActiva } from "@/lib/campanias/vigentes";
 import Link from "next/link";
 import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
@@ -23,6 +24,7 @@ export async function RelacionadosProducto({
   disp,
   destacado,
   cuotas,
+  campanias,
 }: {
   categoriaPropiaId?: string;
   categoria?: string;
@@ -36,6 +38,8 @@ export async function RelacionadosProducto({
   destacado?: MedioPrecio | null;
   /** Cuotas sin interés de las cards (flag `cuotas-cobro`). */
   cuotas?: MedioCuotas[] | null;
+  /** Campañas de precios activas en el request (`campaniasVigentes()`). */
+  campanias?: CampaniaActiva[];
 }) {
   const relacionados = await relacionadosProducto({
     categoriaPropiaId,
@@ -47,6 +51,7 @@ export async function RelacionadosProducto({
     disp,
     destacado,
     cuotas,
+    campanias,
   });
   if (!relacionados || relacionados.productos.length === 0) return null;
 

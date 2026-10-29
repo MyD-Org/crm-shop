@@ -5,6 +5,8 @@
 import type { OrigenCoeficiente } from "@/lib/precios-online-grilla"
 
 export const TEXTOS = {
+  /** Indicador de la grilla: el producto está en una campaña de precios activa. */
+  campania: (etiqueta: string) => `En campaña: ${etiqueta}`,
   titulo: "Precios online",
   ayudaGeneral:
     "El precio de cada producto es su costo (sin impuestos) multiplicado por el coeficiente de cada lista. Los precios de las listas de Alegra no intervienen en el cálculo.",

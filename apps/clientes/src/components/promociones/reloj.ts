@@ -36,3 +36,17 @@ export function useAhora(): number | null {
     () => null,
   );
 }
+
+const sinSuscribir = () => () => {};
+
+/**
+ * Como `useAhora`, pero sólo se suscribe al reloj (y re-renderiza cada segundo) mientras `activo`. Para
+ * componentes siempre montados (el mini-carrito del header) que sólo necesitan la hora a veces.
+ */
+export function useAhoraSi(activo: boolean): number | null {
+  return useSyncExternalStore(
+    activo ? suscribir : sinSuscribir,
+    () => (activo ? ahora || null : null),
+    () => null,
+  );
+}

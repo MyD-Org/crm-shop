@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
+import { recalcularCampanias } from "./campanias-recalculo"
 import {
   catalogCategories,
   catalogOverlay,
@@ -560,6 +561,8 @@ export async function guardarOverlay(
       set: { ...set, updatedBy, updatedAt: AHORA },
     })
     .returning()
+  // La categoría decide qué regla de campaña alcanza al producto (y a su modelo, si es el ancla).
+  if (campos.categoriaId !== undefined) await recalcularCampanias(ejecutor, tenantId, [alegraId])
   return row
 }
 
@@ -665,6 +668,8 @@ export async function masivaOverlay(
       SET ${columna} = excluded.${columna}, updated_by = excluded.updated_by, updated_at = now()
     RETURNING 1
   `)
+  // Categoría en masa: la selección puede ser un filtro entero; se recalcula el tenant.
+  if (accion.tipo === "categoria" && filas.length > 0) await recalcularCampanias(ejecutor, tenantId, null)
   return { kind: "ok", afectados: filas.length }
 }
 

@@ -1,3 +1,5 @@
+import { UnidadesCampaniaError } from "@/lib/campanias/unidades";
+import { campaniasActivasEn } from "@/lib/campanias/vigentes";
 import { NextResponse, after } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
@@ -126,6 +128,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const idListaPrivada = cliente ? await listaPrivadaDelComprador() : null;
+    const campanias = await campaniasActivasEn(pedido.creadoEn);
     const resuelto = await cotizarConMedio({
       lineas: pedido.lineas,
       entregaTipo: pedido.entregaTipo,
@@ -137,6 +140,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       idListaPrivada,
       soloVisibles: await catalogoSoloVisibles(),
       ...((await variantesSelector()) ? { agrupar: true } : {}),
+      // Decisión C: un pedido creado durante una campaña conserva su precio aunque cambie el medio.
+      ...(campanias.length ? { campanias } : {}),
+      excluirPedidoId: id,
       ignorarStock: true,
       origen: "/api/pedidos/:id/medio",
     });
@@ -237,6 +243,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       ...(await configMpPara({ id, sucursal: pedido.sucursal, facturaSucursal: pedido.facturaSucursal }, pagoMetodo)),
     });
   } catch (err) {
+    if (err instanceof UnidadesCampaniaError) {
+      // Otro checkout se llevó las últimas unidades a precio de campaña entre la cotización y el cambio.
+      return NextResponse.json(
+        {
+          error: "Ya no quedan suficientes unidades a precio de campaña de un producto. Revise el pedido.",
+          motivo: "unidades_campania",
+          quedan: err.quedan,
+          ids: err.ids,
+        },
+        { status: 409 },
+      );
+    }
     console.error("[/api/pedidos/:id/medio] POST error:", err);
     return NextResponse.json(
       { error: "No pudimos cambiar el medio de pago. Inténtelo de nuevo en un momento." },

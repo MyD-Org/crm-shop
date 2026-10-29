@@ -173,6 +173,11 @@ export const shopOrderItems = shop.table("order_items", {
   // Snapshot de la modalidad sin stock con la que se vendió la línea (0039 del Shop; NULL = línea
   // normal). Lo escribe el Shop; el CRM solo lo lee.
   ventaSinStock: jsonb("venta_sin_stock").$type<VentaSinStockLinea | null>(),
+  // Campaña de precios con la que se vendió la línea (0040 del Shop; ids de `public.campanias` /
+  // `campania_reglas`, sin FK) y el unitario normal sin IVA que se tachó. NULL = sin campaña.
+  campaniaId: uuid("campania_id"),
+  campaniaReglaId: uuid("campania_regla_id"),
+  precioNormal: numeric("precio_normal", { precision: 14, scale: 2 }),
 })
 
 export type ShopOrderRow = typeof shopOrders.$inferSelect

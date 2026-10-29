@@ -157,12 +157,12 @@ describe("migración 0068: shop_app y las listas privadas (DB real)", () => {
     }
   })
 
-  it("la vista pública (12 originales + 5 de variantes, 0083): ninguna 'privad*'", async () => {
+  it("la vista pública (12 originales + 5 de variantes, 0083 + campanias_online, 0095): ninguna 'privad*'", async () => {
     const cols = await sql`
       SELECT column_name FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'catalog_products_shop'
     `
-    expect(cols).toHaveLength(17)
+    expect(cols).toHaveLength(18)
     expect(cols.filter((c) => /privad/.test(c.column_name))).toHaveLength(0)
   })
 

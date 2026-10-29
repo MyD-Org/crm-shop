@@ -1,3 +1,4 @@
+import { campaniasActivasEn } from "@/lib/campanias/vigentes";
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
@@ -114,6 +115,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // Lista privada o cuenta corriente: el precio no depende del medio ni hay cuotas sin interés.
     const idListaPrivada = cliente ? await listaPrivadaDelComprador() : null;
     const conSinInteres = !idListaPrivada && !esCompradorCuentaCorriente(cliente) && (await cuotasHabilitadas());
+    const campanias = await campaniasActivasEn(pedido.creadoEn);
     const { opciones: cotizadas } = await opcionesCuotasDePedido({
       lineas: pedido.lineas,
       medio: { condicionesCuotas: conSinInteres ? (medio.condicionesCuotas ?? []) : [] },
@@ -124,6 +126,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         idListaPrivada,
         soloVisibles: await catalogoSoloVisibles(),
         ...((await variantesSelector()) ? { agrupar: true } : {}),
+        // Decisión C: rigen las campañas activas cuando se creó el pedido.
+        ...(campanias.length ? { campanias } : {}),
+        excluirPedidoId: id,
       },
       // El pedido ya reserva sus unidades.
       ignorarStock: true,

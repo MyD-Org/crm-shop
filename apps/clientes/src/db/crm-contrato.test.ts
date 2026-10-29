@@ -101,6 +101,8 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
       "etiqueta",
       "es_representante",
       "overlay_alegra_id",
+      // 0095 (campañas de precios): AL FINAL.
+      "campanias_online",
     ]);
     for (const prohibida of ["raw", "images", "prices", "status", "alegra_status"]) {
       expect(vista[prohibida], prohibida).toBeUndefined();
@@ -109,7 +111,7 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
 
   it("la vista de catálogo suma el grupo de variantes AL FINAL (0083 del CRM) y no abre su tabla manual", () => {
     const vista = esperado["public.catalog_products_shop"];
-    expect(Object.keys(vista).slice(-5)).toEqual([
+    expect(Object.keys(vista).slice(-6, -1)).toEqual([
       "tipo",
       "grupo_id",
       "etiqueta",
@@ -120,6 +122,13 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
     expect(vista.overlay_alegra_id).toBe("text");
     // El Shop lee el grupo ya resuelto por la vista: la tabla de grupos manuales no se concede.
     expect(esperado["public.catalog_variantes_manuales"]).toBeUndefined();
+  });
+
+  it("las campañas (0095 del CRM): la columna al final de la vista y sólo la ventana, nunca las reglas", () => {
+    expect(esperado["public.catalog_products_shop"].campanias_online).toBe("jsonb");
+    expect(Object.keys(esperado["public.campanias_shop"])).toEqual(["tenant_id", "id", "nombre", "etiqueta", "inicio", "fin"]);
+    expect(esperado["public.campanias"]).toBeUndefined();
+    expect(esperado["public.campania_reglas"]).toBeUndefined();
   });
 
   it("la vista de categorías de Alegra trae sólo lo que usa el catálogo", () => {

@@ -63,3 +63,22 @@ describe("totalesEstimados", () => {
     ).toBeNull();
   });
 });
+
+describe("campañas de precios en el carrito", () => {
+  // 2 unidades a 128 neto con normal 160, IVA 21 %. Datos inventados.
+  const linea = { id: "1", qty: 2, precioUnitario: 128, ivaPorcentaje: 21, total: 309.76, precioNormal: 160, campaniaEtiqueta: "BF" };
+
+  it("campaniaDeLinea: el normal con IVA para tachar y la etiqueta", async () => {
+    const { campaniaDeLinea } = await import("./carrito-precios");
+    expect(campaniaDeLinea(linea)).toEqual({ normalFinal: 193.6, etiqueta: "BF" });
+    expect(campaniaDeLinea({ ...linea, precioNormal: undefined })).toBeNull();
+    expect(campaniaDeLinea({ ...linea, problema: "sin_stock" })).toBeNull();
+  });
+
+  it("ahorroCampania: 2 × (160 − 128) con IVA = 77,44; sin campaña, 0", async () => {
+    const { ahorroCampania } = await import("./carrito-precios");
+    expect(ahorroCampania([linea])).toBe(77.44);
+    expect(ahorroCampania([{ ...linea, precioNormal: undefined }])).toBe(0);
+    expect(ahorroCampania([{ ...linea, problema: "inactivo" }])).toBe(0);
+  });
+});

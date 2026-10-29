@@ -1,5 +1,7 @@
 "use client";
 
+import { frasePrecio } from "@/lib/promociones/promo";
+import { ahorroCampania } from "@/lib/carrito-precios";
 import { MetaCuotas } from "@/components/checkout/MetaCuotas";
 import { resumenCuotas, type EleccionCuotas } from "@/lib/cuotas-formulario";
 import { montoPorCuota } from "@/lib/cuotas-sin-interes";
@@ -2173,6 +2175,9 @@ export function CheckoutClient({
                 <span className={linea.problema ? "text-danger" : "text-muted"}>
                   {nombreConMarca(linea.name, linea.brand ? formatMarca(linea.brand) : undefined).nombre}
                   <span className="ml-1 text-xs">x{linea.qty}</span>
+                  {!linea.problema && linea.campaniaEtiqueta && (
+                    <span className="mt-0.5 block text-xs font-semibold text-success">{frasePrecio(linea.campaniaEtiqueta, true)}</span>
+                  )}
                   {linea.problema && (
                     <span className="mt-0.5 block text-xs">{linea.detalle}</span>
                   )}
@@ -2232,6 +2237,11 @@ export function CheckoutClient({
             </div>
             {pasoActual === "pago" && ahorroSel && (
               <p className="text-right text-[13px] font-bold text-success">Ahorra {fmtPrecio(ahorroSel.monto)}</p>
+            )}
+            {cotizacion && ahorroCampania(cotizacion.lineas) > 0 && (
+              <p className="text-right text-[13px] font-bold text-success">
+                Usted ahorra {fmtPrecio(ahorroCampania(cotizacion.lineas))}
+              </p>
             )}
             <p className="text-xs text-muted">
               Precio sin impuestos {fmtPrecio(cotizacion?.subtotal ?? 0)}

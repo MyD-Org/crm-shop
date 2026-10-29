@@ -80,6 +80,9 @@ import { contextoUnion, type ContextoDisponibilidad } from "./disponibilidad-con
 import { modalidadPorId, type VentaSinStock } from "./venta-sin-stock";
 import { modalidadesActivas } from "./venta-sin-stock-repo";
 import { armarPreciosMedios, type MediosPrecio } from "./medios-precio";
+import { campaniaParaExhibir } from "./campanias/exhibicion";
+import { mapCampanias } from "./campanias/precio";
+import { quedanParaEntradas } from "./campanias/unidades";
 import { disponibleSucursalSql, joinStock, stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
 import {
   columnasConteoAtributos,
@@ -179,6 +182,8 @@ interface FilaCatalogo {
    * sucursal alcanzable tiene stock disponible. Entonces el producto sin stock NO pasa a pedido.
    */
   overlayCubreOtra?: boolean | null;
+  /** Campañas de precios del CRM (0095), crudas: ver `campaniaParaExhibir`. Ausente = ninguna. */
+  campaniasOnline?: unknown;
 }
 
 /**
@@ -206,11 +211,15 @@ export function mapFilaToProduct(
   modalidades: readonly VentaSinStock[] = [],
 ): Product {
   const qty = fila.stock != null ? Number(fila.stock) : null;
+  const iva = fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null;
   const stock = derivarStock(qty);
   const modalidad = modalidadPorId(modalidades, fila.overlayModalidadId);
   // Sin stock en las sucursales que cuentan pero otra alcanzable lo trae: se ve como hoy (traslado).
   const ventaSinStock = modalidad && !(stock === "out" && fila.overlayCubreOtra === true) ? modalidad : undefined;
-  const precios = mapPrecios(fila.prices);
+  // Campaña activa: los precios efectivos son los de campaña (también "$X con <Medio>") y el normal
+  // de la misma lista se tacha. La misma regla que el cobro (`resolverPrecioVigente`).
+  const enCampania = campaniaParaExhibir(mapPrecios(fila.prices), fila.campaniasOnline, mediosPrecio, idPriceList, iva);
+  const precios = enCampania ? enCampania.precios : mapPrecios(fila.prices);
   const price = precioDeLista(precios, idPriceList);
   const atributosEstructurados = leerAtributosEstructurados(fila.atributos);
   const especificaciones = caracteristicasDe(atributosEstructurados);
@@ -222,8 +231,18 @@ export function mapFilaToProduct(
     brand: fila.overlayMostrarMarca === false ? "" : fila.brand || fila.categoryName || "",
     name: nombreExhibido(fila),
     price,
-    ...camposIva(price, fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null),
-    ...armarPreciosMedios(precios, fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null, mediosPrecio),
+    ...camposIva(price, iva),
+    ...armarPreciosMedios(precios, iva, mediosPrecio),
+    ...(enCampania
+      ? {
+          oldPrice: precioFinal(enCampania.normal, iva) ?? enCampania.normal,
+          // Lo que queda a precio de campaña nunca supera el stock disponible (no se inflan unidades).
+          campania:
+            enCampania.campania.quedan != null && qty != null
+              ? { ...enCampania.campania, quedan: Math.max(0, Math.min(enCampania.campania.quedan, qty)) }
+              : enCampania.campania,
+        }
+      : {}),
     stock,
     stockQty: qty ?? undefined,
     // `reference` de Alegra; si falta, `name`, que en esta cuenta ES el
@@ -243,6 +262,26 @@ export function mapFilaToProduct(
     ...(ventaSinStock ? { ventaSinStock } : {}),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
   };
+}
+
+/**
+ * Límite de unidades de las campañas de precios: con campañas activas, lo que queda de cada regla con
+ * límite de estas filas (una lectura de los pedidos), para que la ficha diga cuántas quedan y una
+ * regla agotada vuelva sola al precio normal. Corre adentro de las funciones cacheadas: crear o
+ * cancelar un pedido vence el tag del catálogo (`marcarStockCambiado`).
+ */
+async function conQuedanCampania(
+  filas: readonly { campaniasOnline?: unknown }[],
+  medios: MediosPrecio | undefined,
+): Promise<MediosPrecio | undefined> {
+  const activas = medios?.campanias;
+  if (!medios || !activas?.length) return medios;
+  const quedan = await quedanParaEntradas(
+    getDb(),
+    filas.map((f) => mapCampanias(f.campaniasOnline)),
+    new Set(activas.map((c) => c.id)),
+  );
+  return quedan.size ? { ...medios, quedanCampania: Object.fromEntries(quedan) } : medios;
 }
 
 /** Mismo criterio que `urlsDeFotos`: la key se guarda en el CRM, la url se compone al leer. */
@@ -365,13 +404,17 @@ const columnasCatalogo = (
   const conVariantes = agrupar
     ? { ...conAtributos, etiqueta: crmCatalogo.etiqueta, grupoId: crmCatalogo.grupoId, tipo: crmCatalogo.tipo }
     : conAtributos;
-  if (!modalidades.length) return conVariantes;
-  const traslado = conTraslado(disp);
-  return {
-    ...conVariantes,
-    overlayModalidadId: crmOverlay.modalidadSinStockId,
-    ...(traslado ? { overlayCubreOtra: cubreOtraSql(traslado) } : {}),
-  };
+  const traslado = modalidades.length ? conTraslado(disp) : undefined;
+  const conModalidad = modalidades.length
+    ? {
+        ...conVariantes,
+        overlayModalidadId: crmOverlay.modalidadSinStockId,
+        ...(traslado ? { overlayCubreOtra: cubreOtraSql(traslado) } : {}),
+      }
+    : conVariantes;
+  // Campañas de precios (CRM 0095), siempre AL FINAL: una fila sin la columna (fixtures posicionales
+  // de los tests) queda sin campañas, que es el precio de siempre.
+  return { ...conModalidad, campaniasOnline: crmCatalogo.campaniasOnline };
 };
 
 /**
@@ -673,7 +716,8 @@ export async function getCatalogo(opts: {
   if (opts.offset != null) query = query.offset(opts.offset);
 
   const filas = await query;
-  return filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, opts.mediosPrecio, modalidades));
+  const medios = await conQuedanCampania(filas, opts.mediosPrecio);
+  return filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, medios, modalidades));
 }
 
 /**
@@ -734,9 +778,10 @@ export async function getCategoriaExacta(opts: {
     .orderBy(asc(crmCatalogo.name))
     .limit(opts.limit);
 
+  const medios = await conQuedanCampania(filas, opts.mediosPrecio);
   return {
     nombre: categoria.nombre,
-    productos: filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, opts.mediosPrecio, modalidades)),
+    productos: filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, medios, modalidades)),
   };
 }
 
@@ -803,6 +848,7 @@ export async function getProductosPorIds(
     for (const f of fotos) if (f.fotos?.length) propias.set(f.alegraId, f.fotos);
   }
 
+  const medios = await conQuedanCampania(filas, opts?.mediosPrecio);
   return new Map(
     filas.map((f) => {
       const fotosPropias = propias.get(f.alegraId);
@@ -814,7 +860,7 @@ export async function getProductosPorIds(
           opts?.idPriceList,
           undefined,
           undefined,
-          opts?.mediosPrecio,
+          medios,
           modalidades,
         ),
       ];
@@ -902,9 +948,8 @@ export async function getProductosPorSkus(
       ),
     );
 
-  const productos = filas.map((f) =>
-    mapFilaToProduct(f, undefined, undefined, undefined, opts.mediosPrecio, modalidades),
-  );
+  const medios = await conQuedanCampania(filas, opts.mediosPrecio);
+  const productos = filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, medios, modalidades));
   if (!opts.agrupar) return productos;
   // Los códigos pedidos que cayeron en el grupo de cada card (para ubicarla en el lugar elegido).
   const grupoDe = new Map(filas.map((f) => [f.alegraId, (f as { grupoId?: string | null }).grupoId ?? null]));
@@ -928,6 +973,8 @@ export async function getProductosPorSkus(
       const cods = g ? codigosPorGrupo.get(g) : undefined;
       return cods?.length ? { ...p, codigosElegidos: [...new Set(cods)] } : p;
     }),
+    undefined,
+    opts.mediosPrecio,
   );
 }
 
@@ -939,8 +986,17 @@ export async function getProductosPorSkus(
  * Precio exhibido (con IVA si se conoce) de una fila de la vista: el mismo que muestra la card del
  * producto (`mapFilaToProduct`), para comparar variantes entre sí.
  */
-function precioExhibidoDe(prices: unknown, iva: string | null, idPriceList?: string): number {
-  const neto = precioDeLista(mapPrecios(prices), idPriceList);
+export function precioExhibidoDe(
+  prices: unknown,
+  iva: string | null,
+  idPriceList?: string,
+  /** Campañas del CRM (0095) de la fila y las activas del request: "Desde" con el precio de campaña. */
+  campaniasOnline?: unknown,
+  mediosPrecio?: MediosPrecio,
+): number {
+  const base = mapPrecios(prices);
+  const enCampania = campaniaParaExhibir(base, campaniasOnline, mediosPrecio, idPriceList);
+  const neto = precioDeLista(enCampania ? enCampania.precios : base, idPriceList);
   const ivaNum = iva != null ? Number(iva) : null;
   return camposIva(neto, ivaNum).precioFinal ?? neto;
 }
@@ -955,7 +1011,12 @@ function precioExhibidoDe(prices: unknown, iva: string | null, idPriceList?: str
  * precio de lista privada de una cuenta se superpone en el navegador, y la card no ofrece "Desde"
  * cuando eso pasa (ver `vistaCardVariantes`).
  */
-export async function conResumenDeVariantes(productos: Product[], idPriceList?: string): Promise<Product[]> {
+export async function conResumenDeVariantes(
+  productos: Product[],
+  idPriceList?: string,
+  /** Las campañas activas viajan acá (ver `MediosPrecio.campanias`): el "Desde" es el de campaña. */
+  mediosPrecio?: MediosPrecio,
+): Promise<Product[]> {
   if (productos.length === 0) return productos;
   const db = getDb();
   const grupos = await db
@@ -980,6 +1041,7 @@ export async function conResumenDeVariantes(productos: Product[], idPriceList?: 
       etiqueta: crmCatalogo.etiqueta,
       prices: preciosSql,
       iva: crmCatalogo.ivaPorcentaje,
+      campaniasOnline: crmCatalogo.campaniasOnline,
     })
     .from(crmCatalogo)
     .where(and(enTenantCatalogo(), inArray(crmCatalogo.grupoId, idsDeGrupo), activoSql, conPrecioSql));
@@ -987,7 +1049,7 @@ export async function conResumenDeVariantes(productos: Product[], idPriceList?: 
   const opcionesPorGrupo = new Map<string, { id: string; etiqueta: string }[]>();
   for (const h of hermanas) {
     const lista = preciosPorGrupo.get(h.grupoId as string) ?? [];
-    lista.push(precioExhibidoDe(h.prices, h.iva, idPriceList));
+    lista.push(precioExhibidoDe(h.prices, h.iva, idPriceList, h.campaniasOnline, mediosPrecio));
     preciosPorGrupo.set(h.grupoId as string, lista);
     const etiqueta = h.etiqueta?.trim();
     if (etiqueta) {
@@ -1028,13 +1090,15 @@ export async function getVariantesDeGrupo(
 ): Promise<(OpcionFicha & { esRepresentante: boolean })[]> {
   const propio = alias(crmOverlay, "overlay_propio");
   const modalidades = await modalidadesActivas();
+  const { campaniasOnline, ...columnas } = columnasCatalogo(opts.disp, opts.atributosEstructurados, false, modalidades);
   const filas = await getDb()
     .select({
-      ...columnasCatalogo(opts.disp, opts.atributosEstructurados, false, modalidades),
+      ...columnas,
       etiqueta: crmCatalogo.etiqueta,
       tipo: crmCatalogo.tipo,
       esRepresentante: crmCatalogo.esRepresentante,
       fotosPropias: propio.fotos,
+      campaniasOnline, // al final, como en `columnasCatalogo`
     })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
@@ -1051,6 +1115,7 @@ export async function getVariantesDeGrupo(
         visibleEnZonaSql(opts.disp),
       ),
     );
+  const medios = await conQuedanCampania(filas, opts.mediosPrecio);
   const opciones = filas.map((f) => {
     const { etiqueta, esRepresentante, fotosPropias, ...fila } = f; // `tipo` queda en `fila`
     // `grupoId` no se selecciona (es el del pedido): todas las opciones son del mismo grupo.
@@ -1059,7 +1124,7 @@ export async function getVariantesDeGrupo(
       opts.idPriceList,
       undefined,
       undefined,
-      opts.mediosPrecio,
+      medios,
       modalidades,
     );
     return { id: fila.alegraId, etiqueta: etiqueta?.trim() || producto.name, producto, esRepresentante };
@@ -1116,6 +1181,13 @@ export interface FiltrosCatalogo {
    * la marca: con `marcas` un producto con la marca oculta quedaría fuera de su página.
    */
   marcasPropias?: string[];
+  /**
+   * Interno (no viaja en la URL): ids de las campañas de precios ACTIVAS en el request. Con ellas el
+   * orden, el filtro y el rango por precio usan el precio de campaña (`precioVigenteSql`), el mismo
+   * que muestra la card. Va en los filtros porque ya llegan a la página, al orden y a las facetas, y
+   * son parte de la clave de sus cachés. Lo completa `getPaginaCatalogo` desde `mediosPrecio`.
+   */
+  precioCampanias?: string[];
   /**
    * Una línea de una página de marca: lo que está en alguna de estas categorías (con su
    * subárbol, como `categorias`) O tiene alguno de estos códigos (como `getProductosPorSkus`).
@@ -1266,6 +1338,53 @@ const precioSql = sql<string>`coalesce(
  * que se muestra sigue saliendo de `mapFilaToProduct`.
  */
 const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${crmCatalogo.ivaPorcentaje}, 0) / 100)`;
+
+/**
+ * Precio general VIGENTE en SQL (campañas de precios, spec 2026-10-28-campanias-precios-design.md):
+ * con campañas activas, el de campaña de la lista general (`main`, si no la primera) de la primera
+ * entrada de `campanias_online` cuya id está activa; si no, `precioSql`. Es el equivalente de
+ * `campaniaParaExhibir` para ORDENAR, filtrar por rango y armar el slider, así el catálogo ordena
+ * por el precio que muestra la card. Una regla con límite de unidades agotada no rige (cuenta los
+ * pedidos sólo en las filas con límite, que son pocas).
+ */
+function precioVigenteSql(idsCampanias: readonly string[] | undefined) {
+  if (!idsCampanias?.length) return precioSql;
+  const ids = sql`array[${sql.join(idsCampanias.map((i) => sql`${i}`), sql`, `)}]::text[]`;
+  const campanias = crmCatalogo.campaniasOnline;
+  return sql<string>`coalesce((
+    select (pe->>'price')::numeric
+    from jsonb_array_elements(case when jsonb_typeof(${campanias}) = 'array' then ${campanias} else '[]'::jsonb end) e
+    cross join jsonb_array_elements(case when jsonb_typeof(e->'precios') = 'array' then e->'precios' else '[]'::jsonb end) pe
+    where e->>'id' = any(${ids})
+      and (pe->>'price')::numeric > 0
+      -- Regla con límite de unidades agotada: rige el precio normal (mismo criterio de conteo que
+      -- \`unidadesUsadas\`, lib/campanias/unidades.ts).
+      and (e->>'unidades' is null or (
+        select coalesce(sum(oi.qty), 0)
+        from shop.order_items oi
+        join shop.orders o on o.id = oi.order_id
+        where o.tenant_id = ${crmCatalogo.tenantId}
+          and oi.campania_regla_id::text = e->>'reglaId'
+          and o.estado <> 'cancelado'
+          and (o.estado <> 'pendiente' or o.pago_estado = 'pagado'
+               or coalesce(o.reserva_vence_en, o.created_at + interval '24 hours') > now())
+      ) < (e->>'unidades')::numeric)
+      and pe->>'idPriceList' = coalesce(
+        case when jsonb_typeof(${preciosSql}) = 'array' then (
+          select m->>'idPriceList' from jsonb_array_elements(${preciosSql}) m where (m->>'main')::boolean limit 1
+        ) end,
+        case when jsonb_typeof(${preciosSql}) = 'array' then ${preciosSql}->0->>'idPriceList' end
+      )
+    limit 1
+  ), ${precioSql})`;
+}
+
+/** `precioExhibidoSql` con el precio vigente (ver `precioVigenteSql`). Sin campañas, el mismo SQL. */
+function precioExhibidoVigenteSql(idsCampanias: readonly string[] | undefined) {
+  return idsCampanias?.length
+    ? sql<string>`${precioVigenteSql(idsCampanias)} * (1 + coalesce(${crmCatalogo.ivaPorcentaje}, 0) / 100)`
+    : precioExhibidoSql;
+}
 
 /**
  * Sólo productos con precio. Un ítem sin precio en Alegra resuelve a 0 en
@@ -1663,10 +1782,10 @@ function condicionesDe(
       : undefined,
     aplicar.car && conFacetasPorTipo(filtros) ? filtroCaracteristicasSql(contextoCar, filtros.caracteristicas) : undefined,
     aplicar.precio && filtros.precioMin != null
-      ? sql`${precioExhibidoSql} >= ${filtros.precioMin}`
+      ? sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} >= ${filtros.precioMin}`
       : undefined,
     aplicar.precio && filtros.precioMax != null
-      ? sql`${precioExhibidoSql} <= ${filtros.precioMax}`
+      ? sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} <= ${filtros.precioMax}`
       : undefined,
     aplicar.stock && filtros.soloStock ? conStock(disp, modalidades) : undefined,
   );
@@ -1811,9 +1930,9 @@ function ordenDe(
       return [sql`${relevanciaSql(texto.q, !!texto.tolerante, codigo)} desc`, ...desempateRelevancia(disp)];
     }
     case "precio-asc":
-      return [sql`${precioExhibidoSql} asc`, asc(crmCatalogo.name)];
+      return [sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} asc`, asc(crmCatalogo.name)];
     case "precio-desc":
-      return [sql`${precioExhibidoSql} desc`, asc(crmCatalogo.name)];
+      return [sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} desc`, asc(crmCatalogo.name)];
     case "destacados":
       return ordenDestacadosSql(destacados ?? contextoDestacados([]), disp, modalidades);
     default:
@@ -1859,7 +1978,12 @@ export async function getPaginaCatalogo(opts: {
    */
   sinConteo?: boolean;
 }): Promise<PaginaCatalogo> {
-  const filtros = opts.filtros ?? {};
+  // Campañas activas (ver `MediosPrecio.campanias`): el orden y el filtro por precio usan el vigente.
+  const idsCampanias = opts.mediosPrecio?.campanias?.map((c) => c.id);
+  const filtros: FiltrosCatalogo =
+    idsCampanias?.length && !opts.filtros?.precioCampanias
+      ? { ...(opts.filtros ?? {}), precioCampanias: idsCampanias }
+      : (opts.filtros ?? {});
   const porPagina = opts.porPagina ?? PRODUCTOS_POR_PAGINA;
   const agrupar = opts.agrupar ?? false;
   const modalidades = await modalidadesActivas();
@@ -1897,10 +2021,9 @@ export async function getPaginaCatalogo(opts: {
         .offset((pagina - 1) * porPagina)
     : [];
 
-  const mapeados = filas.map((f) =>
-    mapFilaToProduct(f, opts.idPriceList, undefined, undefined, opts.mediosPrecio, modalidades),
-  );
-  const productos = agrupar ? await conResumenDeVariantes(mapeados, opts.idPriceList) : mapeados;
+  const medios = await conQuedanCampania(filas, opts.mediosPrecio);
+  const mapeados = filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, medios, modalidades));
+  const productos = agrupar ? await conResumenDeVariantes(mapeados, opts.idPriceList, medios) : mapeados;
   if (opts.sinConteo) return { productos, total: productos.length, pagina: 1, paginas: 1, totalExacto: false };
   return { productos, total, pagina, paginas, totalExacto: true };
 }
@@ -2248,8 +2371,8 @@ export async function getFacetas(
     // de los límites que muestra el slider.
     getDb()
       .select({
-        min: sql<number | null>`floor(min(${precioExhibidoSql}))::int`,
-        max: sql<number | null>`ceil(max(${precioExhibidoSql}))::int`,
+        min: sql<number | null>`floor(min(${precioExhibidoVigenteSql(filtros.precioCampanias)}))::int`,
+        max: sql<number | null>`ceil(max(${precioExhibidoVigenteSql(filtros.precioCampanias)}))::int`,
       })
       .from(crmCatalogo)
       .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())

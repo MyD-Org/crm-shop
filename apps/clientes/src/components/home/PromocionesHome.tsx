@@ -1,8 +1,9 @@
+import { campaniasShop, campaniasVigentes } from "@/lib/campanias/vigentes";
 import { connection } from "next/server";
 import type { PromocionesContent } from "@/data/home-defaults";
 import { productosPromo } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
-import { estadoPromo, skusNoResueltos, skusPromo } from "@/lib/promociones/promo";
+import { contenidoConCampania, estadoPromo, skusNoResueltos, skusPromo } from "@/lib/promociones/promo";
 import { quedanEstrella } from "@/lib/promociones/stock";
 import { dispCatalogo } from "@/lib/zona-servidor";
 import { PromocionesVista } from "./PromocionesVista";
@@ -12,12 +13,17 @@ import { PromocionesVista } from "./PromocionesVista";
  * vigencia se calcula acá, fuera de toda caché (el contenido de la home vive un día cacheado), y el
  * stock de la sucursal de la promo se lee sin caché. Los productos salen de la caché del catálogo.
  */
-export async function PromocionesHome({ contenido }: { contenido: PromocionesContent }) {
+export async function PromocionesHome({ contenido: guardado }: { contenido: PromocionesContent }) {
   await connection();
-  const estado = estadoPromo(contenido, ahoraServidor());
-  const skus = skusPromo(contenido);
+  const skus = skusPromo(guardado);
 
-  const [{ soloVisibles, variantes, mediosPrecio }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
+  const [{ soloVisibles, variantes, mediosPrecio }, disp, campanias, ventanas] = await Promise.all([
+    flagsPublicos(),
+    dispCatalogo(),
+    campaniasVigentes(),
+    // Sección asociada a una campaña de precios: sus fechas (aunque todavía no haya empezado).
+    guardado.campaniaId ? campaniasShop() : Promise.resolve([]),
+  ]);
   const productos = await productosPromo({
     skus,
     soloVisibles,
@@ -25,13 +31,24 @@ export async function PromocionesHome({ contenido }: { contenido: PromocionesCon
     disp,
     destacado: mediosPrecio?.destacado,
     cuotas: mediosPrecio?.cuotas,
+    campanias,
   });
+  // Con campaña de precios: fechas, precio habitual tachado y unidades de la estrella salen de ella.
+  const contenido = contenidoConCampania(
+    guardado,
+    ventanas.find((c) => c.id === guardado.campaniaId),
+    productos,
+  );
+  const estado = estadoPromo(contenido, ahoraServidor());
   const porSku = new Map(productos.map((p) => [(p.sku ?? "").toUpperCase(), p]));
   const skuEstrella = contenido.estrella?.sku.trim().toUpperCase();
   const prodEstrella = skuEstrella ? porSku.get(skuEstrella) : undefined;
 
   let quedan: number | null = null;
-  if (prodEstrella && contenido.estrella?.unidadesPromo) {
+  if (prodEstrella?.campania?.unidades != null) {
+    // Límite de la campaña: lo que queda ya viene contado en el producto (pedidos de la tienda).
+    quedan = prodEstrella.campania.quedan;
+  } else if (prodEstrella && contenido.estrella?.unidadesPromo) {
     quedan = await quedanEstrella(contenido.estrella, prodEstrella.id);
   }
 

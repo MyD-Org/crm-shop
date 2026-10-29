@@ -17,6 +17,10 @@
  * SOLO servidor: usa la DB.
  */
 
+import { quedanParaEntradas } from "./campanias/unidades";
+import { frasePrecio } from "./promociones/promo";
+import { mapCampanias, resolverPrecioVigente, type ContextoCampania, type EntradaCampania } from "./campanias/precio";
+import type { CampaniaActiva } from "./campanias/vigentes";
 import { and, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { stockReservado } from "@/db/schema";
@@ -58,7 +62,9 @@ export type ProblemaLinea =
   | "inactivo"
   | "sin_stock"
   | "stock_insuficiente"
-  | "sin_precio";
+  | "sin_precio"
+  /** Campaña de precios con límite: se pidieron más unidades de las que quedan a precio de campaña. */
+  | "unidades_campania";
 
 export interface LineaCotizada {
   id: string;
@@ -92,6 +98,15 @@ export interface LineaCotizada {
    * con el stock (ver `topeCantidad`).
    */
   aceptaSinStock?: true;
+  /**
+   * Campaña de precios que rige la línea (spec 2026-10-28-campanias-precios-design.md): el unitario
+   * NORMAL sin IVA que se tacha, la campaña, su regla (para contar unidades) y su etiqueta. Ausentes =
+   * precio normal.
+   */
+  precioNormal?: number;
+  campaniaId?: string;
+  campaniaReglaId?: string;
+  campaniaEtiqueta?: string;
 }
 
 export interface Cotizacion {
@@ -161,9 +176,15 @@ function lineaRota(
   };
 }
 
+/** Ítem a cotizar: el de Alegra más las campañas materializadas por el CRM (`campanias_online`). */
+export type ItemCotizable = AlegraItem & { campanias?: EntradaCampania[] };
+
+/** Las campañas activas al cotizar, con su etiqueta (para la línea) y las unidades que quedan. */
+export type ContextoCotizacionCampania = ContextoCampania & { etiquetas?: ReadonlyMap<string, string> };
+
 export function cotizarItem(
   pedida: LineaPedida,
-  item: AlegraItem,
+  item: ItemCotizable,
   /**
    * Lista del medio de pago elegido (la resuelve el servidor desde el slug, ver `lista-medio.ts`).
    * Se ignora si el comprador tiene lista privada.
@@ -182,11 +203,23 @@ export function cotizarItem(
    * de la línea (`lineaAPedido`).
    */
   venta?: { modalidad: VentaSinStock; aPedido?: boolean },
+  /**
+   * Campañas activas (la MISMA regla que la exhibición, `resolverPrecioVigente`). Ausente = precio
+   * normal. Con lista privada rige el menor entre su privado y el de campaña de la lista general.
+   */
+  campanias?: ContextoCotizacionCampania,
 ): LineaCotizada {
   const categoria = item.itemCategory as { name?: string } | undefined;
   const conListaPrivada = precioPrivado !== undefined;
+  const vigente =
+    campanias && Array.isArray(item.price)
+      ? resolverPrecioVigente(item.price, item.campanias, campanias, {
+          idListaMedio,
+          ...(conListaPrivada ? { precioPrivado } : {}),
+        })
+      : null;
   const precioUnitario = redondear(
-    conListaPrivada ? (precioPrivado ?? 0) : resolverPrecio(item, idListaMedio),
+    vigente ? vigente.precio : conListaPrivada ? (precioPrivado ?? 0) : resolverPrecio(item, idListaMedio),
   );
   const ivaPorcentaje = ivaDeItem(item);
   const disponible = item.inventory?.availableQuantity;
@@ -207,6 +240,14 @@ export function cotizarItem(
     iva,
     total: redondear(subtotal + iva),
     stockDisponible,
+    ...(vigente?.campania
+      ? {
+          precioNormal: redondear(vigente.normal),
+          campaniaId: vigente.campania.id,
+          campaniaReglaId: vigente.campania.reglaId,
+          ...(campanias?.etiquetas?.get(vigente.campania.id) ? { campaniaEtiqueta: campanias.etiquetas.get(vigente.campania.id) } : {}),
+        }
+      : {}),
   };
 
   if (item.status === "inactive") {
@@ -264,6 +305,8 @@ export interface FilaEspejo {
    * modalidad activa: sin la migración del CRM la columna no existe.
    */
   modalidadId?: string | null;
+  /** Campañas de precios del CRM (0095), crudas: ver `mapCampanias`. Ausente = ninguna. */
+  campanias?: unknown;
 }
 
 /**
@@ -275,7 +318,7 @@ export interface FilaEspejo {
  * - Precios: pasan por `mapPrecios` porque vienen crudos del CRM (ids
  *   numéricos).
  */
-export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
+export function itemDesdeEspejo(fila: FilaEspejo): ItemCotizable {
   // Con la marca apagada tampoco va la categoría: `cotizarItem` la usa de fallback de la marca.
   const conMarca = fila.mostrarMarca !== false;
   return {
@@ -292,6 +335,7 @@ export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
       fila.stock != null ? { availableQuantity: Number(fila.stock) } : undefined,
     customFields: conMarca && fila.brand ? [{ name: "Marca", value: fila.brand }] : undefined,
     itemCategory: conMarca && fila.categoryName ? { name: fila.categoryName } : undefined,
+    ...(fila.campanias != null ? { campanias: mapCampanias(fila.campanias) } : {}),
   };
 }
 
@@ -316,7 +360,7 @@ async function leerEspejo(
    * filtra por representante: la variante que está en el carrito se cotiza siempre.
    */
   agrupar = false,
-): Promise<Map<string, { item: AlegraItem; modalidad?: VentaSinStock }>> {
+): Promise<Map<string, { item: ItemCotizable; modalidad?: VentaSinStock }>> {
   if (ids.length === 0) return new Map();
   const modalidades = await modalidadesActivas();
   const filas: FilaEspejo[] = await getDb()
@@ -347,6 +391,8 @@ async function leerEspejo(
       ...(agrupar ? { etiqueta: crmCatalogo.etiqueta, grupoId: crmCatalogo.grupoId } : {}),
       // Última: con `agrupar`, `joinOverlay` trae el overlay del ancla, y la modalidad es la suya.
       ...(modalidades.length ? { modalidadId: crmOverlay.modalidadSinStockId } : {}),
+      // Campañas de precios (0095): al final, como en el catálogo.
+      campanias: crmCatalogo.campaniasOnline,
     })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
@@ -392,6 +438,14 @@ export async function cotizar(
      * de la unión no decide). Ausente = decide `lineaAPedido` con el stock de la línea.
      */
     aPedido?: ReadonlySet<string>;
+    /**
+     * Campañas de precios activas en el instante que se cotiza: `campaniasActivasEn(new Date())` para
+     * el carrito y el pedido nuevo, o con la fecha de creación al recotizar un pedido ya creado
+     * (decisión C). Ausente o vacío = precio normal.
+     */
+    campanias?: readonly CampaniaActiva[];
+    /** Recotizar un pedido existente: sus propias unidades no cuentan contra el límite de una campaña. */
+    excluirPedidoId?: string;
   } = {},
 ): Promise<Cotizacion> {
   const items = await leerEspejo(
@@ -403,6 +457,19 @@ export async function cotizar(
   // Una sola lectura de la vista privada para todas las líneas (nunca desde caché compartida).
   const privados = opts.idListaPrivada
     ? await preciosPrivados(opts.idListaPrivada, pedidas.map((p) => p.id))
+    : undefined;
+  const activas = new Set((opts.campanias ?? []).map((c) => c.id));
+  // Límite de unidades: lo que queda de cada regla con límite (agotada = precio normal). Al recotizar un
+  // pedido existente, sus propias unidades no cuentan.
+  const quedan = activas.size
+    ? await quedanParaEntradas(getDb(), [...items.values()].map((i) => i.item.campanias), activas, opts.excluirPedidoId)
+    : undefined;
+  const campanias: ContextoCotizacionCampania | undefined = opts.campanias?.length
+    ? {
+        activas,
+        ...(quedan?.size ? { quedan } : {}),
+        etiquetas: new Map(opts.campanias.map((c) => [c.id, c.etiqueta])),
+      }
     : undefined;
   const lineas = pedidas.map((pedida) => {
     const leido = items.get(pedida.id);
@@ -416,8 +483,10 @@ export async function cotizar(
       modalidad
         ? { modalidad, ...(opts.aPedido ? { aPedido: opts.aPedido.has(pedida.id) } : {}) }
         : undefined,
+      campanias,
     );
   });
+  if (quedan?.size) marcarExcesoDeUnidades(lineas, quedan);
 
   const validas = lineas.filter((l) => !l.problema);
   const subtotal = redondear(validas.reduce((a, l) => a + l.subtotal, 0));
@@ -434,6 +503,29 @@ export async function cotizar(
     listaPrivada: Boolean(opts.idListaPrivada),
     flujo: flujoDelPedido(lineas),
   };
+}
+
+/**
+ * Límite de unidades de una campaña: si las líneas de una regla (las variantes de un modelo la
+ * comparten) piden más de lo que queda a precio de campaña, se marcan con `unidades_campania` y el
+ * pedido no se puede confirmar hasta bajar la cantidad (no se parte la línea en dos precios).
+ */
+function marcarExcesoDeUnidades(lineas: LineaCotizada[], quedan: ReadonlyMap<string, number>): void {
+  const porRegla = new Map<string, LineaCotizada[]>();
+  for (const l of lineas) {
+    if (l.problema || !l.campaniaReglaId || !quedan.has(l.campaniaReglaId)) continue;
+    porRegla.set(l.campaniaReglaId, [...(porRegla.get(l.campaniaReglaId) ?? []), l]);
+  }
+  for (const [regla, del] of porRegla) {
+    const q = quedan.get(regla)!;
+    if (del.reduce((a, l) => a + l.qty, 0) <= q) continue;
+    const etiqueta = del[0].campaniaEtiqueta ? frasePrecio(del[0].campaniaEtiqueta) : "precio de campaña";
+    const texto = `${q === 1 ? "Queda 1 unidad" : `Quedan ${q} unidades`} a ${etiqueta}. Reduzca la cantidad para mantener el precio.`;
+    for (const l of del) {
+      l.problema = "unidades_campania";
+      l.detalle = texto;
+    }
+  }
 }
 
 /**

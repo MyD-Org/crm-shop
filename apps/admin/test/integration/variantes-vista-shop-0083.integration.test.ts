@@ -16,6 +16,9 @@ import { TEST_DATABASE_URL, assertLocalTestDb } from "./db-url"
  */
 
 const M0083 = fileURLToPath(new URL("../../drizzle/0083_vista_shop_variantes.sql", import.meta.url))
+// La vista vigente es la de 0095 (campañas: + campanias_online al final). La de 0083 ya no se puede
+// reaplicar (CREATE OR REPLACE no quita columnas): la idempotencia se prueba sobre la de 0095.
+const M0095 = fileURLToPath(new URL("../../drizzle/0095_campanias.sql", import.meta.url))
 const T = "tenant-v83"
 
 const partes = (archivo: string) =>
@@ -72,7 +75,7 @@ describe("migración 0083: la vista del Shop expone el grupo de variantes (DB re
     await sql.end()
   })
 
-  it("la vista tiene las 12 columnas originales intactas y las 5 nuevas AL FINAL, en orden y con su tipo", async () => {
+  it("la vista tiene las 12 columnas originales intactas, las 5 de 0083 y la de 0095 AL FINAL, en orden y con su tipo", async () => {
     const cols = await sql`
       SELECT column_name, data_type FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'catalog_products_shop' ORDER BY ordinal_position
@@ -95,6 +98,7 @@ describe("migración 0083: la vista del Shop expone el grupo de variantes (DB re
       ["etiqueta", "text"],
       ["es_representante", "boolean"],
       ["overlay_alegra_id", "text"],
+      ["campanias_online", "jsonb"],
     ])
   })
 
@@ -159,12 +163,14 @@ describe("migración 0083: la vista del Shop expone el grupo de variantes (DB re
     expect(cols.map((c) => c.column_name)).toEqual(["tenant_id", "alegra_id", "lista_id", "precio"])
   })
 
-  it("es idempotente: reaplicar la migración no falla ni cambia las columnas", async () => {
-    for (const s of partes(M0083)) await sql.unsafe(s)
+  it("es idempotente: reaplicar la vista vigente (0095) y su GRANT no falla ni cambia las columnas", async () => {
+    const p = partes(M0095)
+    await sql.unsafe(p.find((s) => s.includes('CREATE OR REPLACE VIEW "public"."catalog_products_shop"'))!)
+    await sql.unsafe(p[p.length - 1])
     const cols = await sql`
       SELECT column_name FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'catalog_products_shop'
     `
-    expect(cols).toHaveLength(17)
+    expect(cols).toHaveLength(18)
   })
 })

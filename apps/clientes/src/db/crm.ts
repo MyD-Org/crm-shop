@@ -218,6 +218,30 @@ export const crmCatalogo = publico
     esRepresentante: boolean("es_representante").notNull(),
     /** `coalesce(grupo_id, alegra_id)`: de quién se lee el overlay (nombre, fotos, ficha, visibilidad). */
     overlayAlegraId: text("overlay_alegra_id").notNull(),
+    /**
+     * 0095 (campañas de precios): las campañas no terminadas (o terminadas hace < 24 h) que alcanzan
+     * al producto, con su precio NETO por lista pública:
+     * `[{ id, reglaId, inicio, fin, pct, unidades, precios: [{ idPriceList, price }] }]`, por inicio.
+     * null = ninguna. Qué campaña rige lo decide el Shop por request (`lib/campanias/`), nunca adentro
+     * de un `use cache`. Se normaliza con `mapCampanias`.
+     */
+    campaniasOnline: jsonb("campanias_online"),
+  })
+  .existing();
+
+/**
+ * Ventanas de las campañas de precios (`public.campanias_shop`, migración 0095 del CRM): las no
+ * terminadas o terminadas hace menos de 24 h (para recotizar un pedido pendiente creado durante la
+ * campaña). Sin reglas: el Shop sólo necesita saber cuáles están activas en un instante dado.
+ */
+export const crmCampanias = publico
+  .view("campanias_shop", {
+    tenantId: text("tenant_id").notNull(),
+    id: uuid("id").notNull(),
+    nombre: text("nombre").notNull(),
+    etiqueta: text("etiqueta").notNull(),
+    inicio: timestamp("inicio", { withTimezone: true, mode: "string" }).notNull(),
+    fin: timestamp("fin", { withTimezone: true, mode: "string" }).notNull(),
   })
   .existing();
 

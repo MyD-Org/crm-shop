@@ -903,6 +903,9 @@ async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Pro
     .from(preciosOnlineCambios)
     .where(and(eq(preciosOnlineCambios.tenantId, tenantId), eq(preciosOnlineCambios.id, entradaId)))
   if (!e) throw new PreciosOnlineError(404, "entrada_no_existe", "El cambio indicado no existe.")
+  if (e.tipo === "campania") {
+    throw new PreciosOnlineError(422, "irreversible", "Las campañas se editan desde la solapa Campañas.")
+  }
   if (IRREVERTIBLES.has(e.tipo)) {
     throw new PreciosOnlineError(422, "irreversible", "Este cambio no puede revertirse.")
   }

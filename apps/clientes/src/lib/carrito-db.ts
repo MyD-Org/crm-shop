@@ -9,6 +9,9 @@
  * sólo aplica si trae la versión vigente. Si no, no se toca nada y se devuelve
  * el carrito actual para que el cliente lo adopte.
  */
+import type { Product } from "@/data/products";
+import { campaniasVigentes } from "./campanias/vigentes";
+import { SIN_MEDIOS_PRECIO } from "./medios-precio";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { carts } from "@/db/schema";
@@ -168,9 +171,11 @@ export async function enriquecer(
   if (lineas.length === 0) return [];
   const ids = lineas.map((l) => l.id);
   // Flag `variantes-selector`: la línea de una variante se llama "Modelo / Opción", con su foto si tiene.
-  const agrupar = await variantesSelector();
+  const [agrupar, campanias] = await Promise.all([variantesSelector(), campaniasVigentes()]);
+  // Campañas activas: el precio de referencia de la línea es el de campaña (el que se cobra).
+  const conCampanias = campanias.length ? { mediosPrecio: { ...SIN_MEDIOS_PRECIO, campanias } } : {};
   const [productos, privados] = await Promise.all([
-    agrupar ? getProductosPorIds(ids, { agrupar: true }) : getProductosPorIds(ids),
+    agrupar || campanias.length ? getProductosPorIds(ids, { ...(agrupar ? { agrupar: true } : {}), ...conCampanias }) : getProductosPorIds(ids),
     idListaPrivada ? preciosPrivados(idListaPrivada, ids) : Promise.resolve(null),
   ]);
   return lineas.map(({ id, qty }) => {
@@ -181,9 +186,16 @@ export async function enriquecer(
           qty,
           name: nombreDeLinea(p),
           brand: p.brand,
-          price: privados ? (privados.get(id) ?? 0) : p.price,
+          price: privados ? menorConCampania(p, privados.get(id) ?? 0) : p.price,
+          // Precio de campaña: vale hasta el fin de la campaña (el mini-carrito no lo muestra después).
+          ...(p.campania && (!privados || menorConCampania(p, privados.get(id) ?? 0) === p.price) ? { precioHasta: p.campania.fin } : {}),
           image: p.images?.[0]?.url,
         }
       : { id, qty, name: "", brand: "", price: 0, faltante: true };
   });
+}
+
+/** Decisión B (campañas de precios): una cuenta privada paga el menor entre su privado y el de campaña. */
+function menorConCampania(p: Product, privado: number): number {
+  return p.campania && privado > 0 && p.price < privado ? p.price : privado;
 }

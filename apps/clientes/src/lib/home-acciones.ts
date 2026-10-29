@@ -1,5 +1,6 @@
 "use server";
 
+import { campaniasShop, campaniasVigentes, type CampaniaShop } from "./campanias/vigentes";
 import { randomUUID } from "node:crypto";
 import { updateTag } from "next/cache";
 import { TAG_HOME } from "@/lib/cache-tags";
@@ -363,9 +364,13 @@ export async function productosParaPromo(skus: string[], sucursal: string): Prom
   if (pedidos.length === 0) return { ok: true, productos: [] };
 
   try {
-    const { soloVisibles, variantes, mediosPrecio } = await flagsPublicos();
+    const [{ soloVisibles, variantes, mediosPrecio }, campanias] = await Promise.all([flagsPublicos(), campaniasVigentes()]);
     const [productos, { sucursales }] = await Promise.all([
-      getProductosPorSkus(pedidos, { soloVisibles, ...(variantes ? { agrupar: true } : {}), mediosPrecio }),
+      getProductosPorSkus(pedidos, {
+        soloVisibles,
+        ...(variantes ? { agrupar: true } : {}),
+        mediosPrecio: campanias.length ? { ...mediosPrecio, campanias } : mediosPrecio,
+      }),
       sucursalesCacheadas(),
     ]);
     const predeterminada = sucursalesDePromo(sucursales)[0]?.slug ?? sucursal;
@@ -390,6 +395,12 @@ export async function productosParaPromo(skus: string[], sucursal: string): Prom
 }
 
 /** Sucursales activas para el selector del contador de unidades. Sólo admin. */
+/** Las campañas de precios para asociar la sección Promociones (sólo admin; vacío si falla). */
+export async function campaniasParaPromo(): Promise<CampaniaShop[]> {
+  if (!(await esAdmin())) return [];
+  return campaniasShop();
+}
+
 export async function sucursalesParaPromo(): Promise<SucursalPromo[]> {
   if (!(await esAdmin())) return [];
   try {

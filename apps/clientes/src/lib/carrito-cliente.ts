@@ -33,6 +33,17 @@ export interface CartItem {
    * resolver del catálogo en cada carga. Sin foto, el ícono de siempre.
    */
   image?: string;
+  /**
+   * Fin (ISO) de la campaña de precios con cuyo precio se agregó la línea. Pasado ese momento el
+   * `price` referencial ya no vale y el mini-carrito no lo muestra (`precioDeReferenciaVigente`): el
+   * carrito y el checkout cotizan en el servidor. Ausente = precio normal.
+   */
+  precioHasta?: string;
+}
+
+/** ¿El precio referencial de la línea sigue valiendo en `ahora`? (ver `CartItem.precioHasta`). */
+export function precioDeReferenciaVigente(item: Pick<CartItem, "precioHasta">, ahora: number): boolean {
+  return !item.precioHasta || ahora < Date.parse(item.precioHasta);
 }
 
 /** Caché local: `owner` es el userId de Clerk, o null para invitado / cookie CRM. */
@@ -188,9 +199,11 @@ export function agregar(
   if (existente) {
     const suma = existente.qty + cant;
     if (suma > QTY_MAX) avisos.push("cantidad");
+    // El precio (y su vigencia de campaña) es el del agregado nuevo: sin campaña, se borra la vieja.
+    const sinVigencia = ({ precioHasta: _vieja, ...resto }: CartItem) => resto;
     return {
       items: items.map((i) =>
-        i.id === nuevo.id ? { ...i, ...nuevo, qty: Math.min(suma, QTY_MAX) } : i,
+        i.id === nuevo.id ? { ...sinVigencia(i), ...nuevo, qty: Math.min(suma, QTY_MAX) } : i,
       ),
       avisos,
     };
@@ -286,6 +299,9 @@ export function parsearItems(parsed: unknown): CartItem[] | null {
         qty: Math.min(qty, QTY_MAX),
         ...(esUrlDeImagen(item.image) ? { image: item.image } : {}),
         ...(item.faltante === true ? { faltante: true } : {}),
+        ...(typeof item.precioHasta === "string" && !Number.isNaN(Date.parse(item.precioHasta))
+          ? { precioHasta: item.precioHasta }
+          : {}),
       },
     ];
   });

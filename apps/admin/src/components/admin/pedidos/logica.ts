@@ -323,3 +323,20 @@ export function mensajeAvisoFactura(aviso: AvisoFacturaDto): { texto: string; ok
   }
   return { texto: "No se pudo enviar la factura por mail.", ok: false }
 }
+
+/**
+ * Leyenda de una línea vendida con campaña de precios (`shop.order_items.precio_normal`, 0040 del
+ * Shop): "Black Friday −20 %", con el % contra el precio normal redondeado hacia abajo (como en la
+ * tienda). null = la línea no tuvo campaña.
+ */
+export function textoCampaniaLinea(i: {
+  precioUnitario: number
+  precioNormal: number | null
+  campaniaNombre: string | null
+}): string | null {
+  const normal = i.precioNormal ?? NaN
+  const precio = i.precioUnitario
+  if (!(normal > 0) || !(precio < normal)) return null
+  const pct = Math.floor((1 - precio / normal) * 100 + 1e-9)
+  return `${i.campaniaNombre ?? "Campaña"} −${pct} %`
+}

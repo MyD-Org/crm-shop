@@ -14,7 +14,9 @@ import { TEST_DATABASE_URL, assertLocalTestDb } from "./db-url"
  */
 
 const M0080 = fileURLToPath(new URL("../../drizzle/0080_variantes_espejo.sql", import.meta.url))
-const M0083 = fileURLToPath(new URL("../../drizzle/0083_vista_shop_variantes.sql", import.meta.url))
+// Desde la 0095 la vista vigente es la de esa migración (18 columnas): la de 0083 ya no se puede
+// reaplicar (CREATE OR REPLACE no quita columnas).
+const M0095 = fileURLToPath(new URL("../../drizzle/0095_campanias.sql", import.meta.url))
 const T = "tenant-var"
 
 let sql: postgres.Sql
@@ -220,9 +222,9 @@ describe("migración 0081: la vista del Shop no ofrece padres (DB real)", () => 
     // esto el resultado dependía de qué otro archivo de la misma base (un worker) hubiera concedido antes.
     // Se concede con el MISMO bloque de la migración y se recrea la vista (CREATE OR REPLACE) para
     // comprobar lo que importa: que reemplazar la vista no pierde el permiso.
-    const partes = sentencias(M0083)
+    const partes = sentencias(M0095)
     await sql.unsafe(partes[partes.length - 1])
-    await sql.unsafe(partes[0])
+    await sql.unsafe(partes.find((s) => s.includes('CREATE OR REPLACE VIEW "public"."catalog_products_shop"'))!)
     const [r] = await sql`SELECT has_table_privilege('shop_app', 'public.catalog_products_shop', 'SELECT') AS ok`
     expect(r.ok).toBe(true)
     // La tabla base sigue sin SELECT para el Shop.

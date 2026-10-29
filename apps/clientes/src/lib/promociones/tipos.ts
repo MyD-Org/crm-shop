@@ -37,6 +37,12 @@ export type EstrellaPromo = ItemPromo & {
 
 export type PromocionesContent = TextosSeccion & {
   eyebrow?: string;
+  /**
+   * Campaña de precios asociada (id de `campanias_shop`, spec 2026-10-28-campanias-precios-design.md).
+   * Con ella las fechas, el precio habitual tachado y las unidades de la estrella salen de la campaña
+   * (`contenidoConCampania`); lo cargado a mano queda sólo para los productos sin campaña.
+   */
+  campaniaId?: string;
   /** ISO con offset; ausente = ya empezó. */
   inicio?: string;
   /** ISO con offset; obligatorio si hay productos. */

@@ -53,6 +53,9 @@ const CON_CACHE = [
   "lib/cuentas-bancarias-datos.ts",
   "lib/pagos/tarjetas-aceptadas-mp.ts",
   "lib/venta-sin-stock-repo.ts",
+  // Las VENTANAS de las campañas de precios (iguales para todos). Qué campaña rige se decide afuera,
+  // con el reloj del request; el checkout las lee sin caché (`campaniasActivasEn`).
+  "lib/campanias/vigentes.ts",
 ];
 
 /** Lo que cotiza o cobra: siempre del espejo en vivo (FRS-4). */

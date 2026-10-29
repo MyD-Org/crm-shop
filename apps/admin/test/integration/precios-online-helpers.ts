@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import {
+  campaniaReglas,
+  campanias,
   catalogOverlay,
   catalogProducts,
   listaPrecioOverrides,
@@ -65,6 +67,8 @@ export interface ProductoSeed {
   categoriaId?: string | null
   status?: string
   rawPrice?: unknown[]
+  /** Modelo (variantes): `catalog_products.grupo_id`. */
+  grupoId?: string | null
 }
 
 export async function seedProducto(tenantId: string, p: ProductoSeed): Promise<void> {
@@ -78,6 +82,7 @@ export async function seedProducto(tenantId: string, p: ProductoSeed): Promise<v
       name: `Producto ${p.alegraId}`,
       status: p.status ?? "active",
       brand: p.brand ?? null,
+      grupoId: p.grupoId ?? null,
       costo,
       costoAplicado: p.costoAplicado === undefined ? costo : p.costoAplicado,
       raw: { price: p.rawPrice ?? [{ idPriceList: "1", name: "Lista de Alegra", price: 999 }] },
@@ -115,4 +120,74 @@ export async function aplicar(
     sql`SELECT * FROM aplicar_precios_online(${tenantId}, ${idsSql}, ${modo})`,
   )) as unknown as { actualizados: number; retenidos: number }[]
   return rows[0]
+}
+
+// ── Campañas (spec 2026-10-28-campanias-precios-design.md) ──
+
+export async function seedCampania(
+  tenantId: string,
+  c: { nombre?: string; etiqueta?: string; inicio: Date; fin: Date },
+): Promise<string> {
+  const [row] = await getDb()
+    .insert(campanias)
+    .values({
+      tenantId,
+      nombre: c.nombre ?? "Campaña de prueba",
+      etiqueta: c.etiqueta ?? c.nombre ?? "Campaña de prueba",
+      inicio: c.inicio,
+      fin: c.fin,
+    })
+    .returning({ id: campanias.id })
+  return row.id
+}
+
+export async function seedRegla(
+  tenantId: string,
+  campaniaId: string,
+  r: {
+    tipo: "producto" | "marca" | "categoria"
+    alegraId?: string
+    marca?: string
+    categoriaId?: string
+    pct: number
+    unidades?: number | null
+  },
+): Promise<string> {
+  const [row] = await getDb()
+    .insert(campaniaReglas)
+    .values({
+      tenantId,
+      campaniaId,
+      tipo: r.tipo,
+      alegraId: r.alegraId ?? null,
+      marca: r.marca ?? null,
+      categoriaId: r.categoriaId ?? null,
+      pct: r.pct,
+      unidades: r.unidades ?? null,
+    })
+    .returning({ id: campaniaReglas.id })
+  return row.id
+}
+
+export interface FilaCampania {
+  alegra_id: string
+  campania_id: string
+  regla_id: string
+  pct: number
+  unidades: number | null
+}
+
+export async function calcularCampanias(tenantId: string, ids: string[] | null = null): Promise<FilaCampania[]> {
+  const idsSql = ids ? sql`${sql.raw(`ARRAY[${ids.map((i) => `'${i.replace(/'/g, "''")}'`).join(",")}]::text[]`)}` : sql`NULL::text[]`
+  return (await getDb().execute(
+    sql`SELECT * FROM calcular_campanias_online(${tenantId}, ${idsSql}) ORDER BY alegra_id, campania_id`,
+  )) as unknown as FilaCampania[]
+}
+
+export async function aplicarCampanias(tenantId: string, ids: string[] | null = null): Promise<number> {
+  const idsSql = ids ? sql`${sql.raw(`ARRAY[${ids.map((i) => `'${i.replace(/'/g, "''")}'`).join(",")}]::text[]`)}` : sql`NULL::text[]`
+  const rows = (await getDb().execute(
+    sql`SELECT aplicar_campanias_online(${tenantId}, ${idsSql}) AS n`,
+  )) as unknown as { n: number }[]
+  return Number(rows[0].n)
 }

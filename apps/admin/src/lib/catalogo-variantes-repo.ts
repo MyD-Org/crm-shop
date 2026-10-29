@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
+import { recalcularCampanias } from "./campanias-recalculo"
 
 // Grupos de variantes (change `variantes-de-producto`, rebanada S2, design D3).
 //
@@ -172,6 +173,10 @@ export async function recalcularGrupos(
     FROM catalog_products c
     WHERE c.tenant_id = ${tenantId} AND c.grupo_id IS NOT NULL AND ${alcanceSql}
   `)) as unknown as { n: number }[]
+
+  // Un producto que entra o sale de un modelo cambia de categoría efectiva (la del ancla): las
+  // campañas por categoría o por producto del modelo se recalculan en el momento.
+  if (g.length > 0) await recalcularCampanias(ej, tenantId, null)
 
   return { grupos: n, cambiados: g.length + r.length + o.length }
 }

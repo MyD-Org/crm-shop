@@ -6,6 +6,7 @@
  * Cuando eso cambie, el único lugar a tocar es `crearPedido`.
  */
 
+import { validarUnidadesEnTx } from "./campanias/unidades";
 import { cache } from "react";
 import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -445,6 +446,9 @@ export async function crearPedido(
     // La modalidad de cada línea a pedido se relee fresca acá (activa y con el mismo flujo que se
     // cotizó) y se congela en la línea. Sin líneas a pedido no se lee nada: el pedido es el de siempre.
     const snapshots = idsAPedido.size > 0 ? await snapshotsVentaSinStock(tx, lineas) : new Map();
+    // Límite de unidades de las campañas de precios: con lock por regla y relectura, en la MISMA
+    // transacción (dos compras simultáneas por la última unidad: una sola se confirma).
+    await validarUnidadesEnTx(tx, lineas);
 
     await tx.insert(orderItems).values(
       lineas.map((l) => ({
@@ -462,6 +466,10 @@ export async function crearPedido(
         // Línea "a traer": el origen no es la sucursal que despacha el pedido.
         aTraerDe: aTraerDe(asignacion, l.id),
         ventaSinStock: snapshots.get(l.id) ?? null,
+        // Campaña de precios con la que se cotizó (trazabilidad y conteo de unidades).
+        ...(l.campaniaId
+          ? { campaniaId: l.campaniaId, campaniaReglaId: l.campaniaReglaId ?? null, precioNormal: l.precioNormal != null ? String(l.precioNormal) : null }
+          : {}),
       })),
     );
 
@@ -2066,10 +2074,13 @@ export async function pedidoParaCambiarMedio(
   /** Lo que el checkout precarga al volver al paso Pago con un pedido retomado. */
   entrega: { local: string | null; ciudad: string | null; direccion: string | null };
   contacto: { nombre: string; telefono: string };
+  /** Cuándo se creó: al recotizar rigen las campañas de precios activas ese día (decisión C). */
+  creadoEn: Date;
 } | null> {
   const db = getDb();
   const [p] = await db
     .select({
+      createdAt: orders.createdAt,
       entregaTipo: orders.entregaTipo,
       pagoMetodo: orders.pagoMetodo,
       cuotas: orders.cuotas,
@@ -2111,6 +2122,7 @@ export async function pedidoParaCambiarMedio(
       direccion: p.entregaDireccion ?? null,
     },
     contacto: { nombre: p.contactoNombre, telefono: p.contactoTelefono },
+    creadoEn: p.createdAt,
   };
 }
 
@@ -2208,6 +2220,10 @@ export async function cambiarMedioPedido(
       actuales.size === cot.lineas.length && cot.lineas.every((l) => actuales.get(l.id) === l.qty);
     if (!mismas) return { ok: false, motivo: "lineas_distintas" };
 
+    // Límite de unidades de campaña: mismo control que al crear (lock por regla y relectura), sin
+    // contar las unidades de este mismo pedido. Una cotización vieja no le suma una unidad que no queda.
+    await validarUnidadesEnTx(tx, cot.lineas, id);
+
     // Reserva: el vencimiento depende del medio (24 h en línea; `reserva_dias` sin cobro en línea).
     let reglasReserva: Pick<ReglasVentaTenant, "reservaDias"> | null = null;
     try {
@@ -2236,6 +2252,10 @@ export async function cambiarMedioPedido(
           subtotal: String(l.subtotal),
           iva: String(l.iva),
           total: String(l.total),
+          // La campaña de la recotización (con las activas a la fecha de creación del pedido).
+          campaniaId: l.campaniaId ?? null,
+          campaniaReglaId: l.campaniaReglaId ?? null,
+          precioNormal: l.precioNormal != null ? String(l.precioNormal) : null,
         })
         .where(and(eq(orderItems.orderId, id), eq(orderItems.alegraItemId, l.id)));
     }

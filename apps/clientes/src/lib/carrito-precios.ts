@@ -78,3 +78,31 @@ export function totalesEstimados(
   iva = redondear(iva);
   return { subtotal, iva, total: redondear(subtotal + iva), unidades };
 }
+
+/** Una línea cotizada con su campaña de precios (ver `LineaCotizada` en src/lib/cotizacion.ts). */
+export type LineaPrecioCampania = LineaPrecio & { precioNormal?: number; campaniaEtiqueta?: string };
+
+/**
+ * Campaña de precios de una línea del carrito: el unitario NORMAL con IVA (para tacharlo) y la
+ * etiqueta de la campaña. null = la línea no tiene campaña o tiene un problema.
+ */
+export function campaniaDeLinea(l: LineaPrecioCampania): { normalFinal: number; etiqueta: string } | null {
+  if (l.problema || l.precioNormal == null || !(l.precioNormal > l.precioUnitario)) return null;
+  const normalFinal = precioFinal(l.precioNormal, l.ivaPorcentaje);
+  return normalFinal === undefined ? null : { normalFinal, etiqueta: l.campaniaEtiqueta ?? "" };
+}
+
+/**
+ * Cuánto ahorra el comprador por las campañas de precios, con impuestos y con el mismo redondeo que
+ * `cotizarItem` (subtotal al centavo, IVA al centavo): total normal − total cobrado de cada línea
+ * válida con campaña. 0 = sin ahorro (el resumen no muestra la línea).
+ */
+export function ahorroCampania(lineas: readonly LineaPrecioCampania[]): number {
+  const ahorro = lineas.reduce((acc, l) => {
+    if (l.problema || l.precioNormal == null || !(l.precioNormal > l.precioUnitario)) return acc;
+    const normal = montosDe({ ...l, precioUnitario: l.precioNormal }, l.qty).total;
+    const cobrado = montosDe(l, l.qty).total;
+    return acc + (normal - cobrado);
+  }, 0);
+  return redondear(ahorro);
+}

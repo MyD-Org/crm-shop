@@ -47,7 +47,7 @@ export function FavoritosCompartidosLista({
     }
     addItems(
       conPrecio.map((p) => ({
-        item: { id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url },
+        item: { id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url, ...(p.campania ? { precioHasta: p.campania.fin } : {}) },
         qty: 1,
       })),
     );

@@ -117,3 +117,23 @@ describe("jsonLdProductoHtml", () => {
     expect(parsed.name).toContain("</script>");
   });
 });
+
+describe("jsonLdProducto con campaña de precios", () => {
+  it("el Offer lleva el precio de campaña y priceValidUntil = último día de la campaña en Argentina (fin exclusivo)", () => {
+    const producto = {
+      ...base,
+      price: 128,
+      precioFinal: 154.88,
+      oldPrice: 193.6,
+      campania: { id: "c1", nombre: "Black Friday", etiqueta: "BF", fin: "2026-12-01T03:00:00.000Z", pct: 20, unidades: null, quedan: null },
+    } as Product;
+    const offer = jsonLdProducto(producto, undefined).offers as Record<string, unknown>;
+    expect(offer.price).toBe(154.88);
+    expect(offer.priceValidUntil).toBe("2026-11-30"); // termina el 1/12 00:00 AR: vale hasta el 30/11
+  });
+
+  it("sin campaña no hay priceValidUntil", () => {
+    const offer = jsonLdProducto(base, undefined).offers as Record<string, unknown>;
+    expect(offer.priceValidUntil).toBeUndefined();
+  });
+});

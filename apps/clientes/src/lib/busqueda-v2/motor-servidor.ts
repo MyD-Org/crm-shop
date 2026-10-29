@@ -10,6 +10,8 @@
  *   (Vercel Flags): apagado, o si no se puede evaluar, no hay plan.
  * - Nunca se llama dentro de un scope `'use cache'`: lee flags y plan por request.
  */
+import type { CampaniaActiva } from "../campanias/vigentes";
+import { SIN_MEDIOS_PRECIO } from "../medios-precio";
 import { contarCatalogo, getPaginaCatalogo } from "../catalog";
 import { facetasPublicas, paginaCatalogoPublica } from "../catalogo-publico";
 import { busquedaIaHabilitada } from "../busqueda-ia-flag";
@@ -30,6 +32,8 @@ export interface ContextoShop {
   destacado?: MedioPrecio | null;
   /** Sólo la página: cuotas sin interés de las cards (flag `cuotas-cobro`; parte de la clave de la caché). */
   cuotas?: MedioCuotas[] | null;
+  /** Campañas de precios activas (`campaniasVigentes()`): el precio de campaña en toda superficie. */
+  campanias?: CampaniaActiva[] | null;
   /** Sólo la página: la URL trae `ia=1`, así que el plan de la consulta aporta lo blando. */
   conPlanDeUrl?: boolean;
   /** Sólo la página: leer las facetas de cada etapa junto con la página. */
@@ -47,15 +51,21 @@ async function leerBusquedaIa(c: ContextoShop): Promise<boolean> {
 }
 
 function depsDe(c: ContextoShop): DepsMotor {
-  const { superficie, soloVisibles, disp, destacado, cuotas } = c;
+  const { superficie, soloVisibles, disp, destacado, cuotas, campanias } = c;
   const agrupado = c.agrupar ? { agrupar: true } : {};
+  // Fuera de la página (autocompletar, chat): sin medios, pero con el precio de campaña.
+  const conCampanias = campanias?.length ? { mediosPrecio: { ...SIN_MEDIOS_PRECIO, campanias } } : {};
   return {
     pagina: ({ filtros, orden, pagina, porPagina, sinConteo }) =>
       superficie === "catalogo"
         ? // La página del catálogo siempre cuenta y pagina de a PRODUCTOS_POR_PAGINA (su caché lo asume).
-          paginaCatalogoPublica({ filtros, orden, pagina, soloVisibles, ...agrupado, disp, destacado, cuotas })
-        : getPaginaCatalogo({ soloVisibles, ...agrupado, filtros, orden, pagina, porPagina, disp, sinConteo }),
-    facetas: (filtros) => (c.agrupar ? facetasPublicas(filtros, soloVisibles, disp, true) : facetasPublicas(filtros, soloVisibles, disp)),
+          paginaCatalogoPublica({ filtros, orden, pagina, soloVisibles, ...agrupado, disp, destacado, cuotas, campanias })
+        : getPaginaCatalogo({ soloVisibles, ...agrupado, filtros, orden, pagina, porPagina, disp, sinConteo, ...conCampanias }),
+    facetas: (f) => {
+      // El rango de precio del slider con el precio vigente (campañas activas), como la página.
+      const filtros = campanias?.length ? { ...f, precioCampanias: campanias.map((x) => x.id) } : f;
+      return c.agrupar ? facetasPublicas(filtros, soloVisibles, disp, true) : facetasPublicas(filtros, soloVisibles, disp);
+    },
     log: (mensaje) => console.error(mensaje),
   };
 }

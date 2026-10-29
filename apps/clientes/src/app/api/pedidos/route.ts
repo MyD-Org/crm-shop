@@ -1,3 +1,4 @@
+import { campaniasActivasEn } from "@/lib/campanias/vigentes";
 import { NextResponse, after } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
@@ -9,6 +10,7 @@ import { provinciaCanonica } from "@/lib/provincias";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { marcarModalidadesCambiadas, marcarStockCambiado } from "@/lib/cache-invalidar";
 import { ProductoNoDisponibleError, StockInsuficienteError } from "@/lib/stock-disponible";
+import { UnidadesCampaniaError } from "@/lib/campanias/unidades";
 import { admiteEnvio } from "@/lib/facturacion";
 import { guardarTelefonoSiFalta } from "@/lib/facturacion-db";
 import { congelarFacturacion, telefonoParaAlegra, validarComplemento } from "@/lib/contacto-alegra";
@@ -421,6 +423,8 @@ export async function POST(req: Request) {
     // (`cotizarConMedio`). La lista sale del slug ya validado (medios releídos sin caché más arriba),
     // nunca del body. Un pedido a confirmar por modalidad (sin cuenta corriente) se cotiza con la lista
     // que muestran las cards, como en el carrito.
+    // Campañas de precios activas AHORA, leídas sin caché (lo que cobra va siempre en vivo).
+    const campanias = await campaniasActivasEn(new Date());
     const resuelto = await cotizarConMedio({
       lineas,
       entregaTipo,
@@ -437,6 +441,7 @@ export async function POST(req: Request) {
       ...(opcionesMedios.esCuentaCorriente
         ? {}
         : { idListaAConfirmar: listaAConfirmar(sinProcesadoresNoConfigurados(mediosCrm)) }),
+      ...(campanias.length ? { campanias } : {}),
     });
     if (!resuelto.ok) {
       if (resuelto.motivo === "forma_no_disponible") {
@@ -606,6 +611,21 @@ export async function POST(req: Request) {
         // Se despublicó entre la cotización y el pedido: se re-cotiza para marcar la línea.
         const recotizada = await cotizar(lineas, opcionesCotizar);
         return NextResponse.json({ error: err.message, cotizacion: recotizada, ids: err.ids }, { status: 409 });
+      }
+      if (err instanceof UnidadesCampaniaError) {
+        // Otro checkout se llevó las últimas unidades a precio de campaña: se re-cotiza (ya con lo
+        // que queda, o el precio normal si se agotaron) para que el checkout marque la línea.
+        const recotizada = await cotizar(lineas, opcionesCotizar);
+        return NextResponse.json(
+          {
+            error: "Ya no quedan suficientes unidades a precio de campaña de un producto. Revise el carrito.",
+            motivo: "unidades_campania",
+            quedan: err.quedan,
+            ids: err.ids,
+            cotizacion: recotizada,
+          },
+          { status: 409 },
+        );
       }
       if (!(err instanceof StockInsuficienteError) && !(err instanceof VentaSinStockCambioError)) throw err;
       // Otro checkout se llevó las unidades entre la cotización y el pedido, o la modalidad de venta

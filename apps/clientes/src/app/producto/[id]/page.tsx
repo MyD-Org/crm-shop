@@ -1,3 +1,4 @@
+import { campaniasVigentes } from "@/lib/campanias/vigentes";
 import { cache, Suspense } from "react";
 import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
 import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
@@ -37,15 +38,15 @@ const productoDe = cache(async (id: string) => {
   // cualquier local, sin lo que ninguna sucursal ofrece). Sin flag: undefined.
   // Tabla "Características" (fichas estructuradas, fase 2): sólo con el flag `busqueda-ia` y con
   // `catalog_atributos` legible; si no, la ficha de siempre (sin la tabla).
-  const [{ soloVisibles, variantes, mediosPrecio }, disp, estructurados] = await Promise.all([
+  const [{ soloVisibles, variantes, mediosPrecio }, disp, estructurados, campanias] = await Promise.all([
     flagsPublicos(),
     dispCatalogo(),
     usarAtributosEstructurados(),
+    // Campañas de precios activas AHORA (fuera de la caché: parte de su clave).
+    campaniasVigentes(),
   ]);
   // `variantes` (flag `variantes-selector`): overlay del ancla del grupo; apagado, la llamada de siempre.
-  return variantes
-    ? productoPublico(id, soloVisibles, disp, estructurados, mediosPrecio?.ficha, mediosPrecio?.cuotas, mediosPrecio?.modal, true)
-    : productoPublico(id, soloVisibles, disp, estructurados, mediosPrecio?.ficha, mediosPrecio?.cuotas, mediosPrecio?.modal);
+  return productoPublico(id, soloVisibles, disp, estructurados, mediosPrecio?.ficha, mediosPrecio?.cuotas, mediosPrecio?.modal, variantes, campanias);
 });
 
 /** Vista previa del link (WhatsApp, Google…). Ver src/lib/producto-metadata.ts. */
@@ -57,7 +58,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProductoPage({ params }: Props) {
   const id = idDeRuta((await params).id);
-  const [producto, reglas, { soloVisibles, variantes, mediosPrecio }, disp, dispEntrega, tarjetas, { promociones }] = await Promise.all([
+  const [producto, reglas, { soloVisibles, variantes, mediosPrecio }, disp, dispEntrega, tarjetas, { promociones }, campanias] = await Promise.all([
     productoDe(id),
     reglasVentaCacheadas(),
     flagsPublicos(),
@@ -65,6 +66,7 @@ export default async function ProductoPage({ params }: Props) {
     dispDelVisitante(),
     getTarjetasMercadoPago(),
     getContenidoHome(),
+    campaniasVigentes(),
   ]);
   // Local de retiro elegido en "Enviar a" (si la lectura falla, sin local elegido).
   const eleccion = (await ubicacionDelVisitante().catch(() => null))?.eleccion;
@@ -153,6 +155,7 @@ export default async function ProductoPage({ params }: Props) {
                 disp={disp}
                 destacado={mediosPrecio?.destacado}
                 cuotas={mediosPrecio?.cuotas}
+                campanias={campanias}
               />
             </Suspense>
           ) : null

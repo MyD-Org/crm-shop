@@ -1,3 +1,4 @@
+import { campaniasVigentes } from "@/lib/campanias/vigentes";
 import { redirect } from "next/navigation";
 import { EmptyState } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
@@ -31,9 +32,14 @@ export default async function FavoritosPage() {
   }
 
   // "$X con <Medio>" sólo del destacado (las cards no muestran los de la ficha).
-  const { mediosPrecio } = await flagsPublicos();
+  const [{ mediosPrecio }, campanias] = await Promise.all([flagsPublicos(), campaniasVigentes()]);
   const productos = await listarFavoritos(clerkUserId, {
-    mediosPrecio: { destacado: mediosPrecio.destacado, ficha: [], ...(mediosPrecio.cuotas ? { cuotas: mediosPrecio.cuotas } : {}) },
+    mediosPrecio: {
+      destacado: mediosPrecio.destacado,
+      ficha: [],
+      ...(mediosPrecio.cuotas ? { cuotas: mediosPrecio.cuotas } : {}),
+      ...(campanias.length ? { campanias } : {}),
+    },
   });
 
   return (

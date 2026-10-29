@@ -342,3 +342,25 @@ describe("mensajes", () => {
     }
   });
 });
+
+describe("precio de campaña en el mini-carrito (precioHasta)", () => {
+  const base = { id: "7", name: "Lámpara", brand: "Marca", price: 128 };
+  it("parsearItems conserva precioHasta válido y descarta basura", async () => {
+    const { parsearItems } = await import("./carrito-cliente");
+    expect(parsearItems([{ ...base, qty: 1, precioHasta: "2026-12-01T03:00:00.000Z" }])![0].precioHasta).toBe("2026-12-01T03:00:00.000Z");
+    expect(parsearItems([{ ...base, qty: 1, precioHasta: "mañana" }])![0].precioHasta).toBeUndefined();
+  });
+  it("precioDeReferenciaVigente: antes del fin sí, después no; sin campaña siempre", async () => {
+    const { precioDeReferenciaVigente } = await import("./carrito-cliente");
+    const item = { precioHasta: "2026-12-01T03:00:00.000Z" };
+    expect(precioDeReferenciaVigente(item, Date.parse("2026-12-01T02:59:59Z"))).toBe(true);
+    expect(precioDeReferenciaVigente(item, Date.parse("2026-12-01T03:00:00Z"))).toBe(false);
+    expect(precioDeReferenciaVigente({}, Date.parse("2030-01-01T00:00:00Z"))).toBe(true);
+  });
+  it("agregar de nuevo sin campaña borra el precioHasta viejo", async () => {
+    const { agregar } = await import("./carrito-cliente");
+    const r = agregar([{ ...base, qty: 1, precioHasta: "2026-12-01T03:00:00.000Z" }], { ...base, price: 160 });
+    expect(r.items[0]).toMatchObject({ price: 160, qty: 2 });
+    expect(r.items[0].precioHasta).toBeUndefined();
+  });
+});

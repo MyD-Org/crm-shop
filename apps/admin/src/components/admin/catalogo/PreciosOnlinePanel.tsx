@@ -236,7 +236,12 @@ function GrillaPrecios({ categorias, listas, estadoInicial }: GrillaProps) {
     {
       key: "estado",
       header: TEXTOS.grilla.estadoCol,
-      render: (f) => <Badge tone={TONO_ESTADO[f.estado]}>{TEXTOS.estados[f.estado]}</Badge>,
+      render: (f) => (
+        <span className="flex flex-wrap gap-1">
+          <Badge tone={TONO_ESTADO[f.estado]}>{TEXTOS.estados[f.estado]}</Badge>
+          {f.enCampania && <Badge tone="info">{TEXTOS.campania(f.enCampania)}</Badge>}
+        </span>
+      ),
     },
   ]
 

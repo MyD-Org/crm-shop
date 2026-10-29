@@ -64,8 +64,10 @@ import { SOLO_STOCK_DEFAULT, type OrdenCatalogo } from "./catalogo-url";
 import { elegirDestacados } from "./destacados";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import type { MedioCuotas } from "./cuotas-sin-interes";
-import { SIN_MEDIOS_PRECIO, type MedioPrecio } from "./medios-precio";
+
 import { agotadoSinModalidad } from "./venta-sin-stock";
+import { SIN_MEDIOS_PRECIO, type MedioPrecio, type MediosPrecio } from "./medios-precio";
+import type { CampaniaActiva } from "./campanias/vigentes";
 
 /** Categoría de Alegra que alimenta los destacados de la home. */
 const CATEGORIA_DESTACADOS = "ILUMINACION";
@@ -119,6 +121,11 @@ export interface ArgsPaginaPublica {
   destacado?: MedioPrecio | null;
   /** Cuotas sin interés de las cards (flag `cuotas-cobro`): también parte de la clave de la caché. */
   cuotas?: MedioCuotas[] | null;
+  /**
+   * Campañas de precios activas en el request (`campaniasVigentes()`): parte de la clave de la caché,
+   * así el precio de campaña aparece y desaparece en el minuto exacto del inicio y del fin.
+   */
+  campanias?: CampaniaActiva[] | null;
 }
 
 async function paginaCacheada(args: ArgsPaginaPublica): Promise<PaginaCatalogo> {
@@ -130,14 +137,20 @@ async function paginaCacheada(args: ArgsPaginaPublica): Promise<PaginaCatalogo> 
 }
 
 /** Los medios que dibujan las cards: el destacado y las cuotas sin interés (la ficha va aparte). */
-function conMedios<T extends { destacado?: MedioPrecio | null; cuotas?: MedioCuotas[] | null }>(
-  args: T,
-): Omit<T, "destacado" | "cuotas"> & {
-  mediosPrecio?: { destacado: MedioPrecio | null; ficha: MedioPrecio[]; cuotas?: MedioCuotas[] };
-} {
-  const { destacado, cuotas, ...resto } = args;
-  return destacado || cuotas?.length
-    ? { ...resto, mediosPrecio: { ...SIN_MEDIOS_PRECIO, destacado: destacado ?? null, ...(cuotas?.length ? { cuotas } : {}) } }
+function conMedios<
+  T extends { destacado?: MedioPrecio | null; cuotas?: MedioCuotas[] | null; campanias?: CampaniaActiva[] | null },
+>(args: T): Omit<T, "destacado" | "cuotas" | "campanias"> & { mediosPrecio?: MediosPrecio } {
+  const { destacado, cuotas, campanias, ...resto } = args;
+  return destacado || cuotas?.length || campanias?.length
+    ? {
+        ...resto,
+        mediosPrecio: {
+          ...SIN_MEDIOS_PRECIO,
+          destacado: destacado ?? null,
+          ...(cuotas?.length ? { cuotas } : {}),
+          ...(campanias?.length ? { campanias } : {}),
+        },
+      }
     : resto;
 }
 
@@ -286,12 +299,14 @@ async function productoCacheado(
   modal: readonly MedioPrecio[] = [],
   /** Flag `variantes-selector`: también parte de la clave. */
   agrupar = false,
+  /** Campañas activas (`campaniasVigentes()`): también parte de la clave. */
+  campanias: readonly CampaniaActiva[] = [],
 ): Promise<Product | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   cacheLife("catalogo");
   console.info("[cache] producto miss");
-  return leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas, modal, agrupar);
+  return leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas, modal, agrupar, campanias);
 }
 
 function leerProducto(
@@ -303,14 +318,23 @@ function leerProducto(
   cuotas: MedioCuotas[] | null,
   modal: readonly MedioPrecio[] = [],
   agrupar = false,
+  campanias: readonly CampaniaActiva[] = [],
 ): Promise<Product | null> {
   return getProducto(id, {
     soloVisibles,
     ...conAgrupar(agrupar),
     disp,
     ...(estructurados ? { atributosEstructurados: true } : {}),
-    ...(ficha.length || cuotas?.length || modal.length
-      ? { mediosPrecio: { destacado: null, ficha: [...ficha], ...(cuotas?.length ? { cuotas } : {}), ...(modal.length ? { modal: [...modal] } : {}) } }
+    ...(ficha.length || cuotas?.length || modal.length || campanias.length
+      ? {
+          mediosPrecio: {
+            destacado: null,
+            ficha: [...ficha],
+            ...(cuotas?.length ? { cuotas } : {}),
+            ...(modal.length ? { modal: [...modal] } : {}),
+            ...(campanias.length ? { campanias: [...campanias] } : {}),
+          },
+        }
       : {}),
   });
 }
@@ -338,10 +362,14 @@ export function productoPublico(
   modal: readonly MedioPrecio[] = [],
   /** Flag `variantes-selector` (`flagsPublicos().variantes`): overlay del ancla del grupo. */
   agrupar = false,
+  /** Campañas activas (`campaniasVigentes()`): el precio de campaña. Vacío = ninguna. */
+  campanias: readonly CampaniaActiva[] = [],
 ): Promise<Product | null> {
   if (!esIdProducto(id)) return Promise.resolve(null);
   const cacheada = () =>
-    agrupar
+    campanias.length
+      ? productoCacheado(id, soloVisibles, disp, estructurados, ficha, cuotas, modal, agrupar, campanias)
+      : agrupar
       ? productoCacheado(id, soloVisibles, disp, estructurados, ficha, cuotas, modal, true)
       : ficha.length || cuotas?.length || modal.length
         ? productoCacheado(id, soloVisibles, disp, estructurados, ficha, cuotas, modal)
@@ -349,7 +377,7 @@ export function productoPublico(
           ? productoCacheado(id, soloVisibles, disp, true)
           : productoCacheado(id, soloVisibles, disp);
   return conRespaldoSinCache("producto", cacheada, () =>
-    leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas, modal, agrupar),
+    leerProducto(id, soloVisibles, disp, estructurados, ficha, cuotas, modal, agrupar, campanias),
   );
 }
 
@@ -466,6 +494,11 @@ interface ArgsDestacados {
   /** Cuotas sin interés de las cards (flag `cuotas-cobro`). */
   cuotas?: MedioCuotas[] | null;
   /**
+   * Campañas de precios activas en el request (`campaniasVigentes()`): parte de la clave de la caché,
+   * así el precio de campaña aparece y desaparece en el minuto exacto del inicio y del fin.
+   */
+  campanias?: CampaniaActiva[] | null;
+  /**
    * Con qué se completa después de los curados. Ausente: Iluminación (la home). Las páginas de
    * marca pasan sus filtros (`marcasPropias`), así "Los más elegidos" no trae productos ajenos.
    */
@@ -570,6 +603,7 @@ async function primeraPaginaCategoria(
   destacado: MedioPrecio | null = null,
   cuotas: MedioCuotas[] | null = null,
   agrupar = false,
+  campanias: CampaniaActiva[] | null = null,
 ): Promise<Product[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
@@ -582,7 +616,7 @@ async function primeraPaginaCategoria(
       soloVisibles,
       ...conAgrupar(agrupar),
       disp,
-      ...conMedios({ destacado, cuotas }),
+      ...conMedios({ destacado, cuotas, campanias }),
     });
     cacheLife("catalogo");
     return productos;
@@ -603,6 +637,7 @@ async function categoriaExacta(
   destacado: MedioPrecio | null = null,
   cuotas: MedioCuotas[] | null = null,
   agrupar = false,
+  campanias: CampaniaActiva[] | null = null,
 ): Promise<{ nombre: string; productos: Product[] } | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
@@ -614,7 +649,7 @@ async function categoriaExacta(
       soloVisibles,
       ...conAgrupar(agrupar),
       disp,
-      ...conMedios({ destacado, cuotas }),
+      ...conMedios({ destacado, cuotas, campanias }),
     });
     cacheLife("catalogo");
     return r;
@@ -655,6 +690,11 @@ export async function relacionadosProducto(args: {
   destacado?: MedioPrecio | null;
   /** Cuotas sin interés de las cards (flag `cuotas-cobro`). */
   cuotas?: MedioCuotas[] | null;
+  /**
+   * Campañas de precios activas en el request (`campaniasVigentes()`): parte de la clave de la caché,
+   * así el precio de campaña aparece y desaparece en el minuto exacto del inicio y del fin.
+   */
+  campanias?: CampaniaActiva[] | null;
 }): Promise<Relacionados | null> {
   const recortar = (productos: Product[]) =>
     productos.filter((p) => p.id !== args.excluirId && !agotadoSinModalidad(p)).slice(0, args.cantidad);
@@ -664,10 +704,13 @@ export async function relacionadosProducto(args: {
     const agrupar = args.agrupar ?? false;
     const destacado = args.destacado ?? null;
     const cuotas = args.cuotas ?? null;
+    const campanias = args.campanias?.length ? args.campanias : null;
     const exacta = await conRespaldoSinCache(
       "categoria-exacta",
       () =>
-        agrupar
+        campanias
+          ? categoriaExacta(categoriaPropiaId, soloVisibles, disp, destacado, cuotas, agrupar, campanias)
+          : agrupar
           ? categoriaExacta(categoriaPropiaId, soloVisibles, disp, destacado, cuotas, true)
           : categoriaExacta(categoriaPropiaId, soloVisibles, disp, destacado, cuotas),
       () =>
@@ -677,7 +720,7 @@ export async function relacionadosProducto(args: {
           soloVisibles,
           ...conAgrupar(agrupar),
           disp,
-          ...conMedios({ destacado, cuotas }),
+          ...conMedios({ destacado, cuotas, campanias }),
         }).catch(() => null),
     );
     if (exacta) return { categoria: exacta.nombre, productos: recortar(exacta.productos) };
@@ -687,14 +730,17 @@ export async function relacionadosProducto(args: {
   const agrupar = args.agrupar ?? false;
   const destacado = args.destacado ?? null;
   const cuotas = args.cuotas ?? null;
+  const campanias = args.campanias?.length ? args.campanias : null;
   const productos = await conRespaldoSinCache(
     "categoria-relacionados",
     () =>
-      agrupar
+      campanias
+        ? primeraPaginaCategoria(categoria, soloVisibles, disp, destacado, cuotas, agrupar, campanias)
+        : agrupar
         ? primeraPaginaCategoria(categoria, soloVisibles, disp, destacado, cuotas, true)
         : primeraPaginaCategoria(categoria, soloVisibles, disp, destacado, cuotas),
     () =>
-      getPaginaCatalogo({ filtros: { categorias: [categoria] }, orden: "destacados", pagina: 1, soloVisibles, ...conAgrupar(agrupar), disp, ...conMedios({ destacado, cuotas }) })
+      getPaginaCatalogo({ filtros: { categorias: [categoria] }, orden: "destacados", pagina: 1, soloVisibles, ...conAgrupar(agrupar), disp, ...conMedios({ destacado, cuotas, campanias }) })
         .then((r) => r.productos)
         .catch(() => []),
   );

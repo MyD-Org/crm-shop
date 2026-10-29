@@ -12,6 +12,8 @@ import {
 } from "../lib/promociones/promo";
 import type { PromocionesContent } from "../lib/promociones/tipos";
 
+const RE_UUID_CAMPANIA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export type { EstrellaPromo, ItemPromo, PromocionesContent, Referencia } from "../lib/promociones/tipos";
 
 /**
@@ -1016,7 +1018,10 @@ function erroresPromociones(
     if (o[campo] !== undefined && !esFechaIso(o[campo])) errores.push(`${campo} debe ser una fecha ISO con zona horaria`);
   if (esFechaIso(o.inicio) && esFechaIso(o.fin) && Date.parse(o.fin as string) <= Date.parse(o.inicio as string))
     errores.push("fin debe ser posterior a inicio");
-  if (skus.length > 0 && o.fin === undefined) errores.push("fin es obligatorio si la promo tiene productos");
+  if (o.campaniaId !== undefined && !(typeof o.campaniaId === "string" && RE_UUID_CAMPANIA.test(o.campaniaId)))
+    errores.push("campaniaId debe ser el id de una campaña");
+  // Con campaña de precios asociada, las fechas son las de la campaña.
+  if (skus.length > 0 && o.fin === undefined && o.campaniaId === undefined) errores.push("fin es obligatorio si la promo tiene productos");
   if (skus.length > 0 && typeof o.legales === "string" && o.legales.includes("{inicio}") && o.inicio === undefined)
     errores.push("Indique la fecha de inicio: los legales la mencionan con {inicio}.");
   return errores;

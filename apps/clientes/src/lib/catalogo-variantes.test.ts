@@ -101,10 +101,10 @@ describe("conResumenDeVariantes", () => {
 describe("getVariantesDeGrupo", () => {
   const fotoModelo = JSON.stringify([{ key: "productos/t/g1/aaa-1600.webp", w: 1600 }]);
   const fotoPropia = JSON.stringify([{ key: "productos/t/11/bbb-1600.webp", w: 1600 }]);
-  // Orden de columnas: las del catálogo (14) + etiqueta, tipo, esRepresentante, fotosPropias.
+  // Orden de columnas: las del catálogo (15) + etiqueta, tipo, esRepresentante, fotosPropias.
   const fila = (id: string, etiqueta: string | null, o: { stock: string | null; precio: number; rep: boolean; propia: string | null }) => [
     id, `Cinta LED ${id}`, `COD-${id}`, null, "Marca", precios(o.precio), o.stock, null, "ILUMINACION",
-    "Cinta LED 5050", fotoModelo, null, null, null,
+    "Cinta LED 5050", null, fotoModelo, null, null, null,
     etiqueta, "variante", o.rep, o.propia,
   ];
 
@@ -160,7 +160,7 @@ describe("getVariantesDeGrupo", () => {
 
 describe("getProducto con el flag (agrupar)", () => {
   const fotoModelo = JSON.stringify([{ key: "productos/t/g1/aaa-1600.webp", w: 1600 }]);
-  const base = (id: string) => [id, `Cinta LED ${id}`, `COD-${id}`, null, "Marca", precios(100), "10", null, "ILUMINACION", "Cinta LED 5050", fotoModelo, null, null, null];
+  const base = (id: string) => [id, `Cinta LED ${id}`, `COD-${id}`, null, "Marca", precios(100), "10", null, "ILUMINACION", "Cinta LED 5050", null, fotoModelo, null, null, null];
   const opcion = (id: string, etiqueta: string, rep: boolean) => [...base(id), etiqueta, rep, null];
 
   /** Contesta cada lectura de `getProducto` según su forma. */

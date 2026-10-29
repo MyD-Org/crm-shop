@@ -148,6 +148,8 @@ interface FilaCatalogo {
   overlayCategoriaId?: string | null;
   /** Nombre curado en el CRM. null = sin fila de overlay o sin nombre. */
   overlayNombre: string | null;
+  /** Descripción curada en el CRM; pisa la de Alegra. Opcional por los fixtures de test. */
+  overlayDescripcion?: string | null;
   /** Fotos del overlay, con la key de R2. null = sin fila de overlay (left join). */
   overlayFotos: FotoCrm[] | null;
   /**
@@ -366,6 +368,7 @@ const COLUMNAS_CATALOGO_BASE = {
   ivaPorcentaje: crmCatalogo.ivaPorcentaje,
   categoryName: crmCategoriasAlegra.name,
   overlayNombre: crmOverlay.nombre,
+  overlayDescripcion: crmOverlay.descripcion,
   overlayFotos: crmOverlay.fotos,
   overlayFichaTecnica: crmOverlay.fichaTecnica,
   overlayCategoriaId: crmOverlay.categoriaId,

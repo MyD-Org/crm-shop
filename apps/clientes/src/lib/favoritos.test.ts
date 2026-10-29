@@ -130,7 +130,7 @@ describe("quitarFavorito", () => {
 describe("listarFavoritos", () => {
   // Fila del espejo en el orden de COLUMNAS_CATALOGO (ver catalog-por-ids.test.ts).
   const fila = (id: string, nombre: string) => [
-    id, nombre, null, null, "Marca Ejemplo", [{ idPriceList: "1", price: 1000 }], "10", "21", null, null, [],
+    id, nombre, null, null, "Marca Ejemplo", [{ idPriceList: "1", price: 1000 }], "10", "21", null, null, null, [],
   ];
 
   it("dos consultas: ids con límite y productos del espejo sin filtro de visibilidad", async () => {

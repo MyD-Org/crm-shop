@@ -70,13 +70,19 @@ const normalizado = (v: string) => v.trim().replace(/\s+/g, " ").toLowerCase();
  * `nombreExhibido` ya tomó la descripción de Alegra como nombre, `nameEsCodigo`,
  * pero también con productos que por otra razón repiten el mismo texto en los
  * dos campos). Mostrarla ahí sería repetir el título.
+ *
+ * La descripción curada en el CRM (`overlayDescripcion`) gana siempre: alguien la escribió para la
+ * tienda. Vacía no pisa, igual que el nombre curado.
  */
 export function descripcionExhibida(fila: {
   overlayNombre: string | null;
+  overlayDescripcion?: string | null;
   description: string | null;
   name: string;
   code: string | null;
 }): string | undefined {
+  const curada = fila.overlayDescripcion?.trim();
+  if (curada) return curada;
   const descripcion = fila.description?.trim();
   if (!descripcion) return undefined;
   return normalizado(descripcion) === normalizado(nombreExhibido(fila)) ? undefined : descripcion;

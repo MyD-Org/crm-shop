@@ -83,6 +83,8 @@ export const crmOverlay = publico.table("catalog_overlay", {
   alegraId: text("alegra_id").notNull(),
   visible: boolean("visible").notNull(),
   nombre: text("nombre"),
+  /** Descripción curada en el admin; pisa la de Alegra en la ficha (`descripcionExhibida`). */
+  descripcion: text("descripcion"),
   categoriaId: uuid("categoria_id"),
   fotos: jsonb("fotos").$type<FotoCrm[]>().notNull(),
   fichaTecnica: jsonb("ficha_tecnica").$type<FichaTecnicaCrm | null>(),

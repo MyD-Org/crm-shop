@@ -70,7 +70,7 @@ describe("getIdAlternativoDeVariante", () => {
   const precios = JSON.stringify([{ idPriceList: "1", name: "General", price: 100, main: true }]);
   const opcion = (id: string, etiqueta: string, rep: boolean) => [
     id, `Cinta ${id}`, `COD-${id}`, null, "Marca", precios, "10", null, "ILUMINACION",
-    "Cinta", "[]", null, null, null,
+    "Cinta", null, "[]", null, null, null,
     etiqueta, "variante", rep, null,
   ];
 

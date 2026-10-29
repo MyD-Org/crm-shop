@@ -14,6 +14,7 @@
     "alegra_id": "text",
     "visible": "boolean",
     "nombre": "text",
+    "descripcion": "text",
     "categoria_id": "uuid",
     "fotos": "jsonb",
     "ficha_tecnica": "jsonb",

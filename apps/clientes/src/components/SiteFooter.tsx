@@ -10,8 +10,6 @@ import { getPaginasPublicadas } from "@/lib/institucional/datos";
 import { getMarca } from "@/lib/marca";
 import { partesNombre } from "@/lib/marca-base";
 import { columnasFooter } from "@/lib/legales/footer";
-import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
-import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
 
 /**
  * Footer global del layout. "Led" con el color de marca del tema sobre oscuro
@@ -30,8 +28,8 @@ import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
  * En mobile no se muestra en las páginas con una barra fija abajo (ficha,
  * carrito, checkout): ver `[data-sin-footer-mobile]` en globals.css.
  *
- * "Medios de pago": logos de las tarjetas que acepta Mercado Pago en la cuenta (`getTarjetasMercadoPago`,
- * cacheado por días). Si Mercado Pago no responde, la fila no se muestra.
+ * Sin la fila "Medios de pago" del DS (logos de tarjetas): se sacó a pedido
+ * de la tienda. Los logos siguen en la ficha, "Ver medios de pago" y el checkout.
  *
  * Cuentas de Instagram (`redes` de la misma fila) en la barra inferior, junto
  * al QR de Data Fiscal (el DS no tiene lugar para íconos bajo la marca). En
@@ -42,16 +40,14 @@ import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
  * (`BotonEditarFooterSiAdmin` dentro de `<Suspense fallback={null}>`).
  */
 export async function SiteFooter() {
-  const [anio, legal, footer, tarjetas, marca, paginas] = await Promise.all([
+  const [anio, legal, footer, marca, paginas] = await Promise.all([
     anioActual(),
     getDatosLegales(),
     getDatosFooter(),
-    getTarjetasMercadoPago(),
     getMarca(),
     getPaginasPublicadas(),
   ]);
   const { principal, acento } = partesNombre(marca);
-  const logos = logosTarjetas(tarjetas);
   return (
     <div className="footer-global">
       <Suspense fallback={null}>
@@ -66,7 +62,6 @@ export async function SiteFooter() {
         columns={columnasFooter({ arrepentimiento: true, footer, paginas })}
         barLeft={textoBarra(footer.barraIzquierda, anio)}
         barRight={textoBarra(footer.barraDerecha, anio)}
-        payments={{ title: "Medios de pago", logos }}
         barExtra={
           footer.redes.length > 0 || legal.dataFiscalUrl ? (
             <div className="flex items-center gap-5">

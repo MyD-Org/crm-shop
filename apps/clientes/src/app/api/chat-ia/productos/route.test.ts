@@ -13,9 +13,11 @@ vi.mock("@/lib/catalog", () => ({ getProductosPorIds: (...a: unknown[]) => getPr
 vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async (...a: unknown[]) => permitir(...a) }));
 const disponibles = vi.fn(async () => false);
 vi.mock("@/lib/catalogo-atributos-disponibles", () => ({ atributosEstructuradosDisponibles: () => disponibles() }));
-vi.mock("@/lib/flags-publicos", () => ({ flagsPublicos: async () => ({ soloVisibles: false, cuotas: false }) }));
+const flags = vi.fn(async (): Promise<Record<string, unknown>> => ({ soloVisibles: false, cuotas: false }));
+vi.mock("@/lib/flags-publicos", () => ({ flagsPublicos: () => flags() }));
 
 import { GET } from "./route";
+import { textoConMedio } from "@/lib/precio-medio-texto";
 
 const pedir = (qs: string) => GET(new Request(`http://localhost/api/chat-ia/productos${qs}`));
 const prod = (id: string, precioFinal = 121): Record<string, unknown> => ({ id, name: `P${id}`, brand: "", price: 100, precioFinal, stock: "in" });
@@ -32,6 +34,7 @@ beforeEach(() => {
   permitir.mockReturnValue(true);
   identidad.mockResolvedValue({ clerkUserId: null, cliente: null });
   setFlag("chat-ia", true);
+  flags.mockReset().mockResolvedValue({ soloVisibles: false, cuotas: false });
 });
 
 describe("GET /api/chat-ia/productos", () => {
@@ -95,5 +98,19 @@ describe("GET /api/chat-ia/productos", () => {
     expect(res.status).toBe(502);
     expect(JSON.stringify(await res.json())).not.toContain("detalle interno");
     log.mockRestore();
+  });
+
+  it("con medio destacado ⇒ lo pide como el catálogo y la card lleva «$X con <Medio>»", async () => {
+    const destacado = { slug: "transferencia", nombre: "Transferencia", idListaPrecios: "7" };
+    flags.mockResolvedValue({ soloVisibles: false, cuotas: false, mediosPrecio: { destacado, ficha: [] } });
+    const precioMedio = { slug: "transferencia", nombre: "Transferencia", price: 90, precioFinal: 108.9 };
+    getProductosPorIds.mockResolvedValue(new Map([["1", { ...prod("1"), precioMedio }]]));
+    const res = await pedir("?ids=1");
+    expect(getProductosPorIds).toHaveBeenLastCalledWith(["1"], {
+      soloActivos: true,
+      soloVisibles: false,
+      mediosPrecio: { destacado, ficha: [] },
+    });
+    expect((await res.json())[0].priceNote).toBe(textoConMedio(precioMedio));
   });
 });

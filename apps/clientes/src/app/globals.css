@@ -59,6 +59,13 @@ body {
   --aichat-font: var(--font-sans);
   --aichat-font-display: var(--font-display);
   --aichat-peek-z-index: 40;
+  /* Cards de producto del chat con los colores de la card del catálogo: la línea
+     "$ X con Transferencia" en acento (PrecioMedioCard) y "Agregar" como el
+     Button `soft` del DS (bg-accent-soft text-accent hover:bg-accent/15). */
+  --aichat-price-note: var(--color-accent);
+  --aichat-add-bg: var(--color-accent-soft);
+  --aichat-add-bg-hover: color-mix(in oklab, var(--color-accent) 15%, transparent);
+  --aichat-add-text: var(--color-accent);
 }
 html[data-chat-dock="abierto"] body {
   padding-right: calc(var(--aichat-dock-width) + env(safe-area-inset-right, 0px));

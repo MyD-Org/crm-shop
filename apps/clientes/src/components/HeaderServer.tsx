@@ -7,7 +7,8 @@ import { flagsPublicos } from "@/lib/flags-publicos"
 import { accesoFacturacion } from "@/lib/acceso-facturacion"
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag"
 import { identidadActual } from "@/lib/auth"
-import { getContenidoHome } from "@/lib/home-datos"
+import { getContenidoHome, getDatosFooter } from "@/lib/home-datos"
+import { hrefWhatsapp } from "@/data/footer"
 import { visibilidadDe, type NavBadgeContent } from "@/data/home-defaults"
 import { HeaderSinRuta, HeaderUI } from "./HeaderUI"
 import { UbicacionHeader } from "./ubicacion/UbicacionHeader"
@@ -21,8 +22,10 @@ import { UbicacionHeader } from "./ubicacion/UbicacionHeader"
  */
 export async function Header() {
   // Badge administrable del nav (config de home, mismo contrato que el resto
-  // del contenido). Cacheado: el layout ya lo lee para el anuncio.
-  const { navBadge: badge, visibilidad } = await getContenidoHome()
+  // del contenido). Cacheado: el layout ya lo lee para el anuncio. El WhatsApp es el del footer
+  // (se carga con "Editar footer" en la tienda), también cacheado.
+  const [{ navBadge: badge, visibilidad }, footer] = await Promise.all([getContenidoHome(), getDatosFooter()])
+  const whatsapp = footer.whatsapp ? hrefWhatsapp(footer.whatsapp) : null
   const vBadge = visibilidadDe(visibilidad, "navBadge")
   const navBadge = vBadge === "nunca" ? null : badge
   const navBadgeVisibleOn = vBadge === "mobile" || vBadge === "desktop" ? vBadge : undefined
@@ -36,6 +39,7 @@ export async function Header() {
     // por request y comparten la lectura (`ubicacionDelVisitante` está cacheada por request).
     ubicacion: <UbicacionHeader />,
     ubicacionEnLinea: <UbicacionHeader enLinea />,
+    whatsapp,
   }
 
   // Fallback de dos pisos: con la ruta (rutas sin parámetros, que se conocen
@@ -54,6 +58,7 @@ export async function Header() {
         navBadgeVisibleOn={navBadgeVisibleOn}
         ubicacion={pendiente.ubicacion}
         ubicacionEnLinea={pendiente.ubicacionEnLinea}
+        whatsapp={whatsapp}
       />
     </Suspense>
   )
@@ -65,11 +70,13 @@ async function HeaderDinamico({
   navBadgeVisibleOn,
   ubicacion,
   ubicacionEnLinea,
+  whatsapp,
 }: {
   navBadge: NavBadgeContent | null
   navBadgeVisibleOn?: VisibleOn
   ubicacion: ReactNode
   ubicacionEnLinea: ReactNode
+  whatsapp: string | null
 }) {
   // Las categorias del menu salen del catalogo real, cacheadas y compartidas
   // (`categoriasNav`, tag `catalogo`). Si la lectura falla, el header se
@@ -121,6 +128,7 @@ async function HeaderDinamico({
       busquedaIa={busquedaIa}
       ubicacion={ubicacion}
       ubicacionEnLinea={ubicacionEnLinea}
+      whatsapp={whatsapp}
     />
   )
 }

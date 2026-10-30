@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { SignInButton, useAuth } from "@clerk/nextjs";
 import { SiteHeader, type VisibleOn } from "@myd-org/ui";
 import type { NavBadgeContent } from "@/data/home-defaults";
 import { SearchAutocomplete } from "./SearchAutocomplete";
 import { destinoSeguro } from "@/lib/ingreso";
+import { busquedaAplicada } from "@/lib/busqueda-header";
 import { useHidratado } from "@/lib/hidratado";
 import { MAX_CATEGORIAS_NAV, conBadgeNav } from "@/lib/nav-badge";
 import { formatRubro } from "@/lib/formato-rubro";
@@ -15,6 +16,7 @@ import { CartPreview } from "./CartPreview";
 import { linkNext } from "./catalogo/link-next";
 import { MenuUsuario } from "./MenuUsuario";
 import { BotonAsistente } from "./chat/BotonAsistente";
+import { IconoWhatsapp } from "./IconoWhatsapp";
 import logo from "@/assets/central-led-logo.svg";
 import { MARCA_POR_DEFECTO, altLogo, partesNombre } from "@/lib/marca-base";
 import { useMarca } from "./MarcaProvider";
@@ -64,6 +66,8 @@ interface PropsHeader {
   ubicacion?: ReactNode;
   /** El mismo "Enviar a" en una línea, para mobile: debajo del buscador. */
   ubicacionEnLinea?: ReactNode;
+  /** `https://wa.me/…` del WhatsApp del footer; null = sin número cargado, sin botón. */
+  whatsapp?: string | null;
 }
 
 /** Header con la ruta actual (nav de la home, cierre del preview del carrito). */
@@ -81,6 +85,43 @@ export function HeaderSinRuta(props: PropsHeader) {
   return <HeaderVista {...props} pathname={null} />;
 }
 
+/**
+ * Lleva el texto de los buscadores a la búsqueda aplicada cada vez que cambia la URL (ver
+ * `busquedaAplicada`): lo tipeado y no enviado se descarta al navegar. Aparte y en su propio
+ * Suspense, porque `useSearchParams` suspende en el prerender y el header no espera por esto.
+ */
+function SincronizarBusqueda({ setBusqueda }: { setBusqueda: (texto: string) => void }) {
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const url = `${pathname}?${params.toString()}`;
+  const texto = busquedaAplicada(pathname, params);
+  // Por la URL y no por el texto: de una página sin búsqueda a otra el texto aplicado no cambia,
+  // pero lo que se haya tipeado en el medio tiene que irse igual.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setBusqueda(texto), [url, setBusqueda]);
+  return null;
+}
+
+/**
+ * WhatsApp de la tienda, a mano en todas las páginas: en las acciones del header (desde lg, con
+ * texto), junto a la cuenta en el celular y en la barra compacta. Verde de WhatsApp oscurecido
+ * para llegar a 3:1 sobre el fondo claro.
+ */
+function BotonWhatsapp({ href, conTexto = false }: { href: string; conTexto?: boolean }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={conTexto ? undefined : "Consultar por WhatsApp"}
+      className="flex shrink-0 items-center gap-2 text-[13.5px] font-bold text-text transition-colors hover:text-accent"
+    >
+      <IconoWhatsapp className="size-[22px] text-[#1DAA61]" />
+      {conTexto ? <span>WhatsApp</span> : null}
+    </a>
+  );
+}
+
 /** Destino tras ingresar: la ruta actual (sin ruta todavía, la del navegador). */
 function destinoIngreso(pathname: string | null) {
   return destinoSeguro(pathname ?? (typeof window === "undefined" ? "/" : window.location.pathname));
@@ -94,6 +135,7 @@ function HeaderVista({
   busquedaIa = false,
   ubicacion,
   ubicacionEnLinea,
+  whatsapp = null,
   pathname,
 }: PropsHeader & { pathname: string | null }) {
   // Marca de la tienda: nombre en una o dos tintas, línea de abajo y logo. Central usa el SVG de
@@ -201,7 +243,12 @@ function HeaderVista({
       <SiteHeader
         brandPlacement="start"
         compactOnScroll
-        compactActions={<CartPreview pathname={pathname} />}
+        compactActions={
+          <div className="flex items-center gap-3">
+            {whatsapp ? <BotonWhatsapp href={whatsapp} /> : null}
+            <CartPreview pathname={pathname} />
+          </div>
+        }
         brandName={principal}
         brandAccent={acento}
         brandSub={marca.lema}
@@ -220,7 +267,13 @@ function HeaderVista({
         }
         compactSearch={buscador}
         // Debajo de lg: cuenta a la izquierda, marca al centro y carrito a la derecha.
-        mobileStart={cuentaNodo("start")}
+        // El WhatsApp va con la cuenta y no con el carrito: así la marca sigue centrada.
+        mobileStart={
+          <div className="flex items-center gap-4">
+            {cuentaNodo("start")}
+            {whatsapp ? <BotonWhatsapp href={whatsapp} /> : null}
+          </div>
+        }
         nav={nav}
         // Marca y nav con next/link: con `<a>` cada clic recargaba la página.
         renderLink={linkNext}
@@ -230,6 +283,11 @@ function HeaderVista({
             {ubicacion ? <div className="hidden lg:flex">{ubicacion}</div> : null}
             {/* Desde lg; debajo, la cuenta va a la izquierda de la marca (mobileStart). */}
             <div className="hidden lg:flex">{cuentaNodo("end")}</div>
+            {whatsapp ? (
+              <div className="hidden lg:flex">
+                <BotonWhatsapp href={whatsapp} conTexto />
+              </div>
+            ) : null}
 
             <CartPreview pathname={pathname} />
           </>
@@ -238,6 +296,9 @@ function HeaderVista({
       {/* Categorías todavía en camino: se reserva el alto de la barra para que
           la home no salte cuando llegan. */}
       {pathname === "/" && categorias === null ? <div aria-hidden className={RESERVA_NAV} /> : null}
+      <Suspense fallback={null}>
+        <SincronizarBusqueda setBusqueda={setBusqueda} />
+      </Suspense>
     </div>
   );
 }

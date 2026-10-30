@@ -33,9 +33,15 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   return metadataMarca(pagina, marca.nombre, Object.keys(query).length > 0);
 }
 
+/**
+ * El fallback es más alto que la pantalla a propósito. Al navegar desde abajo de la home, el router
+ * de Next decide si subir al tope en el primer render, que es este fallback: si fuera más bajo, la
+ * página quedaría tan corta que el navegador recorta el scroll dentro de él, el router lo da por "a
+ * la vista" y no sube, y al llegar el contenido se veía la página por la mitad.
+ */
 export default function PaginaMarcaPage(props: Props) {
   return (
-    <Suspense fallback={<div className="min-h-[60vh] flex-1" />}>
+    <Suspense fallback={<div className="min-h-[120vh] flex-1" />}>
       <Contenido {...props} />
     </Suspense>
   );

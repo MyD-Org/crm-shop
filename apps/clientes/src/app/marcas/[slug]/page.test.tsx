@@ -10,7 +10,8 @@ vi.mock("@/components/marcas/PaginaMarcaVista", () => ({ PaginaMarcaVista: () =>
 vi.mock("@/components/marcas/bloques/ProductosMarca", () => ({ totalProductosMarca: vi.fn() }));
 vi.mock("@/lib/home-datos", () => ({ getDatosFooter: vi.fn() }));
 
-import { generateMetadata } from "./page";
+import type { ReactElement } from "react";
+import PaginaMarcaPage, { generateMetadata } from "./page";
 
 const pagina = (publicada: boolean) => ({
   slug: "secreta",
@@ -40,5 +41,14 @@ describe("/marcas/[slug] metadata", () => {
   it("una publicada lleva su título", async () => {
     m.getPaginaMarca.mockResolvedValue(pagina(true));
     expect(JSON.stringify(await generateMetadata(props))).toContain("Marca secreta");
+  });
+});
+
+describe("/marcas/[slug] shell", () => {
+  // Al entrar desde abajo de la home, el router de Next solo sube al tope si el fallback no queda
+  // a la vista: uno más bajo que la pantalla hace que el navegador recorte el scroll dentro de él.
+  it("el fallback es más alto que la pantalla", () => {
+    const shell = PaginaMarcaPage(props) as ReactElement<{ fallback: ReactElement<{ className: string }> }>;
+    expect(shell.props.fallback.props.className).toContain("min-h-[120vh]");
   });
 });

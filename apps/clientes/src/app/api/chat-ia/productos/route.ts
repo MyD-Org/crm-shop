@@ -51,7 +51,7 @@ export async function GET(req: Request) {
   if (ids.length === 0) return json([]);
 
   try {
-    const [{ soloVisibles, variantes }, disp, idListaPrivada, estructurados, campanias] = await Promise.all([
+    const [{ soloVisibles, variantes, mediosPrecio }, disp, idListaPrivada, estructurados, campanias] = await Promise.all([
       flagsPublicos(),
       dispCatalogo(),
       identidad.cliente ? listaPrivadaDelComprador() : Promise.resolve(null),
@@ -62,7 +62,16 @@ export async function GET(req: Request) {
     const productos = await getProductosPorIds(ids, {
       soloActivos: true,
       soloVisibles,
-      ...(campanias.length ? { mediosPrecio: { ...SIN_MEDIOS_PRECIO, campanias } } : {}),
+      // Como las cards del catálogo: el medio destacado ("$X con Transferencia") y las campañas.
+      ...(mediosPrecio?.destacado || campanias.length
+        ? {
+            mediosPrecio: {
+              ...SIN_MEDIOS_PRECIO,
+              destacado: mediosPrecio?.destacado ?? null,
+              ...(campanias.length ? { campanias } : {}),
+            },
+          }
+        : {}),
       ...(variantes ? { agrupar: true } : {}),
       disp,
       // Card `spec`: valores técnicos estructurados si la tabla del CRM está disponible.

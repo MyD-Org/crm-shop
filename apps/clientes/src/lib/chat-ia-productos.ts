@@ -17,6 +17,7 @@ import { atributosParaAgente, etiquetasTecnicas } from "./catalogo-caracteristic
 import { maxCantidad } from "./catalogo-vista";
 import { agotadoSinModalidad, esAPedido } from "./venta-sin-stock";
 import { formatMarca, formatRubro } from "./formato-rubro";
+import { textoConMedio } from "./precio-medio-texto";
 
 /** Largo de la descripción que ve el modelo. Más es ruido y costo. */
 export const DESCRIPCION_MAX = 200;
@@ -52,6 +53,11 @@ export interface ProductoResuelto {
   brand?: string;
   imageUrl?: string;
   price?: number;
+  /**
+   * Línea bajo el precio (ai-widget 0.11.0): "$X con <Medio>" del medio destacado, el mismo texto
+   * que la card del catálogo. Ausente si el producto no tiene precio por medio menor.
+   */
+  priceNote?: string;
   available: boolean;
   /** Código del producto (línea "Cód." de la card); ausente si el nombre ya es el código. */
   sku?: string;
@@ -111,6 +117,7 @@ export function aProductoResuelto(p: Product): ProductoResuelto {
     // Un producto a $ 0 no se puede agregar al carrito (CartContext lo descarta):
     // sin precio la card muestra el nombre y no un "$ 0" engañoso.
     ...(precio > 0 ? { price: precio } : {}),
+    ...(precio > 0 && p.precioMedio ? { priceNote: textoConMedio(p.precioMedio) } : {}),
     available: !agotadoSinModalidad(p) && precio > 0,
     ...(p.sku && p.sku !== p.name ? { sku: p.sku } : {}),
     maxQuantity: maxCantidad(p),

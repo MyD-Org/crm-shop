@@ -11,7 +11,7 @@
 
 import type { PrecioMedio } from "@/data/products";
 import { fmtPrecio as fmt } from "@/lib/format";
-import { textoConMedio } from "@/components/PrecioMedio";
+import { textoConMedio } from "@/lib/precio-medio-texto";
 
 interface Props {
   /** Precio neto (sin IVA) de la lista del visitante. */

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { textoConMedio } from "./precio-medio-texto";
 import type { Product } from "@/data/products";
 import {
   aProductoAgente,
@@ -57,6 +58,13 @@ describe("aProductoAgente", () => {
 });
 
 describe("aProductoResuelto", () => {
+  it("priceNote = el mismo «$X con <Medio>» de la card del catálogo; sin precio, nada", () => {
+    const medio = { slug: "transferencia", nombre: "Transferencia", price: 90, precioFinal: 108.9 };
+    expect(aProductoResuelto({ ...base, precioMedio: medio }).priceNote).toBe(textoConMedio(medio));
+    expect(aProductoResuelto({ ...base, precioMedio: medio, price: 0, precioFinal: 0 }).priceNote).toBeUndefined();
+    expect(aProductoResuelto(base).priceNote).toBeUndefined();
+  });
+
   it("precio con IVA, foto de portada y disponible", () => {
     expect(aProductoResuelto(base)).toEqual({
       id: "1101",

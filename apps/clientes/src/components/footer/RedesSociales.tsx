@@ -1,3 +1,4 @@
+import { IconoWhatsapp } from "@/components/IconoWhatsapp";
 import { hrefInstagram, type RedFooter } from "@/data/footer";
 
 function InstagramIcon() {
@@ -21,12 +22,25 @@ function InstagramIcon() {
  * se lee como las ubicaciones de los locales. Va en vos a pedido del dueño de
  * la tienda (excepción al registro de usted de CLAUDE.md): es el mismo tono
  * de las cuentas de Instagram.
+ *
+ * `whatsapp` (link ya armado) suma el WhatsApp de la tienda al final, con el mismo estilo: lo pasa
+ * solo la barra superior, que es donde está a mano antes de bajar (después, en la barra compacta
+ * del header). Para que todo entre en una línea en el celular, el espacio entre links es menor y en
+ * las pantallas más angostas (menos de 380px) WhatsApp queda solo con el ícono.
  */
-export function RedesSociales({ redes, className = "" }: { redes: RedFooter[]; className?: string }) {
-  if (redes.length === 0) return null;
+export function RedesSociales({
+  redes,
+  whatsapp = null,
+  className = "",
+}: {
+  redes: RedFooter[];
+  whatsapp?: string | null;
+  className?: string;
+}) {
+  if (redes.length === 0 && !whatsapp) return null;
   return (
-    <ul className={`flex flex-wrap items-center gap-x-4 gap-y-1 ${className}`}>
-      <li className="text-[12.5px] font-semibold text-on-primary/55">Seguinos</li>
+    <ul className={`flex flex-wrap items-center gap-x-3 gap-y-1 md:gap-x-4 ${className}`}>
+      {redes.length > 0 ? <li className="text-[12.5px] font-semibold text-on-primary/55">Seguinos</li> : null}
       {redes.map((r) => (
         <li key={r.usuario}>
           <a
@@ -34,13 +48,24 @@ export function RedesSociales({ redes, className = "" }: { redes: RedFooter[]; c
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Instagram ${r.nombre} (@${r.usuario})`}
-            className="flex items-center gap-1.5 text-[12.5px] font-semibold text-on-primary/85 transition-colors hover:text-highlight"
+            className={CLASE_LINK}
           >
             <InstagramIcon />
             {r.nombre}
           </a>
         </li>
       ))}
+      {whatsapp ? (
+        <li>
+          <a href={whatsapp} target="_blank" rel="noopener noreferrer" className={CLASE_LINK}>
+            <IconoWhatsapp className="size-4 shrink-0" />
+            <span className="max-[379px]:sr-only">WhatsApp</span>
+          </a>
+        </li>
+      ) : null}
     </ul>
   );
 }
+
+const CLASE_LINK =
+  "flex items-center gap-1.5 text-[12.5px] font-semibold text-on-primary/85 transition-colors hover:text-highlight";

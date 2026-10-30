@@ -103,21 +103,20 @@ function SincronizarBusqueda({ setBusqueda }: { setBusqueda: (texto: string) => 
 }
 
 /**
- * WhatsApp de la tienda, a mano en todas las páginas: en las acciones del header (desde lg, con
- * texto), junto a la cuenta en el celular y en la barra compacta. Verde de WhatsApp oscurecido
- * para llegar a 3:1 sobre el fondo claro.
+ * WhatsApp de la tienda en la barra compacta (al bajar): arriba de todo está en la barra azul de
+ * redes (layout), que se va con el scroll. Verde de WhatsApp oscurecido para llegar a 3:1 sobre
+ * el fondo claro.
  */
-function BotonWhatsapp({ href, conTexto = false }: { href: string; conTexto?: boolean }) {
+function BotonWhatsapp({ href }: { href: string }) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={conTexto ? undefined : "Consultar por WhatsApp"}
-      className="flex shrink-0 items-center gap-2 text-[13.5px] font-bold text-text transition-colors hover:text-accent"
+      aria-label="Consultar por WhatsApp"
+      className="flex shrink-0 items-center"
     >
       <IconoWhatsapp className="size-[22px] text-[#1DAA61]" />
-      {conTexto ? <span>WhatsApp</span> : null}
     </a>
   );
 }
@@ -267,13 +266,7 @@ function HeaderVista({
         }
         compactSearch={buscador}
         // Debajo de lg: cuenta a la izquierda, marca al centro y carrito a la derecha.
-        // El WhatsApp va con la cuenta y no con el carrito: así la marca sigue centrada.
-        mobileStart={
-          <div className="flex items-center gap-4">
-            {cuentaNodo("start")}
-            {whatsapp ? <BotonWhatsapp href={whatsapp} /> : null}
-          </div>
-        }
+        mobileStart={cuentaNodo("start")}
         nav={nav}
         // Marca y nav con next/link: con `<a>` cada clic recargaba la página.
         renderLink={linkNext}
@@ -283,11 +276,6 @@ function HeaderVista({
             {ubicacion ? <div className="hidden lg:flex">{ubicacion}</div> : null}
             {/* Desde lg; debajo, la cuenta va a la izquierda de la marca (mobileStart). */}
             <div className="hidden lg:flex">{cuentaNodo("end")}</div>
-            {whatsapp ? (
-              <div className="hidden lg:flex">
-                <BotonWhatsapp href={whatsapp} conTexto />
-              </div>
-            ) : null}
 
             <CartPreview pathname={pathname} />
           </>

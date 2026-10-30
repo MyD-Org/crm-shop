@@ -7,6 +7,7 @@ import { Providers } from "@/components/Providers";
 import { Header } from "@/components/HeaderServer";
 import { SiteFooter } from "@/components/SiteFooter";
 import { RedesSociales } from "@/components/footer/RedesSociales";
+import { hrefWhatsapp } from "@/data/footer";
 import { getContenidoHome, getDatosFooter } from "@/lib/home-datos";
 import { clasesVisibilidad, visibilidadDe } from "@/data/home-defaults";
 import { scriptTema } from "@/lib/tema-ip";
@@ -100,7 +101,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Anuncio global: contenido administrable (mismo contrato que la home).
-  const [{ anuncio, visibilidad, promociones }, marca, temaTenant, { redes }] = await Promise.all([
+  const [{ anuncio, visibilidad, promociones }, marca, temaTenant, footer] = await Promise.all([
     getContenidoHome(),
     getMarca(),
     getTemaTenant(),
@@ -113,6 +114,9 @@ export default async function RootLayout({
   const tema = atributosHtmlTema(temaTenant);
   const vAnuncio = visibilidadDe(visibilidad, "anuncio");
   const hayAnuncio = vAnuncio !== "nunca" && !!anuncio.texto;
+  const { redes } = footer;
+  const whatsapp = footer.whatsapp ? hrefWhatsapp(footer.whatsapp) : null;
+  const hayRedes = redes.length > 0 || !!whatsapp;
 
   return (
     // Tema: el shell trae el de la tienda (base de `shop_tema`; geo-IP apagada, ver
@@ -137,15 +141,15 @@ export default async function RootLayout({
            <MarcaProvider marca={{ base: marca.base, nombre: marca.nombre, lema: marca.lema, logoUrl: marca.logoUrl }}>
            <PromoProvider datos={datosPromo}>
             {/* Barra superior: anuncio global (contenido administrable) al medio y
-                cuentas de Instagram (`redes` del footer) a la derecha. Dónde se ve el
+                cuentas de Instagram (`redes` del footer) y WhatsApp a la derecha. Dónde se ve el
                 anuncio lo decide el editor (default: solo desktop, porque en mobile el
                 texto ocupa varias filas hasta que sea un carrusel); las redes se ven
                 siempre: en mobile, centradas debajo del anuncio. Sin anuncio visible
                 ni redes, no hay barra. Grilla: con un anuncio largo, el texto se achica
                 y parte línea; las redes conservan su ancho a la derecha. */}
-            {!hayAnuncio && redes.length === 0 ? null : (
+            {!hayAnuncio && !hayRedes ? null : (
               <div
-                className={`bg-primary text-on-primary ${redes.length === 0 ? clasesVisibilidad(vAnuncio) : ""}`}
+                className={`bg-primary text-on-primary ${!hayRedes ? clasesVisibilidad(vAnuncio) : ""}`}
               >
                 <div className="mx-auto flex max-w-contenido flex-col items-center gap-1.5 px-[clamp(18px,4vw,48px)] py-2.5 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] md:gap-4">
                   <span aria-hidden className="max-md:hidden" />
@@ -156,7 +160,7 @@ export default async function RootLayout({
                   ) : (
                     <span aria-hidden className="max-md:hidden" />
                   )}
-                  <RedesSociales redes={redes} className="justify-center md:flex-nowrap md:justify-end" />
+                  <RedesSociales redes={redes} whatsapp={whatsapp} className="justify-center md:flex-nowrap md:justify-end" />
                 </div>
               </div>
             )}

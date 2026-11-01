@@ -42,6 +42,17 @@ describe("opcionDelCobro", () => {
     expect(mp("naranja")).toBe("credito");
   });
 
+  it("Mercado Pago: el tipo de tarjeta del formulario manda sobre el id", () => {
+    const conTipo = (metodoPagoId: string, tipoTarjeta: string) =>
+      opcionDelCobro({ procesadorId: "mercadopago", medio: "tarjeta", metodoPagoId, tipoTarjeta });
+    expect(conTipo("master", "prepaid_card")).toBe("debito");
+    expect(conTipo("visa", "prepaid_card")).toBe("debito");
+    expect(conTipo("debvisa", "debit_card")).toBe("debito");
+    expect(conTipo("visa", "credit_card")).toBe("credito");
+    expect(conTipo("master", "otro_tipo")).toBe("credito");
+    expect(opcionDelCobro({ procesadorId: "mercadopago", medio: "cuenta_mp", tipoTarjeta: "prepaid_card" })).toBe("cuenta_mp");
+  });
+
   it("un id desconocido o ausente cuenta como crédito", () => {
     expect(mp("una-marca-nueva")).toBe("credito");
     expect(mp(undefined)).toBe("credito");

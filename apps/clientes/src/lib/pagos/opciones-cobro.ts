@@ -45,7 +45,10 @@ export function opcionesAplicables(
 
 /**
  * Qué opción usa un cobro, con lo que manda el navegador. Mercado Pago: `cuenta_mp` por el medio;
- * débito por el id del método (`deb*`, `maestro`); lo demás, incluso un id desconocido o ausente,
+ * si viene el tipo que identificó el formulario (`tipoTarjeta`), manda ese: `debit_card` y
+ * `prepaid_card` son débito (la tarjeta de Mercado Pago y las de billeteras son prepagas con id
+ * `master`/`visa`), `credit_card` es crédito. Sin tipo, débito por el id del método (`deb*`,
+ * `maestro`); lo demás, incluso un id desconocido o ausente,
  * cuenta como crédito (si crédito está deshabilitado se rechaza: falla cerrado). Payway: por la
  * tabla de ids de débito.
  */
@@ -53,6 +56,7 @@ export function opcionDelCobro(datos: {
   procesadorId: string;
   medio: "tarjeta" | "cuenta_mp";
   metodoPagoId?: string;
+  tipoTarjeta?: string;
 }): OpcionCobro {
   const id = (datos.metodoPagoId ?? "").trim().toLowerCase();
   if (datos.procesadorId === "payway") {
@@ -60,6 +64,9 @@ export function opcionDelCobro(datos: {
     return id !== "" && Number.isInteger(n) && esDebito(n) ? "debito" : "credito";
   }
   if (datos.medio === "cuenta_mp") return "cuenta_mp";
+  const tipo = (datos.tipoTarjeta ?? "").trim().toLowerCase();
+  if (tipo === "debit_card" || tipo === "prepaid_card") return "debito";
+  if (tipo === "credit_card") return "credito";
   return id.startsWith("deb") || id === "maestro" ? "debito" : "credito";
 }
 

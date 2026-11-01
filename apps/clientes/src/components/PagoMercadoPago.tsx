@@ -296,7 +296,7 @@ export function PagoMercadoPago({
    * "procesando" y bloquea un segundo envío. Por eso el `await` del fetch va
    * adentro y no se dispara en background.
    */
-  async function enviar(formData: unknown) {
+  async function enviar(formData: unknown, tipoTarjeta?: string) {
     setEstado({ fase: "procesando" });
 
     const datos = formData as {
@@ -333,6 +333,9 @@ export function PagoMercadoPago({
           ...(deviceId ? { deviceId } : {}),
           // La cuenta con la que se tokenizó: el servidor la valida contra la del pedido.
           ...(cuentaCobro ? { cuenta: cuentaCobro } : {}),
+          // Tipo real que identificó Mercado Pago (credit_card, debit_card, prepaid_card): una prepaga
+          // con id `master` o `visa` es débito, no crédito.
+          ...(tipoTarjeta ? { tipoTarjeta } : {}),
         }),
       });
 
@@ -413,8 +416,8 @@ export function PagoMercadoPago({
   });
 
   // El Card Payment Brick llama `onSubmit(formData)` directo (el Payment Brick lo envolvía).
-  const onSubmit = useCallback(async (formData: unknown) => {
-    await enviarRef.current(formData);
+  const onSubmit = useCallback(async (formData: unknown, adicionales?: { paymentTypeId?: string }) => {
+    await enviarRef.current(formData, adicionales?.paymentTypeId);
   }, []);
 
   /**
@@ -474,8 +477,14 @@ export function PagoMercadoPago({
    */
   async function pagarConTarjeta() {
     if (estado.fase === "procesando") return;
-    const controlador = (window as { cardPaymentBrickController?: { getFormData: () => Promise<unknown> } })
-      .cardPaymentBrickController;
+    const controlador = (
+      window as {
+        cardPaymentBrickController?: {
+          getFormData: () => Promise<unknown>;
+          getAdditionalData?: () => Promise<{ paymentTypeId?: string } | null | undefined>;
+        };
+      }
+    ).cardPaymentBrickController;
     if (!controlador) return;
     let datos: unknown;
     try {
@@ -483,7 +492,15 @@ export function PagoMercadoPago({
     } catch {
       return;
     }
-    if (datos) await enviarRef.current(datos);
+    if (!datos) return;
+    // Sin el tipo, el servidor lo deduce por el id del método (como antes).
+    let tipoTarjeta: string | undefined;
+    try {
+      tipoTarjeta = (await controlador.getAdditionalData?.())?.paymentTypeId;
+    } catch {
+      tipoTarjeta = undefined;
+    }
+    await enviarRef.current(datos, tipoTarjeta);
   }
 
   if (faltaKey) {

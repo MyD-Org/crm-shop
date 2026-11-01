@@ -13,7 +13,7 @@ import { opcionesCheckoutDelVisitante } from "@/lib/zona-servidor";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import type { EleccionInicialCheckout } from "@/lib/checkout-ubicacion";
 import type { EleccionUbicacion } from "@/lib/ubicacion";
-import { mediosOfrecibles } from "@/lib/medios-pago-datos";
+import { mediosOfreciblesComprador } from "@/lib/medios-pago-datos";
 import { esCompradorCuentaCorriente, mediosVisiblesPara } from "@/lib/medios-pago";
 import { idPagoDeRetorno } from "@/lib/pagos/mercadopago-preferencia";
 import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
@@ -74,7 +74,7 @@ export default async function CheckoutPage({
   // semántica, una espera menos en la cascada). `identidadActual` decide el
   // redirect, así que a ella sí hay que esperarla antes de renderizar.
   const reglasPromise = reglasVentaCacheadas();
-  const mediosPromise = mediosOfrecibles();
+  const mediosPromise = mediosOfreciblesComprador();
   const tarjetasPromise = getTarjetasMercadoPago();
 
   const { clerkUserId, cliente, nombre, email } = await identidadActual();

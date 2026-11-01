@@ -2,12 +2,12 @@
  * Flags de Vercel Flags en los tests. `src/flags.ts` evalúa contra Vercel en
  * tiempo de request, así que en vitest se reemplaza entero (ver setup-flags.ts)
  * por lecturas de este estado. Arranca todo apagado antes de cada test, igual
- * que el `defaultValue` de producción.
+ * que el `defaultValue` de producción, salvo `mercadopago` (ver `apagados`).
  *
  * El estado vive en `globalThis` y no en una variable del módulo para que
  * sobreviva a `vi.resetModules()` (los tests que reimportan con `await import`).
  */
-export type FlagDeTest = "cuotas-cobro" | "catalogo-solo-visibles" | "chat-ia" | "sucursales" | "disponibilidad-sucursal" | "busqueda-ia" | "tracking" | "busqueda-medidas" | "variantes-selector";
+export type FlagDeTest = "cuotas-cobro" | "catalogo-solo-visibles" | "chat-ia" | "sucursales" | "disponibilidad-sucursal" | "busqueda-ia" | "tracking" | "busqueda-medidas" | "variantes-selector" | "mercadopago";
 
 type Estado = Record<FlagDeTest, boolean>;
 
@@ -19,7 +19,9 @@ export function estadoFlags(): Estado {
 }
 
 export function apagados(): Estado {
-  return { "cuotas-cobro": false, "catalogo-solo-visibles": false, "chat-ia": false, sucursales: false, "disponibilidad-sucursal": false, "busqueda-ia": false, tracking: false, "busqueda-medidas": false, "variantes-selector": false };
+  return { "cuotas-cobro": false, "catalogo-solo-visibles": false, "chat-ia": false, sucursales: false, "disponibilidad-sucursal": false, "busqueda-ia": false, tracking: false, "busqueda-medidas": false, "variantes-selector": false,
+    // Prendido: los tests de cobro dan Mercado Pago por ofrecido; los del flag lo apagan.
+    mercadopago: true };
 }
 
 export function setFlag(flag: FlagDeTest, valor: boolean) {

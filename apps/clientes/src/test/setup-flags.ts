@@ -12,6 +12,9 @@ vi.mock("@/flags", () => ({
   trackingFlag: async () => estadoFlags().tracking,
   busquedaMedidasFlag: async () => estadoFlags()["busqueda-medidas"],
   variantesSelectorFlag: async () => estadoFlags()["variantes-selector"],
+  mercadopagoFlag: Object.assign(async () => estadoFlags().mercadopago, {
+    run: async () => estadoFlags().mercadopago,
+  }),
 }));
 
 // Por defecto nadie tiene lista privada: los tests de rutas no dependen de la DB ni de la sesión para

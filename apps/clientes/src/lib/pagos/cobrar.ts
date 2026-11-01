@@ -50,6 +50,8 @@ interface Body {
   token?: unknown;
   cuotas?: unknown;
   metodoPagoId?: unknown;
+  /** Tipo que identificó el formulario de Mercado Pago (`debit_card`, `prepaid_card`…). Se sanea acá. */
+  tipoTarjeta?: unknown;
   medio?: unknown;
   bin?: unknown;
   /** Cuenta con la que el navegador tokenizó la tarjeta (la que le dio el servidor). Se valida acá. */
@@ -249,10 +251,12 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
   const metodoPagoId = texto(body.metodoPagoId, 40) || undefined;
 
   // Forma de pago habilitada para el medio en el admin (crédito, débito, cuenta de Mercado Pago). Se
-  // decide con lo que manda el navegador; un id desconocido cuenta como crédito. Rechazo sin reservar
+  // decide con lo que manda el navegador (tipo de tarjeta o id del método); un id desconocido cuenta
+  // como crédito. El tipo real se controla igual después del cobro (`registrarCobroTx`). Rechazo sin reservar
   // intento ni llamar al procesador. Los medios se leen SIN caché: rige lo último del admin.
   const medios = await leerMediosPagoTolerante();
-  const opcion = opcionDelCobro({ procesadorId: proveedor.id, medio, metodoPagoId });
+  const tipoTarjeta = texto(body.tipoTarjeta, 20) || undefined;
+  const opcion = opcionDelCobro({ procesadorId: proveedor.id, medio, metodoPagoId, tipoTarjeta });
   const rechazoOpcion = await rechazoPorOpcionDeCobro(pedido.pagoMetodo, proveedor.id, opcion, medios);
   if (rechazoOpcion) return rechazoOpcion;
 

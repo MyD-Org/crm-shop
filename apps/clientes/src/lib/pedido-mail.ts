@@ -1,6 +1,6 @@
 /**
  * Mails al comprador sobre su pedido: "Recibimos su pedido" (al crearlo, sólo en medios sin cobro
- * en línea) y los del cobro en línea: "Recibimos su pedido y su pago" (al aprobarse, es el único
+ * en línea) y los del cobro en línea: "¡Gracias por su compra!" (al aprobarse, es el único
  * mail de confirmación de esos pedidos) y "No pudimos procesar su pago". Puros (sin red ni base): los
  * arma `pedido-avisos.ts` y los manda.
  *
@@ -160,10 +160,10 @@ const COPY: Record<AvisoPedidoShop, { asunto: string; titulo: string; bajada: (d
           : "Registramos su pedido. Le avisaremos por este medio cada vez que avance.",
   },
   pago_recibido: {
-    asunto: "y pago recibidos",
-    titulo: "Recibimos su pedido y su pago",
+    asunto: "con pago aprobado",
+    titulo: "¡Gracias por su compra!",
     bajada: () =>
-      "Registramos su pedido y su pago fue aprobado. Le avisaremos por este medio cada vez que avance.",
+      "Su pago fue aprobado y su pedido quedó registrado. Le avisaremos por este medio cada vez que avance.",
   },
   pago_rechazado: {
     asunto: "pago no procesado",

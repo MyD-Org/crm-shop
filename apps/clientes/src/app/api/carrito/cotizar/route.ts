@@ -16,6 +16,7 @@ import { cuentaParaVistaPrevia } from "@/lib/cuenta-transferencia";
 import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
+import { mediosSegunComprador, mediosSegunPublico } from "@/lib/mercadopago-flag";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { condicionAlcanzada, cuotasElegidas, montoPorCuota, progresoCuotas, proximoEscalon } from "@/lib/cuotas-sin-interes";
 import { baseParaCuotasCon, opcionesSinInteresCotizadas } from "@/lib/cuotas-opciones";
@@ -156,7 +157,7 @@ export async function POST(req: Request) {
     // lista privada tampoco aplica la lista del medio ni las cuotas.
     const esCuentaCorriente = esCompradorCuentaCorriente(cliente);
     const conMedio = Boolean(pagoMetodo) && !esCuentaCorriente && !idListaPrivada;
-    const mediosCrm = conMedio ? await leerMediosPagoTolerante() : [];
+    const mediosCrm = conMedio ? await mediosSegunComprador(await leerMediosPagoTolerante()) : [];
     // Cuotas sin interés: sólo con el flag y un medio con cobro en línea. Cada cantidad es otra lista.
     const medioCobro = mediosParaModalidad(mediosCrm, entregaTipo).find((m) => m.slug === pagoMetodo);
     const conCuotas = Boolean(conMedio && medioCobro?.cobroOnline && (await cuotasHabilitadas()));
@@ -256,7 +257,7 @@ export async function POST(req: Request) {
     // en las líneas con stock). Cuenta corriente y lista privada siguen con su precio.
     const aConfirmar = cotizacion.flujo === "a_confirmar" && !esCuentaCorriente && !idListaPrivada;
     if (aConfirmar) {
-      const lista = listaAConfirmar(sinProcesadoresNoConfigurados(await leerMediosPagoTolerante()));
+      const lista = listaAConfirmar(await mediosSegunPublico(sinProcesadoresNoConfigurados(await leerMediosPagoTolerante())));
       cotizacion = await cotizar(lineas, { ...opcionesCotizar, idListaMedio: lista });
     }
     // Selector del checkout: el total de cada cantidad de cuotas es el de SU lista (varias cotizaciones
@@ -283,7 +284,7 @@ export async function POST(req: Request) {
     let mediosProgreso: { condiciones: typeof mediosCrm[number]["condicionesCuotas"]; base: number }[] = [];
     // A confirmar: sin cobro en línea no hay cuotas que promover.
     if (!aConfirmar && body.progresoCuotas === true && !conMedio && !esCuentaCorriente && !idListaPrivada && (await cuotasHabilitadas())) {
-      const todos = await leerMediosPagoTolerante();
+      const todos = await mediosSegunComprador(await leerMediosPagoTolerante());
       const medios = mediosParaModalidad(todos, entregaTipo, { procesadorDisponible: procesadorConfigurado }).filter(
         (m) => m.cobroOnline && (m.condicionesCuotas ?? []).some((c) => c.montoMinimo != null),
       );
@@ -351,7 +352,7 @@ export async function POST(req: Request) {
     // cotización por lista distinta. Cuenta corriente y lista privada no eligen medio: nada.
     let totalesOpciones: Record<string, number | null> | undefined;
     if (!aConfirmar && body.totalesOpciones === true && !esCuentaCorriente && !idListaPrivada) {
-      const medios = mediosParaModalidad(mediosCrm.length > 0 ? mediosCrm : await leerMediosPagoTolerante(), entregaTipo, {
+      const medios = mediosParaModalidad(mediosCrm.length > 0 ? mediosCrm : await mediosSegunComprador(await leerMediosPagoTolerante()), entregaTipo, {
         procesadorDisponible: procesadorConfigurado,
       });
       const opciones = opcionesDePago(medios);

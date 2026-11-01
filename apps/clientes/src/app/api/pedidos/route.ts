@@ -19,6 +19,7 @@ import { datosDelContacto, type DatosLeidos } from "@/lib/datos-del-contacto";
 import { cotizarConMedio } from "@/lib/pedido-medio";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
+import { mediosSegunComprador } from "@/lib/mercadopago-flag";
 import { SLUG_A_COORDINAR, esCompradorCuentaCorriente, pagoValidoConMedios } from "@/lib/medios-pago";
 import { sinProcesadoresNoConfigurados } from "@/lib/medios-pago-datos";
 import { listaAConfirmar } from "@/lib/medios-precio";
@@ -261,7 +262,7 @@ export async function POST(req: Request) {
   // conoce recién al cotizar: vale si el pedido queda a confirmar por una modalidad; si no, es el
   // mismo 400 de siempre (o un 409 si el checkout lo armó a confirmar, ver más abajo). Cuenta
   // corriente: sin cambios (su medio, o "a_coordinar" si no está activo).
-  const mediosCrm = await leerMediosPagoTolerante();
+  const mediosCrm = await mediosSegunComprador(await leerMediosPagoTolerante());
   const opcionesMedios = {
     procesadorDisponible: procesadorConfigurado,
     esCuentaCorriente: esCompradorCuentaCorriente(cliente),

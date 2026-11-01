@@ -80,3 +80,24 @@ export const busquedaMedidasFlag = flag<boolean>({
   defaultValue: false,
   adapter: vercelAdapter,
 });
+
+/** Quién compra, para las reglas de Vercel Flags (`user.id`, `user.email`). Vacío = visitante. */
+export interface EntidadesComprador {
+  user?: { id: string; email?: string };
+}
+
+export const mercadopagoFlag = flag<boolean, EntidadesComprador>({
+  key: "mercadopago",
+  description:
+    "Mercado Pago en el checkout. Con una regla por user.email o user.id se prende sólo para esos compradores (pruebas en producción); prendido para todos = lanzamiento. Apagado: el medio no se ofrece ni se acepta aunque esté activo en el admin",
+  defaultValue: false,
+  adapter: vercelAdapter,
+  async identify() {
+    // Import diferido: los flags que no identifican no cargan Clerk.
+    const { auth, currentUser } = await import("@clerk/nextjs/server");
+    const { userId } = await auth();
+    if (!userId) return {};
+    const user = await currentUser();
+    return { user: { id: userId, email: user?.primaryEmailAddress?.emailAddress } };
+  },
+});

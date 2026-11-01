@@ -14,6 +14,7 @@ import { TAG_SUCURSALES } from "./cache-tags";
 import { leerMediosPago } from "./medios-pago-repo";
 import { procesadorDeMedio, type MedioPago } from "./medios-pago";
 import { procesadorConfigurado } from "./pagos";
+import { mediosSegunComprador, mediosSegunPublico } from "./mercadopago-flag";
 
 async function mediosPagoDeCache(): Promise<MedioPago[]> {
   "use cache: remote";
@@ -44,8 +45,16 @@ export function sinProcesadoresNoConfigurados(medios: readonly MedioPago[]): Med
   });
 }
 
-/** Medios para OFRECER (checkout, Envíos y pagos): los cacheados, sin los procesadores sin credenciales. */
+/**
+ * Medios que ve CUALQUIER visitante (precios "con X", Envíos y pagos): los cacheados, sin los
+ * procesadores sin credenciales y sin Mercado Pago salvo que su flag esté prendido para todos.
+ */
 export async function mediosOfrecibles(): Promise<MedioPago[]> {
-  return sinProcesadoresNoConfigurados(await mediosPagoCacheados());
+  return mediosSegunPublico(sinProcesadoresNoConfigurados(await mediosPagoCacheados()));
+}
+
+/** Medios que puede elegir el comprador del request (checkout): Mercado Pago según su flag. */
+export async function mediosOfreciblesComprador(): Promise<MedioPago[]> {
+  return mediosSegunComprador(sinProcesadoresNoConfigurados(await mediosPagoCacheados()));
 }
 

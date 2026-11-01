@@ -8,6 +8,7 @@ import { marcarStockCambiado } from "@/lib/cache-invalidar";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
+import { mediosSegunComprador } from "@/lib/mercadopago-flag";
 import { esCompradorCuentaCorriente, pagoValidoConMedios } from "@/lib/medios-pago";
 import { medioAdmiteCambio } from "@/lib/cambiar-medio-pago";
 import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
@@ -115,7 +116,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     // Medio ofrecible HOY para la entrega del pedido y el comprador (releído sin caché).
-    const mediosCrm = await leerMediosPagoTolerante();
+    const mediosCrm = await mediosSegunComprador(await leerMediosPagoTolerante());
     const opcionesMedios = {
       procesadorDisponible: procesadorConfigurado,
       esCuentaCorriente: esCompradorCuentaCorriente(cliente),

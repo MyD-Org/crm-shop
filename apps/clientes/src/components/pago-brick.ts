@@ -30,7 +30,7 @@ export type VariablesBrick = Readonly<Record<string, string>>;
 
 export interface CustomizacionBrick {
   readonly paymentMethods: {
-    readonly types: { readonly included: ("credit_card" | "debit_card")[] };
+    readonly types: { readonly included: ("credit_card" | "debit_card" | "prepaid_card")[] };
     readonly minInstallments?: number;
     readonly maxInstallments?: number;
   };
@@ -77,7 +77,7 @@ export function variablesDelTema(): VariablesBrick {
  * Las cuotas se eligen en nuestro desplegable (`SelectorCuotas`, con sus totales y el chip "Sin
  * interés"), no en el Brick: en crédito el Brick va en un pago (mínimo = máximo = 1), así su selector
  * queda oculto y cambiar de cuotas no le cambia las props. El servidor cobra las cuotas que mandamos
- * nosotros sobre el total del pedido. El débito es siempre un pago.
+ * nosotros sobre el total del pedido. El débito (y la prepaga) es siempre un pago.
  */
 export function customizacionBrick(tipo: TipoTarjeta, leerVariables: () => VariablesBrick = variablesDelTema): CustomizacionBrick {
   const previa = cache.get(tipo);
@@ -85,7 +85,10 @@ export function customizacionBrick(tipo: TipoTarjeta, leerVariables: () => Varia
 
   const nueva: CustomizacionBrick = {
     paymentMethods: {
-      types: { included: [tipo === "credito" ? "credit_card" : "debit_card"] },
+      // Débito acepta también las prepagas: Mercado Pago clasifica así a su propia tarjeta y a las de
+      // muchas billeteras (Ualá, Brubank…), que el comprador usa como débito. El cobro ya las trata
+      // como débito (forma-cobro.ts).
+      types: { included: tipo === "credito" ? ["credit_card"] : ["debit_card", "prepaid_card"] },
       ...(tipo === "credito" ? { minInstallments: 1, maxInstallments: 1 } : {}),
     },
     visual: {

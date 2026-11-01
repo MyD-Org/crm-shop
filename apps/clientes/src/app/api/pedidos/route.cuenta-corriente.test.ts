@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setFlag } from "@/test/flags";
 
 /**
  * Checkout de cuenta corriente (change `listas-cuenta-corriente`, rebanada D): para un comprador con
@@ -209,5 +210,16 @@ describe("POST /api/pedidos — quien no tiene cuenta corriente", () => {
     expect(crearPedido).not.toHaveBeenCalled();
     expect((await post({ pagoMetodo: "transferencia" })).status).toBe(201);
     expect((await post({ pagoMetodo: "mercadopago" })).status).toBe(201);
+  });
+});
+
+describe("POST /api/pedidos — flag mercadopago", () => {
+  it("apagado para el comprador: Mercado Pago se rechaza y los demás medios siguen", async () => {
+    identidad = COMPRADOR_PUBLICO;
+    setFlag("mercadopago", false);
+    const r = await post({ pagoMetodo: "mercadopago" });
+    expect(r.status).toBe(400);
+    expect(crearPedido).not.toHaveBeenCalled();
+    expect((await post({ pagoMetodo: "transferencia" })).status).toBe(201);
   });
 });

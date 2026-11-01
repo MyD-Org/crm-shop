@@ -230,6 +230,13 @@ export function modo3DS(monto: number): "mandatory" | "optional" {
 }
 
 /**
+ * Categoría de los ítems para Mercado Pago (`items.category_id`, de su lista fija de industrias). La
+ * tienda vende iluminación y material eléctrico: "home" (hogar). Ayuda al control de fraude y suma en
+ * la calidad de la integración.
+ */
+export const CATEGORIA_ITEM_MP = "home";
+
+/**
  * `additional_info` del pago con tarjeta: líneas, comprador y domicilio de entrega del pedido. Mercado
  * Pago lo usa en su control de fraude (aprueba más pagos) y en el puntaje de calidad de la integración;
  * no valida que las líneas sumen el monto. Sin nada que informar, no se manda.
@@ -241,6 +248,8 @@ export function infoAdicionalMP(info: InfoAdicionalPago): Record<string, unknown
           items: info.items.map((i) => ({
             id: i.id,
             title: i.titulo,
+            description: i.titulo,
+            category_id: CATEGORIA_ITEM_MP,
             quantity: i.cantidad,
             unit_price: i.precioUnitario,
           })),

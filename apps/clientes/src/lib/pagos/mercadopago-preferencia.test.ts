@@ -33,7 +33,15 @@ describe("armarPreferencia", () => {
     const p = armarPreferencia(base);
     expect(p.purpose).toBe("wallet_purchase");
     expect(p.items).toEqual([
-      { id: "ped-1", title: "Pedido 000123 — Central LED", quantity: 1, unit_price: 1500.5, currency_id: "ARS" },
+      {
+        id: "ped-1",
+        title: "Pedido 000123 — Central LED",
+        description: "Pedido 000123 — Central LED",
+        category_id: "home",
+        quantity: 1,
+        unit_price: 1500.5,
+        currency_id: "ARS",
+      },
     ]);
     expect(p.payment_methods).toEqual({
       installments: 1,

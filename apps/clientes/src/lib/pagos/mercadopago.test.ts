@@ -260,7 +260,7 @@ describe("proveedor ligado a una cuenta: llamadas HTTP", () => {
     const cuerpo = cuerpoEnviado();
     expect(cuerpo.issuer_id).toBe(310);
     expect(cuerpo.additional_info).toEqual({
-      items: [{ id: "SKU-1", title: "Lámpara LED 9 W", quantity: 2, unit_price: 500 }],
+      items: [{ id: "SKU-1", title: "Lámpara LED 9 W", description: "Lámpara LED 9 W", category_id: "home", quantity: 2, unit_price: 500 }],
       payer: { first_name: "Ana", last_name: "Pérez Gómez" },
       shipments: { receiver_address: { street_name: "Calle Falsa 123", city_name: "Mar del Plata" } },
     });
@@ -366,7 +366,7 @@ describe("crearPreferencia", () => {
   });
 
   const pref = {
-    items: [{ id: "p", title: "Pedido", quantity: 1 as const, unit_price: 10, currency_id: "ARS" as const }],
+    items: [{ id: "p", title: "Pedido", description: "Pedido", category_id: "home", quantity: 1 as const, unit_price: 10, currency_id: "ARS" as const }],
     external_reference: "p",
     purpose: "wallet_purchase" as const,
     payment_methods: { installments: 1 as const, excluded_payment_types: [], excluded_payment_methods: [{ id: "consumer_credits" }] },

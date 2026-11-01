@@ -6,7 +6,7 @@
  * del pedido congelado, nunca del navegador.
  */
 
-import { urlNotificacion } from "./mercadopago";
+import { CATEGORIA_ITEM_MP, urlNotificacion } from "./mercadopago";
 import { descripcionPedido, type Marca } from "../marca-base";
 
 export interface DatosPreferencia {
@@ -29,7 +29,15 @@ export interface DatosPreferencia {
 }
 
 export interface Preferencia {
-  items: { id: string; title: string; quantity: 1; unit_price: number; currency_id: "ARS" }[];
+  items: {
+    id: string;
+    title: string;
+    description: string;
+    category_id: string;
+    quantity: 1;
+    unit_price: number;
+    currency_id: "ARS";
+  }[];
   external_reference: string;
   purpose: "wallet_purchase";
   payment_methods: {
@@ -67,6 +75,8 @@ export function armarPreferencia(d: DatosPreferencia): Preferencia {
       {
         id: d.pedidoId,
         title: descripcionPedido(d.numero, d.marca),
+        description: descripcionPedido(d.numero, d.marca),
+        category_id: CATEGORIA_ITEM_MP,
         quantity: 1,
         unit_price: Math.round(d.total * 100) / 100,
         currency_id: "ARS",

@@ -76,7 +76,7 @@ describe("customizacionBrick", () => {
   });
 
   it("débito: sólo tarjeta de débito y sin cuotas", () => {
-    expect(customizacionBrick("debito", sinTema).paymentMethods).toEqual({ types: { included: ["debit_card"] } });
+    expect(customizacionBrick("debito", sinTema).paymentMethods).toEqual({ types: { included: ["debit_card", "prepaid_card"] } });
   });
 
   it("sin título ni botón propios (el botón es un Button del DS)", () => {

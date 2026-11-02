@@ -47,12 +47,12 @@ export const toCuentaDto = (r: Fila): CuentaBancariaDto => ({
 })
 
 export type ResultadoCuenta =
-  | { kind: "ok"; cuenta: CuentaBancariaDto }
+  | { kind: "ok"; cuenta: CuentaBancariaDto; /** Estado previo (sólo en actualizar): para el aviso de cambios. */ antes?: CuentaBancariaDto }
   | { kind: "invalid"; campo: string; error: string }
   | { kind: "conflict"; campo: string; error: string }
   | { kind: "not_found" }
 
-export type ResultadoBorradoCuenta = { kind: "ok" } | { kind: "not_found" }
+export type ResultadoBorradoCuenta = { kind: "ok"; cuenta: CuentaBancariaDto } | { kind: "not_found" }
 
 const MSG_CBU_REPETIDO = "Ya existe una cuenta con ese CBU."
 const MSG_SLUG_INEXISTENTE = "Alguna de las sucursales indicadas no existe. Recargue la página e inténtelo nuevamente."
@@ -179,7 +179,7 @@ export async function actualizarCuenta(tenantId: string, id: string, body: unkno
         .set({ ...valores(v.valor), updatedAt: new Date() })
         .where(and(eq(cuentasBancariasShop.tenantId, tenantId), eq(cuentasBancariasShop.id, id)))
         .returning()
-      return { kind: "ok", cuenta: toCuentaDto(fila) }
+      return { kind: "ok", cuenta: toCuentaDto(fila), antes: toCuentaDto(actual) }
     })
   } catch (err) {
     const c = conflictoDe(err)
@@ -193,6 +193,6 @@ export async function eliminarCuenta(tenantId: string, id: string): Promise<Resu
   const borradas = await getDb()
     .delete(cuentasBancariasShop)
     .where(and(eq(cuentasBancariasShop.tenantId, tenantId), eq(cuentasBancariasShop.id, id)))
-    .returning({ id: cuentasBancariasShop.id })
-  return borradas.length > 0 ? { kind: "ok" } : { kind: "not_found" }
+    .returning()
+  return borradas.length > 0 ? { kind: "ok", cuenta: toCuentaDto(borradas[0]) } : { kind: "not_found" }
 }

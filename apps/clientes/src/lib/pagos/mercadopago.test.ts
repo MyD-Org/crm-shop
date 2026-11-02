@@ -498,3 +498,38 @@ describe("modo3DS", () => {
     expect(modo3DS(95_956.58)).toBe("optional");
   });
 });
+
+describe("ErrorProveedor.detalle (diagnóstico saneado para el intento)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+  const conCuerpo = (status: number, cuerpo: unknown) => {
+    vi.stubEnv("MP_ACCESS_TOKEN_MDP", "TEST-token-mdp");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(cuerpo), { status })));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  };
+
+  it("500 internal_error: el detalle lleva el motivo y el status", async () => {
+    conCuerpo(500, { message: "internal_error", error: "internal_server_error", status: 500, cause: [{ code: "2001", description: "fallo interno" }] });
+    const err = await crearMercadoPago("mdp").crearPago({ ...base, token: "tok" }).catch((e) => e);
+    expect(err).toBeInstanceOf(ErrorProveedor);
+    expect(err.status).toBe(500);
+    expect(err.detalle).toContain("internal_error");
+    expect(err.detalle).toContain("2001");
+  });
+
+  it("con token, PAN y email en el cuerpo, el detalle no los contiene", async () => {
+    conCuerpo(400, { message: "payer comprador@cliente.example tarjeta 4509953566233704 Bearer abc123", status: 400 });
+    const err = await crearMercadoPago("mdp").crearPago({ ...base, token: "tok" }).catch((e) => e);
+    expect(err.detalle).toContain("400");
+    for (const sensible of ["cliente.example", "4509953566233704", "abc123"]) expect(err.detalle).not.toContain(sensible);
+  });
+
+  it("cuerpo sin información útil: detalle null", async () => {
+    conCuerpo(502, {});
+    const err = await crearMercadoPago("mdp").crearPago({ ...base, token: "tok" }).catch((e) => e);
+    expect(err.detalle).toBeNull();
+  });
+});

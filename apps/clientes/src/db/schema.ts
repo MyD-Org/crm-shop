@@ -859,6 +859,14 @@ export const pagoIntentos = shop.table(
      */
     cuenta: text("cuenta"),
     cuentaPrevista: text("cuenta_prevista"),
+    /**
+     * Diagnóstico del último fallo del proveedor en este intento (migración 0041): texto SANEADO por lista
+     * blanca (`lib/pagos/detalle-proveedor.ts`), <= 500 caracteres, sin PII ni credenciales; y el HTTP del
+     * proveedor (NULL = sin respuesta/otro). Es independiente de `estado` y `detalle`: sobrevive a
+     * `descartarReserva` ('reserva_abandonada'). NULL = sin error registrado (incluye todo intento anterior).
+     */
+    errorProveedor: text("error_proveedor"),
+    errorStatus: integer("error_status"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -877,6 +885,8 @@ export const pagoIntentos = shop.table(
       "pago_intentos_estado_check",
       sql`${t.estado} in ('pendiente','pagado','fallido')`,
     ),
+    // Red de seguridad del saneo (`sanearDetalleProveedor` ya trunca a 500).
+    check("pago_intentos_error_proveedor_largo_check", sql`char_length(${t.errorProveedor}) <= 500`),
   ],
 );
 
@@ -1022,6 +1032,12 @@ export const carts = shop.table(
     clerkUserId: text("clerk_user_id").notNull(),
     items: jsonb("items").$type<{ id: string; qty: number }[]>().notNull().default([]),
     version: integer("version").notNull().default(0),
+    /**
+     * Desde cuándo el carrito tiene ítems (migración 0041): se fija al pasar de vacío a con ítems, se
+     * conserva al editar y vuelve a NULL al vaciarse. Lo mantiene `carrito-db.ts` en SQL. Lo lee el CRM
+     * (carritos abandonados). NULL con ítems = fila anterior a la migración sin backfill.
+     */
+    conItemsDesde: timestamp("con_items_desde", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

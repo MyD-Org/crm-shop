@@ -1,11 +1,12 @@
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { invalidResponse } from "@/lib/catalogo-admin"
 import { leerPromocionEntrada } from "@/lib/cupones-http"
+import { listarCanjes } from "@/lib/cupones-canjes"
 import { eliminarPromocion, guardarPromocion, leerPromocion, pausarPromocion } from "@/lib/cupones-repo"
 import { esUuid } from "@/lib/precios-online-cambios"
 import { NO_STORE, leerJson, respuestaDeError } from "@/lib/precios-online-http"
 
-// GET    /api/admin/cupones/[id] — { promocion }.
+// GET    /api/admin/cupones/[id] — { promocion, canjes } (estado calculado desde el pedido).
 // PUT    /api/admin/cupones/[id] — edita; con canjes no cambia tipo ni % (409 `promocion_con_canjes`).
 // PATCH  /api/admin/cupones/[id] — { activa } pausa o reanuda.
 // DELETE /api/admin/cupones/[id] — sólo sin canjes -> 204 (borra sus códigos).
@@ -20,7 +21,7 @@ export async function GET(req: Request, { params }: Params) {
   if (!esUuid(id)) return adminNotFoundResponse()
   const promocion = await leerPromocion(guard.tenantId, id)
   if (!promocion) return adminNotFoundResponse()
-  return Response.json({ promocion }, { headers: NO_STORE })
+  return Response.json({ promocion, canjes: await listarCanjes(guard.tenantId, id) }, { headers: NO_STORE })
 }
 
 export async function PUT(req: Request, { params }: Params) {

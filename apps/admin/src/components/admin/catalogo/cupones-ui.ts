@@ -1,6 +1,7 @@
 // Piezas puras de la solapa "Cupones" (spec 2026-11-01-cupones-design.md): el formulario, el
 // cuerpo que se manda a /api/admin/cupones, rótulos y textos. Textos en usted.
 
+import type { EstadoCanje } from "@/lib/cupones-canjes"
 import type { PromocionDto } from "@/lib/cupones-repo"
 import type { EstadoPromocion, FormaCupon, PromocionEntrada, TipoPromocion } from "@/lib/cupones-validar"
 import { aIsoArgentina, deIsoArgentina } from "./campanias-ui"
@@ -122,6 +123,12 @@ export const ROTULO_ESTADO_PROMO: Record<EstadoPromocion, { texto: string; tono:
   terminada: { texto: "Terminada", tono: "neutral" },
 }
 
+export const ROTULO_ESTADO_CANJE: Record<EstadoCanje, { texto: string; tono: "info" | "success" | "neutral" }> = {
+  reservado: { texto: "Reservado", tono: "info" },
+  canjeado: { texto: "Canjeado", tono: "success" },
+  liberado: { texto: "Liberado", tono: "neutral" },
+}
+
 /** "10 % + envío gratis", "Envío gratis" o "10 %". */
 export function textoBeneficio(p: { pct: number | null; envioGratis: boolean }): string {
   if (p.pct === null) return "Envío gratis"
@@ -191,4 +198,9 @@ export const TEXTOS_CUPONES = {
     descuento: "Descuento otorgado",
   },
   tipoCorto: { generica: "Genérica", unicos: "Únicos" } as Record<TipoPromocion, string>,
+  verCanjes: "Canjes",
+  canjesTitulo: (nombre: string) => `Canjes de "${nombre}"`,
+  sinCanjes: "Todavía no hay canjes.",
+  duplicado: "Canje duplicado",
+  columnasCanje: { pedido: "Pedido", fecha: "Fecha", estado: "Estado", descuento: "Descuento" },
 }

@@ -2,7 +2,7 @@ import { and, asc, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { cuponCodigos, cuponPromociones, mediosPagoShop, preciosOnlineCambios } from "@/db/schema"
 import { generateToken } from "./admin-crypto"
-import { contarCanjes } from "./cupones-canjes"
+import { contarCanjes, resumenCanjes } from "./cupones-canjes"
 import { generarCodigo } from "./cupones-codigo"
 import {
   estadoPromocion,
@@ -377,6 +377,7 @@ async function aDtos(tenantId: string, filas: FilaPromocion[]): Promise<Promocio
     FROM cupon_codigos WHERE tenant_id = ${tenantId}
     GROUP BY promocion_id`)) as unknown as { promocion_id: string; n: number; manual: string | null }[]
   const porId = new Map(conteos.map((c) => [c.promocion_id, c]))
+  const canjes = await resumenCanjes(tenantId)
   const [{ ahora }] = (await db.execute(sql`SELECT now() AS ahora`)) as unknown as { ahora: Date | string }[]
   return filas.map((p) => {
     const c = porId.get(p.id)
@@ -386,8 +387,8 @@ async function aDtos(tenantId: string, filas: FilaPromocion[]): Promise<Promocio
       estado: estadoPromocion(p, new Date(ahora)),
       activa: p.activa,
       codigosEmitidos: Number(c?.n ?? 0),
-      canjesUsados: 0,
-      descuentoTotal: 0,
+      canjesUsados: canjes.get(p.id)?.usados ?? 0,
+      descuentoTotal: canjes.get(p.id)?.descuento ?? 0,
       tieneToken: p.tokenHash !== null,
     }
   })

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import type { PromocionDto } from "@/lib/cupones-repo"
-import { ROTULO_ESTADO_PROMO, cuerpoPromocion, formDesdeDto, formVacioPromocion, textoBeneficio, type FormPromocion } from "./cupones-ui"
+import { ROTULO_ESTADO_CANJE, ROTULO_ESTADO_PROMO, cuerpoPromocion, formDesdeDto, formVacioPromocion, textoBeneficio, type FormPromocion } from "./cupones-ui"
 
 const MEDIOS = ["transferencia", "mercadopago", "a_coordinar"]
 
@@ -84,5 +84,13 @@ describe("textos", () => {
   it("ROTULO_ESTADO_PROMO", () => {
     expect(ROTULO_ESTADO_PROMO.pausada.texto).toBe("Pausada")
     expect(ROTULO_ESTADO_PROMO.activa).toEqual({ texto: "Activa", tono: "success" })
+  })
+})
+
+describe("canjes", () => {
+  it("rótulos del estado calculado", () => {
+    expect(ROTULO_ESTADO_CANJE.reservado.texto).toBe("Reservado")
+    expect(ROTULO_ESTADO_CANJE.canjeado).toEqual({ texto: "Canjeado", tono: "success" })
+    expect(ROTULO_ESTADO_CANJE.liberado.texto).toBe("Liberado")
   })
 })

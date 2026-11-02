@@ -1,13 +1,16 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import { Alert, Badge, Button, Checkbox, Dialog, EmptyState, Field, Input, Select, Switch, Table, Textarea, type TableColumn } from "@myd-org/ui"
+import type { CanjeDto } from "@/lib/cupones-canjes"
 import type { PromocionDto } from "@/lib/cupones-repo"
 import type { MedioPagoDto } from "@/lib/medios-pago-shop-repo"
 import { PROVINCIAS, claveProvincia } from "@/lib/provincias"
 import { fmtVentana } from "./campanias-ui"
 import {
   FORMAS,
+  ROTULO_ESTADO_CANJE,
   ROTULO_ESTADO_PROMO,
   TEXTOS_CUPONES as TX,
   cuerpoPromocion,
@@ -39,6 +42,7 @@ export function CuponesPanel() {
   const [confirmar, setConfirmar] = useState<Confirmar>(null)
   const [lote, setLote] = useState<{ promo: PromocionDto; cantidad: string; error: string } | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const [canjes, setCanjes] = useState<{ promo: PromocionDto; filas: CanjeDto[] } | null>(null)
   const [ocupado, setOcupado] = useState(false)
 
   const disponibles = [...medios.map((m) => m.slug), SLUG_A_COORDINAR]
@@ -107,6 +111,15 @@ export function CuponesPanel() {
     try {
       await api(tipo === "eliminar" ? `/api/admin/cupones/${promo.id}` : `/api/admin/cupones/${promo.id}/token`, { method: "DELETE" })
       await cargar()
+    } catch (e) {
+      setError(mensaje(e))
+    }
+  }
+
+  async function verCanjes(p: PromocionDto) {
+    try {
+      const r = await api<{ canjes: CanjeDto[] }>(`/api/admin/cupones/${p.id}`)
+      setCanjes({ promo: p, filas: r.canjes })
     } catch (e) {
       setError(mensaje(e))
     }
@@ -199,6 +212,9 @@ export function CuponesPanel() {
       align: "right",
       render: (p) => (
         <span className="flex flex-wrap justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={() => verCanjes(p)}>
+            {TX.verCanjes}
+          </Button>
           {p.estado !== "terminada" && (
             <Button size="sm" variant="outline" onClick={() => abrirEdicion(p)}>
               {TX.editar}
@@ -430,6 +446,51 @@ export function CuponesPanel() {
             </Field>
           </div>
         )}
+      </Dialog>
+
+      <Dialog
+        open={canjes !== null}
+        onOpenChange={(v) => !v && setCanjes(null)}
+        title={canjes ? TX.canjesTitulo(canjes.promo.nombre) : ""}
+        size="lg"
+        footer={
+          <div className="flex justify-end">
+            <Button onClick={() => setCanjes(null)}>{TX.cerrar}</Button>
+          </div>
+        }
+      >
+        {canjes &&
+          (canjes.filas.length === 0 ? (
+            <EmptyState title={TX.sinCanjes} />
+          ) : (
+            <Table
+              columns={[
+                {
+                  key: "pedido",
+                  header: TX.columnasCanje.pedido,
+                  render: (k: CanjeDto) => (
+                    <Link href={`/admin/pedidos/${k.pedidoId}`} className="font-medium tabular-nums hover:underline" style={{ color: "var(--ink)" }}>
+                      {k.numero}
+                    </Link>
+                  ),
+                },
+                { key: "fecha", header: TX.columnasCanje.fecha, render: (k: CanjeDto) => <span className="tabular-nums">{new Date(k.fecha).toLocaleDateString("es-AR")}</span> },
+                {
+                  key: "estado",
+                  header: TX.columnasCanje.estado,
+                  render: (k: CanjeDto) => (
+                    <span className="flex flex-wrap gap-1">
+                      <Badge tone={ROTULO_ESTADO_CANJE[k.estado].tono}>{ROTULO_ESTADO_CANJE[k.estado].texto}</Badge>
+                      {k.duplicado && <Badge tone="warning">{TX.duplicado}</Badge>}
+                    </span>
+                  ),
+                },
+                { key: "descuento", header: TX.columnasCanje.descuento, align: "right", render: (k: CanjeDto) => <span className="tabular-nums">{fmtPrecio(k.descuento)}</span> },
+              ]}
+              rows={canjes.filas}
+              rowKey={(k) => k.pedidoId}
+            />
+          ))}
       </Dialog>
 
       <Dialog

@@ -340,3 +340,9 @@ export function textoCampaniaLinea(i: {
   const pct = Math.floor((1 - precio / normal) * 100 + 1e-9)
   return `${i.campaniaNombre ?? "Campaña"} −${pct} %`
 }
+
+/** "Costo de envío" del detalle: gratis (por la regla de la tienda o por el cupón) o a coordinar. */
+export function textoCostoEnvio(envioGratis: boolean | null, porCupon: boolean): string {
+  if (!envioGratis) return "A coordinar con el cliente"
+  return porCupon ? "Envío gratis por cupón" : "Gratis"
+}

@@ -57,6 +57,12 @@ export function formaInicialDelMedio(
   return hayPreciosPorForma(medio) ? (formasDelMedio(medio)[0] ?? null) : null;
 }
 
+/** El medio se cobra con un procesador que distingue formas (Mercado Pago, Payway). */
+export function medioConFormas(slug: string): boolean {
+  const procesador = procesadorDeMedio(slug);
+  return Boolean(procesador && PROCESADORES_CON_FORMAS.includes(procesador));
+}
+
 /**
  * Forma con la que se cotiza y congela el pedido. Una forma pedida inválida o no habilitada para el
  * procesador del medio (p. ej. `cuenta_mp` con Payway) se rechaza siempre. La pedida se congela siempre:

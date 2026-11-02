@@ -31,6 +31,11 @@ import { idsAPedido } from "@/lib/venta-sin-stock";
 import { localDeRetiro } from "@/lib/sucursales-pedido";
 import { sinProcesadoresNoConfigurados } from "@/lib/medios-pago-datos";
 import { listaAConfirmar } from "@/lib/medios-precio";
+import { cuponDelPedido, resolverCupon } from "@/lib/cupones/repo";
+import { aplicadorDeCupon, nombresDeMedios, opcionCupon, type AplicadorCupon } from "@/lib/cupones/aplicar";
+import { promoDesdePedido } from "@/lib/cupones/reglas";
+import type { CuponError } from "@/lib/cupones/tipos";
+import type { Cotizacion } from "@/lib/cotizacion";
 
 /**
  * Techo por usuario.
@@ -87,9 +92,16 @@ function ipDe(req: Request): string | null {
  * mismo motor que el pedido). Un carrito `a_confirmar` (sin cuenta corriente ni lista privada) se
  * cotiza con la lista que muestran las cards (`listaAConfirmar`) y no trae cuotas, totales por
  * opción, barra de cuotas ni cuenta de transferencia: no se cobra en línea.
+ *
+ * Cupón (spec 2026-11-01-cupones-design.md): `cupon` (texto) se valida en el servidor y se aplica con
+ * las reglas puras (`cupones/reglas.ts`) a la cotización principal, a cada card (`totalesOpciones`,
+ * más `cuponPorOpcion`: true = elegible) y a cada cantidad de cuotas. Un cupón que no aplica no
+ * bloquea: vuelve `cuponError`. Con `pedidoId` (cambio de medio) rige el cupón congelado del pedido
+ * de este comprador y se ignora `cupon`. El envío gratis de la tienda se evalúa sobre el subtotal
+ * ANTES del cupón; el envío gratis del cupón lo fuerza.
  */
 export async function POST(req: Request) {
-  const { clerkUserId, cliente } = await identidadActual();
+  const { clerkUserId, cliente, email } = await identidadActual();
 
   const quien = clerkUserId ?? cliente?.codigocliente;
   const permitido = quien
@@ -115,6 +127,8 @@ export async function POST(req: Request) {
     conCuotas?: unknown;
     forma?: unknown;
     totalesOpciones?: unknown;
+    cupon?: unknown;
+    pedidoId?: unknown;
   };
   try {
     body = await req.json();
@@ -164,6 +178,7 @@ export async function POST(req: Request) {
     // Forma de pago de la pestaña o modalidad activa (change `listas-por-forma-de-pago`): solo con un
     // medio de cobro en línea. Sin forma, o sin precios distintos por forma, rige la lista del medio.
     let forma: OpcionCobro | null = null;
+    let formaPedida: OpcionCobro | null = null;
     if (conMedio && medioCobro?.cobroOnline) {
       const f = resolverForma(medioCobro, body.forma);
       if (!f.ok) {
@@ -173,6 +188,7 @@ export async function POST(req: Request) {
         );
       }
       forma = f.forma;
+      formaPedida = f.pedida;
       // Las cuotas sin interés son de crédito.
       if (typeof body.cuotas === "number" && body.cuotas >= 2 && f.pedida && f.pedida !== "credito") {
         return NextResponse.json(
@@ -260,6 +276,38 @@ export async function POST(req: Request) {
       const lista = listaAConfirmar(await mediosSegunPublico(sinProcesadoresNoConfigurados(await leerMediosPagoTolerante())));
       cotizacion = await cotizar(lineas, { ...opcionesCotizar, idListaMedio: lista });
     }
+    // Cupón: el del pedido (cambio de medio, sólo del dueño) o el ingresado. Un mismo contexto para la
+    // cotización principal, las cards y las cuotas.
+    let aplicar: AplicadorCupon | null = null;
+    let cuponError: CuponError | null = null;
+    const pedidoId = typeof body.pedidoId === "string" ? body.pedidoId.trim().slice(0, 40) : "";
+    const cuponPedido = pedidoId && clerkUserId ? await cuponDelPedido(pedidoId, clerkUserId) : null;
+    const resuelto =
+      pedidoId || body.cupon == null || body.cupon === ""
+        ? null
+        : await resolverCupon(
+          body.cupon,
+          clerkUserId || cliente ? { clerkUserId: clerkUserId ?? null, email: email ?? null, listaPrivada: Boolean(idListaPrivada) } : null,
+        );
+    const cuponParaCotizar = cuponPedido
+      ? { promo: promoDesdePedido(cuponPedido), motivoCuenta: null, verificado: true, congelado: true }
+      : resuelto?.ok
+        ? resuelto
+        : null;
+    if (resuelto && !resuelto.ok) cuponError = resuelto.error;
+    if (cuponParaCotizar) {
+      const nombres = nombresDeMedios(mediosCrm.length > 0 ? mediosCrm : await mediosSegunComprador(await leerMediosPagoTolerante()));
+      aplicar = aplicadorDeCupon({
+        cupon: cuponParaCotizar,
+        entrega: { tipo: entregaTipo, provincia: provinciaTexto },
+        nombresMedios: nombres,
+        totalListaGeneral: async () => (await cotizarConLista(undefined)).total,
+      });
+      const slugCupon = aConfirmar ? "a_coordinar" : conMedio ? pagoMetodo : "";
+      cotizacion = await aplicar(cotizacion, slugCupon ? opcionCupon(slugCupon, forma ?? formaPedida, cuotas) : null);
+    } else if (cuponError) {
+      cotizacion = { ...cotizacion, cupon: null, cuponError };
+    }
     // Selector del checkout: el total de cada cantidad de cuotas es el de SU lista (varias cotizaciones
     // en paralelo, sólo con `conCuotas`). Los montos salen del servidor, nunca del navegador. Sólo las
     // cantidades cuyo mínimo alcanza la base.
@@ -271,6 +319,9 @@ export async function POST(req: Request) {
             idListaUnPago: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1, forma),
             totalBase,
             cotizarConLista,
+            ...(aplicar
+              ? { porCantidad: (c: Cotizacion, n: number) => aplicar!(c, opcionCupon(pagoMetodo, n > 1 ? "credito" : (forma ?? formaPedida), n)) }
+              : {}),
           })
         : undefined;
     // "Le faltan $X para N cuotas": sólo con las opciones pedidas (checkout) y algún mínimo sin alcanzar.
@@ -351,6 +402,7 @@ export async function POST(req: Request) {
     // Paso Pago del checkout (`totalesOpciones: true`): el total de cada card (forma de pago), una
     // cotización por lista distinta. Cuenta corriente y lista privada no eligen medio: nada.
     let totalesOpciones: Record<string, number | null> | undefined;
+    let cuponPorOpcion: Record<string, boolean> | undefined;
     if (!aConfirmar && body.totalesOpciones === true && !esCuentaCorriente && !idListaPrivada) {
       const medios = mediosParaModalidad(mediosCrm.length > 0 ? mediosCrm : await mediosSegunComprador(await leerMediosPagoTolerante()), entregaTipo, {
         procesadorDisponible: procesadorConfigurado,
@@ -359,10 +411,10 @@ export async function POST(req: Request) {
       const listas = [...new Set(opciones.map((o) => listaDeOpcion(medios, o)))];
       const porLista = new Map(
         await Promise.all(
-          listas.map(async (l): Promise<[string, number | null]> => {
+          listas.map(async (l): Promise<[string, Cotizacion | null]> => {
             try {
               const q = await cotizarConLista(l || undefined);
-              return [l, q.hayProblemas ? null : q.total];
+              return [l, q.hayProblemas ? null : q];
             } catch (err) {
               console.error("[/api/carrito/cotizar] total de una opción de pago:", err);
               return [l, null];
@@ -370,18 +422,36 @@ export async function POST(req: Request) {
           }),
         ),
       );
-      totalesOpciones = Object.fromEntries(opciones.map((o) => [o.clave, porLista.get(listaDeOpcion(medios, o)) ?? null]));
+      // Con cupón, cada card con SU elegibilidad: con descuento si la opción es elegible.
+      const elegibles: Record<string, boolean> = {};
+      totalesOpciones = Object.fromEntries(
+        await Promise.all(
+          opciones.map(async (o): Promise<[string, number | null]> => {
+            const q = porLista.get(listaDeOpcion(medios, o)) ?? null;
+            if (!q || !aplicar) return [o.clave, q?.total ?? null];
+            const conCupon = await aplicar(q, opcionCupon(o.slug, o.forma, 1));
+            if (conCupon.cupon) elegibles[o.clave] = true;
+            else if (conCupon.cuponError?.motivo === "opcion_no_elegible") elegibles[o.clave] = false;
+            return [o.clave, conCupon.total];
+          }),
+        ),
+      );
+      if (Object.keys(elegibles).length > 0) cuponPorOpcion = elegibles;
     }
 
     return NextResponse.json({
       ...cotizacion,
       ...(totalesOpciones ? { totalesOpciones } : {}),
+      ...(cuponPorOpcion ? { cuponPorOpcion } : {}),
       ...(cuotasOpciones ? { cuotasOpciones } : {}),
       ...(escalon ? { proximoEscalon: escalon } : {}),
       ...(progreso ? { progresoCuotas: progreso } : {}),
       ...(cuentaTransferencia !== undefined ? { cuentaTransferencia } : {}),
       ...(disponibilidad ? { disponibilidad } : {}),
-      envio: evaluarEnvio(cotizacion.subtotal, provinciaTexto, await leerConfigEnvio()),
+      envio: envioConCupon(
+        evaluarEnvio(cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal, provinciaTexto, await leerConfigEnvio()),
+        cotizacion.cupon?.envioGratis === true,
+      ),
     });
   } catch (err) {
     console.error("[/api/carrito/cotizar] error:", err);
@@ -390,4 +460,10 @@ export async function POST(req: Request) {
       { status: 502 },
     );
   }
+}
+
+/** El envío gratis del cupón (ya validado para esta entrega y zona) fuerza el gratis. */
+function envioConCupon(envio: ReturnType<typeof evaluarEnvio>, gratisPorCupon: boolean): ReturnType<typeof evaluarEnvio> {
+  if (!gratisPorCupon || !envio.disponible) return envio;
+  return { ...envio, gratis: true, aCoordinar: false, motivo: null, faltante: 0 };
 }

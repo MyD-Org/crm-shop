@@ -96,11 +96,14 @@ export interface OpcionCupon {
   slug: string;
   forma: OpcionCobro | null;
   cuotasSinInteres: boolean;
+  /** El medio tiene formas (Mercado Pago, Payway): sin `forma` conocida, una promoción con formas no aplica. */
+  conFormas?: boolean;
 }
 
 export interface ContextoCupon {
   ahora: Date;
-  opcion: OpcionCupon;
+  /** null = todavía no eligió cómo pagar (carrito): se aplica y se avisa la restricción de pago. */
+  opcion: OpcionCupon | null;
   entrega: { tipo: EntregaTipo; provincia: string | null };
   /** Total con IVA de todo el carrito a la lista general (para el mínimo). */
   totalListaGeneral: number;

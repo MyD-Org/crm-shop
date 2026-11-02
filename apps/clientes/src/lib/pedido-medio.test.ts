@@ -225,3 +225,57 @@ describe("cotizarConMedio con venta sin stock", () => {
     expect(cotizar.mock.calls.every((c) => c[1].idListaMedio !== "lista-destacado")).toBe(true);
   });
 });
+
+describe("cotizarConMedio con cupón", () => {
+  const linea = (pu: number) => ({ id: "1", code: null, name: "x", brand: "", qty: 1, precioUnitario: pu, ivaPorcentaje: 0, subtotal: pu, iva: 0, total: pu, stockDisponible: 5 });
+  const PRECIOS: Record<string, number> = { A: 1000, B: 900, C: 1100 };
+  const promo = (o: Record<string, unknown> = {}) => ({
+    codigoId: "c1", codigo: "LUZ-7KQ2M", promocionId: "p1", nombre: "Bot", tipo: "unicos" as const, pct: 10, envioGratis: false,
+    provinciasEnvio: null, inicio: "2026-01-01T00:00:00-03:00", fin: "2099-01-01T00:00:00-03:00", venceEn: null,
+    soloPrimeraCompra: true, minimo: null, medios: null, formas: null, permiteCuotas: false, limiteCanjes: null, condiciones: "", activa: true, ...o,
+  });
+  const cupon = (o: Record<string, unknown> = {}) => ({ promo: promo(o) as never, motivoCuenta: null, verificado: true });
+
+  beforeEach(() => {
+    cotizar.mockImplementation(async (_l: unknown, o: { idListaMedio?: string }) => {
+      const pu = PRECIOS[o.idListaMedio ?? ""] ?? 1200;
+      return { lineas: [linea(pu)], subtotal: pu, iva: 0, costoEnvio: 0, total: pu, hayProblemas: false, listaPrivada: false, flujo: "normal" };
+    });
+  });
+
+  it("aplica el cupón sobre la lista que rige la elección", async () => {
+    const r = await llamar(MP, { formaPedida: "debito", cupon: cupon() });
+    expect(r.ok && r.cotizacion.total).toBe(810);
+    expect(r.ok && r.cotizacion.cupon?.descuento).toBe(90);
+  });
+
+  it("cuotas sin interés con cupón sólo en 1 pago: sin descuento y con aviso", async () => {
+    const r = await llamar(MP, { formaPedida: "credito", cuotasPedidas: 3, cupon: cupon() });
+    expect(r.ok && r.cotizacion.total).toBe(1100);
+    expect(r.ok && r.cotizacion.cuponError?.motivo).toBe("opcion_no_elegible");
+  });
+
+  it("mínimo: se mide a la lista general con una cotización extra", async () => {
+    const r = await llamar(MP, { formaPedida: "debito", cupon: cupon({ minimo: 1201 }) });
+    expect(r.ok && r.cotizacion.cuponError?.motivo).toBe("minimo");
+    expect(cotizar.mock.calls.some(([, o]) => (o as { idListaMedio?: string }).idListaMedio === undefined)).toBe(true);
+  });
+
+  it("promoción con formas y medio sin precios por forma: la forma pedida queda congelada (el cobro la valida)", async () => {
+    const r = await llamar(medio({}), { formaPedida: "debito", cupon: cupon({ formas: ["debito"] }) });
+    expect(r.ok && r.cotizacion.cupon).toBeTruthy();
+    expect(r.ok && r.formaCobro).toBe("debito");
+  });
+
+  it("promoción con formas y medio con formas sin forma conocida: no aplica (falla cerrado)", async () => {
+    const r = await llamar(medio({}), { cupon: cupon({ formas: ["debito"] }) });
+    expect(r.ok && r.cotizacion.cuponError?.motivo).toBe("opcion_no_elegible");
+    expect(r.ok && r.cotizacion.total).toBe(1000);
+  });
+
+  it("congelado: no recotiza el mínimo ni mira la vigencia", async () => {
+    const r = await llamar(MP, { formaPedida: "debito", cupon: { ...cupon({ minimo: 1e9, fin: "2026-01-02T00:00:00-03:00" }), congelado: true } });
+    expect(r.ok && r.cotizacion.total).toBe(810);
+    expect(cotizar.mock.calls.every(([, o]) => (o as { idListaMedio?: string }).idListaMedio !== undefined)).toBe(true);
+  });
+});

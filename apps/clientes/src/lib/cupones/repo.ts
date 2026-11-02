@@ -9,13 +9,13 @@
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmCupones } from "@/db/crm";
-import { cuponCanjes } from "@/db/schema";
+import { cuponCanjes, orders } from "@/db/schema";
 import type { OpcionCobro } from "../pagos/opciones-cobro";
 import { pedidoCompradoSql, pedidoVivoSql } from "../pedido-vivo";
 import { shopTenantId } from "../tenant";
 import { mensajeCupon } from "./mensajes";
 import { normalizarCodigo } from "./reglas";
-import type { CuponError, MotivoCupon, PromocionCupon } from "./tipos";
+import type { CuponError, CuponPedido, MotivoCupon, PromocionCupon } from "./tipos";
 
 type Ejecutor = Pick<ReturnType<typeof getDb>, "execute">;
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
@@ -195,4 +195,15 @@ export async function reservarCanjeEnTx(tx: Tx, p: PromocionCupon, q: QuienCupon
 /** El pedido pierde el cupón (cambio a una opción no elegible): el código vuelve a servir. */
 export async function liberarCanjeEnTx(tx: Pick<Tx, "delete">, pedidoId: string): Promise<void> {
   await tx.delete(cuponCanjes).where(eq(cuponCanjes.orderId, pedidoId));
+}
+
+/** La foto del cupón de un pedido de ESTE comprador (cambio de medio); null si no es suyo o no tiene. */
+export async function cuponDelPedido(pedidoId: string, clerkUserId: string): Promise<CuponPedido | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(pedidoId)) return null;
+  const [f] = await getDb()
+    .select({ cupon: orders.cupon })
+    .from(orders)
+    .where(and(eq(orders.id, pedidoId), eq(orders.tenantId, shopTenantId()), eq(orders.clerkUserId, clerkUserId)))
+    .limit(1);
+  return f?.cupon ?? null;
 }

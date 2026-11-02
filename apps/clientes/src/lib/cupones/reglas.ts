@@ -31,10 +31,13 @@ export function motivoVigencia(p: PromocionCupon, ahora: Date): MotivoCupon | nu
   return null;
 }
 
-/** Medio, forma (sólo si la opción tiene forma) y cuotas sin interés (sólo si la promoción las permite). */
+/**
+ * Medio, forma y cuotas sin interés (sólo si la promoción las permite). La forma filtra sólo medios con
+ * formas; un medio con formas sin forma conocida no pasa un filtro de formas (falla cerrado).
+ */
 export function opcionElegible(p: Pick<PromocionCupon, "medios" | "formas" | "permiteCuotas">, o: OpcionCupon): boolean {
   if (p.medios && !p.medios.includes(o.slug)) return false;
-  if (p.formas && o.forma !== null && !p.formas.includes(o.forma)) return false;
+  if (p.formas && (o.forma !== null ? !p.formas.includes(o.forma) : Boolean(o.conFormas))) return false;
   if (o.cuotasSinInteres && !p.permiteCuotas) return false;
   return true;
 }
@@ -51,14 +54,14 @@ function descontar(l: LineaCotizada, pct: number): LineaCotizada {
 }
 
 export function aplicarCupon(c: Cotizacion, p: PromocionCupon, ctx: ContextoCupon): Cotizacion {
-  const error = (m: MotivoCupon) => conError(c, m, mensajeCupon(m, p, ctx.nombresMedios, ctx.opcion));
+  const error = (m: MotivoCupon) => conError(c, m, mensajeCupon(m, p, ctx.nombresMedios, ctx.opcion ?? undefined));
   if (!ctx.congelado) {
     if (ctx.motivoCuenta) return error(ctx.motivoCuenta);
     const vigencia = motivoVigencia(p, ctx.ahora);
     if (vigencia) return error(vigencia);
     if (p.minimo !== null && ctx.totalListaGeneral < p.minimo) return error("minimo");
   }
-  if (!opcionElegible(p, ctx.opcion)) return error("opcion_no_elegible");
+  if (ctx.opcion && !opcionElegible(p, ctx.opcion)) return error("opcion_no_elegible");
 
   const alcanza = (l: LineaCotizada) => !l.problema && !l.campaniaId;
   const pctAplicado = p.pct !== null && c.lineas.some(alcanza);
@@ -70,8 +73,10 @@ export function aplicarCupon(c: Cotizacion, p: PromocionCupon, ctx: ContextoCupo
 
   const lineas = pctAplicado ? c.lineas.map((l) => (alcanza(l) ? descontar(l, p.pct!) : l)) : c.lineas;
   const totales = totalizar(lineas, c.costoEnvio);
+  const restringePago = Boolean(p.medios || p.formas);
   const avisos = [
     ...(!ctx.verificado ? [AVISO_INVITADO] : []),
+    ...(!ctx.opcion && restringePago ? [mensajeCupon("opcion_no_elegible", p, ctx.nombresMedios)] : []),
     ...(p.pct !== null && !pctAplicado ? [AVISO_CAMPANIA] : []),
   ];
   const cupon: CuponAplicado = {

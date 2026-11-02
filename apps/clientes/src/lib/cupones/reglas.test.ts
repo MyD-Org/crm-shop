@@ -107,6 +107,12 @@ describe("aplicarCupon", () => {
     expect(r2.cuponError?.motivo).toBe("opcion_no_elegible");
   });
 
+  it("sin medio elegido (carrito): aplica y avisa la restricción de pago", () => {
+    const r = aplicarCupon(cot, promo({ medios: ["transferencia"] }), { ...ctx, opcion: null });
+    expect(r.cupon).toMatchObject({ pctAplicado: true, descuento: 242, aviso: "Su cupón es válido sólo pagando con Transferencia." });
+    expect(aplicarCupon(cot, promo(), { ...ctx, opcion: null }).cupon?.aviso).toBeNull();
+  });
+
   it("sin verificar (invitado): aplica y avisa", () => {
     expect(aplicarCupon(cot, promo(), { ...ctx, verificado: false }).cupon).toMatchObject({ verificado: false, aviso: "Se aplicará al confirmar si corresponde." });
   });
@@ -121,6 +127,10 @@ describe("opcionElegible", () => {
     expect(opcionElegible({ medios: null, formas: ["debito"], permiteCuotas: false }, { slug: "transferencia", forma: null, cuotasSinInteres: false })).toBe(true);
     expect(opcionElegible({ medios: null, formas: ["debito"], permiteCuotas: false }, { slug: "mercadopago", forma: "credito", cuotasSinInteres: false })).toBe(false);
     expect(opcionElegible({ medios: null, formas: ["debito"], permiteCuotas: false }, { slug: "mercadopago", forma: "debito", cuotasSinInteres: false })).toBe(true);
+  });
+  it("medio con formas y forma desconocida: no elegible si la promoción restringe formas (fail closed)", () => {
+    expect(opcionElegible({ medios: null, formas: ["debito"], permiteCuotas: false }, { slug: "mercadopago", forma: null, cuotasSinInteres: false, conFormas: true })).toBe(false);
+    expect(opcionElegible({ medios: null, formas: null, permiteCuotas: false }, { slug: "mercadopago", forma: null, cuotasSinInteres: false, conFormas: true })).toBe(true);
   });
   it("medios: a_coordinar entra si no hay restricción o si está", () => {
     expect(opcionElegible({ medios: null, formas: null, permiteCuotas: false }, { slug: "a_coordinar", forma: null, cuotasSinInteres: false })).toBe(true);

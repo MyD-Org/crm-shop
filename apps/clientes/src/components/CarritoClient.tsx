@@ -529,7 +529,7 @@ export function CarritoClient({
                 <dt className="text-muted">Impuestos</dt>
                 <dd className="font-medium tabular-nums text-text">{iva === null ? "—" : fmtPrecio(iva)}</dd>
               </div>
-              {confirmado && cotizacion.cupon && <LineaCupon cupon={cotizacion.cupon} />}
+              {confirmado && cotizacion.cupon && <LineaCupon cupon={cotizacion.cupon} onQuitar={() => setCupon(null)} />}
             </dl>
             <CampoCupon
               cupon={cupon}

@@ -2248,7 +2248,7 @@ export function CheckoutClient({
             </div>
             {cotizacion?.cupon && (
               <dl>
-                <LineaCupon cupon={cotizacion.cupon} />
+                <LineaCupon cupon={cotizacion.cupon} onQuitar={pedidoACambiar ? undefined : () => setCupon(null)} />
               </dl>
             )}
             {!pedidoACambiar && (

@@ -76,6 +76,7 @@ describe("admin-totp", () => {
     const uri = uriOtpauth("ABCDEF", "Empresa Ejemplo", "persona@cliente.example")
     expect(uri.startsWith("otpauth://totp/Empresa%20Ejemplo%3Apersona%40cliente.example?")).toBe(true)
     expect(uri).toContain("secret=ABCDEF")
-    expect(uri).toContain("issuer=Empresa+Ejemplo")
+    expect(uri).toContain("issuer=Empresa%20Ejemplo")
+    expect(uri).not.toContain("+")
   })
 })

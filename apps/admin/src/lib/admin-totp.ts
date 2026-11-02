@@ -113,14 +113,16 @@ export function verificarTotp(secretoBase32: string, codigo: string, ahoraMs: nu
 /** URI que codifica el QR (formato de Google Authenticator, lo entienden todas). */
 export function uriOtpauth(secretoBase32: string, emisor: string, cuenta: string): string {
   const etiqueta = encodeURIComponent(`${emisor}:${cuenta}`)
-  const params = new URLSearchParams({
-    secret: secretoBase32,
-    issuer: emisor,
-    algorithm: "SHA1",
-    digits: String(TOTP_DIGITOS),
-    period: String(TOTP_PASO_SEG),
-  })
-  return `otpauth://totp/${etiqueta}?${params.toString()}`
+  // encodeURIComponent y no URLSearchParams: este codifica el espacio como "+" y Google Authenticator
+  // lo muestra literal ("Empresa+Ejemplo").
+  const params = [
+    `secret=${secretoBase32}`,
+    `issuer=${encodeURIComponent(emisor)}`,
+    "algorithm=SHA1",
+    `digits=${TOTP_DIGITOS}`,
+    `period=${TOTP_PASO_SEG}`,
+  ].join("&")
+  return `otpauth://totp/${etiqueta}?${params}`
 }
 
 // ── Cifrado del secreto en la base ───────────────────────────────────────────

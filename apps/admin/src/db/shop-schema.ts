@@ -285,5 +285,47 @@ export const shopClientLinks = shop.table("client_links", {
   revocadoPorNombre: text("revocado_por_nombre"),
 })
 
+// Intentos de cobro en línea (`shop.pago_intentos`, 0034/0035/0041 del Shop). Lo escribe SÓLO el
+// Shop; el CRM lo lee para "Intentos de pago" y el detalle del pedido. `error_proveedor` es el
+// detalle SANEADO del fallo del procesador (<= 500, sin PII) y `error_status` su HTTP; ambos son
+// NULL en intentos históricos o sin error. `order_id` no declara la FK (es del Shop).
+export const shopPagoIntentos = shop.table("pago_intentos", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  orderId: uuid("order_id").notNull(),
+  proveedor: text("proveedor").notNull(),
+  referencia: text("referencia"),
+  estado: text("estado").notNull().default("pendiente"),
+  detalle: text("detalle"),
+  medio: text("medio"),
+  cuotas: integer("cuotas"),
+  totalPagado: numeric("total_pagado", { precision: 14, scale: 2 }),
+  info: jsonb("info"),
+  cuotasSolicitadas: integer("cuotas_solicitadas"),
+  totalEsperado: numeric("total_esperado", { precision: 14, scale: 2 }),
+  conInteres: boolean("con_interes"),
+  cuenta: text("cuenta"),
+  cuentaPrevista: text("cuenta_prevista"),
+  errorProveedor: text("error_proveedor"),
+  errorStatus: integer("error_status"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+// Carrito del comprador con sesión (`shop.carts`, 0041 del Shop). Una fila por (tenant, usuario).
+// `items` guarda sólo `{ id, qty }` (id de Alegra y cantidad). `con_items_desde` = cuándo pasó de
+// vacío a con ítems (NULL = vacío); `updated_at` = última actividad.
+export const shopCarts = shop.table("carts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  clerkUserId: text("clerk_user_id").notNull(),
+  items: jsonb("items").$type<{ id: string; qty: number }[]>().notNull().default([]),
+  version: integer("version").notNull().default(0),
+  conItemsDesde: timestamp("con_items_desde", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
 export type ShopClienteRow = typeof shopClientes.$inferSelect
+export type ShopPagoIntentoRow = typeof shopPagoIntentos.$inferSelect
+export type ShopCartRow = typeof shopCarts.$inferSelect
 export type ShopClientLinkRow = typeof shopClientLinks.$inferSelect

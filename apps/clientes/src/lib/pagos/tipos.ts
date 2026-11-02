@@ -365,6 +365,11 @@ export class ErrorProveedor extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /**
+     * Diagnóstico del procesador YA SANEADO (`sanearDetalleProveedor`: lista blanca, sin PII, <= 500), para
+     * guardarlo en `pago_intentos.error_proveedor`. null = el cuerpo no traía nada útil. Nunca va al comprador.
+     */
+    readonly detalle: string | null = null,
   ) {
     super(message);
     this.name = "ErrorProveedor";

@@ -26,6 +26,7 @@ import {
   type EstadoPago,
   type ProveedorPago,
 } from "./tipos";
+import { sanearDetalleProveedor, sanearTexto } from "./detalle-proveedor";
 import { credencialesPayway, cuentaConfigurada, paywayBaseUrl } from "./credenciales";
 import { armarFraudDetection } from "./payway-antifraude";
 import {
@@ -103,8 +104,9 @@ export function crearPayway(deps: Deps): ProveedorPago & { requiereBin: true; re
       });
     } catch (err) {
       // Sin el mensaje de la causa: a veces trae la URL o headers.
-      console.error(`[payway] sin respuesta (${init.method} ${ruta.split("?")[0]}):`, (err as Error)?.name ?? "error");
-      throw new ErrorProveedor("Payway no respondió", 504);
+      const nombre = (err as Error)?.name ?? "error";
+      console.error(`[payway] sin respuesta (${init.method} ${ruta.split("?")[0]}):`, nombre);
+      throw new ErrorProveedor("Payway no respondió", 504, `sin_respuesta: ${sanearTexto(nombre)}`);
     }
     const cuerpo = await res.json().catch(() => null);
     return { status: res.status, cuerpo };
@@ -120,7 +122,7 @@ export function crearPayway(deps: Deps): ProveedorPago & { requiereBin: true; re
     if (r.status === 401 || r.status === 403) {
       console.error("[payway] error de credenciales o de habilitación del site: revisar las keys y las habilitaciones.");
     }
-    return new ErrorProveedor(`Payway respondió ${r.status}`, r.status);
+    return new ErrorProveedor(`Payway respondió ${r.status}`, r.status, sanearDetalleProveedor(r.cuerpo));
   }
 
   /** Pago de esa referencia, o null si Payway no lo conoce. */

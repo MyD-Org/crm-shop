@@ -16,6 +16,7 @@ const crearPago = vi.fn();
 const fijarReferenciaIntento = vi.fn();
 const cerrarIntentoSinPago = vi.fn();
 const registrarIntentoFallido = vi.fn();
+const registrarErrorIntento = vi.fn();
 const orden: string[] = [];
 
 // Formas de pago del medio (migración 0073 del CRM). Por defecto, sin dato = todas las del procesador.
@@ -36,6 +37,7 @@ vi.mock("@/lib/pedidos", async (original) => ({
   getItemsParaAntifraude: (...a: unknown[]) => getItemsParaAntifraude(...a),
   registrarCobro: (...a: unknown[]) => registrarCobro(...a),
   registrarIntentoFallido: (...a: unknown[]) => registrarIntentoFallido(...a),
+  registrarErrorIntento: (...a: unknown[]) => registrarErrorIntento(...a),
   fijarReferenciaIntento: (...a: unknown[]) => fijarReferenciaIntento(...a),
   cerrarIntentoSinPago: (...a: unknown[]) => cerrarIntentoSinPago(...a),
 }));
@@ -115,10 +117,10 @@ beforeEach(() => {
   configurado = true;
   cuentas.configurado = true;
   falsos.clear();
-  for (const f of [registrarCobro, getPedidoParaPago, getItemsParaAntifraude, crearPago, fijarReferenciaIntento, cerrarIntentoSinPago, registrarIntentoFallido]) f.mockReset();
+  for (const f of [registrarCobro, getPedidoParaPago, getItemsParaAntifraude, crearPago, fijarReferenciaIntento, cerrarIntentoSinPago, registrarIntentoFallido, registrarErrorIntento]) f.mockReset();
   orden.length = 0;
   medios.lista = null;
-  for (const f of [fijarReferenciaIntento, cerrarIntentoSinPago, registrarIntentoFallido]) f.mockResolvedValue(undefined);
+  for (const f of [fijarReferenciaIntento, cerrarIntentoSinPago, registrarIntentoFallido, registrarErrorIntento]) f.mockResolvedValue(undefined);
   crearPago.mockResolvedValue({ estado: "pagado", referencia: "r1", detalle: "ok" });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -209,6 +211,35 @@ describe("cobrarPedido — referencia del intento antes de cobrar", () => {
     const r = await pagarCon(conReferencia());
     expect(r.status).toBe(502);
     expect(crearPago).not.toHaveBeenCalled();
+  });
+
+  it("5xx: guarda el diagnóstico saneado y su HTTP en el intento ANTES de registrar el fallo", async () => {
+    registrarErrorIntento.mockImplementation(async () => void orden.push("error"));
+    registrarIntentoFallido.mockImplementation(async () => void orden.push("fallido"));
+    crearPago.mockRejectedValue(new ErrorProveedor("Payway respondió 503", 503, "message: internal_error"));
+    await pagarCon(conReferencia());
+    expect(registrarErrorIntento).toHaveBeenCalledWith("i1", { detalle: "message: internal_error", status: 503 });
+    expect(orden.indexOf("error")).toBeLessThan(orden.indexOf("fallido"));
+  });
+
+  it("si guardar el diagnóstico falla, la respuesta al comprador no cambia", async () => {
+    registrarErrorIntento.mockRejectedValue(new Error("db caída"));
+    crearPago.mockRejectedValue(new ErrorProveedor("Payway respondió 400", 400, "message: x"));
+    const r = await pagarCon(conReferencia());
+    expect(r.status).toBe(502);
+    expect(cerrarIntentoSinPago).toHaveBeenCalledWith("i1", expect.any(String));
+  });
+
+  it("timeout: texto fijo y sin status", async () => {
+    crearPago.mockRejectedValue(Object.assign(new Error("agotado"), { name: "TimeoutError" }));
+    await pagarCon(conReferencia());
+    expect(registrarErrorIntento).toHaveBeenCalledWith("i1", { detalle: "tiempo de espera agotado", status: null });
+  });
+
+  it("no se pudo anotar la referencia: queda 'no_se_pudo_anotar_referencia'", async () => {
+    fijarReferenciaIntento.mockRejectedValue(new Error("db caída"));
+    await pagarCon(conReferencia());
+    expect(registrarErrorIntento).toHaveBeenCalledWith("i1", { detalle: "no_se_pudo_anotar_referencia", status: null });
   });
 
   it("un procesador sin referenciaDeIntento (Mercado Pago) no toca la referencia del intento", async () => {

@@ -1,5 +1,6 @@
-import { emailCardHtml, emailDocumentHtml, escapeHtml, safeLogoUrl } from "@/lib/email-layout"
+import { emailCardHtml, emailDocumentHtml, escapeHtml } from "@/lib/email-layout"
 import type { TenantConfig } from "@/lib/tenants"
+import { logoMailDeTenant } from "@/lib/email-logo"
 
 // Formato pensado para que el celular ofrezca "Copiar código" desde la notificación,
 // sin abrir el mail. No hay estándar para email (el `@dominio #código` es solo de SMS):
@@ -39,7 +40,7 @@ export function buildOtpEmail(tenant: TenantConfig, razonsocial: string, otp: st
     html: emailDocumentHtml(
       emailCardHtml({
         tenantName: tenant.name,
-        logoUrl: safeLogoUrl(tenant.logoPath),
+        logoUrl: logoMailDeTenant(tenant),
         preheader: `Su código de verificación es ${otp}`,
         contenidoHtml,
         footerExterno: `Portal de clientes de ${tenant.name}`,

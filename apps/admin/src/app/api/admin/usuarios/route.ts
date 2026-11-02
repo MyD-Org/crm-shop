@@ -7,9 +7,9 @@ import { adminLinkBase } from "@/lib/admin-links"
 import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { assignableRoles, canManageUsers, type AdminRole } from "@/lib/roles"
 import { sendEmail } from "@/lib/email"
-import { safeLogoUrl } from "@/lib/email-layout"
 import { buildInvitacionEmail } from "@/lib/invitacion-email"
 import { EMPTY_TENANT, tenantConfigFromRow, type TenantConfig } from "@/lib/tenants"
+import { logoMailDeTenant } from "@/lib/email-logo"
 
 // Intenta enviar el email de invitación. Devuelve { sent, errorMsg }.
 async function trySendInviteEmail({
@@ -25,7 +25,7 @@ async function trySendInviteEmail({
 }): Promise<{ sent: boolean; errorMsg?: string }> {
   const { subject, html, text } = buildInvitacionEmail({
     tenantName: tenant.name,
-    logoUrl: safeLogoUrl(tenant.logoPath),
+    logoUrl: logoMailDeTenant(tenant),
     nombre: user.name,
     role,
     inviteUrl,

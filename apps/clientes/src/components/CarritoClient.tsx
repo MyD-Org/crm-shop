@@ -23,6 +23,9 @@ import { BotonCompartirLista } from "@/components/BotonCompartirLista";
 import { hrefCompartido, MENSAJE_CARRITO } from "@/lib/carrito-compartido";
 import { topeCantidad } from "@/lib/catalogo-vista";
 import { TEXTO_CARRITO_A_CONFIRMAR } from "@/lib/venta-sin-stock";
+import { CampoCupon } from "@/components/checkout/CampoCupon";
+import { LineaCupon } from "@/components/checkout/LineaCupon";
+import { montosAntesDelCupon } from "@/lib/cupones/ui";
 
 function LightbulbIcon({ className }: { className?: string }) {
   return (
@@ -102,7 +105,7 @@ export function CarritoClient({
   /** Hay elección (retiro o envío con provincia): no se pide la localidad. Por defecto, hay provincia. */
   ubicacionConocida?: boolean;
 }) {
-  const { items, updateQty, removeItem: remove, restoreItem, ready } = useCart();
+  const { items, updateQty, removeItem: remove, restoreItem, ready, cupon, setCupon } = useCart();
   // Líneas que se están yendo: colapsan SALIDA_MS antes de salir del carrito.
   const [saliendo, setSaliendo] = useState<ReadonlySet<string>>(new Set());
   // Bajas que el aviso puede deshacer. Varias seguidas se agrupan en un solo
@@ -199,6 +202,7 @@ export function CarritoClient({
   const { cotizacion, estado, error, recotizar, ultimasLineas, ultimoProgresoCuotas } = useCotizacion({
     entregaTipo,
     conProgresoCuotas: true,
+    cupon,
     ...(entregaTipo === "envio" && provincia ? { provincia } : {}),
     ...(entregaTipo === "retiro" && sucursalRetiro ? { sucursalRetiro } : {}),
   });
@@ -251,8 +255,10 @@ export function CarritoClient({
   // Sin nada con qué estimar (primera carga, producto recién agregado), null:
   // "Calculando…", nunca el neto guardado en el carrito como si fuera el total.
   const estimados = confirmado ? null : totalesEstimados(items, ultimasLineas);
-  const subtotal = confirmado ? cotizacion.subtotal : (estimados?.subtotal ?? null);
-  const iva = confirmado ? cotizacion.iva : (estimados?.iva ?? null);
+  // Con cupón, subtotal e impuestos de antes del cupón: la línea del cupón cierra en el total.
+  const antesDelCupon = confirmado ? montosAntesDelCupon(cotizacion) : null;
+  const subtotal = antesDelCupon ? antesDelCupon.subtotal : (estimados?.subtotal ?? null);
+  const iva = antesDelCupon ? antesDelCupon.iva : (estimados?.iva ?? null);
   const total = confirmado ? cotizacion.total : (estimados?.total ?? null);
 
   /**
@@ -523,7 +529,16 @@ export function CarritoClient({
                 <dt className="text-muted">Impuestos</dt>
                 <dd className="font-medium tabular-nums text-text">{iva === null ? "—" : fmtPrecio(iva)}</dd>
               </div>
+              {confirmado && cotizacion.cupon && <LineaCupon cupon={cotizacion.cupon} onQuitar={() => setCupon(null)} />}
             </dl>
+            <CampoCupon
+              cupon={cupon}
+              aplicado={cotizacion?.cupon ?? null}
+              error={cotizacion?.cuponError ?? null}
+              cargando={estado === "cargando"}
+              onAplicar={setCupon}
+              onQuitar={() => setCupon(null)}
+            />
             {/*
               La cotización deja afuera las líneas con problema: si no entran
               todas las unidades, se dice cuántas suman (antes, "1 productos"

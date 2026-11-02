@@ -32,15 +32,16 @@ type Db = ReturnType<typeof getDb>;
 /** La transacción expone la misma API de consultas que el cliente. */
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-export type CarritoServidor = { items: LineaCarrito[]; version: number };
+/** `cupon`: código guardado tal como se ingresó (`limpiarCupon`); null = sin cupón. */
+export type CarritoServidor = { items: LineaCarrito[]; version: number; cupon: string | null };
 
 export type ResultadoReemplazo =
   | { ok: true; carrito: CarritoServidor; avisos: AvisoCarrito[] }
   | { ok: false; actual: CarritoServidor };
 
 const t = carts;
-const VACIO: CarritoServidor = { items: [], version: 0 };
-const COLUMNAS = { items: t.items, version: t.version };
+const VACIO: CarritoServidor = { items: [], version: 0, cupon: null };
+const COLUMNAS = { items: t.items, version: t.version, cupon: t.cupon };
 const siguienteVersion = sql`${t.version} + 1`;
 
 /**
@@ -70,7 +71,7 @@ function lineasGuardadas(raw: unknown): LineaCarrito[] {
 
 async function leerCon(db: Db | Tx, clerkUserId: string): Promise<CarritoServidor> {
   const [fila] = await db.select(COLUMNAS).from(t).where(deEsteUsuario(clerkUserId)).limit(1);
-  return fila ? { items: lineasGuardadas(fila.items), version: fila.version } : VACIO;
+  return fila ? { items: lineasGuardadas(fila.items), version: fila.version, cupon: fila.cupon ?? null } : VACIO;
 }
 
 /** El carrito del usuario; sin fila, vacío en versión 0. */
@@ -90,16 +91,18 @@ export async function reemplazarCarrito(
   clerkUserId: string,
   version: number,
   entrada: readonly LineaCarrito[],
+  /** Código de cupón (ya limpio); null lo quita; ausente = no se toca. */
+  cupon?: string | null,
 ): Promise<ResultadoReemplazo> {
   const { items, avisos } = normalizarCarrito(entrada);
   const db = getDb();
 
   const [actualizada] = await db
     .update(t)
-    .set({ items, version: siguienteVersion, conItemsDesde: desdeSql(items.length), updatedAt: new Date() })
+    .set({ items, version: siguienteVersion, conItemsDesde: desdeSql(items.length), updatedAt: new Date(), ...(cupon !== undefined ? { cupon } : {}) })
     .where(and(deEsteUsuario(clerkUserId), eq(t.version, version)))
-    .returning({ version: t.version });
-  if (actualizada) return { ok: true, carrito: { items, version: actualizada.version }, avisos };
+    .returning({ version: t.version, cupon: t.cupon });
+  if (actualizada) return { ok: true, carrito: { items, version: actualizada.version, cupon: actualizada.cupon ?? null }, avisos };
 
   if (version === 0) {
     const [creada] = await db
@@ -110,10 +113,11 @@ export async function reemplazarCarrito(
         items,
         version: 1,
         conItemsDesde: items.length ? new Date() : null,
+        cupon: cupon ?? null,
       })
       .onConflictDoNothing({ target: [t.tenantId, t.clerkUserId] })
       .returning({ version: t.version });
-    if (creada) return { ok: true, carrito: { items, version: creada.version }, avisos };
+    if (creada) return { ok: true, carrito: { items, version: creada.version, cupon: cupon ?? null }, avisos };
   }
 
   return { ok: false, actual: await leerCon(db, clerkUserId) };
@@ -128,6 +132,8 @@ export async function reemplazarCarrito(
 export async function mergearCarrito(
   clerkUserId: string,
   invitado: readonly LineaCarrito[],
+  /** El cupón del invitado: gana sólo si el servidor no tenía uno. */
+  cuponInvitado?: string | null,
 ): Promise<CarritoServidor & { avisos: AvisoCarrito[] }> {
   return getDb().transaction(async (tx) => {
     // Sin esta fila previa, dos primeros merges simultáneos no tendrían nada
@@ -145,15 +151,16 @@ export async function mergearCarrito(
       .for("update");
 
     const { items, avisos } = mergeMax(lineasGuardadas(fila?.items), invitado);
+    const cupon = fila?.cupon ?? cuponInvitado ?? null;
 
     const [actualizada] = await tx
       .update(t)
-      .set({ items, version: siguienteVersion, conItemsDesde: desdeSql(items.length), updatedAt: new Date() })
+      .set({ items, cupon, version: siguienteVersion, conItemsDesde: desdeSql(items.length), updatedAt: new Date() })
       .where(deEsteUsuario(clerkUserId))
       .returning({ version: t.version });
     if (!actualizada) throw new Error("El carrito desapareció durante el merge");
 
-    return { items, version: actualizada.version, avisos };
+    return { items, version: actualizada.version, cupon, avisos };
   });
 }
 
@@ -165,7 +172,7 @@ export async function mergearCarrito(
 export async function vaciarCarritoTx(tx: Tx | Db, clerkUserId: string): Promise<void> {
   await tx
     .update(t)
-    .set({ items: [], version: siguienteVersion, conItemsDesde: null, updatedAt: new Date() })
+    .set({ items: [], cupon: null, version: siguienteVersion, conItemsDesde: null, updatedAt: new Date() })
     .where(deEsteUsuario(clerkUserId));
 }
 

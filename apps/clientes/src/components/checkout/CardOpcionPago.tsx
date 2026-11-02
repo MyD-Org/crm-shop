@@ -1,4 +1,4 @@
-import { PaymentLogos, type PaymentLogo } from "@myd-org/ui";
+import { Badge, PaymentLogos, type PaymentLogo } from "@myd-org/ui";
 import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
 import { IconoBanco, IconoBilletera, IconoTarjeta, IconoTarjetaDebito } from "@/components/PagoIconos";
 import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
@@ -49,6 +49,7 @@ export function CardOpcionPago({
   total,
   textoAhorro,
   logos,
+  cuponNoAplica,
 }: {
   opcion: OpcionPago;
   medio: MedioPago;
@@ -61,6 +62,8 @@ export function CardOpcionPago({
   /** Franja de ahorro (la etiqueta `{ahorro}` del medio, ya armada); null = sin franja. */
   textoAhorro: string | null;
   logos?: PaymentLogo[];
+  /** Con un cupón en el carrito: true = no aplica con esta opción, false = el total ya lo incluye. Ausente = sin cupón. */
+  cuponNoAplica?: boolean;
 }) {
   const detalle = detalleDe(opcion, medio);
   // Las etiquetas del admin son del medio y van en todas sus cards, salvo las de cuotas ("Hasta 6
@@ -95,8 +98,10 @@ export function CardOpcionPago({
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-[15px] font-extrabold text-text sm:text-base">{titulo}</span>
             <ChipsMedioPago chips={chips} className="" />
+            {cuponNoAplica === false && <Badge tone="success">Con su cupón</Badge>}
           </span>
           {bajada && <span className="text-xs text-muted sm:text-[13px]">{bajada}</span>}
+          {cuponNoAplica === true && <span className="text-xs text-muted sm:text-[13px]">El cupón no aplica con este medio</span>}
           {logos && logos.length > 0 && <PaymentLogos logos={logos} className="mt-1" />}
         </span>
         <span className="flex shrink-0 flex-col items-end">

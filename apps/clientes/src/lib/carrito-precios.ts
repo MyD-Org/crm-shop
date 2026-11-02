@@ -8,6 +8,8 @@ export interface LineaPrecio {
   ivaPorcentaje: number;
   total: number;
   problema?: unknown;
+  /** Unitario sin IVA antes del cupón (líneas alcanzadas): la línea muestra éste. */
+  precioSinCupon?: number;
 }
 
 const redondear = (n: number) => Math.round(n * 100) / 100;
@@ -39,11 +41,13 @@ export function precioLineaCarrito(
   vigente: LineaPrecio | undefined,
   ultima: LineaPrecio | undefined,
 ): { unitario: number; neto: number; total: number } | null {
-  const linea = vigente ?? ultima;
-  if (!linea || linea.problema) return null;
+  const cotizada = vigente ?? ultima;
+  if (!cotizada || cotizada.problema) return null;
+  // Con cupón la línea muestra su precio sin cupón: el descuento se ve en una sola línea del resumen.
+  const linea = cotizada.precioSinCupon != null ? { ...cotizada, precioUnitario: cotizada.precioSinCupon } : cotizada;
   const unitario = precioFinal(linea.precioUnitario, linea.ivaPorcentaje);
   if (unitario === undefined) return null;
-  const total = vigente ? vigente.total : montosDe(linea, qty).total;
+  const total = vigente && cotizada.precioSinCupon == null ? vigente.total : montosDe(linea, qty).total;
   return { unitario, neto: linea.precioUnitario, total };
 }
 

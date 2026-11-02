@@ -18,6 +18,8 @@
  */
 
 import { quedanParaEntradas } from "./campanias/unidades";
+import { totalizar } from "./cotizacion-totales";
+import type { CuponAplicado, CuponError } from "./cupones/tipos";
 import { frasePrecio } from "./promociones/promo";
 import { mapCampanias, resolverPrecioVigente, type ContextoCampania, type EntradaCampania } from "./campanias/precio";
 import type { CampaniaActiva } from "./campanias/vigentes";
@@ -107,6 +109,8 @@ export interface LineaCotizada {
   campaniaId?: string;
   campaniaReglaId?: string;
   campaniaEtiqueta?: string;
+  /** Unitario sin IVA ANTES del cupón (sólo en las líneas que el cupón alcanzó). */
+  precioSinCupon?: number;
 }
 
 export interface Cotizacion {
@@ -121,6 +125,10 @@ export interface Cotizacion {
   listaPrivada: boolean;
   /** `a_confirmar` si alguna línea va a pedido con una modalidad a confirmar (`flujoDelPedido`). */
   flujo: FlujoPedido;
+  /** Cupón aplicado (`aplicarCupon`, `cupones/reglas.ts`); ausente o null = sin cupón. */
+  cupon?: CuponAplicado | null;
+  /** Por qué no se aplicó el cupón ingresado. No bloquea: el pedido se confirma sin él. */
+  cuponError?: CuponError | null;
 }
 
 // Máximo de unidades por línea y techo de líneas por pedido: los mismos del
@@ -488,18 +496,9 @@ export async function cotizar(
   });
   if (quedan?.size) marcarExcesoDeUnidades(lineas, quedan);
 
-  const validas = lineas.filter((l) => !l.problema);
-  const subtotal = redondear(validas.reduce((a, l) => a + l.subtotal, 0));
-  const iva = redondear(validas.reduce((a, l) => a + l.iva, 0));
-  const envio = costoEnvio();
-
   return {
     lineas,
-    subtotal,
-    iva,
-    costoEnvio: envio,
-    total: redondear(subtotal + iva + envio),
-    hayProblemas: lineas.some((l) => l.problema),
+    ...totalizar(lineas, costoEnvio()),
     listaPrivada: Boolean(opts.idListaPrivada),
     flujo: flujoDelPedido(lineas),
   };
@@ -543,15 +542,5 @@ export function ignorarProblemasDeStock(c: Cotizacion): Cotizacion {
     delete resto.detalle;
     return resto;
   });
-  const validas = lineas.filter((l) => !l.problema);
-  const subtotal = redondear(validas.reduce((a, l) => a + l.subtotal, 0));
-  const iva = redondear(validas.reduce((a, l) => a + l.iva, 0));
-  return {
-    ...c,
-    lineas,
-    subtotal,
-    iva,
-    total: redondear(subtotal + iva + c.costoEnvio),
-    hayProblemas: lineas.some((l) => l.problema),
-  };
+  return { ...c, lineas, ...totalizar(lineas, c.costoEnvio) };
 }

@@ -20,7 +20,7 @@ import { RemitoControl } from "./RemitoControl"
 import { VincularFacturaControl } from "./VincularFacturaControl"
 import { MotivosFrecuentes } from "./MotivosFrecuentes"
 import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
-import { avisoDevolucion, ofreceCancelar, opcionesOtroEstado, pasosPedido, siguientePaso, textoCampaniaLinea, verboSiguientePaso } from "./logica"
+import { avisoDevolucion, ofreceCancelar, opcionesOtroEstado, pasosPedido, siguientePaso, textoCampaniaLinea, textoCostoEnvio, verboSiguientePaso } from "./logica"
 import {
   PAGO_REVISION_INFO,
   condicionIvaLabel,
@@ -360,6 +360,10 @@ export function PedidoDetalle({
             <dl className="mt-3 ml-auto flex w-full max-w-xs flex-col gap-1 text-sm tabular-nums">
               <Total label="Subtotal" valor={fmtMoneda(pedido.subtotal)} />
               <Total label="IVA" valor={fmtMoneda(pedido.iva)} />
+              {/* El descuento ya está dentro de los unitarios: la línea informa cuánto se descontó. */}
+              {pedido.cupon && pedido.cupon.descuento > 0 && (
+                <Total label={`${pedido.cupon.texto} (incluido)`} valor={`−${fmtMoneda(pedido.cupon.descuento)}`} />
+              )}
               <Total label="Envío" valor={fmtMoneda(pedido.costoEnvio)} />
               <Total label="Total" valor={fmtMoneda(pedido.total)} destacado />
             </dl>
@@ -402,7 +406,7 @@ export function PedidoDetalle({
                 <dl className="flex flex-col gap-3">
                   <Dato label="Tipo">{envioACoordinar ? "Envío a coordinar" : entregaLabel(pedido.entrega.tipo)}</Dato>
                   {esEnvio && (pedido.envioGratis !== null || envioACoordinar) && (
-                    <Dato label="Costo de envío">{pedido.envioGratis ? "Gratis" : "A coordinar con el cliente"}</Dato>
+                    <Dato label="Costo de envío">{textoCostoEnvio(pedido.envioGratis, pedido.cupon?.envioGratis ?? false)}</Dato>
                   )}
                   {((esEnvio && !envioACoordinar) || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
                   {((esEnvio && !envioACoordinar) || pedido.entrega.direccion) && <Dato label="Dirección">{pedido.entrega.direccion}</Dato>}

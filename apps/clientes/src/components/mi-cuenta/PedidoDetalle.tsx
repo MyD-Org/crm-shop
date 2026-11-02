@@ -134,8 +134,12 @@ export function PedidoDetalle({
           ))}
         </ul>
         <dl className="mt-4 flex flex-col gap-2 border-t border-border pt-4 text-sm">
-          <Fila label="Subtotal" valor={fmtPrecio(pedido.subtotal)} />
-          <Fila label="Impuestos" valor={fmtPrecio(pedido.iva)} />
+          {/* Con cupón, subtotal e impuestos de antes del cupón: la línea del cupón cierra en el total. */}
+          <Fila label="Subtotal" valor={fmtPrecio(pedido.cupon?.subtotalAntes ?? pedido.subtotal)} />
+          <Fila label="Impuestos" valor={fmtPrecio(pedido.cupon?.ivaAntes ?? pedido.iva)} />
+          {pedido.cupon && pedido.cupon.descuento > 0 && (
+            <Fila label={pedido.cupon.texto} valor={`−${fmtPrecio(pedido.cupon.descuento)}`} />
+          )}
           {pedido.costoEnvio > 0 && <Fila label="Envío" valor={fmtPrecio(pedido.costoEnvio)} />}
           <Fila label="Total" valor={fmtPrecio(pedido.total)} fuerte />
         </dl>

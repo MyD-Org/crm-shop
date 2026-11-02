@@ -621,6 +621,7 @@ export function PagoMercadoPago({
             procesador={PROCESADOR}
             noDisponible={noDisponible}
             deshabilitado={procesando}
+            avisoCupon={datosCuotas?.avisoCupon ?? null}
           />
         </div>
       )}

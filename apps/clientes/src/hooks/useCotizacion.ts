@@ -46,6 +46,8 @@ export interface CotizacionResponse extends Cotizacion {
   progresoCuotas?: ProgresoCuotas;
   /** Sólo con `conTotalesOpciones`: el total de cada card del paso Pago (clave de `opcionesDePago`); null = no se pudo. */
   totalesOpciones?: Record<string, number | null>;
+  /** Con cupón y `conTotalesOpciones`: por card, true = el cupón aplica, false = no aplica con esa opción. */
+  cuponPorOpcion?: Record<string, boolean>;
 }
 
 export type EstadoCotizacion = "vacio" | "cargando" | "ok" | "error" | "no_auth";
@@ -91,6 +93,8 @@ interface Resultado {
   cuotas: number;
   conCuotas: boolean;
   conProgresoCuotas: boolean;
+  cupon: string;
+  pedidoId: string;
   data: CotizacionResponse | null;
   error: string | null;
   noAuth: boolean;
@@ -134,6 +138,10 @@ export function useCotizacion(opts: {
   conProgresoCuotas?: boolean;
   /** Pide el total de cada card del paso Pago (checkout). Es fijo por pantalla: no dispara refetch. */
   conTotalesOpciones?: boolean;
+  /** Código de cupón guardado en el carrito: lo valida y aplica el servidor. Cambiarlo recotiza. */
+  cupon?: string | null;
+  /** Cambio de medio de un pedido ya creado: rige el cupón congelado del pedido (se ignora `cupon`). */
+  pedidoId?: string;
   /** false para no cotizar todavía (ej. el carrito aún no se hidrató). */
   activo?: boolean;
 }) {
@@ -153,6 +161,8 @@ export function useCotizacion(opts: {
   const conCuotas = opts.conCuotas ?? false;
   const conProgresoCuotas = opts.conProgresoCuotas ?? false;
   const conTotalesOpciones = opts.conTotalesOpciones ?? false;
+  const cupon = opts.cupon ?? "";
+  const pedidoId = opts.pedidoId ?? "";
   const { entregaTipo } = opts;
 
   // Solo `id` y `qty` disparan una recotización. Sin esta clave, cualquier
@@ -181,7 +191,7 @@ export function useCotizacion(opts: {
 
     const lineas = JSON.parse(clave) as [string, number][];
     const ctrl = new AbortController();
-    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas };
+    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, cupon, pedidoId };
     let reintento: ReturnType<typeof setTimeout> | undefined;
 
     const timer = setTimeout(async () => {
@@ -204,6 +214,8 @@ export function useCotizacion(opts: {
             conCuotas: conCuotas || undefined,
             progresoCuotas: conProgresoCuotas || undefined,
             totalesOpciones: conTotalesOpciones || undefined,
+            cupon: cupon || undefined,
+            pedidoId: pedidoId || undefined,
           }),
         });
 
@@ -257,7 +269,7 @@ export function useCotizacion(opts: {
       clearTimeout(reintento);
       ctrl.abort();
     };
-  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, conTotalesOpciones, nonce]);
+  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, conTotalesOpciones, cupon, pedidoId, nonce]);
 
   // Estado DERIVADO de los inputs actuales vs. los del último resultado. Nada
   // de esto vive en useState: setear estado desde un efecto para algo que ya se
@@ -276,7 +288,9 @@ export function useCotizacion(opts: {
     res.forma === forma &&
     res.cuotas === cuotas &&
     res.conCuotas === conCuotas &&
-    res.conProgresoCuotas === conProgresoCuotas;
+    res.conProgresoCuotas === conProgresoCuotas &&
+    res.cupon === cupon &&
+    res.pedidoId === pedidoId;
 
   let estado: EstadoCotizacion;
   if (vacio) estado = "vacio";

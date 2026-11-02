@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { MOTIVO_MAX } from "@/lib/pedidos-transiciones"
 import {
+  textoCostoEnvio,
   FILTRO_TODOS,
   leerAvisoFactura,
   mensajeAvisoFactura,
@@ -400,5 +401,14 @@ describe("textoCampaniaLinea (campañas de precios)", () => {
   it("campaña borrada (sin nombre): igual muestra el descuento", async () => {
     const { textoCampaniaLinea } = await import("./logica")
     expect(textoCampaniaLinea({ precioUnitario: 128, precioNormal: 160, campaniaNombre: null })).toBe("Campaña −20 %")
+  })
+})
+
+describe("textoCostoEnvio", () => {
+  it("gratis, gratis por cupón o a coordinar", () => {
+    expect(textoCostoEnvio(true, false)).toBe("Gratis")
+    expect(textoCostoEnvio(true, true)).toBe("Envío gratis por cupón")
+    expect(textoCostoEnvio(false, false)).toBe("A coordinar con el cliente")
+    expect(textoCostoEnvio(null, false)).toBe("A coordinar con el cliente")
   })
 })

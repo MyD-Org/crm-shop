@@ -6,14 +6,19 @@
  * Cuando eso cambie, el único lugar a tocar es `crearPedido`.
  */
 
+import { liberarCanjeEnTx, reservarCanjeEnTx, type QuienCupon } from "./cupones/repo";
+import { cuponPedidoDesde } from "./cupones/reglas";
+import { cuponParaResumen } from "./cupones/ui";
+import type { CuponPedido, PromocionCupon } from "./cupones/tipos";
 import { validarUnidadesEnTx } from "./campanias/unidades";
 import { cache } from "react";
 import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { orderItems, orders, pagoIntentos } from "@/db/schema";
+import { cuponCanjes, orderItems, orders, pagoIntentos } from "@/db/schema";
 import {
   ESTADOS_EN_CURSO,
   type EntregaTipoPedido,
+  type CuponOrder,
   type Order,
   type OrderEstado,
   type OrderItem,
@@ -148,6 +153,12 @@ export interface DatosPedido {
    * ancla del grupo (ver `joinOverlay`). Ausente = apagado: como siempre.
    */
   agrupar?: boolean;
+  /**
+   * Cupón aplicado a la `cotizacion` (spec 2026-11-01-cupones-design.md): se congela la foto en
+   * `orders.cupon` y se reserva el canje en la misma transacción (`reservarCanjeEnTx`, con lock y
+   * relectura). Si el canje ya no entra, `CuponCanjeError` y no se crea nada.
+   */
+  cupon?: { promo: PromocionCupon; quien: QuienCupon; envioGratisTienda?: boolean };
   /**
    * Sólo con el flag `sucursales` prendido: modalidad, provincia, ciudad y local de retiro con los
    * que se asigna la sucursal. `crearPedido` relee las reglas SIN caché dentro de la transacción y
@@ -372,6 +383,7 @@ export async function crearPedido(
         // El plan viejo (`cuotas_max`, `cuotas_plan`) ya no se escribe: los pedidos históricos lo conservan.
         cuotas: datos.cuotas ?? null,
         formaCobro: datos.formaCobro ?? null,
+        cupon: datos.cupon && cotizacion.cupon ? cuponPedidoDesde(cotizacion.cupon, datos.cupon.promo, datos.cupon.envioGratisTienda) : null,
         sucursal: asignacion?.sucursal ?? null,
         sucursalRegla: asignacion?.regla ?? null,
         sucursalAsignadaEn: asignacion ? new Date() : null,
@@ -450,6 +462,11 @@ export async function crearPedido(
     // Límite de unidades de las campañas de precios: con lock por regla y relectura, en la MISMA
     // transacción (dos compras simultáneas por la última unidad: una sola se confirma).
     await validarUnidadesEnTx(tx, lineas);
+    // El canje del cupón, con su lock y relectura, ANTES de escribir las líneas (dos checkouts con el
+    // mismo código único: uno solo se confirma).
+    if (datos.cupon && cotizacion.cupon) {
+      await reservarCanjeEnTx(tx, datos.cupon.promo, datos.cupon.quien, pedido.id, cotizacion.cupon.descuento);
+    }
 
     await tx.insert(orderItems).values(
       lineas.map((l) => ({
@@ -471,6 +488,8 @@ export async function crearPedido(
         ...(l.campaniaId
           ? { campaniaId: l.campaniaId, campaniaReglaId: l.campaniaReglaId ?? null, precioNormal: l.precioNormal != null ? String(l.precioNormal) : null }
           : {}),
+        // Unitario antes del cupón (sólo en las líneas que alcanzó).
+        ...(l.precioSinCupon != null ? { precioSinCupon: String(l.precioSinCupon) } : {}),
       })),
     );
 
@@ -653,19 +672,22 @@ export function armarOrder(
     )
       ? { aConfirmar: true }
       : {}),
+    cupon: cuponDeOrder(fila, items),
     items: items.map((i): OrderItem => {
       const producto = productos.get(i.alegraItemId);
       const imagen = producto?.images?.[0];
       // Del snapshot: un pedido sigue mostrando el texto aunque la modalidad se haya borrado.
       const aPedido = leerSnapshot(i.ventaSinStock)?.texto;
+      // Con cupón la línea se muestra sin él: el descuento va en una sola línea del resumen.
+      const antes = montosSinCupon(i);
       return {
         id: i.alegraItemId,
         name: i.name,
         brand: i.brand ?? "",
         code: i.code,
         qty: num(i.qty),
-        price: num(i.precioUnitario),
-        total: num(i.total),
+        price: antes ? antes.unitario : num(i.precioUnitario),
+        total: antes ? antes.total : num(i.total),
         nombreVisible: (producto && nombreDeLinea(producto)) || i.name,
         codigo: i.code || producto?.sku || i.name,
         ...(imagen ? { imagen } : {}),
@@ -673,6 +695,25 @@ export function armarOrder(
       };
     }),
   };
+}
+
+const redondear2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Montos de una línea ANTES del cupón (sólo las que alcanzó); null = la línea no tiene cupón. */
+function montosSinCupon(i: FilaItem): { unitario: number; subtotal: number; total: number } | null {
+  if (i.precioSinCupon == null) return null;
+  const unitario = num(i.precioSinCupon);
+  const subtotal = redondear2(unitario * num(i.qty));
+  return { unitario, subtotal, total: redondear2(subtotal + redondear2(subtotal * (num(i.ivaPorcentaje) / 100))) };
+}
+
+/** La línea del cupón del pedido y el subtotal / impuestos de antes del cupón (Mi cuenta). */
+function cuponDeOrder(fila: FilaOrder, items: FilaItem[]): CuponOrder | null {
+  const linea = cuponParaResumen(fila.cupon);
+  if (!linea) return null;
+  const subtotalAntes = redondear2(items.reduce((a, i) => a + (montosSinCupon(i)?.subtotal ?? num(i.subtotal)), 0));
+  const ivaAntes = redondear2(num(fila.total) + linea.descuento - subtotalAntes - num(fila.costoEnvio));
+  return { ...linea, subtotalAntes, ivaAntes };
 }
 
 /**
@@ -2097,6 +2138,8 @@ export async function pedidoParaCambiarMedio(
   contacto: { nombre: string; telefono: string };
   /** Cuándo se creó: al recotizar rigen las campañas de precios activas ese día (decisión C). */
   creadoEn: Date;
+  /** Foto del cupón congelado (null = sin cupón): se recotiza con ella, sin volver a leer la promoción. */
+  cupon: CuponPedido | null;
 } | null> {
   const db = getDb();
   const [p] = await db
@@ -2115,6 +2158,7 @@ export async function pedidoParaCambiarMedio(
       contactoNombre: orders.contactoNombre,
       contactoTelefono: orders.contactoTelefono,
       avisosEnviadosEn: orders.avisosEnviadosEn,
+      cupon: orders.cupon,
     })
     .from(orders)
     .where(and(eq(orders.id, id), esDeSuDueno(dueno), eq(orders.estado, "pendiente")))
@@ -2144,6 +2188,7 @@ export async function pedidoParaCambiarMedio(
     },
     contacto: { nombre: p.contactoNombre, telefono: p.contactoTelefono },
     creadoEn: p.createdAt,
+    cupon: p.cupon ?? null,
   };
 }
 
@@ -2190,6 +2235,11 @@ export async function cambiarMedioPedido(
     /** Lista efectivamente usada para cotizar (privada del comprador, o la del medio). */
     idPriceList: string | null;
     cotizacion: Cotizacion;
+    /**
+     * Cupón tras la recotización (`cuponTrasRecotizar`): la foto con el descuento nuevo, o null si la
+     * opción nueva no es elegible (se libera el canje). Ausente = el pedido no se toca en esto.
+     */
+    cupon?: CuponPedido | null;
   },
 ): Promise<ResultadoCambioMedio> {
   const cot = nuevo.cotizacion;
@@ -2204,6 +2254,7 @@ export async function cambiarMedioPedido(
         costoEnvio: orders.costoEnvio,
         clerkUserId: orders.clerkUserId,
         pagoRevision: orders.pagoRevision,
+        cupon: orders.cupon,
       })
       .from(orders)
       .where(
@@ -2241,6 +2292,11 @@ export async function cambiarMedioPedido(
       actuales.size === cot.lineas.length && cot.lineas.every((l) => actuales.get(l.id) === l.qty);
     if (!mismas) return { ok: false, motivo: "lineas_distintas" };
 
+    // Cupón: una recotización con descuento sólo vale si el pedido (bloqueado) sigue teniendo ESE
+    // cupón; otra pestaña pudo haberlo soltado (y liberado el canje) en el medio. Nunca un pedido con
+    // descuento sin su canje: el checkout recotiza.
+    if (nuevo.cupon && pedido.cupon?.codigoId !== nuevo.cupon.codigoId) return { ok: false, motivo: "lineas_distintas" };
+
     // Límite de unidades de campaña: mismo control que al crear (lock por regla y relectura), sin
     // contar las unidades de este mismo pedido. Una cotización vieja no le suma una unidad que no queda.
     await validarUnidadesEnTx(tx, cot.lineas, id);
@@ -2277,8 +2333,21 @@ export async function cambiarMedioPedido(
           campaniaId: l.campaniaId ?? null,
           campaniaReglaId: l.campaniaReglaId ?? null,
           precioNormal: l.precioNormal != null ? String(l.precioNormal) : null,
+          precioSinCupon: l.precioSinCupon != null ? String(l.precioSinCupon) : null,
         })
         .where(and(eq(orderItems.orderId, id), eq(orderItems.alegraItemId, l.id)));
+    }
+    // Cupón: se conserva con el descuento de la lista nueva o se pierde (y el código vuelve a servir).
+    if (nuevo.cupon !== undefined) {
+      if (pedido.cupon && !nuevo.cupon) await liberarCanjeEnTx(tx, id);
+      if (nuevo.cupon) {
+        const canje = await tx
+          .update(cuponCanjes)
+          .set({ descuentoTotal: nuevo.cupon.descuento.toFixed(2) })
+          .where(eq(cuponCanjes.orderId, id))
+          .returning({ id: cuponCanjes.id });
+        if (canje.length === 0) throw new Error(`pedido ${id} con cupón y sin canje`);
+      }
     }
     await tx
       .update(orders)
@@ -2288,6 +2357,11 @@ export async function cambiarMedioPedido(
         idPriceList: nuevo.idPriceList,
         cuotas: nuevo.cuotas,
         formaCobro: nuevo.formaCobro ?? null,
+        ...(nuevo.cupon !== undefined ? { cupon: nuevo.cupon } : {}),
+        // Pierde el cupón y el envío gratis era sólo por él: vuelve a "a coordinar".
+        ...(pedido.cupon && nuevo.cupon === null && pedido.cupon.envioGratisAplicado && pedido.cupon.envioGratisTienda === false
+          ? { envioGratis: false }
+          : {}),
         subtotal: String(cot.subtotal),
         iva: String(cot.iva),
         total: String(total),

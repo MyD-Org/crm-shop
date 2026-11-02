@@ -4,6 +4,7 @@ import { identidadActual } from "@/lib/auth";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import {
   COPY_CARRITO,
+  limpiarCupon,
   validarItemsBody,
   validarVersion,
   type LineaCarrito,
@@ -68,12 +69,15 @@ async function pintar(lineas: readonly LineaCarrito[]) {
   return enriquecer(lineas, idListaPrivada);
 }
 
-/** GET /api/carrito → `{ items, version }` (sin carrito: `{ items: [], version: 0 }`). */
+/** `cupon` sólo si el carrito tiene uno (el cliente adopta su ausencia como "sin cupón"). */
+const conCupon = (cupon: string | null | undefined) => (cupon ? { cupon } : {});
+
+/** GET /api/carrito → `{ items, version, cupon? }` (sin carrito: `{ items: [], version: 0 }`). */
 export async function GET() {
   const s = await solicitante();
   if ("error" in s) return s.error;
   const carrito = await leerCarrito(s.userId);
-  return json({ items: await pintar(carrito.items), version: carrito.version });
+  return json({ items: await pintar(carrito.items), version: carrito.version, ...conCupon(carrito.cupon) });
 }
 
 /**
@@ -89,13 +93,18 @@ export async function PUT(req: Request) {
   const version = validarVersion((body as { version?: unknown } | null)?.version);
   if (!items || version === null) return INVALIDO();
 
-  const r = await reemplazarCarrito(s.userId, version, items);
+  // `cupon` (opcional): el texto como se ingresó, limpio; inválido = null (se quita). Sin la clave no se toca.
+  const conClave = body !== null && typeof body === "object" && "cupon" in body;
+  const r = conClave
+    ? await reemplazarCarrito(s.userId, version, items, limpiarCupon((body as { cupon?: unknown }).cupon))
+    : await reemplazarCarrito(s.userId, version, items);
   if (!r.ok) {
     return json(
       {
         error: COPY_CARRITO.otroDispositivo,
         items: await pintar(r.actual.items),
         version: r.actual.version,
+        ...conCupon(r.actual.cupon),
       },
       409,
     );
@@ -103,6 +112,7 @@ export async function PUT(req: Request) {
   return json({
     items: await pintar(r.carrito.items),
     version: r.carrito.version,
+    ...conCupon(r.carrito.cupon),
     avisos: r.avisos,
   });
 }
@@ -114,9 +124,11 @@ export async function PUT(req: Request) {
 export async function POST(req: Request) {
   const s = await solicitante();
   if ("error" in s) return s.error;
-  const items = validarItemsBody(await leerBody(req));
+  const body = await leerBody(req);
+  const items = validarItemsBody(body);
   if (!items) return INVALIDO();
 
-  const r = await mergearCarrito(s.userId, items);
-  return json({ items: await pintar(r.items), version: r.version, avisos: r.avisos });
+  const cupon = limpiarCupon((body as { cupon?: unknown } | null)?.cupon);
+  const r = cupon ? await mergearCarrito(s.userId, items, cupon) : await mergearCarrito(s.userId, items);
+  return json({ items: await pintar(r.items), version: r.version, ...conCupon(r.cupon), avisos: r.avisos });
 }

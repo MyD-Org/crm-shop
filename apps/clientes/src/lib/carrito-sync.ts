@@ -25,6 +25,7 @@ import {
   CLAVE_CACHE_V1,
   COPY_CARRITO,
   contenidoDistinto,
+  limpiarCupon,
   mensajeAviso,
   mergeMax,
   parsearCache,
@@ -154,12 +155,16 @@ export function crearMotorCarrito(env: EntornoCarrito) {
     }
   }
 
-  /** `{ items, version }` válidos de una respuesta, o null. */
+  /** `{ items, version, cupon? }` válidos de una respuesta, o null. El servidor manda `cupon` sólo si tiene. */
   function carritoDe(body: Record<string, unknown> | null) {
     const items = parsearItems(body?.items);
     const version = validarVersion(body?.version);
-    return items && version !== null ? { items, version } : null;
+    const cupon = limpiarCupon(body?.cupon);
+    return items && version !== null ? { items, version, ...(cupon ? { cupon } : {}) } : null;
   }
+
+  /** El cupón local para mandar al servidor: sólo si se tocó (null = se quitó). */
+  const cuponParaEnviar = (c: CacheCarrito) => (c.cupon !== undefined ? { cupon: c.cupon } : {});
 
   function avisarTodos(avisos: unknown) {
     if (!Array.isArray(avisos)) return;
@@ -225,7 +230,7 @@ export function crearMotorCarrito(env: EntornoCarrito) {
     const enviado = aLineas(c.items);
     const r = await pedir({
       method: "PUT",
-      body: JSON.stringify({ version: c.version, items: enviado }),
+      body: JSON.stringify({ version: c.version, items: enviado, ...cuponParaEnviar(c) }),
       keepalive,
     });
     if (enVuelo === gen) enVuelo = null;
@@ -300,7 +305,7 @@ export function crearMotorCarrito(env: EntornoCarrito) {
         ...porId.get(l.id)!,
         qty: l.qty,
       }));
-      guardar({ owner: u, version: servidor.version, items: unidos });
+      guardar({ owner: u, version: servidor.version, items: unidos, ...(c.cupon !== undefined ? { cupon: c.cupon } : servidor.cupon ? { cupon: servidor.cupon } : {}) });
       programar();
       return;
     }
@@ -316,7 +321,7 @@ export function crearMotorCarrito(env: EntornoCarrito) {
     const gen = generacion;
     enVuelo = gen;
     const enviado = aLineas(c.items);
-    const r = await pedir({ method: "POST", body: JSON.stringify({ items: enviado }) });
+    const r = await pedir({ method: "POST", body: JSON.stringify({ items: enviado, ...(c.cupon ? { cupon: c.cupon } : {}) }) });
     if (enVuelo === gen) enVuelo = null;
     if (gen !== generacion) return;
     if (!r || r.status === 429 || r.status >= 500) {
@@ -352,7 +357,21 @@ export function crearMotorCarrito(env: EntornoCarrito) {
     const r = fn(base);
     for (const a of r.avisos) avisar({ titulo: mensajeAviso(a), tono: "warning" });
     if (r.items === base) return;
-    guardar({ owner, version: owner === null ? null : c.version, items: r.items });
+    const cupon = (c.owner === null || propio) && c.cupon !== undefined ? { cupon: c.cupon } : {};
+    guardar({ owner, version: owner === null ? null : c.version, items: r.items, ...cupon });
+    if (owner !== null) pendiente = true;
+    if (usuarioActivo()) programar();
+  }
+
+  /** Guarda (o quita, con null) el código de cupón del carrito y agenda la subida. */
+  function setCupon(raw: string | null) {
+    const c = leer();
+    const propio = c.owner !== null && sesion.isLoaded && c.owner === sesion.usuario;
+    const owner = propio ? c.owner : null;
+    const base = c.owner === null || propio ? c.items : CARRITO_VACIO;
+    const cupon = raw === null ? null : limpiarCupon(raw);
+    if (cupon === (c.cupon ?? null) && (c.owner === null || propio)) return;
+    guardar({ owner, version: owner === null ? null : c.version, items: base, cupon });
     if (owner !== null) pendiente = true;
     if (usuarioActivo()) programar();
   }
@@ -379,7 +398,7 @@ export function crearMotorCarrito(env: EntornoCarrito) {
     if (pendiente && u && c.owner === u && c.version !== null) {
       void pedir({
         method: "PUT",
-        body: JSON.stringify({ version: c.version, items: aLineas(c.items) }),
+        body: JSON.stringify({ version: c.version, items: aLineas(c.items), ...cuponParaEnviar(c) }),
         keepalive: true,
       });
     }
@@ -443,6 +462,7 @@ export function crearMotorCarrito(env: EntornoCarrito) {
     setSesion,
     reconciliar,
     mutar,
+    setCupon,
     vaciarTrasPedido,
     prepararCierreDeSesion,
     /** Al ocultar o cerrar la pestaña. */

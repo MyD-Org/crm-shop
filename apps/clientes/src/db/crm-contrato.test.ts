@@ -131,6 +131,16 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
     expect(esperado["public.campania_reglas"]).toBeUndefined();
   });
 
+  it("los cupones (0097 del CRM): la vista, en orden y sin datos internos; nunca las tablas", () => {
+    expect(Object.keys(esperado["public.cupones_shop"])).toEqual([
+      "tenant_id", "codigo_id", "codigo", "codigo_norm", "promocion_id", "nombre", "tipo", "pct",
+      "envio_gratis", "provincias_envio", "inicio", "fin", "vence_en", "solo_primera_compra", "minimo",
+      "medios", "formas", "permite_cuotas", "limite_canjes", "condiciones", "activa",
+    ]);
+    expect(esperado["public.cupon_promociones"]).toBeUndefined();
+    expect(esperado["public.cupon_codigos"]).toBeUndefined();
+  });
+
   it("la vista de categorías de Alegra trae sólo lo que usa el catálogo", () => {
     expect(Object.keys(esperado["public.catalog_categories_shop"])).toEqual([
       "tenant_id",

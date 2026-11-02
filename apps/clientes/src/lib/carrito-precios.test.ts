@@ -11,6 +11,14 @@ const linea = (over: Partial<LineaPrecio> = {}): LineaPrecio => ({
 });
 
 describe("precioLineaCarrito", () => {
+  it("con cupón: la línea muestra el precio sin cupón (el descuento va en una sola línea del resumen)", () => {
+    expect(precioLineaCarrito(1, linea({ qty: 1, precioUnitario: 900, precioSinCupon: 1000, ivaPorcentaje: 21, total: 1089 }), undefined)).toEqual({
+      unitario: 1210,
+      neto: 1000,
+      total: 1210,
+    });
+  });
+
   it("con cotización vigente: unitario con IVA, neto aparte y el total cotizado", () => {
     expect(precioLineaCarrito(4, linea(), undefined)).toEqual({
       unitario: 622.04,

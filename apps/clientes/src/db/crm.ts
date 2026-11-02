@@ -248,6 +248,38 @@ export const crmCampanias = publico
   .existing();
 
 /**
+ * Cupones de descuento (`public.cupones_shop`, migración 0097 del CRM): un renglón por código, con
+ * su promoción. SIN filtro de fecha (el Shop dice "Este cupón venció") y sin datos internos (token,
+ * autor, referencia del bot). `codigo_norm` = mayúsculas y sólo [A-Z0-9]: la clave de búsqueda.
+ * `medios`/`formas`/`provincias_envio` NULL = todos; `minimo` con IVA a la lista general.
+ */
+export const crmCupones = publico
+  .view("cupones_shop", {
+    tenantId: text("tenant_id").notNull(),
+    codigoId: uuid("codigo_id").notNull(),
+    codigo: text("codigo").notNull(),
+    codigoNorm: text("codigo_norm").notNull(),
+    promocionId: uuid("promocion_id").notNull(),
+    nombre: text("nombre").notNull(),
+    tipo: text("tipo").notNull(),
+    pct: smallint("pct"),
+    envioGratis: boolean("envio_gratis").notNull(),
+    provinciasEnvio: text("provincias_envio").array(),
+    inicio: timestamp("inicio", { withTimezone: true, mode: "string" }).notNull(),
+    fin: timestamp("fin", { withTimezone: true, mode: "string" }).notNull(),
+    venceEn: timestamp("vence_en", { withTimezone: true, mode: "string" }),
+    soloPrimeraCompra: boolean("solo_primera_compra").notNull(),
+    minimo: numeric("minimo", { precision: 14, scale: 2 }),
+    medios: text("medios").array(),
+    formas: text("formas").array(),
+    permiteCuotas: boolean("permite_cuotas").notNull(),
+    limiteCanjes: integer("limite_canjes"),
+    condiciones: text("condiciones").notNull(),
+    activa: boolean("activa").notNull(),
+  })
+  .existing();
+
+/**
  * Precios de las listas PRIVADAS (`public.catalog_products_shop_privados`, migración 0068 del CRM,
  * change `listas-cuenta-corriente`): un renglón por (ítem activo, lista privada con precio). El
  * precio es NETO (sin IVA). `shop_app` tiene SELECT sólo sobre esta vista: la tabla

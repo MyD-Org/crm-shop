@@ -12,6 +12,8 @@ import { SLUG_A_COORDINAR, mediosParaModalidad, type MedioPago, type OpcionesMed
 import type { EntregaTipo } from "./envio";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import type { FlujoPedido } from "./venta-sin-stock";
+import { aplicadorDeCupon, nombresDeMedios, opcionCupon } from "./cupones/aplicar";
+import type { CuponParaCotizar } from "./cupones/tipos";
 
 export interface OpcionesCotizarMedio {
   idListaPrivada: string | null;
@@ -81,6 +83,13 @@ export async function cotizarConMedio(a: {
   idListaAConfirmar?: string;
   /** Para los logs. */
   origen?: string;
+  /**
+   * Cupón (spec 2026-11-01-cupones-design.md): se aplica a la cotización final con la opción elegida
+   * (medio, forma y cuotas). `congelado` al recotizar un pedido ya creado.
+   */
+  cupon?: CuponParaCotizar;
+  /** Provincia de entrega (envío gratis del cupón por zona). */
+  entregaProvincia?: string | null;
 }): Promise<ResultadoMedio> {
   const { lineas, entregaTipo, pagoMetodo, mediosCrm } = a;
   const cotizarEstas = async (o: Parameters<typeof cotizar>[1]) => {
@@ -99,10 +108,12 @@ export async function cotizarConMedio(a: {
   );
   // Forma de pago: solo con un medio de cobro en línea y sin lista privada (el precio no depende del medio).
   let formaCobro: OpcionCobro | null = null;
+  let formaPedida: OpcionCobro | null = null;
   if (conMedio && medioDelPedido?.cobroOnline) {
     const f = resolverForma(medioDelPedido, a.formaPedida);
     if (!f.ok) return { ok: false, motivo: "forma_no_disponible" };
     formaCobro = f.forma;
+    formaPedida = f.pedida;
     // Las cuotas sin interés son de crédito: con otra forma pedida no hay cuotas.
     if (typeof a.cuotasPedidas === "number" && a.cuotasPedidas >= 2 && f.pedida && f.pedida !== "credito") {
       return { ok: false, motivo: "cuotas_no_disponibles" };
@@ -145,18 +156,27 @@ export async function cotizarConMedio(a: {
     ...(a.aPedido ? { aPedido: a.aPedido } : {}),
     ...conCampanias,
   };
-  const cotizacion = await cotizarEstas(opcionesCotizar);
+  const aplicarCupon = a.cupon
+    ? aplicadorDeCupon({
+        cupon: a.cupon,
+        entrega: { tipo: entregaTipo, provincia: a.entregaProvincia ?? null },
+        nombresMedios: nombresDeMedios(mediosCrm),
+        totalListaGeneral: async () => (await cotizarEstas({ ...opcionesCotizar, idListaMedio: undefined })).total,
+      })
+    : null;
+  const cotizacionSinCupon = await cotizarEstas(opcionesCotizar);
   const aConfirmar =
     pagoMetodo === SLUG_A_COORDINAR &&
     conMedio &&
     !a.opcionesMedios.esCuentaCorriente &&
     !a.ignorarStock &&
     Boolean(a.idListaAConfirmar) &&
-    cotizacion.flujo === "a_confirmar";
+    cotizacionSinCupon.flujo === "a_confirmar";
   if (aConfirmar) {
     // "a_coordinar" no es un medio: no tiene cuotas ni forma (ya quedaron en null más arriba).
     const opcionesAConfirmar: OpcionesCotizarMedio = { ...opcionesCotizar, idListaMedio: a.idListaAConfirmar };
-    const recotizada = await cotizarEstas(opcionesAConfirmar);
+    const sinCupon = await cotizarEstas(opcionesAConfirmar);
+    const recotizada = aplicarCupon ? await aplicarCupon(sinCupon, opcionCupon(SLUG_A_COORDINAR, null, null)) : sinCupon;
     return {
       ok: true,
       cuotasPedido: null,
@@ -167,5 +187,13 @@ export async function cotizarConMedio(a: {
       flujo: recotizada.flujo,
     };
   }
+  // La forma que eligió el comprador: decide si el cupón vale.
+  const formaElegida = formaCobro ?? formaPedida;
+  const cotizacion = aplicarCupon
+    ? await aplicarCupon(cotizacionSinCupon, opcionCupon(pagoMetodo, formaElegida, cuotasPedido))
+    : cotizacionSinCupon;
+  // Cupón limitado a algunas formas: sólo aplica con una forma pedida, y `resolverForma` congela la forma
+  // pedida en `formaCobro` aunque el medio no tenga precios por forma; así el cobro la valida
+  // (`cobrar.ts` rechaza otra con `forma_distinta`). Sin forma pedida, el cupón falla cerrado.
   return { ok: true, cuotasPedido, idListaMedio, formaCobro, opcionesCotizar, cotizacion, flujo: cotizacion.flujo };
 }

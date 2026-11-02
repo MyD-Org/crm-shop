@@ -1,5 +1,8 @@
 "use client";
 
+import { CampoCupon } from "@/components/checkout/CampoCupon";
+import { LineaCupon } from "@/components/checkout/LineaCupon";
+import { montosAntesDelCupon, textoCuponNoAplicaEnCambio } from "@/lib/cupones/ui";
 import { frasePrecio } from "@/lib/promociones/promo";
 import { ahorroCampania } from "@/lib/carrito-precios";
 import { MetaCuotas } from "@/components/checkout/MetaCuotas";
@@ -426,7 +429,7 @@ export function CheckoutClient({
   retornoMercadoPago = false,
   pagoMercadoPagoId,
 }: Props) {
-  const { items, vaciarTrasPedido, ready, addItems } = useCart();
+  const { items, vaciarTrasPedido, ready, addItems, cupon, setCupon } = useCart();
   // Payway reutiliza los logos de Mercado Pago para las marcas de su convenio.
   const tarjetasDelConvenioPayway = useMemo(() => tarjetasPayway(tarjetasMercadoPago), [tarjetasMercadoPago]);
 
@@ -864,6 +867,8 @@ export function CheckoutClient({
     conCuotas: pideCuotas,
     // El total de cada card del paso Pago.
     conTotalesOpciones: opcionesPago.length > 1,
+    // Cupón: el del carrito; en el cambio de medio rige el congelado del pedido (`pedidoId:`).
+    ...(pedidoACambiar ? { pedidoId: pedidoACambiar.id } : { cupon }),
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
@@ -1059,6 +1064,8 @@ export function CheckoutClient({
         body: JSON.stringify({
           idempotencyKey: claveIntento.current ?? undefined,
           totalVisto: cotizacion?.total,
+          // El servidor lo vuelve a validar y aplicar; `totalVisto` ya lo incluye.
+          cupon: cupon || undefined,
           items: items.map((i) => ({ id: i.id, qty: i.qty })),
           contactoNombre: contacto.nombre,
           contactoTelefono: contacto.telefono,
@@ -1098,6 +1105,13 @@ export function CheckoutClient({
         setFaltantes409(Array.isArray(json.faltantes) ? json.faltantes : facturacion.faltantes);
         if (facturacion.vinculado) setModalFacturacion(true);
         else irAPaso("datos");
+        return;
+      }
+      if (res.status === 409 && json?.motivo === "cupon") {
+        // El código se usó o se agotó entre la cotización y el pedido: nada se creó. Se recotiza (el
+        // campo del cupón muestra el motivo) para que confirme el total nuevo.
+        setErrorEnvio(json.error ?? "No pudimos aplicar su cupón. Revise el total antes de confirmar.");
+        recotizar();
         return;
       }
       if (res.status === 409 && json?.motivo === "facturacion_no_disponible") {
@@ -1173,6 +1187,8 @@ export function CheckoutClient({
         numero: json.numero,
         total,
         items: items.map((i) => itemDe(i, i.qty)),
+        // El nombre de la promoción, nunca el código (un código único es casi un dato personal).
+        ...(json.cotizacion?.cupon?.nombre ? { cupon: String(json.cotizacion.cupon.nombre) } : {}),
       });
       if (!esPagoEnLinea(pagoParaEnviar)) vaciarTrasPedido();
     } catch {
@@ -1870,6 +1886,13 @@ export function CheckoutClient({
     </div>
   );
   const nombreOpcionSel = opcionSel ? tituloEnFrase(opcionSel, medioSel?.nombre ?? "") : null;
+  // Resumen: subtotal e impuestos de antes del cupón (la línea del cupón cierra en el total).
+  const resumenAntesDelCupon = cotizacion ? montosAntesDelCupon(cotizacion) : null;
+  // Cambio de medio a una opción que no acepta el cupón del pedido: se avisa ANTES de confirmar.
+  const avisoCuponCambio =
+    pedidoACambiar && cotizacion?.cuponError?.motivo === "opcion_no_elegible" && nombreOpcionSel
+      ? textoCuponNoAplicaEnCambio(nombreOpcionSel, pedidoACambiar.total, cotizacion.total)
+      : null;
 
   return (
     <main className={`mx-auto w-full max-w-contenido flex-1 px-4 py-8 ${pasoActual === "pago" ? "pb-56" : "pb-40"} lg:pb-8`}>
@@ -2100,6 +2123,7 @@ export function CheckoutClient({
                           selected={opcionSel?.clave === o.clave}
                           onClick={() => setOpcionClave(o.clave)}
                           total={totalesOpciones[o.clave]}
+                          cuponNoAplica={cupon && !pedidoACambiar ? cotizacion?.cuponPorOpcion?.[o.clave] === false : undefined}
                           textoAhorro={ahorroDe(o)?.texto ?? null}
                           titulo={tituloOpcion(o, m.nombre)}
                           bajada={bajadaOpcion(o)}
@@ -2129,6 +2153,7 @@ export function CheckoutClient({
                 Volver
               </Button>
               <div className="lg:ml-auto">
+                {avisoCuponCambio && <p className="mb-2 text-sm font-semibold text-warning">{avisoCuponCambio}</p>}
                 <BarraFija
                   total={cotizacion?.total}
                   ahorro={ahorroSel?.monto}
@@ -2215,12 +2240,27 @@ export function CheckoutClient({
           <div className="space-y-2 border-t border-border pt-4 text-sm">
             <div className="flex justify-between">
               <span className="text-muted">Subtotal</span>
-              <span className="font-medium">{fmtPrecio(cotizacion?.subtotal ?? 0)}</span>
+              <span className="font-medium">{fmtPrecio(resumenAntesDelCupon?.subtotal ?? 0)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted">Impuestos</span>
-              <span className="font-medium">{fmtPrecio(cotizacion?.iva ?? 0)}</span>
+              <span className="font-medium">{fmtPrecio(resumenAntesDelCupon?.iva ?? 0)}</span>
             </div>
+            {cotizacion?.cupon && (
+              <dl>
+                <LineaCupon cupon={cotizacion.cupon} onQuitar={pedidoACambiar ? undefined : () => setCupon(null)} />
+              </dl>
+            )}
+            {!pedidoACambiar && (
+              <CampoCupon
+                cupon={cupon}
+                aplicado={cotizacion?.cupon ?? null}
+                error={cotizacion?.cuponError ?? null}
+                cargando={estado === "cargando"}
+                onAplicar={setCupon}
+                onQuitar={() => setCupon(null)}
+              />
+            )}
             {entrega === "envio" && (
               <div className="flex justify-between">
                 <span className="text-muted">Envío</span>

@@ -24,8 +24,8 @@ export interface ItemTracking {
 export type EventoTracking =
   | { tipo: "ver_producto"; item: ItemTracking }
   | { tipo: "agregar_carrito"; items: ItemTracking[] }
-  | { tipo: "iniciar_checkout"; items: ItemTracking[] }
-  | { tipo: "pedido_confirmado"; pedidoId: string; numero?: string | number; total: number; items: ItemTracking[] };
+  | { tipo: "iniciar_checkout"; items: ItemTracking[]; cupon?: string }
+  | { tipo: "pedido_confirmado"; pedidoId: string; numero?: string | number; total: number; items: ItemTracking[]; cupon?: string };
 
 /** Desde dónde se abrió el chat en la búsqueda. */
 export type OrigenConversar = "franja" | "sin_resultados" | "pregunta";
@@ -117,7 +117,11 @@ export function aMeta(e: EventoTracking): { nombre: string; params: Params; opci
     currency: MONEDA,
   };
   if (e.tipo === "ver_producto") params.content_name = e.item.nombre;
-  if (e.tipo === "iniciar_checkout" || e.tipo === "pedido_confirmado") params.num_items = unidades(items);
+  if (e.tipo === "iniciar_checkout" || e.tipo === "pedido_confirmado") {
+    params.num_items = unidades(items);
+    // Nombre de la promoción, nunca el código (un código único es casi un dato personal).
+    if (e.cupon) params.coupon = e.cupon;
+  }
   return e.tipo === "pedido_confirmado"
     ? { nombre: NOMBRES_META[e.tipo], params, opciones: { eventID: `pedido-${e.pedidoId}` } }
     : { nombre: NOMBRES_META[e.tipo], params };
@@ -146,6 +150,7 @@ export function aGa4(e: EventoTracking): { nombre: string; params: Params } {
     })),
   };
   if (e.tipo === "pedido_confirmado") params.transaction_id = e.pedidoId;
+  if ((e.tipo === "pedido_confirmado" || e.tipo === "iniciar_checkout") && e.cupon) params.coupon = e.cupon;
   return { nombre: NOMBRES_GA4[e.tipo], params };
 }
 

@@ -18,6 +18,7 @@ import {
   mergeMax,
   normalizarCarrito,
   parsearCache,
+  limpiarCupon,
   parsearItems,
   restaurar,
   validarItemsBody,
@@ -362,5 +363,25 @@ describe("precio de campaña en el mini-carrito (precioHasta)", () => {
     const r = agregar([{ ...base, qty: 1, precioHasta: "2026-12-01T03:00:00.000Z" }], { ...base, price: 160 });
     expect(r.items[0]).toMatchObject({ price: 160, qty: 2 });
     expect(r.items[0].precioHasta).toBeUndefined();
+  });
+});
+
+describe("cupón en el carrito", () => {
+  it("limpiarCupon guarda el texto tal como se ingresó, recortado; basura = null", () => {
+    expect(limpiarCupon(" luz-7kq2m ")).toBe("luz-7kq2m");
+    expect(limpiarCupon("APERTURA 10")).toBe("APERTURA 10");
+    expect(limpiarCupon("<script>")).toBeNull();
+    expect(limpiarCupon("ab")).toBeNull();
+    expect(limpiarCupon("x".repeat(40))).toBeNull();
+    expect(limpiarCupon(42)).toBeNull();
+    expect(limpiarCupon(null)).toBeNull();
+  });
+
+  it("parsearCache conserva el cupón válido y descarta uno inválido", () => {
+    const raw = (cupon: unknown) => JSON.stringify({ owner: "user_1", version: 4, items: [], cupon });
+    expect(parsearCache(raw("LUZ-7KQ2M"), null).cupon).toBe("LUZ-7KQ2M");
+    expect(parsearCache(raw(null), null).cupon).toBeNull();
+    expect(parsearCache(raw("<b>x</b>"), null).cupon).toBeNull();
+    expect("cupon" in parsearCache(JSON.stringify({ owner: null, version: null, items: [] }), null)).toBe(false);
   });
 });

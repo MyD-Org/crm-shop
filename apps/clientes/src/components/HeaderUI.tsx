@@ -103,8 +103,8 @@ function SincronizarBusqueda({ setBusqueda }: { setBusqueda: (texto: string) => 
 }
 
 /**
- * WhatsApp de la tienda, a mano en todas las páginas: junto a la cuenta en el celular y en la
- * barra compacta (desde lg, sin scroll, va en la barra superior del layout). Verde de WhatsApp oscurecido
+ * WhatsApp de la tienda en la barra compacta (desde lg, al scrollear). Sin scroll, y siempre en el
+ * celular, va en la barra superior del layout. Verde de WhatsApp oscurecido
  * para llegar a 3:1 sobre el fondo claro.
  */
 function BotonWhatsapp({ href }: { href: string }) {
@@ -266,13 +266,8 @@ function HeaderVista({
         }
         compactSearch={buscador}
         // Debajo de lg: cuenta a la izquierda, marca al centro y carrito a la derecha.
-        // El WhatsApp va con la cuenta y no con el carrito: así la marca sigue centrada.
-        mobileStart={
-          <div className="flex items-center gap-4">
-            {cuentaNodo("start")}
-            {whatsapp ? <BotonWhatsapp href={whatsapp} /> : null}
-          </div>
-        }
+        // El WhatsApp va en la barra superior (layout), como en desktop.
+        mobileStart={cuentaNodo("start")}
         nav={nav}
         // Marca y nav con next/link: con `<a>` cada clic recargaba la página.
         renderLink={linkNext}

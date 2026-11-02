@@ -489,6 +489,7 @@ export function PagoPayway({
           procesador={PROCESADOR}
           noDisponible={noDisponible}
           deshabilitado={procesando}
+          avisoCupon={datosCuotas?.avisoCupon ?? null}
         />
       )}
 

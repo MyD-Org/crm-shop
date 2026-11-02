@@ -57,7 +57,7 @@ Tres filtros, todos opcionales, en la promoción:
 - **Formas** (sólo Mercado Pago y Payway): `credito`, `debito`, `cuenta_mp`. Vacío = todas. Un medio sin formas (transferencia, efectivo) no se ve afectado por este filtro.
 - **Cuotas**: "sólo en 1 pago" o "también en cuotas sin interés". Por defecto, **sólo en 1 pago** (decisión mía): las cuotas sin interés ya tienen el costo financiero absorbido en su lista, y sumarles un cupón come margen dos veces. Las cuotas **con interés** de Mercado Pago se calculan sobre el precio en 1 pago, así que ahí el cupón ya está incluido si el medio y la forma valen.
 
-`a_coordinar` (pedidos a confirmar por venta sin stock) cuenta como un medio más: entra si la promoción no restringe medios o si lo incluye.
+`a_coordinar` (pedidos a confirmar por venta sin stock) cuenta como un medio más: entra si la promoción no restringe medios o si lo incluye. No es una fila de `medios_pago_shop`: el formulario del CRM lo ofrece como una casilla fija "A coordinar".
 
 **Qué ve el comprador en el paso Pago:**
 

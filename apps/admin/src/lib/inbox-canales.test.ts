@@ -28,6 +28,14 @@ describe("canalKey", () => {
 })
 
 describe("buildCanalTabs", () => {
+  it("muestra los números habilitados aunque no tengan conversaciones activas", () => {
+    const tabs = buildCanalTabs([], { a: "Sucursal Centro" }, ["a", "b"], { b: "+54 9 11 0000-0002" })
+    expect(tabs).toEqual([
+      { key: "a", label: "Sucursal Centro", pending: 0, phone: null },
+      { key: "b", label: "+54 9 11 0000-0002", pending: 0, phone: "+54 9 11 0000-0002" },
+    ])
+  })
+
   const contacts = [
     c({ channel_account_id: "a", business_phone: "+54 9 11 0000-0000", awaiting_reply: true }),
     c({ channel_account_id: "a", business_phone: "+54 9 11 0000-0000", awaiting_reply: true }),

@@ -5,6 +5,7 @@ import { getDb } from "@/db"
 import { adminUsers } from "@/db/schema"
 import { SESSION_SECRET } from "@/lib/session-secret"
 import { resolveRequestTenantId } from "@/lib/tenant-context"
+import type { Pendiente2fa } from "@/lib/admin-2fa"
 
 export interface AdminSessionData {
   userId: string
@@ -18,6 +19,13 @@ export interface AdminSessionData {
    * Las sesiones de antes de 0075 no lo traen y cuentan como emitidas en 0.
    */
   issuedAt?: number
+  /**
+   * Segundo paso (0096): "ok" = pasó el 2FA. Obligatorio para todos los roles: las cookies de
+   * antes del 2FA no lo traen y el guard las rechaza (un login más, una vez).
+   */
+  mfa?: "ok"
+  /** Login a medias (contraseña OK, falta el código). Sin `userId`. Ver lib/admin-2fa.ts. */
+  mfaPendiente?: Pendiente2fa
 }
 
 export const adminSessionOptions: SessionOptions = {
@@ -38,6 +46,7 @@ export type GuardFailReason =
   | "user-gone"
   | "inactive"
   | "revoked"
+  | "mfa"
 
 export type GuardedSession =
   | {
@@ -78,6 +87,7 @@ export type GuardedSession =
  *   6. `passwordHash === null`      → `inactive`        (invitación pendiente / desactivada)
  *   7. cookie emitida antes de
  *      `sessionsRevokedBefore`      → `revoked`         (contraseña reseteada: caen las cookies viejas)
+ *   7b. cookie sin 2FA      → `mfa`             (ver lib/admin-2fa.ts)
  *   8. rol distinto al de la cookie → se USA el de la fila, no expulsa (refresh, no expulsión)
  *
  * El `select` es el que el layout protegido ya hacía (traía solo `availability`): se le suman
@@ -114,6 +124,8 @@ export async function getGuardedAdminSession(req?: Request): Promise<GuardedSess
   if (me.sessionsRevokedBefore && (session.issuedAt ?? 0) < me.sessionsRevokedBefore.getTime()) {
     return { ok: false, reason: "revoked" }
   }
+  // 2FA obligatorio para todos: una cookie sin la marca (de antes del 2FA) no vale.
+  if (session.mfa !== "ok") return { ok: false, reason: "mfa" }
 
   return {
     ok: true,

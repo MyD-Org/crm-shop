@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import nextConfig from "../../next.config";
-import { headersDeSeguridad, hostFrontendClerk, politicaCsp, type EnvCsp } from "./headers-seguridad";
+import { cspAplicada, headersDeSeguridad, hostFrontendClerk, politicaCsp, RUTA_REPORTE_CSP, type EnvCsp } from "./headers-seguridad";
 
 const clave = (host: string) => `pk_live_${Buffer.from(`${host}$`).toString("base64")}`;
 
@@ -18,14 +18,35 @@ describe("headers() de next.config", () => {
     expect(h["Content-Security-Policy-Report-Only"]).toContain("default-src 'self'");
   });
 
-  it("la CSP va en Report-Only: nunca enforcing todavía", () => {
-    const keys = headersDeSeguridad({}).map((h) => h.key);
-    expect(keys).toContain("Content-Security-Policy-Report-Only");
-    expect(keys).not.toContain("Content-Security-Policy");
+  it("sin CSP_APLICAR: Report-Only en producción y en local, aplicada en el Preview (staging)", () => {
+    const claves = (env: EnvCsp) => headersDeSeguridad(env).map((h) => h.key);
+    for (const env of [{}, { VERCEL_ENV: "production" }, { VERCEL_ENV: "development" }]) {
+      expect(claves(env)).toContain("Content-Security-Policy-Report-Only");
+      expect(claves(env)).not.toContain("Content-Security-Policy");
+    }
+    expect(claves({ VERCEL_ENV: "preview" })).toContain("Content-Security-Policy");
+    expect(claves({ VERCEL_ENV: "preview" })).not.toContain("Content-Security-Policy-Report-Only");
+  });
+
+  it("CSP_APLICAR manda sobre el entorno", () => {
+    expect(cspAplicada({ VERCEL_ENV: "production", CSP_APLICAR: "1" })).toBe(true);
+    expect(cspAplicada({ VERCEL_ENV: "production", CSP_APLICAR: "true" })).toBe(true);
+    expect(cspAplicada({ VERCEL_ENV: "preview", CSP_APLICAR: "0" })).toBe(false);
+    expect(cspAplicada({ VERCEL_ENV: "preview", CSP_APLICAR: "no" })).toBe(false);
+    // Valor no reconocido: se decide por el entorno.
+    expect(cspAplicada({ VERCEL_ENV: "preview", CSP_APLICAR: "quizás" })).toBe(true);
+    expect(cspAplicada({ VERCEL_ENV: "production", CSP_APLICAR: "quizás" })).toBe(false);
   });
 });
 
 describe("politicaCsp", () => {
+  it("fichas técnicas: el PDF en iframe sale de los medios (frame-src y object-src); telemetría de Clerk", () => {
+    const csp = politicaCsp({ SHOP_MEDIA_HOSTS: "media.plataforma.example" });
+    expect(csp).toMatch(/frame-src [^;]*https:\/\/media\.plataforma\.example/);
+    expect(csp).toMatch(/object-src 'self' https:\/\/media\.plataforma\.example/);
+    expect(csp).toMatch(/connect-src [^;]*https:\/\/clerk-telemetry\.com/);
+  });
+
   it("deriva el Frontend API de Clerk de la publishable key", () => {
     expect(hostFrontendClerk(clave("clerk.tienda.example"))).toBe("clerk.tienda.example");
     expect(hostFrontendClerk(undefined)).toBeNull();
@@ -57,14 +78,15 @@ describe("politicaCsp", () => {
     expect(csp).toMatch(/form-action [^;]*https:\/\/\*\.mercadopago\.com\.ar/);
     expect(csp).toMatch(/img-src [^;]*https:\/\/media\.plataforma\.example [^;]*https:\/\/otro\.example/);
     expect(csp).toMatch(/connect-src [^;]*https:\/\/\*\.r2\.cloudflarestorage\.com/);
-    // Sin duplicar el host que aparece en las dos variables.
-    expect(csp.match(/https:\/\/media\.plataforma\.example/g)).toHaveLength(1);
+    // Sin duplicar el host que aparece en las dos variables: una vez por directiva (img, frame, object).
+    expect(csp.match(/https:\/\/media\.plataforma\.example/g)).toHaveLength(3);
   });
 
   it("'unsafe-eval' sólo en desarrollo, y report-uri sólo si está la variable", () => {
     expect(politicaCsp({ NODE_ENV: "production" })).not.toContain("unsafe-eval");
     expect(politicaCsp({ NODE_ENV: "development" })).toContain("'unsafe-eval'");
-    expect(politicaCsp({})).not.toContain("report-uri");
+    // Sin variable, los reportes van a la ruta propia.
+    expect(politicaCsp({})).toContain(`report-uri ${RUTA_REPORTE_CSP}`);
     expect(politicaCsp({ CSP_REPORT_URI: "https://reportes.example/csp" })).toContain(
       "report-uri https://reportes.example/csp",
     );

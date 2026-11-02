@@ -3,10 +3,10 @@ import { getDb } from "@/db"
 import { notificationLog, notificationRules, tenants as tenantsTable } from "@/db/schema"
 import { getClientes, getFacturas } from "@/lib/erp"
 import { sendEmail } from "@/lib/email"
-import { safeLogoUrl } from "@/lib/email-layout"
 import { buildCobranzaEmail } from "@/lib/cobranza-email"
 import { tenantConfigFromRow, type TenantConfig } from "@/lib/tenants"
 import type { Cliente, Factura } from "@/types"
+import { logoMailDeTenant } from "@/lib/email-logo"
 
 // ── Gestor de Cobranza ──────────────────────────────────────────────────────
 // Recorre las facturas impagas de cada cliente, cruza con las reglas del
@@ -44,7 +44,7 @@ function saldoDe(f: Factura): number {
 function buildEmail(tenant: TenantConfig, cliente: Cliente, items: PendingNotification[]) {
   return buildCobranzaEmail({
     tenantName: tenant.name,
-    logoUrl: safeLogoUrl(tenant.logoPath),
+    logoUrl: logoMailDeTenant(tenant),
     clienteNombre: cliente.razonsocial,
     items: items.map((i) => ({
       facturaId: i.factura.id,

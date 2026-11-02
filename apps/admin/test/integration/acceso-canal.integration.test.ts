@@ -54,7 +54,7 @@ const TENANT = "tenant-a"
 const HOST = `${TENANT}.localhost`
 
 function loginAs(userId: string, role: "operator" | "admin" | "superadmin") {
-  session = { userId, role, tenantId: TENANT, name: "Test", email: "t@x.example", save: async () => {} }
+  session = { mfa: "ok", userId, role, tenantId: TENANT, name: "Test", email: "t@x.example", save: async () => {} }
 }
 const patch = (id: string, body: unknown) =>
   patchUser(new NextRequest(`http://${HOST}/api/admin/usuarios/${id}`, { method: "PATCH", body: JSON.stringify(body), headers: { host: HOST } }), {

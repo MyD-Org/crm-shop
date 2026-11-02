@@ -10,6 +10,16 @@ const state = vi.hoisted(() => ({
   guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } } as Record<string, unknown>,
   ping: 0,
   resultado: { kind: "ok", cuenta: { id: "c1" } } as Record<string, unknown>,
+  avisos: [] as Record<string, unknown>[],
+  avisoFalla: false,
+}))
+
+vi.mock("@/lib/cuentas-bancarias-shop-aviso", () => ({
+  programarAvisoCuentaBancaria: (p: Record<string, unknown>) => {
+    state.avisos.push(p)
+    // El real nunca lanza (captura todo): acá se simula el peor caso con una promesa rechazada suelta.
+    if (state.avisoFalla) Promise.reject(new Error("resend caído")).catch(() => {})
+  },
 }))
 
 vi.mock("@/lib/admin-session", () => ({ getGuardedAdminSession: async () => state.guarded }))
@@ -37,6 +47,8 @@ const ctx = { params: Promise.resolve({ id: "11111111-1111-4111-8111-11111111111
 beforeEach(() => {
   state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } }
   state.ping = 0
+  state.avisos = []
+  state.avisoFalla = false
   state.resultado = { kind: "ok", cuenta: { id: "c1" } }
   vi.spyOn(console, "warn").mockImplementation(() => {})
 })
@@ -97,5 +109,49 @@ describe("/api/admin/cuentas-bancarias-shop", () => {
     expect((await PATCH(req("PATCH", {}), ctx)).status).toBe(404)
     expect((await DELETE(req("DELETE"), ctx)).status).toBe(404)
     expect(state.ping).toBe(2)
+  })
+
+  describe("aviso por mail a los administradores", () => {
+    const cuenta = (extra: Record<string, unknown> = {}) => ({
+      id: "c1", alias: "a", cbu: "0000000000000000001234", banco: "B", titular: "T", cuit: "30-1-2",
+      todasLasSucursales: true, sucursalSlugs: [], montoMin: null, montoMax: null, activa: true, predeterminada: false, orden: 0,
+      ...extra,
+    })
+
+    it("alta, edición con cambios y baja avisan con el actor del guard", async () => {
+      const { POST } = await import("@/app/api/admin/cuentas-bancarias-shop/route")
+      const { PATCH, DELETE } = await import("@/app/api/admin/cuentas-bancarias-shop/[id]/route")
+      state.resultado = { kind: "ok", cuenta: cuenta() }
+      await POST(req("POST", {}))
+      state.resultado = { kind: "ok", cuenta: cuenta({ cbu: "0000000000000000009999" }), antes: cuenta() }
+      await PATCH(req("PATCH", {}), ctx)
+      state.resultado = { kind: "ok", cuenta: cuenta() }
+      await DELETE(req("DELETE"), ctx)
+      expect(state.avisos.map((a) => a.tipo)).toEqual(["alta", "edicion", "baja"])
+      expect(state.avisos[0]).toMatchObject({ tenantId: "tenant-a", actor: { email: "ana@cliente.example" } })
+    })
+
+    it("un PATCH sin cambios reales no avisa", async () => {
+      const { PATCH } = await import("@/app/api/admin/cuentas-bancarias-shop/[id]/route")
+      state.resultado = { kind: "ok", cuenta: cuenta(), antes: cuenta() }
+      expect((await PATCH(req("PATCH", { alias: "a" }), ctx)).status).toBe(200)
+      expect(state.avisos).toHaveLength(0)
+    })
+
+    it("validación y conflicto no avisan", async () => {
+      const { POST } = await import("@/app/api/admin/cuentas-bancarias-shop/route")
+      state.resultado = { kind: "conflict", campo: "cbu", error: "x" }
+      await POST(req("POST", {}))
+      expect(state.avisos).toHaveLength(0)
+    })
+
+    it("si el aviso falla, la respuesta de la API no cambia", async () => {
+      const { POST } = await import("@/app/api/admin/cuentas-bancarias-shop/route")
+      state.avisoFalla = true
+      state.resultado = { kind: "ok", cuenta: cuenta() }
+      const res = await POST(req("POST", {}))
+      expect(res.status).toBe(201)
+      expect(await res.json()).toMatchObject({ ok: true, propagado: true })
+    })
   })
 })

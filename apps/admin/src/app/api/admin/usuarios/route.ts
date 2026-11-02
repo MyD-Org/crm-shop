@@ -7,9 +7,9 @@ import { adminLinkBase } from "@/lib/admin-links"
 import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { assignableRoles, canManageUsers, type AdminRole } from "@/lib/roles"
 import { sendEmail } from "@/lib/email"
-import { safeLogoUrl } from "@/lib/email-layout"
 import { buildInvitacionEmail } from "@/lib/invitacion-email"
 import { EMPTY_TENANT, tenantConfigFromRow, type TenantConfig } from "@/lib/tenants"
+import { logoMailDeTenant } from "@/lib/email-logo"
 
 // Intenta enviar el email de invitación. Devuelve { sent, errorMsg }.
 async function trySendInviteEmail({
@@ -25,7 +25,7 @@ async function trySendInviteEmail({
 }): Promise<{ sent: boolean; errorMsg?: string }> {
   const { subject, html, text } = buildInvitacionEmail({
     tenantName: tenant.name,
-    logoUrl: safeLogoUrl(tenant.logoPath),
+    logoUrl: logoMailDeTenant(tenant),
     nombre: user.name,
     role,
     inviteUrl,
@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
       canales_permitidos: adminUsers.canalesPermitidos,
       createdAt: adminUsers.createdAt,
       hasPassword: adminUsers.passwordHash,
+      totpEnabledAt: adminUsers.totpEnabledAt,
       inviteExpiresAt: adminPasswordTokens.expiresAt,
       inviteAcceptedAt: adminPasswordTokens.usedAt,
     })
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
     )
     .where(eq(adminUsers.tenantId, guard.tenantId))
 
-  return NextResponse.json(users.map((u) => ({ ...u, hasPassword: !!u.hasPassword })))
+  return NextResponse.json(users.map(({ totpEnabledAt, ...u }) => ({ ...u, hasPassword: !!u.hasPassword, tiene2fa: !!totpEnabledAt })))
 }
 
 export async function POST(req: NextRequest) {

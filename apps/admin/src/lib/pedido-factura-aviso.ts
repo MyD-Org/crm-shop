@@ -8,13 +8,13 @@
 
 import { getDocumentPdf } from "@/lib/alegra"
 import { maskEmail, sendEmail } from "@/lib/email"
-import { safeLogoUrl } from "@/lib/email-layout"
 import { looksLikeEmail, pedidosUrl } from "@/lib/pedido-estado-aviso"
 import { buildPedidoFacturaEmail, esPdf, nombreAdjuntoFactura } from "@/lib/pedido-factura-email"
 import { formatearNumeroPedido, type PedidoRow } from "@/lib/pedidos-repo"
 import { ATTACH_MAX_BYTES } from "@/lib/receipt-email"
 import { configAlegraDelPedido } from "@/lib/pedido-cuenta-alegra"
 import { getTenantByIdFromDb } from "@/lib/tenants"
+import { logoMailDeTenant } from "@/lib/email-logo"
 
 /** Lo que ve el operador. `destino` va enmascarado (`c***@cliente.example`). */
 export type AvisoFacturaResultado = "enviado" | "sin_email" | "sin_pdf" | "fallo"
@@ -99,7 +99,7 @@ export async function enviarFacturaPedido(input: {
     const numeroFactura = pedido.facturaNumero ?? doc.number
     const { subject, html, text } = buildPedidoFacturaEmail({
       tenantName: tenant.name,
-      logoUrl: safeLogoUrl(tenant.logoPath),
+      logoUrl: logoMailDeTenant(tenant),
       numeroPedido: formatearNumeroPedido(pedido.numero),
       numeroFactura,
       contactoNombre: pedido.contactoNombre,

@@ -7,6 +7,8 @@ import { adminUsers } from "@/db/schema"
 import { verifyPassword } from "@/lib/admin-crypto"
 import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
 import { resolveRequestTenantId } from "@/lib/tenant-context"
+import { abrirSesionPendiente } from "@/lib/admin-2fa"
+import { cifrarSecreto, generarSecreto } from "@/lib/admin-totp"
 
 // ── Hash dummy para timing parejo ──────────────────────────────────────────
 // Cuando no hay fila que matchee (email, tenant) —o la fila es una invitación
@@ -117,15 +119,15 @@ export async function POST(req: NextRequest) {
   loginAttempts.delete(attemptKey) // login exitoso → reinicia SOLO el contador de este tenant
 
   const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  session.userId = user.id
-  session.name = user.name
-  session.email = user.email
-  session.role = user.role as AdminSessionData["role"]
-  // El tenant del host, que por la query de arriba es el mismo que `user.tenantId`.
-  session.tenantId = tenantId
-  // Para poder revocarla después (reset de contraseña): ver getGuardedAdminSession.
-  session.issuedAt = Date.now()
-  await session.save()
 
-  return NextResponse.json({ ok: true })
+  // Segundo paso, obligatorio para todos (ver lib/admin-2fa.ts). La cookie queda pendiente, SIN
+  // userId, hasta el código.
+  if (user.totpSecretEnc) {
+    await abrirSesionPendiente(session, user.id, tenantId, "verificar")
+    return NextResponse.json({ ok: true, paso: "verificar" })
+  }
+  // Sin 2FA: lo da de alta ahora. El secreto nuevo viaja cifrado en la cookie (sellada) y recién
+  // se guarda en la base cuando confirma un código válido.
+  await abrirSesionPendiente(session, user.id, tenantId, "alta", cifrarSecreto(generarSecreto()))
+  return NextResponse.json({ ok: true, paso: "alta" })
 }

@@ -29,7 +29,7 @@ const TENANT_B = "tenant-b"
 const NOT_FOUND_BODY = { error: "No encontrado", code: "not_found" }
 
 function login(userId: string, role: "operator" | "admin" | "superadmin" = "admin") {
-  session = { userId, role, tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
+  session = { mfa: "ok", userId, role, tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
 }
 
 const req = (path: string, init: { method?: string; body?: unknown; host?: string } = {}) => {

@@ -41,7 +41,7 @@ const NOT_FOUND_BODY = { error: "No encontrado", code: "not_found" }
 
 function login(userId: string, opts: { tenantId?: string } = {}) {
   session = {
-    userId,
+    mfa: "ok", userId,
     role: "admin",
     tenantId: opts.tenantId ?? TENANT_A,
     name: "Ana Admin",

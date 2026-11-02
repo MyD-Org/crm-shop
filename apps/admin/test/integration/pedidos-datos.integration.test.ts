@@ -33,7 +33,7 @@ const TENANT_A = "tenant-a"
 const TENANT_B = "tenant-b"
 
 function login(userId: string, tenantId = TENANT_A) {
-  session = { userId, role: "admin", tenantId, name: "Ope Rador", email: "ope@example.com", save: async () => {} }
+  session = { mfa: "ok", userId, role: "admin", tenantId, name: "Ope Rador", email: "ope@example.com", save: async () => {} }
 }
 
 const adminReq = (path: string, init: { method?: string; body?: unknown; host?: string } = {}) => {

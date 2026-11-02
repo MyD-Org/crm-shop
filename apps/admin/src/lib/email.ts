@@ -33,6 +33,17 @@ export interface SendEmailOptions {
  * @returns true si salió de verdad, false si fue dry-run.
  * @throws si Resend rechaza el envío (from no verificado, destinatario inválido, …).
  */
+/**
+ * Remitente con el nombre de la tienda: "Central LED <no-reply@…>" en vez de la dirección sola, igual
+ * que los mails del Shop. Si el from ya trae nombre ("Nombre <dir>"), queda como está.
+ */
+export function remitenteConNombre(from: string, nombre: string): string {
+  const dir = from.trim()
+  if (!dir || dir.includes("<")) return dir
+  const limpio = nombre.replace(/[\u0000-\u001f\u007f"<>]+/g, " ").replace(/\s+/g, " ").trim()
+  return limpio ? `${limpio} <${dir}>` : dir
+}
+
 export async function sendEmail(
   tenant: TenantConfig,
   to: string,
@@ -49,7 +60,7 @@ export async function sendEmail(
   const resend = new Resend(apiKey)
   const { error } = await resend.emails.send(
     {
-      from: opts?.from ?? tenant.resendFrom,
+      from: remitenteConNombre(opts?.from ?? tenant.resendFrom, tenant.name),
       to,
       subject,
       html,

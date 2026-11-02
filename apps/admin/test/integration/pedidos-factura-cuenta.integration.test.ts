@@ -59,7 +59,7 @@ const previewR = (id: string) => remito.GET(req(`/api/admin/pedidos/${id}/remito
 const cuentaDto = (id: string) => cuentaRoute.GET(req(`${base(id)}/cuenta`), idParams(id))
 
 function login(userId: string, role: "operator" | "admin" = "admin", name = "Admin A") {
-  session = { userId, role, tenantId: A, name, email: "c@example.com", save: async () => {} }
+  session = { mfa: "ok", userId, role, tenantId: A, name, email: "c@example.com", save: async () => {} }
 }
 
 let idMdp: string

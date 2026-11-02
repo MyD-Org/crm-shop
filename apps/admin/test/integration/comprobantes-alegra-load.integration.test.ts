@@ -137,7 +137,7 @@ function resetAlegraState() {
 
 function loginAdmin(userId: string, opts: { cookieRole?: string; tenantId?: string } = {}) {
   session = {
-    userId,
+    mfa: "ok", userId,
     role: opts.cookieRole ?? "admin",
     tenantId: opts.tenantId ?? TENANT_A,
     name: "Ana Admin",

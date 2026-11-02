@@ -21,16 +21,22 @@ describe("CampoCupon", () => {
     expect(h).toContain("Aplicar");
   });
 
-  it("con cupón aplicado: el código, Quitar y Condiciones", () => {
+  it("con cupón aplicado y línea propia: sólo Condiciones (el código y la X están en LineaCupon)", () => {
     const h = html({ cupon: "luz-7kq2m", aplicado });
-    expect(h).toContain("LUZ-7KQ2M");
-    expect(h).toContain("Quitar");
     expect(h).toContain("Condiciones");
+    expect(h).not.toContain("LUZ-7KQ2M</span>");
+    expect(h).not.toContain("Quitar el cupón");
+  });
+
+  it("con cupón aplicado sin línea (no elegible con este medio): el código y la X", () => {
+    const h = html({ cupon: "luz-7kq2m", aplicado: { ...aplicado, descuento: 0, pctAplicado: false, aviso: "Su cupón es válido sólo en 1 pago." } });
+    expect(h).toContain("LUZ-7KQ2M");
+    expect(h).toContain('aria-label="Quitar el cupón LUZ-7KQ2M"');
   });
 
   it("con error: el mensaje y Quitar (el cupón queda guardado)", () => {
     const h = html({ cupon: "LUZ-7KQ2M", error: { motivo: "vencido", mensaje: "Este cupón venció." } });
     expect(h).toContain("Este cupón venció.");
-    expect(h).toContain("Quitar");
+    expect(h).toContain('aria-label="Quitar el cupón LUZ-7KQ2M"');
   });
 });

@@ -23,4 +23,16 @@ describe("LineaCupon", () => {
     expect(h).toContain("El descuento no se suma a productos con precio promocional.");
     expect(h).not.toContain("−");
   });
+
+  it("con onQuitar: la X en la línea del descuento; sin onQuitar, no", () => {
+    const con = renderToStaticMarkup(<LineaCupon cupon={cupon()} onQuitar={() => {}} />);
+    expect(con).toContain('aria-label="Quitar el cupón LUZ-7KQ2M"');
+    expect(con.match(/Quitar el cupón/g)).toHaveLength(1);
+    expect(html(cupon())).not.toContain("Quitar el cupón");
+  });
+
+  it("sólo envío gratis: la X va en la línea del envío", () => {
+    const h = renderToStaticMarkup(<LineaCupon cupon={cupon({ pctAplicado: false, descuento: 0, envioGratis: true })} onQuitar={() => {}} />);
+    expect(h).toMatch(/Envío gratis \(cupón\)<button[^>]*aria-label="Quitar el cupón LUZ-7KQ2M"/);
+  });
 });

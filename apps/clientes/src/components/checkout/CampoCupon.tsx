@@ -4,11 +4,13 @@ import { useState } from "react";
 import { Button, Dialog, Field, Input } from "@myd-org/ui";
 import type { CuponAplicado, CuponError } from "@/lib/cupones/tipos";
 import { avisoVencimiento } from "@/lib/cupones/ui";
+import { BotonQuitarCupon, cuponTieneLinea } from "./LineaCupon";
 
 /**
  * Campo del cupón en el resumen del carrito y del checkout (spec 2026-11-01-cupones-design.md): sin
  * cupón, "¿Tiene un código de descuento?" con el campo y "Aplicar" (Enter también aplica); con cupón,
- * el código, "Condiciones" (texto de la promoción), "Quitar" y el error o el aviso de vencimiento.
+ * "Condiciones" chico debajo de la línea del cupón y el error o el aviso de vencimiento. El código con
+ * la X para quitarlo va acá sólo si el cupón no tiene línea propia en el resumen (`LineaCupon`).
  * Mayúsculas, espacios y guiones dan igual: valida el servidor al cotizar.
  */
 export function CampoCupon({
@@ -57,21 +59,26 @@ export function CampoCupon({
   }
 
   const vence = aplicado ? avisoVencimiento(aplicado.venceEn, new Date()) : null;
+  // Con línea propia en el resumen (`LineaCupon`), el código y la X ya están ahí: acá sólo "Condiciones".
+  const conLinea = !!aplicado && cuponTieneLinea(aplicado);
+  const codigo = (aplicado?.codigo ?? cupon).toUpperCase();
   return (
     <div className="space-y-1 text-sm">
-      <div className="flex items-center justify-between gap-3">
-        <span className="font-semibold tabular-nums text-text">{(aplicado?.codigo ?? cupon).toUpperCase()}</span>
-        <span className="flex gap-3">
-          {aplicado?.condiciones && (
-            <button type="button" className="text-sm underline underline-offset-2 hover:no-underline" onClick={() => setCondiciones(true)}>
-              Condiciones
-            </button>
-          )}
-          <button type="button" className="text-sm underline underline-offset-2 hover:no-underline" onClick={onQuitar}>
-            Quitar
-          </button>
-        </span>
-      </div>
+      {!conLinea && (
+        <div className="flex items-center gap-1">
+          <span className="font-semibold tabular-nums text-text">{codigo}</span>
+          <BotonQuitarCupon codigo={codigo} onQuitar={onQuitar} />
+        </div>
+      )}
+      {aplicado?.condiciones && (
+        <button
+          type="button"
+          className="text-xs text-muted underline underline-offset-2 hover:text-text hover:no-underline"
+          onClick={() => setCondiciones(true)}
+        >
+          Condiciones
+        </button>
+      )}
       {error && (
         <p className="text-xs text-danger" role="alert">
           {error.mensaje}

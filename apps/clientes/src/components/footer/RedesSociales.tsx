@@ -22,11 +22,20 @@ function InstagramIcon() {
  * la tienda (excepción al registro de usted de CLAUDE.md): es el mismo tono
  * de las cuentas de Instagram.
  */
-export function RedesSociales({ redes, className = "" }: { redes: RedFooter[]; className?: string }) {
+export function RedesSociales({
+  redes,
+  className = "",
+  claseSeguinos = "",
+}: {
+  redes: RedFooter[];
+  className?: string;
+  /** Clases extra del "Seguinos" (la barra superior lo esconde en el celular para entrar en una línea). */
+  claseSeguinos?: string;
+}) {
   if (redes.length === 0) return null;
   return (
     <ul className={`flex flex-wrap items-center gap-x-4 gap-y-1 ${className}`}>
-      <li className="text-[12.5px] font-semibold text-on-primary/55">Seguinos</li>
+      <li className={`text-[12.5px] font-semibold text-on-primary/55 ${claseSeguinos}`}>Seguinos</li>
       {redes.map((r) => (
         <li key={r.usuario}>
           <a

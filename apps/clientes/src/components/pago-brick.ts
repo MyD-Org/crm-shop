@@ -37,6 +37,7 @@ export interface CustomizacionBrick {
   readonly visual: {
     readonly hideFormTitle: true;
     readonly hidePaymentButton: true;
+    readonly texts: { readonly cardholderName: { readonly placeholder: string } };
     readonly style: { readonly theme: "default"; readonly customVariables: VariablesBrick };
   };
 }
@@ -94,6 +95,8 @@ export function customizacionBrick(tipo: TipoTarjeta, leerVariables: () => Varia
     visual: {
       hideFormTitle: true,
       hidePaymentButton: true,
+      // Sin esto el Brick muestra "María López" de ejemplo.
+      texts: { cardholderName: { placeholder: "Nombre y apellido" } },
       style: { theme: "default", customVariables: leerVariables() },
     },
   };

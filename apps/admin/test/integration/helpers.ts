@@ -9,6 +9,7 @@ import {
   shopOrderRemitos,
   shopOrders,
   shopOrderItems,
+  shopCuponCanjes,
   type ShopClienteRow,
   type ShopClientLinkRow,
   type ShopOrderEventoRow,
@@ -36,7 +37,7 @@ function guard() {
 export async function truncateAll(): Promise<void> {
   guard()
   await getDb().execute(
-    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, correo_eventos,${shopOrderEventos}, ${shopOrderRemitos}, ${shopOrderItems}, ${shopOrders}, ${shopClientes}, ${shopClientLinks} restart identity cascade`,
+    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, correo_eventos,${shopOrderEventos}, ${shopOrderRemitos}, ${shopOrderItems}, ${shopOrders}, ${shopClientes}, ${shopClientLinks}, ${shopCuponCanjes} restart identity cascade`,
   )
 }
 

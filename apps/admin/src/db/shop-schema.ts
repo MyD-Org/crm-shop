@@ -28,6 +28,17 @@ import { boolean, date, integer, jsonb, numeric, pgSchema, text, timestamp, uuid
 
 export const shop = pgSchema("shop")
 
+/** Lo que el CRM lee de `shop.orders.cupon` (CuponPedido del Shop, src/lib/cupones/tipos.ts). */
+export interface CuponPedidoShop {
+  codigoId: string
+  codigo: string
+  promocionId: string
+  nombre: string
+  pct: number | null
+  envioGratis: boolean
+  descuento: number
+}
+
 export const shopOrders = shop.table("orders", {
   id: uuid("id").primaryKey().defaultRandom(),
   // GENERATED ALWAYS en la base: el CRM nunca lo escribe. Se declara como identity (y no como
@@ -89,6 +100,9 @@ export const shopOrders = shop.table("orders", {
   pagoCuotas: integer("pago_cuotas"),
   pagoTotalPagado: numeric("pago_total_pagado", { precision: 14, scale: 2 }),
   pagoInfo: jsonb("pago_info").$type<Record<string, unknown>>(),
+  // Foto del cupón de descuento (0041 del Shop; NULL = sin cupón). El descuento ya está dentro del
+  // precio_unitario de las líneas; esto es para mostrar la línea del cupón.
+  cupon: jsonb("cupon").$type<CuponPedidoShop | null>(),
 
   // --- Estado + auditoría del último cambio ---
   estado: text("estado").notNull().default("pendiente"),
@@ -178,6 +192,8 @@ export const shopOrderItems = shop.table("order_items", {
   campaniaId: uuid("campania_id"),
   campaniaReglaId: uuid("campania_regla_id"),
   precioNormal: numeric("precio_normal", { precision: 14, scale: 2 }),
+  // Unitario sin IVA ANTES del cupón (0041 del Shop) en las líneas que alcanzó; NULL = sin cupón.
+  precioSinCupon: numeric("precio_sin_cupon", { precision: 14, scale: 2 }),
 })
 
 export type ShopOrderRow = typeof shopOrders.$inferSelect
@@ -287,3 +303,17 @@ export const shopClientLinks = shop.table("client_links", {
 
 export type ShopClienteRow = typeof shopClientes.$inferSelect
 export type ShopClientLinkRow = typeof shopClientLinks.$inferSelect
+
+// Canjes de cupones (0041 del Shop): una fila por pedido con cupón. Los escribe el Shop; el CRM los
+// lee para el detalle de la promoción. Sin estado: se calcula desde el pedido (cupones-canjes.ts).
+export const shopCuponCanjes = shop.table("cupon_canjes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  codigoId: uuid("codigo_id").notNull(),
+  promocionId: uuid("promocion_id").notNull(),
+  orderId: uuid("order_id").notNull(),
+  clerkUserId: text("clerk_user_id"),
+  email: text("email"),
+  descuentoTotal: numeric("descuento_total", { precision: 14, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})

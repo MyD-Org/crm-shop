@@ -19,6 +19,7 @@ import type { InfoPago, PagoInfoOrden } from "../lib/pagos/tipos";
 import type { ReglaAplicada } from "../lib/sucursales";
 import type { CuentaPagoSnapshot } from "../lib/cuentas-bancarias";
 import type { SnapshotVentaSinStock } from "../lib/venta-sin-stock";
+import type { CuponPedido } from "../lib/cupones/tipos";
 
 /**
  * Todas las tablas del Shop viven en el esquema `shop` de la base del CRM.
@@ -446,6 +447,12 @@ export const orders = shop.table(
     /** Medio con el que se cobró (marca, tipo, últimos 4…), del intento que decide el estado. */
     pagoInfo: jsonb("pago_info").$type<PagoInfoOrden>(),
     /**
+     * Foto del cupón de descuento con el que se cotizó el pedido (migración 0041; NULL = sin cupón).
+     * El descuento ya está dentro de `order_items.precio_unitario`; esto es para mostrar la línea
+     * del cupón y recotizar. El canje vive en `shop.cupon_canjes`.
+     */
+    cupon: jsonb("cupon").$type<CuponPedido | null>(),
+    /**
      * Pago que un operador tiene que revisar, o null si está todo en orden:
      * - `cobro_duplicado`: más de un intento aprobado; hay que devolver el
      *   excedente.
@@ -769,6 +776,8 @@ export const orderItems = shop.table(
     campaniaReglaId: uuid("campania_regla_id"),
     /** Unitario NORMAL sin IVA (el que se tachó) cuando la línea va con campaña; NULL sin campaña. */
     precioNormal: numeric("precio_normal", { precision: 14, scale: 2 }),
+    /** Unitario sin IVA ANTES del cupón (migración 0041) en las líneas que alcanzó; NULL = sin cupón. */
+    precioSinCupon: numeric("precio_sin_cupon", { precision: 14, scale: 2 }),
   },
   (t) => [index("order_items_order").on(t.orderId)],
 );
@@ -1022,11 +1031,42 @@ export const carts = shop.table(
     clerkUserId: text("clerk_user_id").notNull(),
     items: jsonb("items").$type<{ id: string; qty: number }[]>().notNull().default([]),
     version: integer("version").notNull().default(0),
+    /** Código de cupón guardado (migración 0041), tal como se ingresó; NULL = sin cupón. */
+    cupon: text("cupon"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("cart_tenant_usuario").on(t.tenantId, t.clerkUserId),
     check("carts_version_check", sql`${t.version} >= 0`),
+  ],
+);
+
+/**
+ * Canjes de cupones (migración 0041): una fila por pedido con cupón. SIN columna de estado: vivo,
+ * usado o liberado se calcula desde el pedido con el mismo criterio que la reserva de stock
+ * (`pedidoVivoSql` / `pedidoCompradoSql`, `src/lib/pedido-vivo.ts`). `codigo_id` y `promocion_id`
+ * son ids de `public.cupon_codigos` / `public.cupon_promociones` (CRM 0097), sin FK: otro esquema.
+ * `descuento_total` con IVA, para reportes.
+ */
+export const cuponCanjes = shop.table(
+  "cupon_canjes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    codigoId: uuid("codigo_id").notNull(),
+    promocionId: uuid("promocion_id").notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .unique("cupon_canjes_order_id_unique")
+      .references(() => orders.id, { onDelete: "cascade" }),
+    clerkUserId: text("clerk_user_id"),
+    email: text("email"),
+    descuentoTotal: numeric("descuento_total", { precision: 14, scale: 2 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("cupon_canjes_tenant_codigo").on(t.tenantId, t.codigoId),
+    index("cupon_canjes_tenant_promocion").on(t.tenantId, t.promocionId),
   ],
 );
 

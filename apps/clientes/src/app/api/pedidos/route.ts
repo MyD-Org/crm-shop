@@ -41,6 +41,8 @@ import { dispDelVisitante } from "@/lib/zona-servidor";
 import { contextoUnion } from "@/lib/disponibilidad-contexto";
 import { contextoParaProvincia, disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
 import { claveProvincia } from "@/lib/sucursales";
+import { CuponCanjeError, resolverCupon, type QuienCupon } from "@/lib/cupones/repo";
+import { mensajeCupon } from "@/lib/cupones/mensajes";
 
 /**
  * Techo de confirmaciones por comprador. Una persona real confirma un pedido,
@@ -95,6 +97,8 @@ interface BodyPedido {
   sucursalRetiro?: unknown;
   /** Total que el comprador vio en el checkout. Opcional: sin él se crea al precio actual. */
   totalVisto?: unknown;
+  /** Código de cupón (texto tal como se ingresó). Se valida y aplica en el servidor. */
+  cupon?: unknown;
   /** Cuotas sin interés elegidas (flag `cuotas-cobro`); ausente = un pago. Sólo cobro en línea. */
   cuotas?: unknown;
   /** Forma de pago (`credito`, `debito`, `cuenta_mp`): solo cuenta con un medio de Mercado Pago o Payway con precios por forma. */
@@ -426,6 +430,16 @@ export async function POST(req: Request) {
     // que muestran las cards, como en el carrito.
     // Campañas de precios activas AHORA, leídas sin caché (lo que cobra va siempre en vivo).
     const campanias = await campaniasActivasEn(new Date());
+    // Cupón: se vuelve a validar acá con la cuenta (la validación del carrito no vale de nada) y se
+    // aplica con las mismas reglas y el mismo contexto que `/api/carrito/cotizar`. Uno que no aplica
+    // no bloquea: el pedido se cotiza sin él y `totalVisto` decide.
+    const quienCupon: QuienCupon = {
+      clerkUserId: clerkUserId ?? null,
+      email: (cliente?.email ?? email) || null,
+      listaPrivada: Boolean(idListaPrivada),
+    };
+    const cuponResuelto = body.cupon == null || body.cupon === "" ? null : await resolverCupon(body.cupon, quienCupon);
+    const cuponParaCotizar = cuponResuelto?.ok ? cuponResuelto : undefined;
     const resuelto = await cotizarConMedio({
       lineas,
       entregaTipo,
@@ -443,6 +457,7 @@ export async function POST(req: Request) {
         ? {}
         : { idListaAConfirmar: listaAConfirmar(sinProcesadoresNoConfigurados(mediosCrm)) }),
       ...(campanias.length ? { campanias } : {}),
+      ...(cuponParaCotizar ? { cupon: cuponParaCotizar, entregaProvincia } : {}),
     });
     if (!resuelto.ok) {
       if (resuelto.motivo === "forma_no_disponible") {
@@ -456,7 +471,9 @@ export async function POST(req: Request) {
         { status: 422 },
       );
     }
-    const { cuotasPedido, idListaMedio, formaCobro, opcionesCotizar, cotizacion } = resuelto;
+    const { cuotasPedido, idListaMedio, formaCobro, opcionesCotizar } = resuelto;
+    const cotizacion =
+      cuponResuelto && !cuponResuelto.ok ? { ...resuelto.cotizacion, cupon: null, cuponError: cuponResuelto.error } : resuelto.cotizacion;
 
     // Nada se persiste si hay una sola línea con problema: se devuelve la
     // cotización entera para que el checkout marque exactamente cuál falla.
@@ -539,9 +556,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // `null` = retiro (no aplica); true/false = envío a domicilio gratis o a coordinar.
+    // `null` = retiro (no aplica); true/false = envío a domicilio gratis o a coordinar. La regla de la
+    // tienda se mide sobre el subtotal ANTES del cupón (un % nunca le quita el envío gratis que ya
+    // tenía) o lo da el cupón (ya validado para esta entrega y zona).
     const envioGratis =
-      aDomicilio && configEnvio ? evaluarEnvio(cotizacion.subtotal, entregaProvincia, configEnvio).gratis : null;
+      aDomicilio && configEnvio
+        ? evaluarEnvio(cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal, entregaProvincia, configEnvio).gratis ||
+          cotizacion.cupon?.envioGratis === true
+        : null;
 
 
     // Para revisión de un operador antes de facturar, con el motivo más
@@ -598,10 +620,21 @@ export async function POST(req: Request) {
           disponibilidadSucursal: disp !== undefined,
           soloVisibles,
           ...(agrupar ? { agrupar: true } : {}),
+          ...(cotizacion.cupon && cuponParaCotizar ? { cupon: { promo: cuponParaCotizar.promo, quien: quienCupon } } : {}),
         },
         cotizacion,
       );
     } catch (err) {
+      if (err instanceof CuponCanjeError) {
+        // Otro checkout usó el código (o se agotó la promoción) entre la cotización y el pedido: nada se
+        // creó. Se recotiza sin cupón para que el checkout muestre el total nuevo y el motivo.
+        const mensaje = mensajeCupon(err.motivo);
+        const recotizada = await cotizar(lineas, opcionesCotizar);
+        return NextResponse.json(
+          { error: mensaje, motivo: "cupon", cotizacion: { ...recotizada, cupon: null, cuponError: { motivo: err.motivo, mensaje } } },
+          { status: 409 },
+        );
+      }
       if (err instanceof SucursalPedidoError) {
         return NextResponse.json(
           { error: err.message, motivo: err.codigo, ...(err.ids.length > 0 ? { ids: err.ids } : {}) },

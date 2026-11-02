@@ -38,6 +38,14 @@ vi.mock("@/lib/sucursales-repo", async (importOriginal) => ({
   leerConfigEnvio: async () => configEnvio,
 }));
 vi.mock("@/lib/pagos", () => ({ procesadorConfigurado: () => true }));
+let cuponesPermitidos = true;
+const clavesLimite: string[] = [];
+vi.mock("@/lib/rate-limit", () => ({
+  permitirAsync: async (clave: string) => {
+    clavesLimite.push(clave);
+    return clave.startsWith("cupon:") ? cuponesPermitidos : true;
+  },
+}));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: async () => true }));
 vi.mock("@/lib/medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => medios }));
 vi.mock("@/lib/cupones/repo", () => ({
@@ -78,6 +86,8 @@ const pedir = async (extra: Record<string, unknown> = {}) => {
 };
 
 beforeEach(() => {
+  cuponesPermitidos = true;
+  clavesLimite.length = 0;
   qty = 1;
   medios = [medio({}), MP];
   configEnvio = { domicilioActivo: true, gratis: null };
@@ -171,6 +181,14 @@ describe("POST /api/carrito/cotizar con cupón", () => {
     expect(r.cupon ?? null).toBeNull();
     expect(r.total).toBeCloseTo(900 * 1.21, 2);
     expect(r.cuponPorOpcion).toBeUndefined();
+  });
+
+  it("límite propio de consultas de cupón (frena probar códigos): superado, no_disponible sin leer la base", async () => {
+    cuponesPermitidos = false;
+    const r = await pedir({ pagoMetodo: "transferencia", cupon: "LUZ-7KQ2M" });
+    expect(resolverCupon).not.toHaveBeenCalled();
+    expect(r.cuponError.motivo).toBe("no_disponible");
+    expect(clavesLimite).toContain("cupon:user_ana");
   });
 
   it("carrito sin medio: aplica y avisa la restricción", async () => {

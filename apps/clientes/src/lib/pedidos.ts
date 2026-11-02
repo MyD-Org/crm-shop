@@ -6,6 +6,9 @@
  * Cuando eso cambie, el único lugar a tocar es `crearPedido`.
  */
 
+import { reservarCanjeEnTx, type QuienCupon } from "./cupones/repo";
+import { cuponPedidoDesde } from "./cupones/reglas";
+import type { PromocionCupon } from "./cupones/tipos";
 import { validarUnidadesEnTx } from "./campanias/unidades";
 import { cache } from "react";
 import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
@@ -147,6 +150,12 @@ export interface DatosPedido {
    * ancla del grupo (ver `joinOverlay`). Ausente = apagado: como siempre.
    */
   agrupar?: boolean;
+  /**
+   * Cupón aplicado a la `cotizacion` (spec 2026-11-01-cupones-design.md): se congela la foto en
+   * `orders.cupon` y se reserva el canje en la misma transacción (`reservarCanjeEnTx`, con lock y
+   * relectura). Si el canje ya no entra, `CuponCanjeError` y no se crea nada.
+   */
+  cupon?: { promo: PromocionCupon; quien: QuienCupon };
   /**
    * Sólo con el flag `sucursales` prendido: modalidad, provincia, ciudad y local de retiro con los
    * que se asigna la sucursal. `crearPedido` relee las reglas SIN caché dentro de la transacción y
@@ -371,6 +380,7 @@ export async function crearPedido(
         // El plan viejo (`cuotas_max`, `cuotas_plan`) ya no se escribe: los pedidos históricos lo conservan.
         cuotas: datos.cuotas ?? null,
         formaCobro: datos.formaCobro ?? null,
+        cupon: datos.cupon && cotizacion.cupon ? cuponPedidoDesde(cotizacion.cupon, datos.cupon.promo) : null,
         sucursal: asignacion?.sucursal ?? null,
         sucursalRegla: asignacion?.regla ?? null,
         sucursalAsignadaEn: asignacion ? new Date() : null,
@@ -449,6 +459,11 @@ export async function crearPedido(
     // Límite de unidades de las campañas de precios: con lock por regla y relectura, en la MISMA
     // transacción (dos compras simultáneas por la última unidad: una sola se confirma).
     await validarUnidadesEnTx(tx, lineas);
+    // El canje del cupón, con su lock y relectura, ANTES de escribir las líneas (dos checkouts con el
+    // mismo código único: uno solo se confirma).
+    if (datos.cupon && cotizacion.cupon) {
+      await reservarCanjeEnTx(tx, datos.cupon.promo, datos.cupon.quien, pedido.id, cotizacion.cupon.descuento);
+    }
 
     await tx.insert(orderItems).values(
       lineas.map((l) => ({
@@ -470,6 +485,8 @@ export async function crearPedido(
         ...(l.campaniaId
           ? { campaniaId: l.campaniaId, campaniaReglaId: l.campaniaReglaId ?? null, precioNormal: l.precioNormal != null ? String(l.precioNormal) : null }
           : {}),
+        // Unitario antes del cupón (sólo en las líneas que alcanzó).
+        ...(l.precioSinCupon != null ? { precioSinCupon: String(l.precioSinCupon) } : {}),
       })),
     );
 

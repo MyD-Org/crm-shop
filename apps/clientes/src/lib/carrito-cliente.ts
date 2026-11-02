@@ -52,7 +52,26 @@ export type CacheCarrito = {
   /** Versión del servidor que vio esta caché; null si nunca se sincronizó. */
   version: number | null;
   items: CartItem[];
+  /**
+   * Código de cupón guardado (texto tal como se ingresó, `limpiarCupon`). Ausente = nunca se tocó;
+   * null = se quitó y el servidor todavía no se enteró.
+   */
+  cupon?: string | null;
 };
+
+const CUPON_TEXTO_RE = /^[A-Za-z0-9 _\-–—]{1,32}$/;
+
+/**
+ * El cupón como se guarda en el carrito: el texto ingresado, recortado, con sólo letras, números,
+ * espacios y guiones, y de 4 a 24 caracteres útiles (la validación real es del servidor). Basura = null.
+ */
+export function limpiarCupon(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  if (!CUPON_TEXTO_RE.test(t)) return null;
+  const util = t.toUpperCase().replace(/[^A-Z0-9]/g, "").length;
+  return util >= 4 && util <= 24 ? t : null;
+}
 
 export type AvisoCarrito = "lineas" | "cantidad";
 
@@ -322,7 +341,7 @@ export function parsearCache(rawV2: string | null, rawV1: string | null): CacheC
       if (owner !== null && (typeof owner !== "string" || !owner)) return vacio;
       const items = parsearItems(p.items);
       if (!items) return vacio;
-      return { owner, version: validarVersion(p.version), items };
+      return { owner, version: validarVersion(p.version), items, ...("cupon" in p ? { cupon: limpiarCupon(p.cupon) } : {}) };
     }
     if (rawV1 !== null) {
       const items = parsearItems(JSON.parse(rawV1));

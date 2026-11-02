@@ -122,6 +122,10 @@ interface CartContextValue {
   clear: () => void;
   /** Tras crear un pedido: el servidor ya vació su carrito; sólo se limpia el local. */
   vaciarTrasPedido: () => void;
+  /** Código de cupón guardado en el carrito (tal como se ingresó), o null. Se valida al cotizar. */
+  cupon: string | null;
+  /** Guarda o quita (null) el cupón del carrito: local para el invitado, en el servidor con sesión. */
+  setCupon: (cupon: string | null) => void;
   /** Subtotal referencial. Para el número real, usar la cotización. */
   total: number;
   count: number;
@@ -250,6 +254,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const vaciarTrasPedido = useCallback(() => elMotor().vaciarTrasPedido(), []);
+  const setCupon = useCallback((c: string | null) => elMotor().setCupon(c), []);
+  // Mismo criterio que los ítems: el cupón de una caché ajena nunca se muestra.
+  const cupon = cache.owner === null || (isLoaded && cache.owner === usuario) ? (cache.cupon ?? null) : null;
 
   const total = items.reduce((acc, i) => acc + i.price * i.qty, 0);
   const count = items.reduce((acc, i) => acc + i.qty, 0);
@@ -266,6 +273,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         updateQty,
         clear,
         vaciarTrasPedido,
+        cupon,
+        setCupon,
         total,
         count,
         ready,

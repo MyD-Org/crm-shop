@@ -386,3 +386,56 @@ describe("salida y pedido", () => {
     expect(m.leer().items).toEqual([]);
   });
 });
+
+describe("cupón", () => {
+  it("invitado: setCupon es local y el merge al ingresar lo manda; adopta el del servidor", async () => {
+    const m = crear();
+    m.setSesion(true, null);
+    m.reconciliar();
+    m.mutar((items) => agregar(items, prod("1"), 1));
+    m.setCupon("luz-7kq2m");
+    await drenar(5_000);
+    expect(llamadas).toEqual([]);
+    expect(m.leer().cupon).toBe("luz-7kq2m");
+    m.setSesion(true, "u1");
+    respuestas.push(responder(200, { items: [item("1", 1)], version: 2, cupon: "luz-7kq2m" }));
+    m.reconciliar();
+    await drenar(0);
+    expect(llamadas[0]).toMatchObject({ method: "POST", body: { items: [{ id: "1", qty: 1 }], cupon: "luz-7kq2m" } });
+    expect(m.leer()).toMatchObject({ owner: "u1", version: 2, cupon: "luz-7kq2m" });
+  });
+
+  it("con sesión: setCupon sube con PUT y mutar no lo pierde", async () => {
+    cache("u1", 3, [item("1", 1)]);
+    const m = crear();
+    m.setSesion(true, "u1");
+    m.setCupon("LUZ-7KQ2M");
+    respuestas.push(responder(200, { items: [item("1", 1)], version: 4, cupon: "LUZ-7KQ2M" }));
+    await drenar();
+    expect(llamadas[0]).toMatchObject({ method: "PUT", body: { version: 3, items: [{ id: "1", qty: 1 }], cupon: "LUZ-7KQ2M" } });
+    m.mutar((items) => agregar(items, prod("2"), 1));
+    expect(m.leer().cupon).toBe("LUZ-7KQ2M");
+    respuestas.push(responder(200, { items: [item("1", 1), item("2", 1)], version: 5, cupon: "LUZ-7KQ2M" }));
+    await drenar();
+    expect(llamadas[1].body).toMatchObject({ cupon: "LUZ-7KQ2M" });
+  });
+
+  it("quitar el cupón manda null", async () => {
+    storage.set(CLAVE_CACHE, JSON.stringify({ owner: "u1", version: 3, items: [item("1", 1)], cupon: "LUZ-7KQ2M" }));
+    const m = crear();
+    m.setSesion(true, "u1");
+    m.setCupon(null);
+    respuestas.push(responder(200, { items: [item("1", 1)], version: 4 }));
+    await drenar();
+    expect(llamadas[0].body).toMatchObject({ cupon: null });
+    expect(m.leer().cupon).toBeUndefined();
+  });
+
+  it("vaciar tras el pedido borra el cupón", () => {
+    storage.set(CLAVE_CACHE, JSON.stringify({ owner: null, version: null, items: [item("1", 1)], cupon: "LUZ-7KQ2M" }));
+    const m = crear();
+    m.setSesion(true, null);
+    m.vaciarTrasPedido();
+    expect(m.leer().cupon ?? null).toBeNull();
+  });
+});

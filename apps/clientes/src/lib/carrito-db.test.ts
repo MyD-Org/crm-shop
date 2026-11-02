@@ -67,18 +67,18 @@ const json = (v: unknown) => JSON.stringify(v);
 describe("leerCarrito", () => {
   it("del usuario y del tenant", async () => {
     grabadora = dbGrabadora(() => [[[{ id: "1", qty: 2 }], 4]]);
-    expect(await leerCarrito("u1")).toEqual({ items: [{ id: "1", qty: 2 }], version: 4 });
+    expect(await leerCarrito("u1")).toEqual({ items: [{ id: "1", qty: 2 }], version: 4, cupon: null });
     expect(grabadora.consultas).toHaveLength(1);
     esperaDueno(grabadora.consultas[0]);
   });
 
   it("sin fila: vacío en versión 0", async () => {
-    expect(await leerCarrito("u1")).toEqual({ items: [], version: 0 });
+    expect(await leerCarrito("u1")).toEqual({ items: [], version: 0, cupon: null });
   });
 
   it("lo guardado se normaliza al leer (basura en la fila no llega al cliente)", async () => {
     grabadora = dbGrabadora(() => [[[{ id: "1", qty: 2 }, { id: "1", qty: 1 }, { x: 1 }, "y"], 2]]);
-    expect(await leerCarrito("u1")).toEqual({ items: [{ id: "1", qty: 3 }], version: 2 });
+    expect(await leerCarrito("u1")).toEqual({ items: [{ id: "1", qty: 3 }], version: 2, cupon: null });
   });
 });
 
@@ -86,7 +86,7 @@ describe("reemplazarCarrito", () => {
   it("con la versión vigente: UPDATE con version en el WHERE y version + 1", async () => {
     grabadora = dbGrabadora((c) => (tipo(c) === "update" ? [[5]] : []));
     const r = await reemplazarCarrito("u1", 4, [{ id: "1", qty: 2 }]);
-    expect(r).toEqual({ ok: true, carrito: { items: [{ id: "1", qty: 2 }], version: 5 }, avisos: [] });
+    expect(r).toEqual({ ok: true, carrito: { items: [{ id: "1", qty: 2 }], version: 5, cupon: null }, avisos: [] });
 
     expect(grabadora.consultas).toHaveLength(1);
     const [u] = grabadora.consultas;
@@ -107,7 +107,7 @@ describe("reemplazarCarrito", () => {
     ]);
     expect(r).toEqual({
       ok: true,
-      carrito: { items: [{ id: "1", qty: 5 }, { id: "2", qty: 9_999 }], version: 2 },
+      carrito: { items: [{ id: "1", qty: 5 }, { id: "2", qty: 9_999 }], version: 2, cupon: null },
       avisos: ["cantidad"],
     });
     expect(grabadora.consultas[0].params).toContain(
@@ -118,7 +118,7 @@ describe("reemplazarCarrito", () => {
   it("versión 0 sin fila: INSERT ... ON CONFLICT DO NOTHING en versión 1", async () => {
     grabadora = dbGrabadora((c) => (tipo(c) === "insert" ? [[1]] : []));
     const r = await reemplazarCarrito("u1", 0, [{ id: "1", qty: 1 }]);
-    expect(r).toEqual({ ok: true, carrito: { items: [{ id: "1", qty: 1 }], version: 1 }, avisos: [] });
+    expect(r).toEqual({ ok: true, carrito: { items: [{ id: "1", qty: 1 }], version: 1, cupon: null }, avisos: [] });
 
     const [u, ins] = grabadora.consultas;
     expect(tipo(u)).toBe("update");
@@ -134,7 +134,7 @@ describe("reemplazarCarrito", () => {
   it("versión vieja: no escribe y devuelve el carrito actual", async () => {
     grabadora = dbGrabadora((c) => (tipo(c) === "select" ? [[[{ id: "9", qty: 1 }], 5]] : []));
     const r = await reemplazarCarrito("u1", 4, [{ id: "1", qty: 2 }]);
-    expect(r).toEqual({ ok: false, actual: { items: [{ id: "9", qty: 1 }], version: 5 } });
+    expect(r).toEqual({ ok: false, actual: { items: [{ id: "9", qty: 1 }], version: 5, cupon: null } });
 
     const [u, sel] = grabadora.consultas;
     expect(tipo(u)).toBe("update");
@@ -146,13 +146,13 @@ describe("reemplazarCarrito", () => {
   it("versión 0 y otra pestaña insertó primero: conflicto con el carrito actual", async () => {
     grabadora = dbGrabadora((c) => (tipo(c) === "select" ? [[[{ id: "9", qty: 1 }], 1]] : []));
     const r = await reemplazarCarrito("u1", 0, [{ id: "1", qty: 2 }]);
-    expect(r).toEqual({ ok: false, actual: { items: [{ id: "9", qty: 1 }], version: 1 } });
+    expect(r).toEqual({ ok: false, actual: { items: [{ id: "9", qty: 1 }], version: 1, cupon: null } });
     expect(grabadora.consultas.map(tipo)).toEqual(["update", "insert", "select"]);
   });
 
   it("versión > 0 sin fila: conflicto con carrito vacío en versión 0", async () => {
     const r = await reemplazarCarrito("u1", 3, [{ id: "1", qty: 2 }]);
-    expect(r).toEqual({ ok: false, actual: { items: [], version: 0 } });
+    expect(r).toEqual({ ok: false, actual: { items: [], version: 0, cupon: null } });
     expect(grabadora.consultas.map(tipo)).toEqual(["update", "select"]);
   });
 });
@@ -168,6 +168,7 @@ describe("mergearCarrito", () => {
     expect(r).toEqual({
       items: [{ id: "1", qty: 5 }, { id: "2", qty: 1 }, { id: "3", qty: 3 }],
       version: 4,
+      cupon: null,
       avisos: [],
     });
 

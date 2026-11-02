@@ -15,7 +15,8 @@ import {
   type CapacidadesDespliegue,
   type SeccionMiCuenta,
 } from "@/lib/mi-cuenta-nav";
-import { ICONOS_SECCION } from "./iconos";
+import { ICONOS_SECCION, IconoLampara } from "./iconos";
+import { BotonEnlace } from "./BotonEnlace";
 
 /**
  * Marco de todas las páginas de Mi cuenta: breadcrumb (slot `@migas`), el
@@ -67,9 +68,16 @@ export function MiCuentaShell({
   return (
     <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
       {migas}
-      <h1 className="mt-4 font-display text-3xl font-medium tracking-tight text-text md:text-4xl">
-        Hola, {nombrePila ?? "cliente"}
-      </h1>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-3xl font-medium tracking-tight text-text md:text-4xl">
+          Hola, {nombrePila ?? "cliente"}
+        </h1>
+        {/* Salida a la tienda: el breadcrumb sólo lleva al inicio. */}
+        <BotonEnlace variant="primary" size="md" href="/catalogo">
+          <IconoLampara size={18} />
+          Ir a la tienda
+        </BotonEnlace>
+      </div>
       <p className="mt-1 text-sm text-muted">{bajadaMiCuenta(despliegue, esCuentaCorriente)}</p>
       <div className="mt-8 flex flex-col gap-6 md:flex-row">
         {/* Desde md la navegación queda a la vista al scrollear, debajo de la

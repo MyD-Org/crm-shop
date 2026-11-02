@@ -5,11 +5,11 @@ import { adminUsers, adminPasswordTokens, tenants } from "@/db/schema"
 import { generateToken } from "@/lib/admin-crypto"
 import { adminLinkBase } from "@/lib/admin-links"
 import { sendEmail } from "@/lib/email"
-import { safeLogoUrl } from "@/lib/email-layout"
 import { buildForgotPasswordEmail } from "@/lib/forgot-password-email"
 import { EMPTY_TENANT, tenantConfigFromRow } from "@/lib/tenants"
 import { ipDe, permitirAsync, respuestaLimite } from "@/lib/rate-limit"
 import { resolveRequestTenantId } from "@/lib/tenant-context"
+import { logoMailDeTenant } from "@/lib/email-logo"
 
 // Endpoint anónimo que dispara un mail: sin límite es un generador de spam contra los usuarios
 // del CRM. Por IP (429 visible) y por email (silencioso: la respuesta sigue siendo { ok: true }
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
   const { subject, html, text } = buildForgotPasswordEmail({
     tenantName: tenant.name,
-    logoUrl: safeLogoUrl(tenant.logoPath),
+    logoUrl: logoMailDeTenant(tenant),
     nombre: user.name,
     resetUrl,
   })

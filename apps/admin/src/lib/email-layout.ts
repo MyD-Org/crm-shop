@@ -1,5 +1,6 @@
 // Layout HTML común de los mails del CRM (pedidos, factura, OTP, cobranza, recuperar
-// contraseña, invitación al backoffice): tarjeta blanca con borde superior de color, montada
+// contraseña, invitación al backoffice): la misma tarjeta que los mails del Shop (franja azul,
+// logo, título, cuerpo, botón y pie "Este es un mensaje automático"), montada
 // con tablas y estilos inline. Es lo único que renderiza parejo en todos los clientes de mail
 // (Outlook de escritorio usa el motor de Word: ignora flex, grid y border-radius, pero
 // respeta las tablas y degrada sin romperse).
@@ -91,33 +92,51 @@ export interface EmailCardInput {
   footerExterno?: string
 }
 
+/**
+ * Colores y tipografía de los mails: los MISMOS que el layout del Shop (apps/clientes/src/lib/mail-layout.ts),
+ * para que un cliente reciba mails iguales los mande el CRM o la tienda. Si se cambia uno, cambiar el otro.
+ */
+const FUENTE = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif"
+const COLOR_MARCA = "#1e5aa8"
+const COLOR_TEXTO = "#1c2733"
+const COLOR_SUAVE = "#77808a"
+const COLOR_FONDO = "#f8f8f6"
+/** Alto del logo en el mail (el de Central es un PNG 2x de 387×72: 194×36). */
+const ALTO_LOGO = 36
+
 /** Tarjeta blanca con el encabezado del tenant, título, cuerpo, pie y botón opcional. */
 export function emailCardHtml(input: EmailCardInput): string {
   const e = escapeHtml
-  const boton = input.boton
-    ? `<p style="margin:24px 0 0"><a href="${e(input.boton.url)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px">${e(input.boton.texto)}</a></p>`
+  const titulo = input.titulo
+    ? `<p style="margin:0 0 8px;font-size:20px;line-height:1.3;font-weight:700">${e(input.titulo)}</p>`
     : ""
-  const titulo = input.titulo ? `<p style="margin:0 0 16px;font-size:18px;font-weight:700">${e(input.titulo)}</p>` : ""
-  const parrafos = (input.parrafos ?? []).map((p) => `\n        <p style="margin:0 0 12px">${e(p)}</p>`).join("")
-  const pie = input.pie ? `<p style="margin:0;color:#6b7280;font-size:14px">${e(input.pie)}</p>` : ""
+  const parrafos = (input.parrafos ?? []).map((p) => `\n        <p style="margin:0 0 8px">${e(p)}</p>`).join("")
+  const pie = input.pie ? `<p style="margin:12px 0 0;font-size:14px;color:${COLOR_SUAVE}">${e(input.pie)}</p>` : ""
+  const boton = input.boton
+    ? `<a href="${e(input.boton.url)}" style="display:inline-block;background:${COLOR_MARCA};color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px">${e(input.boton.texto)}</a>`
+    : ""
+  const encabezado = input.logoUrl
+    ? `<img src="${e(input.logoUrl)}" alt="${e(input.tenantName)}" height="${ALTO_LOGO}" style="display:block;border:0;outline:none;text-decoration:none;height:${ALTO_LOGO}px;width:auto;max-width:220px;font-family:${FUENTE};font-size:16px;font-weight:700;color:${COLOR_MARCA}" />`
+    : `<div style="font-family:${FUENTE};font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${COLOR_MARCA}">${e(input.tenantName)}</div>`
   const footerExterno = input.footerExterno
-    ? `\n    <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:12px;color:#9ca3af;padding:16px 0 0;text-align:center">${e(input.footerExterno)}</div>`
+    ? `\n    <div style="font-family:${FUENTE};font-size:12px;color:#9aa3ad;padding:16px 0 0;text-align:center">${e(input.footerExterno)}</div>`
     : ""
 
   return `${input.preheader ? preheaderHtml(input.preheader) : ""}
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef1f5;padding:32px 16px">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${COLOR_FONDO};padding:32px 16px">
   <tr><td align="center">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:440px;background:#ffffff;border-radius:12px;border-top:3px solid #1f8cff">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:440px;background:#ffffff;border-radius:12px;border-top:3px solid ${COLOR_MARCA}">
       <tr><td style="padding:28px 32px 0">
-        ${
-          input.logoUrl
-            ? `<img src="${e(input.logoUrl)}" alt="${e(input.tenantName)}" height="28" style="display:block;height:28px;max-width:200px;border:0" />`
-            : `<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280">${e(input.tenantName)}</div>`
-        }
+        ${encabezado}
       </td></tr>
-      <tr><td style="padding:20px 32px 28px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.55;color:#111827">
+      <tr><td style="padding:20px 32px 0;font-family:${FUENTE};font-size:15px;line-height:1.55;color:${COLOR_TEXTO}">
         ${titulo}${parrafos}${input.contenidoHtml ?? ""}
-        ${pie}${boton}
+        ${pie}
+      </td></tr>
+      <tr><td style="padding:24px 32px 28px;font-family:${FUENTE}">${boton}</td></tr>
+      <tr><td style="padding:20px 32px 28px;font-family:${FUENTE};font-size:12px;line-height:1.55;color:#9aa3ad;border-top:1px solid #eceae4">
+        <p style="margin:0">${e(input.tenantName)}</p>
+        <p style="margin:4px 0 0">Este es un mensaje automático.</p>
       </td></tr>
     </table>${footerExterno}
   </td></tr>
@@ -140,7 +159,7 @@ export function emailDocumentHtml(bodyHtml: string, titulo?: string): string {
 <meta name="color-scheme" content="light">
 <meta name="supported-color-schemes" content="light">${titulo ? `\n<title>${escapeHtml(titulo)}</title>` : ""}
 </head>
-<body style="margin:0;padding:0;background:#eef1f5">${bodyHtml}
+<body style="margin:0;padding:0;background:${COLOR_FONDO}">${bodyHtml}
 </body>
 </html>`
 }

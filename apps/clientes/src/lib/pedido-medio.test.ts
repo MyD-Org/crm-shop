@@ -273,6 +273,18 @@ describe("cotizarConMedio con cupón", () => {
     expect(r.ok && r.cotizacion.total).toBe(1000);
   });
 
+  it("pedido a confirmar (a_coordinar): el cupón se aplica sobre la lista a confirmar", async () => {
+    cotizar.mockImplementation(async (_l: unknown, o: { idListaMedio?: string }) => {
+      const pu = o.idListaMedio === "B" ? 900 : 1200;
+      return { lineas: [linea(pu)], subtotal: pu, iva: 0, costoEnvio: 0, total: pu, hayProblemas: false, listaPrivada: false, flujo: "a_confirmar" };
+    });
+    const r = await llamar(TRANSFERENCIA, { pagoMetodo: "a_coordinar", idListaAConfirmar: "B", cupon: cupon() });
+    expect(r.ok && r.idListaMedio).toBe("B");
+    expect(r.ok && r.cotizacion.total).toBe(810);
+    const soloTransfer = await llamar(TRANSFERENCIA, { pagoMetodo: "a_coordinar", idListaAConfirmar: "B", cupon: cupon({ medios: ["transferencia"] }) });
+    expect(soloTransfer.ok && soloTransfer.cotizacion.cuponError?.motivo).toBe("opcion_no_elegible");
+  });
+
   it("congelado: no recotiza el mínimo ni mira la vigencia", async () => {
     const r = await llamar(MP, { formaPedida: "debito", cupon: { ...cupon({ minimo: 1e9, fin: "2026-01-02T00:00:00-03:00" }), congelado: true } });
     expect(r.ok && r.cotizacion.total).toBe(810);

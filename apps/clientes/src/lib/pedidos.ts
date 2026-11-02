@@ -29,6 +29,7 @@ import type { Product } from "@/data/products";
 import { getProductosPorIds } from "./catalog";
 import { nombreDeLinea } from "./nombre-linea";
 import { variantesSelector } from "./variantes-flag";
+import { sanearTexto } from "./pagos/detalle-proveedor";
 import { vaciarCarritoTx } from "./carrito-db";
 import type { CartItem } from "./carrito-cliente";
 import { disponiblesEnTx, noVisiblesEnTx, ProductoNoDisponibleError, StockInsuficienteError } from "./stock-disponible";
@@ -1708,6 +1709,26 @@ export async function registrarIntentoFallido(
       updatedAt: new Date(),
     })
     .where(and(eq(orders.id, pedidoId), esDeEsteTenant()));
+}
+
+/**
+ * Guarda en el intento el diagnóstico del fallo del proveedor (migración 0041): texto saneado y HTTP.
+ * Independiente del estado: vale con el intento `pendiente` (5xx/timeout, la reserva sigue abierta) o ya
+ * `fallido`, y NO toca `estado` ni `detalle`, así sobrevive a `descartarReserva` ('reserva_abandonada').
+ * Es sólo diagnóstico: el que llama la encadena con `.catch` y nunca rompe la respuesta al comprador.
+ */
+export async function registrarErrorIntento(
+  intentoId: string,
+  e: { detalle: string | null; status: number | null },
+): Promise<void> {
+  await getDb()
+    .update(pagoIntentos)
+    .set({
+      errorProveedor: e.detalle ? sanearTexto(e.detalle) || null : null,
+      errorStatus: e.status,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(pagoIntentos.id, intentoId), intentoDeEsteTenant()));
 }
 
 /**

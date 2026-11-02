@@ -82,6 +82,66 @@ describe("leerCarrito", () => {
   });
 });
 
+/** `con_items_desde` en el SET: conserva el vigente o fija now(), y NULL al vaciar. */
+const DESDE_CONSERVA = /"con_items_desde" = coalesce\("shop"\."carts"\."con_items_desde", now\(\)\)/;
+const DESDE_NULL = /"con_items_desde" = null/;
+
+describe("con_items_desde", () => {
+  it("reemplazar con ítems: coalesce(con_items_desde, now()) en el mismo UPDATE (vacío -> ítem fija now; editar conserva)", async () => {
+    grabadora = dbGrabadora((c) => (tipo(c) === "update" ? [[5]] : []));
+    await reemplazarCarrito("u1", 4, [{ id: "1", qty: 2 }]);
+    expect(grabadora.consultas[0].sql).toMatch(DESDE_CONSERVA);
+  });
+
+  it("reemplazar con lista vacía (quitar el último ítem): NULL", async () => {
+    grabadora = dbGrabadora((c) => (tipo(c) === "update" ? [[5]] : []));
+    await reemplazarCarrito("u1", 4, []);
+    expect(grabadora.consultas[0].sql).toMatch(DESDE_NULL);
+    expect(grabadora.consultas[0].sql).not.toMatch(DESDE_CONSERVA);
+  });
+
+  it("primer guardado (INSERT): fija la fecha si hay ítems y NULL si no", async () => {
+    grabadora = dbGrabadora((c) => (tipo(c) === "insert" ? [[1]] : []));
+    await reemplazarCarrito("u1", 0, [{ id: "1", qty: 1 }]);
+    const con = valoresInsertados(grabadora.consultas[1]);
+    expect(con.con_items_desde).not.toBeNull();
+
+    grabadora = dbGrabadora((c) => (tipo(c) === "insert" ? [[1]] : []));
+    await reemplazarCarrito("u1", 0, []);
+    expect(valoresInsertados(grabadora.consultas[1]).con_items_desde).toBeNull();
+  });
+
+  it("merge: la fila previa vacía nace sin fecha y el UPDATE usa coalesce", async () => {
+    grabadora = dbGrabadora((c) => {
+      if (c.sql.includes("for update")) return [[[], 0]];
+      if (tipo(c) === "update") return [[1]];
+      return [];
+    });
+    await mergearCarrito("u1", [{ id: "1", qty: 1 }]);
+    const [ins, , upd] = grabadora.consultas;
+    expect(valoresInsertados(ins).con_items_desde).toBe("default");
+    expect(upd.sql).toMatch(DESDE_CONSERVA);
+  });
+
+  it("merge con invitado vacío sobre carrito vacío: NULL", async () => {
+    grabadora = dbGrabadora((c) => {
+      if (c.sql.includes("for update")) return [[[], 0]];
+      if (tipo(c) === "update") return [[1]];
+      return [];
+    });
+    await mergearCarrito("u1", []);
+    expect(grabadora.consultas[2].sql).toMatch(DESDE_NULL);
+  });
+
+  it("vaciar (crear un pedido): NULL", async () => {
+    await vaciarCarritoTx(grabadora.db as unknown as Parameters<typeof vaciarCarritoTx>[0], "u1");
+    const [u] = grabadora.consultas;
+    const m = u.sql.match(/"con_items_desde" = \$(\d+)/);
+    expect(m, u.sql).not.toBeNull();
+    expect(u.params[Number(m![1]) - 1]).toBeNull();
+  });
+});
+
 describe("reemplazarCarrito", () => {
   it("con la versión vigente: UPDATE con version en el WHERE y version + 1", async () => {
     grabadora = dbGrabadora((c) => (tipo(c) === "update" ? [[5]] : []));

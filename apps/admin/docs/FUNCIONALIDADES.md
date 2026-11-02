@@ -1309,7 +1309,7 @@ Spec `docs/superpowers/specs/2026-10-28-campanias-precios-design.md` (migración
 
 ## Cupones de descuento
 
-Spec `docs/superpowers/specs/2026-11-01-cupones-design.md` (migración `0097` del CRM y `0041` del Shop). Catálogo → solapa **Cupones**, mismo permiso que Campañas (`requireAdminPlus`). Pensado para la pauta de Instagram: descuento en la primera compra a cambio de seguir la cuenta, con un código único que emite un bot de DM.
+Spec `docs/superpowers/specs/2026-11-01-cupones-design.md` (migración `0097` del CRM y `0042` del Shop). Catálogo → solapa **Cupones**, mismo permiso que Campañas (`requireAdminPlus`). Pensado para la pauta de Instagram: descuento en la primera compra a cambio de seguir la cuenta, con un código único que emite un bot de DM.
 
 - **Promoción y código**: la promoción es la regla (`cupon_promociones`); el código es lo que tipea el comprador (`cupon_codigos`, `codigo_norm` = mayúsculas y sólo `[A-Z0-9]`, único por tenant: "luz 7kq2m" y "LUZ-7KQ2M" son el mismo). **Genérica**: un código elegido a mano para muchos (1 uso por cuenta). **Códigos únicos**: `<PREFIJO>-` + 5 caracteres sin ambiguos, de un solo uso, por lote (CSV, hasta 500) o por el bot; pueden vencer a los N días de emitidos.
 - **Beneficio**: % entero 1..50 y/o envío gratis (opcionalmente sólo en algunas provincias, claves de `claveProvincia`). El % se aplica sobre el unitario de la lista que rija la elección del comprador y no se suma a líneas con precio de campaña; el envío gratis es independiente.

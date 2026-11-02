@@ -6,7 +6,7 @@ import { paymentReceipts } from "@/db/schema"
 import { shopOrderEventos, shopOrderPayments, shopOrders, type ShopOrderPaymentRow } from "@/db/shop-schema"
 import { invalidateTenantRegistry } from "@/lib/tenants"
 import type { PedidoDetalleDto } from "@/lib/pedidos-repo"
-import { seedOperator, seedShopOrder, seedTenant, truncateAll } from "./helpers"
+import { seedOperator, seedShopOrder, seedShopPagoIntento, seedTenant, truncateAll } from "./helpers"
 import { FakeR2, seedReceipt } from "./fake-r2"
 
 // "Registrar pago" con monto, fecha, referencia y comprobante (change
@@ -220,6 +220,30 @@ describe("admin: registrar pago con monto, fecha, referencia y comprobante", () 
 
     const sinCuenta = await detalleRoute(req(`/api/admin/pedidos/${otro.id}`, "GET"), idParams(otro.id))
     expect(((await sinCuenta.json()) as PedidoDetalleDto).cuentaPago).toBeNull()
+  })
+
+  it("el detalle trae los intentos de cobro del pedido (el error 500 y el pago) y ninguno si es por transferencia", async () => {
+    const enLinea = await seedShopOrder(TENANT_A, { pagoMetodo: "mercadopago" })
+    await seedShopPagoIntento(enLinea.id, TENANT_A, {
+      estado: "fallido",
+      detalle: "reserva_abandonada",
+      errorProveedor: "internal_error",
+      errorStatus: 500,
+      createdAt: new Date(Date.now() - 20 * 60_000),
+    })
+    const ok = await seedShopPagoIntento(enLinea.id, TENANT_A, { estado: "pagado", referencia: "pay-1", createdAt: new Date(Date.now() - 5 * 60_000) })
+    // Intento de OTRO tenant con el mismo order_id lógico: no debe colarse.
+    await seedShopPagoIntento(enLinea.id, TENANT_B, { estado: "fallido", detalle: "ajeno" })
+
+    const res = await detalleRoute(req(`/api/admin/pedidos/${enLinea.id}`, "GET"), idParams(enLinea.id))
+    const body = (await res.json()) as PedidoDetalleDto
+    expect(body.intentos.map((i) => i.clase)).toEqual(["aprobado", "error_proveedor"])
+    expect(body.intentos[0].id).toBe(ok.id)
+    expect(body.intentos[1]).toMatchObject({ errorProveedor: "internal_error", errorStatus: 500 })
+
+    const transf = await seedShopOrder(TENANT_A, { pagoMetodo: "transferencia" })
+    const sin = await detalleRoute(req(`/api/admin/pedidos/${transf.id}`, "GET"), idParams(transf.id))
+    expect(((await sin.json()) as PedidoDetalleDto).intentos).toEqual([])
   })
 
   describe("GET /api/admin/pedidos/[id]/comprobantes/[receiptId]/file (un admin ve el comprobante de SU pedido)", () => {

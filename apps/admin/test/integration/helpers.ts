@@ -4,17 +4,21 @@ import { getDb } from "@/db"
 import { tenants, adminUsers, paymentReceipts } from "@/db/schema"
 import {
   shopClientLinks,
+  shopCarts,
   shopClientes,
   shopOrderEventos,
   shopOrderRemitos,
   shopOrders,
   shopOrderItems,
   shopCuponCanjes,
+  shopPagoIntentos,
+  type ShopCartRow,
   type ShopClienteRow,
   type ShopClientLinkRow,
   type ShopOrderEventoRow,
   type ShopOrderItemRow,
   type ShopOrderRow,
+  type ShopPagoIntentoRow,
 } from "@/db/shop-schema"
 import { assertLocalTestDb } from "./db-url"
 
@@ -37,7 +41,7 @@ function guard() {
 export async function truncateAll(): Promise<void> {
   guard()
   await getDb().execute(
-    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, correo_eventos,${shopOrderEventos}, ${shopOrderRemitos}, ${shopOrderItems}, ${shopOrders}, ${shopClientes}, ${shopClientLinks}, ${shopCuponCanjes} restart identity cascade`,
+    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, correo_eventos,${shopOrderEventos}, ${shopOrderRemitos}, ${shopOrderItems}, ${shopOrders}, ${shopClientes}, ${shopClientLinks}, ${shopCuponCanjes}, ${shopPagoIntentos}, ${shopCarts} restart identity cascade`,
   )
 }
 
@@ -213,6 +217,47 @@ export async function seedClientLink(
       estado: "activa",
       metodo: "email_verificado",
       ...overrides,
+    })
+    .returning()
+  return row
+}
+
+/**
+ * Intento de cobro en línea (`shop.pago_intentos`) sembrado directo. Datos inventados.
+ * Por defecto: Mercado Pago, cuenta `igz`, estado 'pendiente', creado ahora.
+ */
+export async function seedShopPagoIntento(
+  orderId: string,
+  tenantId: string,
+  overrides: Partial<typeof shopPagoIntentos.$inferInsert> = {},
+): Promise<ShopPagoIntentoRow> {
+  guard()
+  const [row] = await getDb()
+    .insert(shopPagoIntentos)
+    .values({ tenantId, orderId, proveedor: "mercadopago", cuenta: "igz", cuentaPrevista: "igz", ...overrides })
+    .returning()
+  return row
+}
+
+/**
+ * Carrito del Shop (`shop.carts`) sembrado directo. `conItemsDesde` y `updatedAt` se pueden fijar
+ * para probar el umbral de inactividad.
+ */
+export async function seedShopCart(
+  tenantId: string,
+  clerkUserId: string,
+  items: { id: string; qty: number }[],
+  opts: { conItemsDesde?: Date | null; updatedAt?: Date } = {},
+): Promise<ShopCartRow> {
+  guard()
+  const [row] = await getDb()
+    .insert(shopCarts)
+    .values({
+      tenantId,
+      clerkUserId,
+      items,
+      conItemsDesde: opts.conItemsDesde === undefined ? (items.length ? new Date() : null) : opts.conItemsDesde,
+      ...(opts.updatedAt ? { updatedAt: opts.updatedAt } : {}),
     })
     .returning()
   return row

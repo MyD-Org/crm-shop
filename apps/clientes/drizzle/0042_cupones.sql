@@ -7,7 +7,7 @@
 --   - order_items.precio_sin_cupon: unitario sin IVA antes del cupón en las líneas alcanzadas.
 --   - carts.cupon: código guardado en el carrito del servidor.
 --
--- Va después de la 0040 (campañas). Correr DESPUÉS de la 0097 del CRM (vista cupones_shop) y ANTES de
+-- Va después de la 0041 (diagnóstico de pagos y carritos). Correr DESPUÉS de la 0097 del CRM (vista cupones_shop) y ANTES de
 -- desplegar el código (db:migrate no corre en el deploy).
 --
 -- Reversa (a mano, en una migración nueva, append-only; nunca editar ésta):

@@ -447,7 +447,7 @@ export const orders = shop.table(
     /** Medio con el que se cobró (marca, tipo, últimos 4…), del intento que decide el estado. */
     pagoInfo: jsonb("pago_info").$type<PagoInfoOrden>(),
     /**
-     * Foto del cupón de descuento con el que se cotizó el pedido (migración 0041; NULL = sin cupón).
+     * Foto del cupón de descuento con el que se cotizó el pedido (migración 0042; NULL = sin cupón).
      * El descuento ya está dentro de `order_items.precio_unitario`; esto es para mostrar la línea
      * del cupón y recotizar. El canje vive en `shop.cupon_canjes`.
      */
@@ -776,7 +776,7 @@ export const orderItems = shop.table(
     campaniaReglaId: uuid("campania_regla_id"),
     /** Unitario NORMAL sin IVA (el que se tachó) cuando la línea va con campaña; NULL sin campaña. */
     precioNormal: numeric("precio_normal", { precision: 14, scale: 2 }),
-    /** Unitario sin IVA ANTES del cupón (migración 0041) en las líneas que alcanzó; NULL = sin cupón. */
+    /** Unitario sin IVA ANTES del cupón (migración 0042) en las líneas que alcanzó; NULL = sin cupón. */
     precioSinCupon: numeric("precio_sin_cupon", { precision: 14, scale: 2 }),
   },
   (t) => [index("order_items_order").on(t.orderId)],
@@ -868,6 +868,14 @@ export const pagoIntentos = shop.table(
      */
     cuenta: text("cuenta"),
     cuentaPrevista: text("cuenta_prevista"),
+    /**
+     * Diagnóstico del último fallo del proveedor en este intento (migración 0041): texto SANEADO por lista
+     * blanca (`lib/pagos/detalle-proveedor.ts`), <= 500 caracteres, sin PII ni credenciales; y el HTTP del
+     * proveedor (NULL = sin respuesta/otro). Es independiente de `estado` y `detalle`: sobrevive a
+     * `descartarReserva` ('reserva_abandonada'). NULL = sin error registrado (incluye todo intento anterior).
+     */
+    errorProveedor: text("error_proveedor"),
+    errorStatus: integer("error_status"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -886,6 +894,8 @@ export const pagoIntentos = shop.table(
       "pago_intentos_estado_check",
       sql`${t.estado} in ('pendiente','pagado','fallido')`,
     ),
+    // Red de seguridad del saneo (`sanearDetalleProveedor` ya trunca a 500).
+    check("pago_intentos_error_proveedor_largo_check", sql`char_length(${t.errorProveedor}) <= 500`),
   ],
 );
 
@@ -1031,8 +1041,14 @@ export const carts = shop.table(
     clerkUserId: text("clerk_user_id").notNull(),
     items: jsonb("items").$type<{ id: string; qty: number }[]>().notNull().default([]),
     version: integer("version").notNull().default(0),
-    /** Código de cupón guardado (migración 0041), tal como se ingresó; NULL = sin cupón. */
+    /** Código de cupón guardado (migración 0042), tal como se ingresó; NULL = sin cupón. */
     cupon: text("cupon"),
+    /**
+     * Desde cuándo el carrito tiene ítems (migración 0041): se fija al pasar de vacío a con ítems, se
+     * conserva al editar y vuelve a NULL al vaciarse. Lo mantiene `carrito-db.ts` en SQL. Lo lee el CRM
+     * (carritos abandonados). NULL con ítems = fila anterior a la migración sin backfill.
+     */
+    conItemsDesde: timestamp("con_items_desde", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -1042,7 +1058,7 @@ export const carts = shop.table(
 );
 
 /**
- * Canjes de cupones (migración 0041): una fila por pedido con cupón. SIN columna de estado: vivo,
+ * Canjes de cupones (migración 0042): una fila por pedido con cupón. SIN columna de estado: vivo,
  * usado o liberado se calcula desde el pedido con el mismo criterio que la reserva de stock
  * (`pedidoVivoSql` / `pedidoCompradoSql`, `src/lib/pedido-vivo.ts`). `codigo_id` y `promocion_id`
  * son ids de `public.cupon_codigos` / `public.cupon_promociones` (CRM 0097), sin FK: otro esquema.

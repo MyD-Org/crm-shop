@@ -3,7 +3,7 @@ import type { EntregaTipo } from "../envio";
 import type { OpcionCobro } from "../pagos/opciones-cobro";
 
 /**
- * Foto del cupón que congela el pedido (`orders.cupon`, migración 0041). Lleva lo necesario para
+ * Foto del cupón que congela el pedido (`orders.cupon`, migración 0042). Lleva lo necesario para
  * recotizar (cambio de medio y cuotas) sin volver a leer la promoción: el pedido conserva su
  * descuento aunque la promoción se pause o venza. `descuento` es con IVA (la línea del resumen).
  */

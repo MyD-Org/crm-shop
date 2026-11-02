@@ -1,6 +1,6 @@
 -- Cupones de descuento (spec apps/admin/docs/superpowers/specs/2026-11-01-cupones-design.md).
 --
--- Va después de la 0096 (2FA del admin, ya en staging). Su par del Shop es la 0041 (`shop.cupon_canjes`,
+-- Va después de la 0096 (2FA del admin, ya en staging). Su par del Shop es la 0042 (`shop.cupon_canjes`,
 -- `orders.cupon`, `order_items.precio_sin_cupon`, `carts.cupon`); correr ésta primero.
 --
 -- Una promoción es la regla (beneficio, condiciones, vigencia); un código es lo que tipea el
@@ -15,7 +15,7 @@
 --
 -- El Shop lee `cupones_shop` (SIN filtro de fecha: necesita ver los vencidos para decir "Este cupón
 -- venció"); nunca las tablas, ni `token_hash`, `creado_por` o `referencia_externa`. Los canjes son
--- del Shop (`shop.cupon_canjes`, 0041) y su estado se calcula desde el pedido.
+-- del Shop (`shop.cupon_canjes`, 0042) y su estado se calcula desde el pedido.
 --
 -- Reversa (en una migración nueva, SOLO después de sacar el código del Shop que lo usa):
 --   DROP VIEW cupones_shop; restaurar el CHECK de tipo de precios_online_cambios de 0095;

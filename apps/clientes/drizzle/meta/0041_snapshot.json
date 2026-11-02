@@ -1,5 +1,5 @@
 {
-  "id": "1c212f9b-5a12-46b1-b196-78640070ab58",
+  "id": "fe4496ba-2a61-4c1b-8bcb-236741c1039e",
   "prevId": "a9023ea3-7db9-473c-8a9f-c997823673c8",
   "version": "7",
   "dialect": "postgresql",
@@ -279,9 +279,9 @@
           "notNull": true,
           "default": 0
         },
-        "cupon": {
-          "name": "cupon",
-          "type": "text",
+        "con_items_desde": {
+          "name": "con_items_desde",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -619,141 +619,6 @@
           "value": "\"shop\".\"clientes\".\"eliminado_en\" IS NULL OR (\"shop\".\"clientes\".\"email\" IS NULL AND \"shop\".\"clientes\".\"email_norm\" IS NULL AND \"shop\".\"clientes\".\"nombre\" IS NULL)"
         }
       },
-      "isRLSEnabled": false
-    },
-    "shop.cupon_canjes": {
-      "name": "cupon_canjes",
-      "schema": "shop",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "codigo_id": {
-          "name": "codigo_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "promocion_id": {
-          "name": "promocion_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "order_id": {
-          "name": "order_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "clerk_user_id": {
-          "name": "clerk_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "descuento_total": {
-          "name": "descuento_total",
-          "type": "numeric(14, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "cupon_canjes_tenant_codigo": {
-          "name": "cupon_canjes_tenant_codigo",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "codigo_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "cupon_canjes_tenant_promocion": {
-          "name": "cupon_canjes_tenant_promocion",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "promocion_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "cupon_canjes_order_id_orders_id_fk": {
-          "name": "cupon_canjes_order_id_orders_id_fk",
-          "tableFrom": "cupon_canjes",
-          "tableTo": "orders",
-          "schemaTo": "shop",
-          "columnsFrom": [
-            "order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "cupon_canjes_order_id_unique": {
-          "name": "cupon_canjes_order_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "order_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "shop.direcciones_envio": {
@@ -1357,12 +1222,6 @@
         },
         "precio_normal": {
           "name": "precio_normal",
-          "type": "numeric(14, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "precio_sin_cupon": {
-          "name": "precio_sin_cupon",
           "type": "numeric(14, 2)",
           "primaryKey": false,
           "notNull": false
@@ -1993,12 +1852,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "cupon": {
-          "name": "cupon",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "pago_revision": {
           "name": "pago_revision",
           "type": "text",
@@ -2390,6 +2243,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "error_proveedor": {
+          "name": "error_proveedor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_status": {
+          "name": "error_status",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2488,6 +2353,10 @@
         "pago_intentos_estado_check": {
           "name": "pago_intentos_estado_check",
           "value": "\"shop\".\"pago_intentos\".\"estado\" in ('pendiente','pagado','fallido')"
+        },
+        "pago_intentos_error_proveedor_largo_check": {
+          "name": "pago_intentos_error_proveedor_largo_check",
+          "value": "char_length(\"shop\".\"pago_intentos\".\"error_proveedor\") <= 500"
         }
       },
       "isRLSEnabled": false

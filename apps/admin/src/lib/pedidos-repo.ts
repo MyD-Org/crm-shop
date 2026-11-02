@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, getTableColumns, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
+import { intentosDelPedido, type IntentoPedidoDto } from "@/lib/pagos-intentos-repo"
 import { getDb, type Db } from "@/db"
 import { alegraContacts, alegraCuentas, campanias, catalogProducts, mediosPagoShop, paymentReceipts, sucursales } from "@/db/schema"
 import {
@@ -435,6 +436,8 @@ export interface DetalleExtras {
   /** Comprobantes que subió el comprador para este pedido (`payment_receipts.shop_order_id`),
    *  sólo los visibles (`pending`/`loaded`), del más nuevo al más viejo. */
   comprobantes: ComprobantePedidoDto[]
+  /** Intentos de cobro en línea del pedido (`shop.pago_intentos`), del más nuevo al más viejo. */
+  intentos: IntentoPedidoDto[]
 }
 
 export interface PagoRegistradoDto {
@@ -543,7 +546,7 @@ async function remitoDe(tenantId: string, orderId: string): Promise<RemitoRow | 
 /** Lo que el detalle suma a la fila, aparte de sus propias columnas: ítems, lista de precios (si
  *  aplica), historial y remito. Se piden en paralelo DESPUÉS de confirmar que el pedido es de ese tenant. */
 async function detalleExtras(tenantId: string, pedido: PedidoRow): Promise<DetalleExtras> {
-  const [items, listaPrecios, historial, remito, manuales, pagos, comprobantes] = await Promise.all([
+  const [items, listaPrecios, historial, remito, manuales, pagos, comprobantes, intentos] = await Promise.all([
     itemsDe(tenantId, pedido.id),
     listaParaRevision(tenantId, pedido),
     historialDe(tenantId, pedido.id, pedido.createdAt),
@@ -551,8 +554,9 @@ async function detalleExtras(tenantId: string, pedido: PedidoRow): Promise<Detal
     slugsMediosManuales(tenantId),
     pagosDe(tenantId, pedido.id),
     comprobantesDe(tenantId, pedido.id),
+    intentosDelPedido(tenantId, pedido.id),
   ])
-  return { items, listaPrecios, historial, remito, pagoManual: esPagoManual(pedido, manuales), pagos, comprobantes }
+  return { items, listaPrecios, historial, remito, pagoManual: esPagoManual(pedido, manuales), pagos, comprobantes, intentos }
 }
 
 /**
@@ -1517,7 +1521,7 @@ export interface PedidoItemDto {
    *  nombre de la campaña. null = sin campaña. */
   precioNormal: number | null
   campaniaNombre: string | null
-  /** Unitario sin IVA antes del cupón (0041 del Shop) en las líneas que alcanzó; null = sin cupón. */
+  /** Unitario sin IVA antes del cupón (0042 del Shop) en las líneas que alcanzó; null = sin cupón. */
   precioSinCupon: number | null
   /** Costo unitario cargado en Alegra (`inventory.unitCost`). SÓLO viaja para admin y
    *  superadmin (`incluirCosto` en `toPedidoDetalleDto`): para operator la clave no existe en
@@ -1630,6 +1634,8 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   pagos: PagoRegistradoDto[]
   /** Comprobantes subidos por el comprador para este pedido. */
   comprobantes: ComprobantePedidoDto[]
+  /** Intentos de cobro en línea del pedido, del más nuevo al más viejo (sólo lo ve admin+). */
+  intentos: IntentoPedidoDto[]
   items: PedidoItemDto[]
   /** Del más nuevo al más viejo; el evento 'creado' (derivado, nunca guardado) siempre es el último. */
   historial: EventoHistorialDto[]
@@ -1698,6 +1704,8 @@ export interface DetalleDtoOpciones {
   pagos?: PagoRegistradoDto[]
   /** `DetalleExtras.comprobantes`. Sin él, ninguno. */
   comprobantes?: ComprobantePedidoDto[]
+  /** `DetalleExtras.intentos`. Sin él, ninguno. */
+  intentos?: IntentoPedidoDto[]
 }
 
 export function toPedidoDetalleDto(
@@ -1706,7 +1714,7 @@ export function toPedidoDetalleDto(
   listaPrecios: RevisionContacto | null = null,
   historial: EventoHistorialDto[] = [],
   remito: RemitoRow | null = null,
-  { incluirCosto = false, pagoManual, pagos = [], comprobantes = [] }: DetalleDtoOpciones = {},
+  { incluirCosto = false, pagoManual, pagos = [], comprobantes = [], intentos = [] }: DetalleDtoOpciones = {},
 ): PedidoDetalleDto {
   return {
     ...toPedidoDto(row),
@@ -1761,6 +1769,7 @@ export function toPedidoDetalleDto(
     cuentaPago: toCuentaPagoDto(row.pagoCuenta),
     pagos,
     comprobantes,
+    intentos,
     items: items.map((i) => toItemDto(i, incluirCosto)),
     historial,
   }

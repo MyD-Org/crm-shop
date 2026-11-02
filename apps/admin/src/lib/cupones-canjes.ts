@@ -3,7 +3,7 @@ import { getDb } from "@/db"
 import { formatearNumeroPedido } from "./pedidos-repo"
 import type { Tx } from "./precios-online-repo"
 
-// Canjes de una promoción: viven en el Shop (`shop.cupon_canjes`, migración 0041 del Shop) y su
+// Canjes de una promoción: viven en el Shop (`shop.cupon_canjes`, migración 0042 del Shop) y su
 // estado se CALCULA desde el pedido, con los mismos predicados que el Shop
 // (apps/clientes/src/lib/pedido-vivo.ts): si cambian allá, cambian acá.
 //   - canjeado: el pedido está pagado o avanzó de estado;

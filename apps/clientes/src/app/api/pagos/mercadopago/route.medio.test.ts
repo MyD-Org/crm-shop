@@ -31,6 +31,7 @@ vi.mock("@/lib/pedidos", async (original) => ({
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),
   registrarCobro: (...a: unknown[]) => registrarCobro(...a),
   registrarIntentoFallido: (...a: unknown[]) => registrarIntentoFallido(...a),
+  registrarErrorIntento: async () => undefined,
 }));
 vi.mock("@/lib/pagos/intento-abierto", () => ({
   resolverIntentoAbierto: async () => "en_curso",

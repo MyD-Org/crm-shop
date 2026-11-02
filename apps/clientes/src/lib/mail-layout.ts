@@ -26,9 +26,12 @@ export const FUENTE_MAIL = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif
 /** Franja y acentos por defecto: azul de la tienda (tema "calido-azul" del DS). */
 export const COLOR_FRANJA_DEFAULT = "#1e5aa8";
 
-/** Ancho de la tarjeta: el `width`/`height` del logo van a este tamaño (2x = 360×46 en el PNG). */
-const ANCHO_LOGO = 180;
-const ALTO_LOGO = 23;
+/**
+ * Tamaño del logo en el mail (el PNG es 2x: 387×72, logo de la tienda sobre placa blanca redondeada para
+ * el modo oscuro). Se genera con `node scripts/logo-mail.mjs` desde src/assets/central-led-logo.svg.
+ */
+const ANCHO_LOGO = 194;
+const ALTO_LOGO = 36;
 
 /**
  * URL absoluta a la raíz del sitio (`NEXT_PUBLIC_SITE_URL`), sin barra final,

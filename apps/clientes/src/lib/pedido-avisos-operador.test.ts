@@ -115,7 +115,7 @@ describe("aviso al local con pago en línea", () => {
     await avisarCobro("p1", { antes: "pendiente", despues: "pagado", reversion: false, referencia: "r1" });
     expect(enviarEmail).toHaveBeenCalledTimes(2);
     expect(enviarEmail.mock.calls[0][0].to).toBe("ana@cliente.example");
-    expect(enviarEmail.mock.calls[0][0].subject).toContain("y pago recibidos");
+    expect(enviarEmail.mock.calls[0][0].subject).toContain("con pago aprobado");
     expect(enviarEmail.mock.calls[0][0].text).toContain("Lámpara");
     expect(enviarEmail.mock.calls[0][0].idempotencyKey).toBe("pedido/p1/pago_recibido");
     expect(enviarEmail.mock.calls[1][0].to).toBe("centro@tienda.cliente.example");

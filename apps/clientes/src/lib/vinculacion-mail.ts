@@ -33,7 +33,7 @@ function agrupar(codigo: string): string {
   return /^\d{6}$/.test(codigo) ? `${codigo.slice(0, 3)} ${codigo.slice(3)}` : codigo;
 }
 
-/** Ruta del logo para mails de Central: PNG (Gmail y Outlook no muestran SVG), a 2x de 180×23. */
+/** Ruta del logo para mails de Central: PNG (Gmail y Outlook no muestran SVG), a 2x de 194×36. */
 export const RUTA_LOGO_MAIL = "/images/central-led/logo-mail.png";
 
 /**

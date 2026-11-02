@@ -59,8 +59,8 @@ describe("armarMailPedido", () => {
       entrega: "Retiro en local",
       pago: "Mercado Pago",
     });
-    expect(ok.subject).toBe("Tienda <Demo> — Pedido PED-00000042 y pago recibidos");
-    expect(ok.text).toContain("Recibimos su pedido y su pago");
+    expect(ok.subject).toBe("Tienda <Demo> — Pedido PED-00000042 con pago aprobado");
+    expect(ok.text).toContain("¡Gracias por su compra!");
     expect(ok.text).toContain("- X × 1");
     expect(ok.text).toContain("Pago: Mercado Pago");
     expect(ok.html).toContain("Ver mis pedidos");

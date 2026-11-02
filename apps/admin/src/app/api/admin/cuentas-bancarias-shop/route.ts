@@ -1,5 +1,6 @@
 import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { crearCuenta, listarCuentas } from "@/lib/cuentas-bancarias-shop-repo"
+import { programarAvisoCuentaBancaria } from "@/lib/cuentas-bancarias-shop-aviso"
 import { errorDeCuenta } from "@/lib/cuentas-bancarias-shop-respuestas"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 import { NO_STORE } from "@/lib/sucursales-respuestas"
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
   const r = await crearCuenta(guard.tenantId, body)
   if (r.kind !== "ok") return errorDeCuenta(r)
 
+  programarAvisoCuentaBancaria({ tenantId: guard.tenantId, tipo: "alta", actor: guard.user, despues: r.cuenta })
   const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado, cuenta: r.cuenta }, { status: 201, headers: NO_STORE })
 }

@@ -32,6 +32,16 @@ export interface LineaMail {
   aPedido?: string;
 }
 
+/** La línea del cupón en los mails: texto armado (`textoLineaCupon`) y descuento con IVA. */
+export interface CuponMail {
+  texto: string;
+  descuento: number;
+}
+
+/** [rótulo, valor] de la línea del cupón; nada sin cupón o sin descuento. */
+const filaCupon = (c: CuponMail | null | undefined): [string, string][] =>
+  c && c.descuento > 0 ? [[c.texto, `−${moneda(c.descuento)}`]] : [];
+
 export interface DatosMailPedido {
   aviso: AvisoPedidoShop;
   /** "PED-00000042". */
@@ -50,6 +60,8 @@ export interface DatosMailPedido {
   /** "recibido" y "pago_recibido": resumen del pedido. */
   lineas?: LineaMail[];
   total?: number;
+  /** Cupón del pedido: la misma línea que el checkout ("Cupón LUZ-7KQ2M (10 %)", −$X), antes del total. */
+  cupon?: CuponMail | null;
   entrega?: string;
   pago?: string;
   /**
@@ -205,6 +217,7 @@ function lineaTexto(l: LineaMail): string {
 function resumen(d: DatosMailPedido): string {
   const filas = (d.lineas ?? []).map(filaLineaHtml).join("");
   const datos: [string, string | undefined][] = [
+    ...filaCupon(d.cupon),
     ["Total", d.total !== undefined ? moneda(d.total) : undefined],
     ["Entrega", d.entrega],
     ["Pago", textoPago(d)],
@@ -279,6 +292,7 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
     ? [
         "",
         ...(d.lineas ?? []).map(lineaTexto),
+        ...filaCupon(d.cupon).map(([k, v]) => `${k}: ${v}`),
         ...(d.total !== undefined ? [`Total: ${moneda(d.total)}`] : []),
         ...(d.entrega ? [`Entrega: ${d.entrega}`] : []),
         ...(d.pago ? [`Pago: ${textoPago(d)}`] : []),
@@ -331,6 +345,7 @@ export interface DatosMailPedidoOperador {
   clienteEmail?: string | null;
   lineas: LineaMail[];
   total: number;
+  cupon?: CuponMail | null;
   entrega?: string;
   /** Lo que cobró el procesador (ver `DatosMailPedido.pagado`). */
   pagado?: { total: number; cuotas: number };
@@ -362,6 +377,7 @@ export function armarMailPedidoOperador(d: DatosMailPedidoOperador): MailPedido 
   ];
   const pedido: [string, string | undefined][] = [
     ["Sucursal", d.sucursal?.trim() || undefined],
+    ...filaCupon(d.cupon),
     ["Total", moneda(d.total)],
     ["Entrega", d.entrega],
     ["Pago", textoPago(d)],

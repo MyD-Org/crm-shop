@@ -331,3 +331,23 @@ describe("venta sin stock: pedido a confirmar y texto por línea", () => {
     expect(m.html).toContain("A pedido");
   });
 });
+
+describe("cupón en los mails", () => {
+  const cupon = { texto: "Cupón LUZ-7KQ2M (10 %)", descuento: 2420 };
+  it("recibido y pago recibido: la línea del cupón antes del total, en HTML y en texto", () => {
+    const m = armarMailPedido({ ...base, aviso: "recibido", lineas: [{ nombre: "Lámpara", cantidad: 2 }], total: 21780, cupon });
+    expect(m.html).toContain("Cupón LUZ-7KQ2M (10 %)");
+    expect(m.html).toContain("−");
+    expect(m.text).toMatch(/Cupón LUZ-7KQ2M \(10 %\): −\$\s?2\.420/);
+    expect(m.text.indexOf("Cupón LUZ-7KQ2M")).toBeLessThan(m.text.indexOf("Total:"));
+  });
+  it("sin cupón el resumen queda igual que antes", () => {
+    const d = { ...base, aviso: "recibido" as const, lineas: [{ nombre: "Lámpara", cantidad: 2 }], total: 12100 };
+    expect(armarMailPedido({ ...d, cupon: null })).toEqual(armarMailPedido(d));
+  });
+  it("al local: la línea del cupón", () => {
+    const m = armarMailPedidoOperador({ numero: "PED-1", comercio: "Tienda", contactoNombre: "Ana", contactoTelefono: "1", lineas: [{ nombre: "x", cantidad: 1 }], total: 900, cupon });
+    expect(m.html).toContain("Cupón LUZ-7KQ2M (10 %)");
+    expect(m.text).toContain("Cupón LUZ-7KQ2M (10 %)");
+  });
+});

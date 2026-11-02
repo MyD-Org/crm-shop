@@ -74,3 +74,21 @@ describe("aPosthog", () => {
     expect(aPosthog(verProducto).props).toMatchObject({ producto_id: "p1" });
   });
 });
+
+describe("cupón en el tracking", () => {
+  const conCupon: EventoTracking = { ...pedido, cupon: "Bot Instagram" } as EventoTracking;
+  it("GA4 y Meta llevan el nombre de la promoción en `coupon`", () => {
+    expect(aGa4(conCupon).params.coupon).toBe("Bot Instagram");
+    expect(aMeta(conCupon).params.coupon).toBe("Bot Instagram");
+    expect(aGa4({ tipo: "iniciar_checkout", items: [lampara], cupon: "Bot Instagram" } as EventoTracking).params.coupon).toBe("Bot Instagram");
+  });
+  it("sin cupón no agrega la clave", () => {
+    expect("coupon" in aGa4(pedido).params).toBe(false);
+    expect("coupon" in aMeta(pedido).params).toBe(false);
+  });
+  it("nunca un valor con forma de código único", () => {
+    for (const v of Object.values(aMeta(conCupon).params)) {
+      if (typeof v === "string") expect(v).not.toMatch(/^[A-Z]{2,8}-[A-Z0-9]{5}$/);
+    }
+  });
+});

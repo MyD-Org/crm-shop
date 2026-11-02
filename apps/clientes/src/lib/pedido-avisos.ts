@@ -7,6 +7,7 @@
  *
  * No importa `pedidos.ts` (que es quien llama a `avisarCobro`): lee el pedido por su cuenta.
  */
+import { cuponParaResumen } from "./cupones/ui";
 import { and, asc, eq, isNull, lt, ne, notInArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmSucursales, crmTenants } from "@/db/crm";
@@ -124,6 +125,7 @@ async function enviarAviso(
       sitioUrl: urlSitioMail(),
       lineas: lineas.map(lineaParaMail),
       total: Number(pedido.total),
+      cupon: cuponParaResumen(pedido.cupon),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, medios),
       // Venta sin stock: pedido a confirmar por modalidad (sale con "a_coordinar"; no se cobró nada).
@@ -333,6 +335,7 @@ export async function avisarOperadorPedidoNuevo(
       clienteEmail: pedido.clienteEmail,
       lineas: lineas.map(lineaParaMail),
       total: Number(pedido.total),
+      cupon: cuponParaResumen(pedido.cupon),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, null),
       ...(pedido.pagoCuotas && pedido.pagoTotalPagado

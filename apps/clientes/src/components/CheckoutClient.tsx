@@ -1187,6 +1187,8 @@ export function CheckoutClient({
         numero: json.numero,
         total,
         items: items.map((i) => itemDe(i, i.qty)),
+        // El nombre de la promoción, nunca el código (un código único es casi un dato personal).
+        ...(json.cotizacion?.cupon?.nombre ? { cupon: String(json.cotizacion.cupon.nombre) } : {}),
       });
       if (!esPagoEnLinea(pagoParaEnviar)) vaciarTrasPedido();
     } catch {

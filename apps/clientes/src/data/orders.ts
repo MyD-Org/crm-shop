@@ -54,6 +54,15 @@ export interface OrderItem {
   aPedido?: string;
 }
 
+export interface CuponOrder {
+  texto: string;
+  /** Con IVA. */
+  descuento: number;
+  envioGratis: boolean;
+  subtotalAntes: number;
+  ivaAntes: number;
+}
+
 export interface Order {
   id: string;
   /** Número visible, ya formateado (PED-00001042). */
@@ -85,6 +94,11 @@ export interface Order {
   costoEnvio: number;
   total: number;
   items: OrderItem[];
+  /**
+   * Cupón del pedido: la línea del resumen y los montos de ANTES del cupón (las líneas se muestran
+   * con su precio sin cupón; subtotal + impuestos − cupón = total). null = sin cupón.
+   */
+  cupon: CuponOrder | null;
   /**
    * Id en Alegra de la factura que un operador del CRM vinculó al pedido
    * (`orders.factura_alegra_id`, migración 0013). undefined = sin factura

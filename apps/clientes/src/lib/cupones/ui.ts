@@ -43,3 +43,11 @@ export function montosAntesDelCupon(c: {
 export function textoCuponNoAplicaEnCambio(opcion: string, totalActual: number, totalNuevo: number): string {
   return `Con ${opcion} el cupón no aplica: el total pasa de ${fmtPrecio(totalActual)} a ${fmtPrecio(totalNuevo)}.`;
 }
+
+/** La línea del cupón de un pedido ya creado (Mi cuenta, mails), desde su foto congelada. */
+export function cuponParaResumen(
+  c: { codigo: string; pct: number | null; descuento: number; envioGratis: boolean } | null | undefined,
+): { texto: string; descuento: number; envioGratis: boolean } | null {
+  if (!c) return null;
+  return { texto: textoLineaCupon({ codigo: c.codigo, pct: c.pct, pctAplicado: c.descuento > 0 }), descuento: c.descuento, envioGratis: c.envioGratis };
+}

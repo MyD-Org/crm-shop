@@ -16,5 +16,7 @@ describe("CheckoutClient con cupón", () => {
     expect(fuente).toContain("pedidoId:");
     expect(fuente).toContain("<CampoCupon");
     expect(fuente).toContain("<LineaCupon");
+    // Tracking: el nombre de la promoción, nunca el código.
+    expect(fuente).toContain("cupon: String(json.cotizacion.cupon.nombre)");
   });
 });

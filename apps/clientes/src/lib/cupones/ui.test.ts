@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CuponAplicado } from "./tipos";
 import { fmtPrecio } from "../format";
-import { avisoCuponGuardado, avisoVencimiento, montosAntesDelCupon, textoCuponNoAplicaEnCambio, textoLineaCupon } from "./ui";
+import { avisoCuponGuardado, avisoVencimiento, cuponParaResumen, montosAntesDelCupon, textoCuponNoAplicaEnCambio, textoLineaCupon } from "./ui";
 
 const cupon = (o: Partial<CuponAplicado> = {}): CuponAplicado => ({
   codigo: "LUZ-7KQ2M", codigoId: "c1", promocionId: "p1", nombre: "Bot", pct: 10, pctAplicado: true, envioGratis: false,
@@ -42,5 +42,17 @@ describe("textoCuponNoAplicaEnCambio", () => {
     expect(textoCuponNoAplicaEnCambio("tarjeta de crédito", 900, 1000)).toBe(
       `Con tarjeta de crédito el cupón no aplica: el total pasa de ${fmtPrecio(900)} a ${fmtPrecio(1000)}.`,
     );
+  });
+});
+
+describe("cuponParaResumen", () => {
+  const foto = {
+    codigoId: "c1", codigo: "LUZ-7KQ2M", promocionId: "p1", nombre: "Bot", pct: 10, envioGratis: false, provinciasEnvio: null,
+    medios: null, formas: null, permiteCuotas: false, condiciones: "", descuento: 2420,
+  };
+  it("la línea del cupón de un pedido (Mi cuenta, mails)", () => {
+    expect(cuponParaResumen(foto)).toEqual({ texto: "Cupón LUZ-7KQ2M (10 %)", descuento: 2420, envioGratis: false });
+    expect(cuponParaResumen({ ...foto, descuento: 0, envioGratis: true })).toEqual({ texto: "Cupón LUZ-7KQ2M", descuento: 0, envioGratis: true });
+    expect(cuponParaResumen(null)).toBeNull();
   });
 });

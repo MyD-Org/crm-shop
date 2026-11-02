@@ -8,6 +8,7 @@
 
 import { liberarCanjeEnTx, reservarCanjeEnTx, type QuienCupon } from "./cupones/repo";
 import { cuponPedidoDesde } from "./cupones/reglas";
+import { cuponParaResumen } from "./cupones/ui";
 import type { CuponPedido, PromocionCupon } from "./cupones/tipos";
 import { validarUnidadesEnTx } from "./campanias/unidades";
 import { cache } from "react";
@@ -17,6 +18,7 @@ import { cuponCanjes, orderItems, orders, pagoIntentos } from "@/db/schema";
 import {
   ESTADOS_EN_CURSO,
   type EntregaTipoPedido,
+  type CuponOrder,
   type Order,
   type OrderEstado,
   type OrderItem,
@@ -669,19 +671,22 @@ export function armarOrder(
     )
       ? { aConfirmar: true }
       : {}),
+    cupon: cuponDeOrder(fila, items),
     items: items.map((i): OrderItem => {
       const producto = productos.get(i.alegraItemId);
       const imagen = producto?.images?.[0];
       // Del snapshot: un pedido sigue mostrando el texto aunque la modalidad se haya borrado.
       const aPedido = leerSnapshot(i.ventaSinStock)?.texto;
+      // Con cupón la línea se muestra sin él: el descuento va en una sola línea del resumen.
+      const antes = montosSinCupon(i);
       return {
         id: i.alegraItemId,
         name: i.name,
         brand: i.brand ?? "",
         code: i.code,
         qty: num(i.qty),
-        price: num(i.precioUnitario),
-        total: num(i.total),
+        price: antes ? antes.unitario : num(i.precioUnitario),
+        total: antes ? antes.total : num(i.total),
         nombreVisible: (producto && nombreDeLinea(producto)) || i.name,
         codigo: i.code || producto?.sku || i.name,
         ...(imagen ? { imagen } : {}),
@@ -689,6 +694,25 @@ export function armarOrder(
       };
     }),
   };
+}
+
+const redondear2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Montos de una línea ANTES del cupón (sólo las que alcanzó); null = la línea no tiene cupón. */
+function montosSinCupon(i: FilaItem): { unitario: number; subtotal: number; total: number } | null {
+  if (i.precioSinCupon == null) return null;
+  const unitario = num(i.precioSinCupon);
+  const subtotal = redondear2(unitario * num(i.qty));
+  return { unitario, subtotal, total: redondear2(subtotal + redondear2(subtotal * (num(i.ivaPorcentaje) / 100))) };
+}
+
+/** La línea del cupón del pedido y el subtotal / impuestos de antes del cupón (Mi cuenta). */
+function cuponDeOrder(fila: FilaOrder, items: FilaItem[]): CuponOrder | null {
+  const linea = cuponParaResumen(fila.cupon);
+  if (!linea) return null;
+  const subtotalAntes = redondear2(items.reduce((a, i) => a + (montosSinCupon(i)?.subtotal ?? num(i.subtotal)), 0));
+  const ivaAntes = redondear2(num(fila.total) + linea.descuento - subtotalAntes - num(fila.costoEnvio));
+  return { ...linea, subtotalAntes, ivaAntes };
 }
 
 /**

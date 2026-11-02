@@ -1,5 +1,6 @@
 "use client";
 
+import { BarraFija } from "@/components/checkout/BarraFija";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, Field, Input, Select, Stepper } from "@myd-org/ui";
 import { DireccionAutocomplete } from "./DireccionAutocomplete";
@@ -149,6 +150,8 @@ export function FacturacionForm({
   antesDeGuardar,
   textoGuardar,
   ocupado = false,
+  barraFija = false,
+  totalBarraFija,
 }: {
   perfil: PerfilFacturacionUI | null;
   /** Precarga "Nombre y apellido" cuando todavía no hay perfil guardado. */
@@ -183,6 +186,9 @@ export function FacturacionForm({
   textoGuardar?: string;
   /** Quien lo usa está ocupado con lo que sigue al guardado (el pedido se está enviando). */
   ocupado?: boolean;
+  /** Por pasos (checkout): en el celular el botón que sigue va en una barra fija abajo, con el total. */
+  barraFija?: boolean;
+  totalBarraFija?: number;
 }) {
   const [form, setForm] = useState<DatosFacturacion>(desdePerfil(perfil, nombreSugerido));
   /**
@@ -210,6 +216,13 @@ export function FacturacionForm({
   const [exito, setExito] = useState(false);
   const [errorGeneral, setErrorGeneral] = useState("");
   const [paso, setPasoInterno] = useState(pasoInicial);
+  // Quien lo usa puede mover el paso desde afuera (el "← Volver" de arriba del checkout).
+  const [pasoInicialPrevio, setPasoInicialPrevio] = useState(pasoInicial);
+  if (pasoInicial !== pasoInicialPrevio) {
+    setPasoInicialPrevio(pasoInicial);
+    setPasoInterno(pasoInicial);
+    setErrores({});
+  }
   useEffect(() => {
     onCambio?.(form);
   }, [form, onCambio]);
@@ -653,17 +666,31 @@ export function FacturacionForm({
                 setPaso(paso - 1);
               }}
               disabled={guardando}
+              // Con barra fija, en el celular "Volver" va arriba del paso (lo pone el checkout).
+              className={barraFija ? "hidden lg:inline-flex" : undefined}
             >
               Volver
             </Button>
           )}
-          {paso < ultimo ? (
-            <Button className="ml-auto" onClick={siguiente}>Continuar</Button>
-          ) : (
-            <Button className="ml-auto" onClick={guardar} disabled={guardando || ocupado}>
-              {guardando ? "Guardando…" : (textoGuardar ?? (onPaso ? "Guardar y continuar" : "Guardar datos de facturación"))}
-            </Button>
-          )}
+          {(() => {
+            const boton =
+              paso < ultimo ? (
+                <Button size={barraFija ? "lg" : undefined} className={barraFija ? "w-full lg:w-auto" : "ml-auto"} onClick={siguiente}>
+                  Continuar
+                </Button>
+              ) : (
+                <Button size={barraFija ? "lg" : undefined} className={barraFija ? "w-full lg:w-auto" : "ml-auto"} onClick={guardar} disabled={guardando || ocupado}>
+                  {guardando ? "Guardando…" : (textoGuardar ?? (onPaso ? "Continuar" : "Guardar datos de facturación"))}
+                </Button>
+              );
+            return barraFija ? (
+              <div className="lg:ml-auto">
+                <BarraFija total={totalBarraFija}>{boton}</BarraFija>
+              </div>
+            ) : (
+              boton
+            );
+          })()}
         </div>
       ) : (
       <div>

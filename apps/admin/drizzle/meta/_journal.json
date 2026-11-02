@@ -659,6 +659,13 @@
       "when": 1793500000000,
       "tag": "0096_admin_2fa",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1793500010000,
+      "tag": "0097_cupones",
+      "breakpoints": true
     }
   ]
 }

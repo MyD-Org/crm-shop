@@ -58,3 +58,27 @@ describe("armarOrder: variantes", () => {
     expect(o.items[0].imagen).toEqual({ url: "https://m.example/rojo.jpg" });
   });
 });
+
+describe("armarOrder: cupón", () => {
+  const foto = {
+    codigoId: "c1", codigo: "LUZ-7KQ2M", promocionId: "p1", nombre: "Bot", pct: 10, envioGratis: false, provinciasEnvio: null,
+    medios: null, formas: null, permiteCuotas: false, condiciones: "", descuento: 121,
+  };
+  const conCupon = { ...(fila(null) as object), subtotal: "1400.00", iva: "294.00", total: "1694.00", cupon: foto } as unknown as FilaOrder;
+  const items = [
+    { alegraItemId: "N1", name: "Normal", brand: "", code: "N1", qty: "1", precioUnitario: "900.00", precioSinCupon: "1000.00", ivaPorcentaje: "21", subtotal: "900.00", iva: "189.00", total: "1089.00" },
+    { alegraItemId: "C1", name: "Campaña", brand: "", code: "C1", qty: "1", precioUnitario: "500.00", precioSinCupon: null, ivaPorcentaje: "21", subtotal: "500.00", iva: "105.00", total: "605.00" },
+  ] as unknown as Parameters<typeof armarOrder>[1];
+
+  it("la línea del cupón y los montos de antes del cupón; las líneas con su precio sin cupón", () => {
+    const o = armarOrder(conCupon, items);
+    expect(o.cupon).toEqual({ texto: "Cupón LUZ-7KQ2M (10 %)", descuento: 121, envioGratis: false, subtotalAntes: 1500, ivaAntes: 315 });
+    expect(o.items.map((i) => [i.price, i.total])).toEqual([[1000, 1210], [500, 605]]);
+    expect(o.total).toBe(1694);
+  });
+
+  it("sin cupón: cupon null y las líneas como siempre", () => {
+    const o = armarOrder(fila(null), items.slice(1));
+    expect(o.cupon).toBeNull();
+  });
+});

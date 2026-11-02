@@ -116,6 +116,21 @@ describe("opcionesCuotasDePedido (sobre las líneas del PEDIDO, no del carrito)"
     );
   });
 
+  it("con cupón sólo en 1 pago: 1 pago con descuento, las cuotas sin interés sin descuento", async () => {
+    const conLinea = (total: number) =>
+      cot(total, { lineas: [{ id: "item-1", code: null, name: "x", brand: "", qty: 1, precioUnitario: total, ivaPorcentaje: 0, subtotal: total, iva: 0, total, stockDisponible: 5 }] });
+    cotizarMock.mockImplementation(async (_l: LineaPedida[], o: { idListaMedio?: string }) => conLinea(TOTALES[o.idListaMedio ?? "ref"]));
+    const cupon = {
+      codigoId: "c1", codigo: "LUZ-7KQ2M", promocionId: "p1", nombre: "Bot", pct: 10, envioGratis: false, provinciasEnvio: null,
+      medios: null, formas: null, permiteCuotas: false, condiciones: "", descuento: 9000,
+    };
+    const r = await opcionesCuotasDePedido({ lineas, medio, idListaUnPago: "l1", opcionesCotizar: { entregaTipo: "envio", soloVisibles: true }, cupon, forma: "credito" });
+    expect(r.opciones.find((o) => o.cuotas === 1)?.total).toBe(81_000);
+    expect(r.opciones.find((o) => o.cuotas === 3)?.total).toBe(100_000);
+    const todas = await opcionesCuotasDePedido({ lineas, medio, idListaUnPago: "l1", opcionesCotizar: { entregaTipo: "envio", soloVisibles: true }, cupon: { ...cupon, permiteCuotas: true }, forma: "credito" });
+    expect(todas.opciones.find((o) => o.cuotas === 3)?.total).toBe(90_000);
+  });
+
   it("pedido retomado: cotiza las líneas del pedido con las opciones del pedido", async () => {
     const r = await opcionesCuotasDePedido({
       lineas,

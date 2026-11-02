@@ -1708,6 +1708,69 @@ export const campaniaReglas = pgTable(
   ],
 )
 
+// Promociones de cupones (0097): 'generica' (un código a mano) | 'unicos' (`<PREFIJO>-XXXXX`, un
+// uso). `pct` 1..50 y/o `envio_gratis`; `medios`/`formas`/`provincias_envio` NULL = todos. El
+// estado (programada / activa / pausada / terminada) sale de fechas y `activa`. `token_hash` =
+// token del bot (sha256). Drift solo-SQL: CHECK de tipo, pct, días, límite, ventana, beneficio y prefijo.
+export const cuponPromociones = pgTable(
+  "cupon_promociones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    nombre: text("nombre").notNull(),
+    tipo: text("tipo").notNull(),
+    pct: smallint("pct"),
+    envioGratis: boolean("envio_gratis").notNull().default(false),
+    provinciasEnvio: text("provincias_envio").array(),
+    inicio: timestamp("inicio", { withTimezone: true }).notNull(),
+    fin: timestamp("fin", { withTimezone: true }).notNull(),
+    venceDiasDesdeEmision: smallint("vence_dias_desde_emision"),
+    soloPrimeraCompra: boolean("solo_primera_compra").notNull().default(true),
+    minimo: numeric("minimo", { precision: 14, scale: 2 }),
+    medios: text("medios").array(),
+    formas: text("formas").array(),
+    permiteCuotas: boolean("permite_cuotas").notNull().default(false),
+    limiteCanjes: integer("limite_canjes"),
+    condiciones: text("condiciones").notNull().default(""),
+    prefijo: text("prefijo"),
+    activa: boolean("activa").notNull().default(true),
+    tokenHash: text("token_hash"),
+    tokenCreadoEn: timestamp("token_creado_en", { withTimezone: true }),
+    creadoPor: text("creado_por").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("cupon_promociones_tenant_fin_idx").on(t.tenantId, t.fin),
+    uniqueIndex("cupon_promociones_token_hash").on(t.tokenHash).where(sql`${t.tokenHash} IS NOT NULL`),
+  ],
+)
+
+// Códigos de una promoción (0097). `codigo_norm` (generada: mayúsculas, sólo [A-Z0-9]) es la clave
+// de búsqueda del Shop y la del único por tenant. `referencia_externa` = id del contacto del bot:
+// la misma referencia recibe el mismo código. Drift solo-SQL: CHECK de origen.
+export const cuponCodigos = pgTable(
+  "cupon_codigos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    promocionId: uuid("promocion_id")
+      .notNull()
+      .references(() => cuponPromociones.id, { onDelete: "cascade" }),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    codigo: text("codigo").notNull(),
+    codigoNorm: text("codigo_norm").generatedAlwaysAs(sql`regexp_replace(upper("codigo"), '[^A-Z0-9]', '', 'g')`),
+    origen: text("origen").notNull(),
+    referenciaExterna: text("referencia_externa"),
+    venceEn: timestamp("vence_en", { withTimezone: true }),
+    emitidoEn: timestamp("emitido_en", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("cupon_codigos_tenant_norm").on(t.tenantId, t.codigoNorm),
+    uniqueIndex("cupon_codigos_promo_ref").on(t.promocionId, t.referenciaExterna).where(sql`${t.referenciaExterna} IS NOT NULL`),
+    index("cupon_codigos_promocion_idx").on(t.promocionId, t.origen),
+  ],
+)
+
 // Qué lista de precio online rige para un medio de pago (migración 0065, rebanada C). `cuotas`
 // NULL = pago único; con valor (>= 2, CHECK en la migración) lo usa la rebanada D. Una condición
 // apunta a UNA lista (FK RESTRICT: no se borra una lista con condiciones). El Shop la lee

@@ -292,5 +292,28 @@
     "etiqueta": "text",
     "inicio": "timestamp with time zone",
     "fin": "timestamp with time zone"
+  },
+  "public.cupones_shop": {
+    "tenant_id": "text",
+    "codigo_id": "uuid",
+    "codigo": "text",
+    "codigo_norm": "text",
+    "promocion_id": "uuid",
+    "nombre": "text",
+    "tipo": "text",
+    "pct": "smallint",
+    "envio_gratis": "boolean",
+    "provincias_envio": "text[]",
+    "inicio": "timestamp with time zone",
+    "fin": "timestamp with time zone",
+    "vence_en": "timestamp with time zone",
+    "solo_primera_compra": "boolean",
+    "minimo": "numeric(14, 2)",
+    "medios": "text[]",
+    "formas": "text[]",
+    "permite_cuotas": "boolean",
+    "limite_canjes": "integer",
+    "condiciones": "text",
+    "activa": "boolean"
   }
 }

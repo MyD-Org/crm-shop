@@ -1,4 +1,5 @@
 import { UnidadesCampaniaError } from "@/lib/campanias/unidades";
+import { cuponTrasRecotizar, promoDesdePedido } from "@/lib/cupones/reglas";
 import { campaniasActivasEn } from "@/lib/campanias/vigentes";
 import { NextResponse, after } from "next/server";
 import { identidadActual } from "@/lib/auth";
@@ -146,6 +147,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       excluirPedidoId: id,
       ignorarStock: true,
       origen: "/api/pedidos/:id/medio",
+      // El cupón congelado del pedido (sin volver a mirar vigencia, mínimo ni cuenta): con una opción
+      // no elegible la cotización sale sin descuento y el pedido lo pierde.
+      ...(pedido.cupon
+        ? { cupon: { promo: promoDesdePedido(pedido.cupon), motivoCuenta: null, verificado: true, congelado: true } }
+        : {}),
     });
     if (!resuelto.ok) {
       if (resuelto.motivo === "forma_no_disponible") {
@@ -187,6 +193,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       formaCobro,
       idPriceList: idListaPrivada ?? idListaMedio ?? null,
       cotizacion,
+      ...(pedido.cupon ? { cupon: cuponTrasRecotizar(pedido.cupon, cotizacion) } : {}),
     });
     if (!r.ok) {
       switch (r.motivo) {

@@ -253,3 +253,26 @@ describe("POST /api/pedidos/[id]/cuotas", () => {
     expect((await llamar()).status).toBe(409);
   });
 });
+
+describe("POST /api/pedidos/[id]/cuotas con cupón", () => {
+  it("cupón sólo en 1 pago: el pago único con descuento y las cuotas sin interés sin descuento", async () => {
+    pedidoParaCambiarMedio.mockResolvedValue(
+      pedido({
+        formaCobro: "credito",
+        cupon: {
+          codigoId: "c1", codigo: "LUZ-7KQ2M", promocionId: "p1", nombre: "Bot", pct: 10, envioGratis: false, provinciasEnvio: null,
+          medios: null, formas: null, permiteCuotas: false, condiciones: "", descuento: 5000,
+        },
+      }),
+    );
+    cotizar.mockImplementation(async (_l: unknown, o: { idListaMedio?: string }) => {
+      const total = TOTALES[o.idListaMedio ?? "ref"];
+      const linea = { id: "item-9", code: null, name: "x", brand: "", qty: 1, precioUnitario: total, ivaPorcentaje: 0, subtotal: total, iva: 0, total, stockDisponible: 5 };
+      return { lineas: [linea], subtotal: total, iva: 0, costoEnvio: 0, total, hayProblemas: false, listaPrivada: false };
+    });
+    const json = await (await llamar()).json();
+    expect(json.precioUnPago).toBe(45_000);
+    expect(json.opciones.find((o: { cuotas: number }) => o.cuotas === 3)?.total).toBe(52_000);
+    expect(json.avisoCupon).toBe("Su cupón es válido sólo en 1 pago: en cuotas sin interés no se aplica y no se recupera.");
+  });
+});

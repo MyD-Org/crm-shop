@@ -326,3 +326,30 @@ describe("POST /api/pedidos/:id/medio — venta sin stock", () => {
     expect(cotizar.mock.calls.every((c) => c[1].idListaMedio === undefined)).toBe(true);
   });
 });
+
+describe("POST /api/pedidos/:id/medio con cupón", () => {
+  const foto = {
+    codigoId: "c1", codigo: "LUZ-7KQ2M", promocionId: "p1", nombre: "Transfer", pct: 10, envioGratis: false, provinciasEnvio: null,
+    medios: ["transferencia"], formas: null, permiteCuotas: false, condiciones: "", descuento: 20,
+  };
+  const lineaReal = { id: "1", code: null, name: "x", brand: "", qty: 2, precioUnitario: 100, ivaPorcentaje: 0, subtotal: 200, iva: 0, total: 200, stockDisponible: 5 };
+
+  beforeEach(() => {
+    pedidoParaCambiarMedio.mockResolvedValue({ entregaTipo: "retiro", pagoMetodo: "transferencia", lineas: [{ id: "1", qty: 2 }], cupon: foto });
+    cotizar.mockResolvedValue({ ...COT, lineas: [lineaReal], subtotal: 200, iva: 0, total: 200 });
+  });
+
+  it("a una opción no elegible: recotiza sin descuento y suelta el cupón (cupon: null)", async () => {
+    const r = await llamar({ pagoMetodo: "mercadopago" });
+    expect(r.status).toBe(200);
+    expect(cambiarMedioPedido.mock.calls[0][2]).toMatchObject({ cupon: null });
+    expect((cambiarMedioPedido.mock.calls[0][2] as { cotizacion: { total: number } }).cotizacion.total).toBe(200);
+  });
+
+  it("a una opción elegible: conserva el cupón con el descuento recalculado, aunque la promoción haya vencido", async () => {
+    const r = await llamar({ pagoMetodo: "transferencia", totalVisto: 180 });
+    expect(r.status).toBe(200);
+    expect(cambiarMedioPedido.mock.calls[0][2]).toMatchObject({ cupon: { ...foto, descuento: 20 } });
+    expect((cambiarMedioPedido.mock.calls[0][2] as { cotizacion: { total: number } }).cotizacion.total).toBe(180);
+  });
+});

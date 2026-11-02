@@ -65,3 +65,12 @@ describe("SelectorCuotas", () => {
     expect(html({ elegida: seis, procesador: "Payway" })).toContain("las financia Payway.");
   });
 });
+
+describe("SelectorCuotas con cupón sólo en 1 pago", () => {
+  const AVISO = "Su cupón es válido sólo en 1 pago: en cuotas sin interés no se aplica y no se recupera.";
+  it("avisa al elegir cuotas sin interés; en 1 pago no", () => {
+    expect(html({ elegida: tres, avisoCupon: AVISO })).toContain(AVISO);
+    expect(html({ elegida: unPago, avisoCupon: AVISO })).not.toContain(AVISO);
+    expect(html({ elegida: seis, avisoCupon: AVISO })).not.toContain(AVISO);
+  });
+});

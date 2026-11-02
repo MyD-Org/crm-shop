@@ -18,6 +18,9 @@ import { pedidoParaCambiarMedio } from "@/lib/pedidos";
 import { permitirAsync } from "@/lib/rate-limit";
 
 /** Respuesta: lo que el formulario de pago necesita para el desplegable "Cuotas". */
+/** Elegir cuotas sin interés suelta el cupón del pedido (y el canje): se avisa antes de pagar. */
+export const AVISO_CUPON_UN_PAGO = "Su cupón es válido sólo en 1 pago: en cuotas sin interés no se aplica y no se recupera.";
+
 export interface OpcionesCuotasPedido {
   procesador: { id: string; nombre: string };
   /** Mercado Pago: la public key de la cuenta del pedido (resolver de credenciales). */
@@ -28,6 +31,8 @@ export interface OpcionesCuotasPedido {
   actual: { cuotas: number | null; total: number };
   marca: { id: string | null; nombre?: string; logo?: string } | null;
   opciones: OpcionCuotasPedido[];
+  /** El pedido tiene un cupón "sólo en 1 pago": aviso para cuando elija cuotas sin interés. */
+  avisoCupon?: string;
   restringidas: CuotasRestringidas[];
   /** false = no hay cuotas con interés (Mercado Pago no respondió, o el procesador no las ofrece). */
   conInteres: { disponible: boolean };
@@ -118,7 +123,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const campanias = await campaniasActivasEn(pedido.creadoEn);
     const { opciones: cotizadas } = await opcionesCuotasDePedido({
       lineas: pedido.lineas,
-      medio: { condicionesCuotas: conSinInteres ? (medio.condicionesCuotas ?? []) : [] },
+      medio: { slug: medio.slug, condicionesCuotas: conSinInteres ? (medio.condicionesCuotas ?? []) : [] },
       // El pago único a la lista de la forma congelada (null = la del medio).
       idListaUnPago: idListaDelMedio(medios, pedido.entregaTipo, pedido.pagoMetodo, undefined, 1, pedido.formaCobro),
       opcionesCotizar: {
@@ -132,6 +137,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       },
       // El pedido ya reserva sus unidades.
       ignorarStock: true,
+      // Cupón congelado: con descuento las cantidades elegibles (1 pago; las sin interés si la promoción lo permite).
+      cupon: pedido.cupon,
+      forma: pedido.formaCobro,
     });
     const precioUnPago = cotizadas.find((o) => o.cuotas === 1)?.total;
     if (precioUnPago === undefined) {
@@ -187,6 +195,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       opciones,
       restringidas,
       conInteres: { disponible: mpDisponible },
+      ...(pedido.cupon && pedido.cupon.descuento > 0 && !pedido.cupon.permiteCuotas ? { avisoCupon: AVISO_CUPON_UN_PAGO } : {}),
     };
     return NextResponse.json(respuesta);
   } catch (err) {

@@ -8,6 +8,7 @@ import {
   shopOrderRemitos,
   shopOrders,
   shopOrderItems,
+  type CuponPedidoShop,
   type ShopOrderEventoRow,
   type ShopOrderItemRow,
   type ShopOrderPaymentRow,
@@ -1520,6 +1521,8 @@ export interface PedidoItemDto {
    *  nombre de la campaña. null = sin campaña. */
   precioNormal: number | null
   campaniaNombre: string | null
+  /** Unitario sin IVA antes del cupón (0042 del Shop) en las líneas que alcanzó; null = sin cupón. */
+  precioSinCupon: number | null
   /** Costo unitario cargado en Alegra (`inventory.unitCost`). SÓLO viaja para admin y
    *  superadmin (`incluirCosto` en `toPedidoDetalleDto`): para operator la clave no existe en
    *  la respuesta. `null` = sin costo cargado en Alegra, o producto fuera del espejo. */
@@ -1585,6 +1588,11 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   costoEnvio: number
   /** Envío a domicilio: true = gratis, false = costo a coordinar; null = retiro o pedido anterior. */
   envioGratis: boolean | null
+  /**
+   * Cupón con el que se vendió (foto `orders.cupon` del Shop): la línea "Cupón LUZ-7KQ2M (10 %)",
+   * el descuento con IVA (ya dentro de los unitarios) y si el envío gratis lo dio el cupón.
+   */
+  cupon: { texto: string; descuento: number; envioGratis: boolean } | null
   /** Aclaración que escribió el CLIENTE en el checkout. */
   notas: string | null
   /** Dato INTERNO del CRM: el Shop nunca lo muestra. */
@@ -1678,6 +1686,7 @@ function toItemDto(item: ItemParaDto, incluirCosto: boolean): PedidoItemDto {
     aTraerDe: item.aTraerDe,
     ventaSinStock: leerVentaSinStock(item.ventaSinStock),
     precioNormal: numONull(item.precioNormal),
+    precioSinCupon: numONull(item.precioSinCupon),
     campaniaNombre: item.campaniaNombre ?? null,
   }
   // La clave se AGREGA sólo con permiso (nunca `costoUnitario: undefined`): así ni siquiera el
@@ -1729,6 +1738,7 @@ export function toPedidoDetalleDto(
     iva: num(row.iva),
     costoEnvio: num(row.costoEnvio),
     envioGratis: row.envioGratis ?? null,
+    cupon: cuponDelPedido(row.cupon ?? null, row.envioGratis ?? null),
     notas: row.notas,
     cancelacionMotivo: row.cancelacionMotivo,
     estadoActualizadoEn: iso(row.estadoActualizadoEn),
@@ -1772,4 +1782,11 @@ export async function listPendientesCreatedAt(tenantId: string): Promise<Date[]>
     .from(shopOrders)
     .where(and(eq(shopOrders.tenantId, tenantId), eq(shopOrders.estado, "pendiente")))
   return rows.map((r) => r.createdAt)
+}
+
+/** La línea del cupón del detalle: % sólo si descontó algo; envío gratis por cupón si el pedido lo tiene. */
+function cuponDelPedido(c: CuponPedidoShop | null, envioGratis: boolean | null): PedidoDetalleDto["cupon"] {
+  if (!c) return null
+  const texto = c.pct !== null && c.descuento > 0 ? `Cupón ${c.codigo} (${c.pct} %)` : `Cupón ${c.codigo}`
+  return { texto, descuento: Number(c.descuento), envioGratis: Boolean(c.envioGratis && envioGratis) }
 }

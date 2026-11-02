@@ -22,12 +22,13 @@ const reemplazarCarrito = vi.fn(
     _u: string,
     _v: number,
     items: Linea[],
+    _cupon?: string | null,
   ): Promise<
     | { ok: true; carrito: { items: Linea[]; version: number }; avisos: string[] }
     | { ok: false; actual: { items: Linea[]; version: number } }
   > => ({ ok: true, carrito: { items, version: 1 }, avisos: [] }),
 );
-const mergearCarrito = vi.fn(async (_u: string, items: Linea[]) => ({
+const mergearCarrito = vi.fn(async (_u: string, items: Linea[], _cupon?: string | null) => ({
   items,
   version: 3,
   avisos: [] as string[],
@@ -48,8 +49,8 @@ vi.mock("@/lib/auth", () => ({ identidadActual: async () => ({ clerkUserId: user
 vi.mock("@/lib/lista-cuenta-repo", () => ({ listaPrivadaDelComprador: () => listaPrivadaDelComprador() }));
 vi.mock("@/lib/carrito-db", () => ({
   leerCarrito: (u: string) => leerCarrito(u),
-  reemplazarCarrito: (u: string, v: number, i: Linea[]) => reemplazarCarrito(u, v, i),
-  mergearCarrito: (u: string, i: Linea[]) => mergearCarrito(u, i),
+  reemplazarCarrito: (...a: Parameters<typeof reemplazarCarrito>) => reemplazarCarrito(...a),
+  mergearCarrito: (...a: Parameters<typeof mergearCarrito>) => mergearCarrito(...a),
   enriquecer: (l: Linea[], p: string | null) => enriquecer(l, p),
 }));
 
@@ -271,5 +272,23 @@ describe("POST (merge)", () => {
   ])("400 con %s, sin escribir", async (_caso, body) => {
     await esperaError(await POST(conBody("POST", body)), 400, INVALIDO);
     nadaEscrito();
+  });
+});
+
+describe("cupón", () => {
+  it("PUT con cupón lo guarda tal como se ingresó; sin la clave no lo toca; basura = null", async () => {
+    await PUT(conBody("PUT", { version: 1, items: [], cupon: " luz-7kq2m " }));
+    expect(reemplazarCarrito).toHaveBeenLastCalledWith("user_1", 1, [], "luz-7kq2m");
+    await PUT(conBody("PUT", { version: 1, items: [] }));
+    expect(reemplazarCarrito.mock.lastCall).toEqual(["user_1", 1, []]);
+    await PUT(conBody("PUT", { version: 1, items: [], cupon: "<script>" }));
+    expect(reemplazarCarrito).toHaveBeenLastCalledWith("user_1", 1, [], null);
+  });
+
+  it("POST (merge) manda el cupón del invitado; GET lo devuelve", async () => {
+    await POST(conBody("POST", { items: [{ id: "1", qty: 1 }], cupon: "LUZ-7KQ2M" }));
+    expect(mergearCarrito).toHaveBeenLastCalledWith("user_1", [{ id: "1", qty: 1 }], "LUZ-7KQ2M");
+    leerCarrito.mockResolvedValueOnce({ items: [], version: 2, cupon: "LUZ-7KQ2M" } as never);
+    expect(await (await GET()).json()).toMatchObject({ version: 2, cupon: "LUZ-7KQ2M" });
   });
 });

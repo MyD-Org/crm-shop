@@ -29,7 +29,7 @@ export const ETIQUETA_MAX = 24
 export const PCT_MAX = 90
 
 /** ISO 8601 con zona explícita (Z u offset): una fecha sin zona se interpretaría en la del servidor. */
-const ISO_CON_ZONA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
+export const ISO_CON_ZONA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
 
 function fecha(v: unknown): Date | null {
   if (typeof v !== "string" || !ISO_CON_ZONA.test(v)) return null

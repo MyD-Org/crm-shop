@@ -11,6 +11,7 @@
  */
 import { sql } from "drizzle-orm";
 import type { getDb } from "@/db";
+import { pedidoVivoSql } from "../pedido-vivo";
 import { shopTenantId } from "../tenant";
 import { mapCampanias, type EntradaCampania } from "./precio";
 
@@ -49,9 +50,7 @@ export async function unidadesUsadas(
     join shop.orders o on o.id = oi.order_id
     where o.tenant_id = ${shopTenantId()}
       and oi.campania_regla_id = any(${ids})
-      and o.estado <> 'cancelado'
-      and (o.estado <> 'pendiente' or o.pago_estado = 'pagado'
-           or coalesce(o.reserva_vence_en, o.created_at + interval '24 hours') > now())
+      and ${pedidoVivoSql("o")}
       ${excluirPedidoId ? sql`and o.id <> ${excluirPedidoId}::uuid` : sql``}
     group by oi.campania_regla_id
   `)) as unknown as { regla: string; n: number }[];

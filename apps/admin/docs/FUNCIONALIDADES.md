@@ -1307,6 +1307,27 @@ Spec `docs/superpowers/specs/2026-10-28-campanias-precios-design.md` (migración
 - **Shop**: lee `campanias_online` por `catalog_products_shop` (última columna) y las ventanas por la vista `campanias_shop`. Cada guardado avisa al Shop (`avisarShop`).
 - Rutas `requireAdminPlus` (operator → 404) filtradas por el tenant del guard: `GET|POST /api/admin/campanias`, `GET|PUT|DELETE /api/admin/campanias/[id]`, `POST /api/admin/campanias/[id]/terminar`, `POST /api/admin/campanias/previsualizar`.
 
+## Cupones de descuento
+
+Spec `docs/superpowers/specs/2026-11-01-cupones-design.md` (migración `0097` del CRM y `0042` del Shop). Catálogo → solapa **Cupones**, mismo permiso que Campañas (`requireAdminPlus`). Pensado para la pauta de Instagram: descuento en la primera compra a cambio de seguir la cuenta, con un código único que emite un bot de DM.
+
+- **Promoción y código**: la promoción es la regla (`cupon_promociones`); el código es lo que tipea el comprador (`cupon_codigos`, `codigo_norm` = mayúsculas y sólo `[A-Z0-9]`, único por tenant: "luz 7kq2m" y "LUZ-7KQ2M" son el mismo). **Genérica**: un código elegido a mano para muchos (1 uso por cuenta). **Códigos únicos**: `<PREFIJO>-` + 5 caracteres sin ambiguos, de un solo uso, por lote (CSV, hasta 500) o por el bot; pueden vencer a los N días de emitidos.
+- **Beneficio**: % entero 1..50 y/o envío gratis (opcionalmente sólo en algunas provincias, claves de `claveProvincia`). El % se aplica sobre el unitario de la lista que rija la elección del comprador y no se suma a líneas con precio de campaña; el envío gratis es independiente.
+- **Condiciones**: vigencia (hora de Argentina, fin exclusivo), sólo primera compra (por defecto; pedidos de la tienda pagados o avanzados, por cuenta o email), compra mínima con IVA sobre todo el carrito a la lista general, límite total de canjes, y restricción por medios (slugs de `medios_pago_shop` públicos, más la casilla fija **A coordinar** = `a_coordinar`, que no es una fila), formas (crédito, débito, cuenta de Mercado Pago) y cuotas sin interés (por defecto sólo 1 pago).
+- **Estados**: Programada / Activa / Pausada / Terminada (fechas y `activa`). Con canjes no se cambia el tipo ni el % ni se elimina; sí el fin, el límite, las condiciones y la pausa. Pausar afecta canjes nuevos: los pedidos ya creados conservan su descuento.
+- **Canjes** (`shop.cupon_canjes`, del Shop): una fila por pedido con cupón, sin columna de estado. El estado se calcula desde el pedido con el mismo criterio que la reserva de stock: **Canjeado** (pagado o avanzado), **Reservado** (pendiente con la reserva vigente), **Liberado** (cancelado o vencido: el código vuelve a servir). "Canje duplicado" = dos pedidos canjeados con el mismo código único (pago tardío de un pedido liberado). El listado muestra canjes canjeados y el descuento otorgado; el botón **Canjes** de cada fila abre el detalle con link al pedido.
+- **Detalle del pedido**: la línea "Cupón LUZ-7KQ2M (10 %) (incluido)" con el descuento (ya dentro de los unitarios: factura y cobro no cambian) y "Envío gratis por cupón" en el costo de envío.
+- **Historial**: cada alta, edición, pausa, baja, lote y token deja una entrada `tipo = 'cupon'` en `precios_online_cambios`.
+- **Rutas** `requireAdminPlus` (operator → 404): `GET|POST /api/admin/cupones`, `GET|PUT|PATCH|DELETE /api/admin/cupones/[id]` (el GET suma los canjes), `POST /api/admin/cupones/[id]/lote` (CSV), `POST|DELETE /api/admin/cupones/[id]/token`.
+
+### Endpoint del bot de Instagram
+
+`POST /api/integraciones/cupones/emitir` — lo llama el bot de DM (ManyChat u otro) DESPUÉS de verificar que la persona sigue la cuenta; la plataforma no verifica el seguimiento.
+
+- **Token**: en la solapa Cupones, sobre una promoción de códigos únicos → **Generar token**. Se muestra una sola vez (cópielo en la configuración del bot); la base guarda sólo su sha256. **Regenerar** lo reemplaza y **Revocar** lo anula. El token identifica tenant y promoción: el bot no elige la promoción, y el host del pedido tiene que ser el del tenant.
+- **Pedido**: `Authorization: Bearer <token>`, body `{ "referencia": "<id del contacto en el bot>" }` (1..128). **Respuesta 200**: `{ codigo, link, venceEn, nuevo }`; `link` = URL pública de la tienda del tenant con `?cupon=`. La misma referencia recibe siempre el mismo código (`nuevo: false`), aunque ya esté usado o la promoción esté pausada.
+- **Errores**: 401 token inválido o revocado; 400 sin referencia; 409 `promocion_inactiva` (pausada, vencida o sin empezar) o `limite_alcanzado` (con límite de canjes, se emiten hasta límite × 3 códigos); 429 (60 por minuto por token). Log de una línea sin la referencia.
+
 ## Base de datos
 
 DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):

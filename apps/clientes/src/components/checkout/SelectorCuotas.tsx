@@ -20,6 +20,7 @@ export function SelectorCuotas({
   procesador,
   noDisponible,
   deshabilitado,
+  avisoCupon,
 }: {
   opciones: readonly OpcionCuotasPedido[];
   elegida: OpcionCuotasPedido | undefined;
@@ -32,6 +33,8 @@ export function SelectorCuotas({
   /** La cantidad elegida no está con la tarjeta cargada: quedó 1 pago. */
   noDisponible?: string | null;
   deshabilitado?: boolean;
+  /** Cupón del pedido "sólo en 1 pago": se muestra al elegir cuotas sin interés. */
+  avisoCupon?: string | null;
 }) {
   const titulo = tituloCuotas(marca);
   const aviso = elegida ? avisoConInteres(elegida, procesador) : null;
@@ -48,6 +51,7 @@ export function SelectorCuotas({
         />
       </Field>
       {noDisponible && <Alert tone="warning">{noDisponible}</Alert>}
+      {avisoCupon && elegida?.tipo === "sin_interes" && <Alert tone="warning">{avisoCupon}</Alert>}
       {otrasTarjetas.map((t) => (
         <p key={t} className="text-xs text-muted">
           {t}

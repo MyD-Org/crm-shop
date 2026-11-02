@@ -6,6 +6,7 @@ import type { ModalidadSinStock } from "@/lib/modalidades-sin-stock-validacion"
 import { CategoriasPanel } from "./CategoriasPanel"
 import { PreciosOnlinePanel } from "./PreciosOnlinePanel"
 import { CampaniasPanel } from "./CampaniasPanel"
+import { CuponesPanel } from "./CuponesPanel"
 import { ProductosPanel } from "./ProductosPanel"
 import { RevisionPanel } from "./RevisionPanel"
 import { TagsPanel } from "./TagsPanel"
@@ -20,7 +21,7 @@ interface Props {
   sucursales: SucursalOpcionDto[]
 }
 
-type Tab = "productos" | "precios" | "campanias" | "categorias" | "etiquetas" | "revision"
+type Tab = "productos" | "precios" | "campanias" | "cupones" | "categorias" | "etiquetas" | "revision"
 
 /**
  * Panel de catálogo: la sección donde se cura lo que la tienda muestra. Vive en la navegación
@@ -66,6 +67,7 @@ export function CatalogoShell({ initialCategorias, initialTags, cuentas, sucursa
           { value: "productos", label: "Productos" },
           { value: "precios", label: "Precios online" },
           { value: "campanias", label: "Campañas" },
+          { value: "cupones", label: "Cupones" },
           { value: "categorias", label: "Categorías" },
           { value: "etiquetas", label: "Etiquetas" },
           ...(hayVariasCuentas ? [{ value: "revision", label: "Revisión" }] : []),
@@ -87,6 +89,7 @@ export function CatalogoShell({ initialCategorias, initialTags, cuentas, sucursa
       )}
       {tab === "precios" && <PreciosOnlinePanel categorias={categorias} />}
       {tab === "campanias" && <CampaniasPanel categorias={categorias} />}
+      {tab === "cupones" && <CuponesPanel />}
       {tab === "categorias" && <CategoriasPanel categorias={categorias} onCambio={recargarTaxonomia} />}
       {tab === "etiquetas" && <TagsPanel tags={tags} onCambio={recargarTaxonomia} />}
       {tab === "revision" && hayVariasCuentas && (

@@ -4,6 +4,7 @@
 import { ISO_CON_ZONA } from "@/lib/campanias-validar"
 import { normalizarCodigo } from "@/lib/cupones-codigo"
 import { SLUG_MEDIO_RE } from "@/lib/medios-pago-shop-validacion"
+import { provinciaCanonica } from "@/lib/provincias"
 
 export type TipoPromocion = "generica" | "unicos"
 export type FormaCupon = "credito" | "debito" | "cuenta_mp"
@@ -17,7 +18,7 @@ export interface PromocionEntrada {
   prefijo?: string
   pct: number | null
   envioGratis: boolean
-  /** NULL = donde la tienda ya hace envío a domicilio. */
+  /** Claves de `claveProvincia` (como la config de envíos); NULL = donde la tienda ya hace envío a domicilio. */
   provinciasEnvio: string[] | null
   /** ISO con offset (p. ej. "2026-11-27T00:00:00-03:00"); fin exclusivo. */
   inicio: string
@@ -97,8 +98,10 @@ export function validarPromocion(e: unknown): { ok: true; valor: PromocionEntrad
   const envioGratis = o.envioGratis === true
   if (pct === null && !envioGratis) agregar("Indique un descuento o envío gratis.")
 
-  const provincias = lista(o.provinciasEnvio)
-  if (provincias === false) agregar("Hay una provincia inválida.")
+  const provinciasRaw = lista(o.provinciasEnvio)
+  const canonicas = provinciasRaw ? provinciasRaw.map((p) => provinciaCanonica(p)) : null
+  if (provinciasRaw === false || canonicas?.some((c) => c === null)) agregar("Hay una provincia inválida.")
+  const provincias = canonicas && canonicas.every((c) => c !== null) ? [...new Set(canonicas.map((c) => c!.clave))] : null
 
   const inicio = fecha(o.inicio)
   const fin = fecha(o.fin)
@@ -143,7 +146,7 @@ export function validarPromocion(e: unknown): { ok: true; valor: PromocionEntrad
       ...(prefijo !== undefined ? { prefijo } : {}),
       pct: pct as number | null,
       envioGratis,
-      provinciasEnvio: provincias || null,
+      provinciasEnvio: provincias,
       inicio: o.inicio as string,
       fin: o.fin as string,
       venceDiasDesdeEmision: dias as number | null,

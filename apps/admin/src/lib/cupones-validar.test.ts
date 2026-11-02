@@ -77,6 +77,12 @@ describe("validarPromocion", () => {
     expect(r.ok && r.valor.medios).toEqual(["transferencia", "a_coordinar"])
   })
 
+  it("provincias: se guardan como clave de provincia conocida", () => {
+    const r = validarPromocion({ ...base, envioGratis: true, provinciasEnvio: ["Buenos Aires", "cordoba"] })
+    expect(r.ok && r.valor.provinciasEnvio).toEqual(["buenosaires", "cordoba"])
+    expect(errores({ ...base, provinciasEnvio: ["Narnia"] })).toContain("Hay una provincia inválida.")
+  })
+
   it("listas vacías equivalen a null (todas)", () => {
     const r = validarPromocion({ ...base, medios: [], formas: [], provinciasEnvio: [] })
     expect(r.ok && [r.valor.medios, r.valor.formas, r.valor.provinciasEnvio]).toEqual([null, null, null])

@@ -30,7 +30,7 @@ const TENANT = "test-tenant"
 const HOST = `${TENANT}.localhost`
 
 function loginAs(userId: string, role: "operator" | "admin" | "superadmin") {
-  session = { userId, role, tenantId: TENANT, name: "Test", email: "t@x.com", save: async () => {} }
+  session = { mfa: "ok", userId, role, tenantId: TENANT, name: "Test", email: "t@x.com", save: async () => {} }
 }
 
 function patchLimits(body: unknown) {

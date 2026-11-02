@@ -66,7 +66,7 @@ const AI_URL = "http://ai-api.test"
 const CONV = "conv-1"
 
 function loginAs(userId: string, role: "operator" | "admin" | "superadmin" = "operator") {
-  session = { userId, role, tenantId: TENANT, name: "Ana Operadora", email: "a@x.com", save: async () => {} }
+  session = { mfa: "ok", userId, role, tenantId: TENANT, name: "Ana Operadora", email: "a@x.com", save: async () => {} }
 }
 function logout() {
   session = {}

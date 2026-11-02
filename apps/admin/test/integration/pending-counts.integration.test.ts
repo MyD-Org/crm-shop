@@ -48,7 +48,7 @@ const CONVERSACIONES = [
 
 function login(userId: string, opts: { tenantId?: string } = {}) {
   session = {
-    userId,
+    mfa: "ok", userId,
     role: "admin",
     tenantId: opts.tenantId ?? TENANT_A,
     name: "Ana Admin",

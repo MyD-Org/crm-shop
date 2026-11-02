@@ -32,7 +32,7 @@ const B = "tenant-b"
 const NOT_FOUND = { error: "No encontrado", code: "not_found" }
 
 function login(userId: string, tenantId = A) {
-  session = { userId, role: "admin", tenantId, name: "Ana Admin", email: "ana.admin@example.com", save: async () => {} }
+  session = { mfa: "ok", userId, role: "admin", tenantId, name: "Ana Admin", email: "ana.admin@example.com", save: async () => {} }
 }
 
 const req = (path: string, init: { method?: string; body?: unknown; host?: string } = {}) => {

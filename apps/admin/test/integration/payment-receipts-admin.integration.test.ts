@@ -77,7 +77,7 @@ const NOT_FOUND_BODY = { error: "No encontrado", code: "not_found" }
 function loginAdmin(userId: string, opts: { cookieRole?: string; tenantId?: string } = {}) {
   // `role`/`tenantId` de la cookie son lo que la cookie DICE; el guard manda lo de la DB.
   session = {
-    userId,
+    mfa: "ok", userId,
     role: opts.cookieRole ?? "admin",
     tenantId: opts.tenantId ?? TENANT_A,
     name: "Ana Admin",

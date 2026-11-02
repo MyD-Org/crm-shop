@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { UserPlus, Mail, Shield, Clock, Pencil, Check, X, Link, RefreshCw, Trash2, ChevronDown } from "lucide-react"
+import { UserPlus, Mail, Shield, Clock, Pencil, Check, X, Link, RefreshCw, Trash2, ChevronDown, ShieldOff } from "lucide-react"
 import { Button, Input, Field, Select, Badge, Alert, Avatar, Dialog, useToast } from "@myd-org/ui"
 import { assignableRoles, canActOnRole } from "@/lib/roles"
 import { useUnsavedGuard } from "@/lib/unsaved-guard"
@@ -35,6 +35,8 @@ interface AdminUser {
   /** Canales del inbox permitidos: null = todos, [] = ninguno. Solo restringe a operadores. */
   canales_permitidos: string[] | null
   hasPassword: boolean
+  /** Verificación en dos pasos dada de alta (obligatoria; se da de alta en el primer login). */
+  tiene2fa: boolean
   createdAt: Date | string
   inviteExpiresAt: Date | string | null
   inviteAcceptedAt: Date | string | null
@@ -71,6 +73,8 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
   const [editSaving, setEditSaving] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [reset2faId, setReset2faId] = useState<string | null>(null)
+  const [reseteando2fa, setReseteando2fa] = useState(false)
   // Modal con el link de invitación para copiar y compartir (mientras no haya mail)
   const [inviteModal, setInviteModal] = useState<{ url: string; name: string } | null>(null)
   const [modalCopied, setModalCopied] = useState(false)
@@ -228,8 +232,44 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
     }
   }
 
+  async function confirmReset2fa() {
+    if (!reset2faId) return
+    setReseteando2fa(true)
+    try {
+      const res = await fetch(`/api/admin/usuarios/${reset2faId}/2fa`, { method: "DELETE" })
+      const body = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setUsers((prev) => prev.map((u) => (u.id === reset2faId ? { ...u, tiene2fa: false } : u)))
+        toast({ title: "Verificación en dos pasos restablecida", tone: "success" })
+      } else {
+        toast({ title: body.error ?? "No se pudo restablecer", tone: "danger" })
+      }
+    } finally {
+      setReseteando2fa(false)
+      setReset2faId(null)
+    }
+  }
+
   return (
     <div>
+      <Dialog
+        open={reset2faId !== null}
+        onOpenChange={(open) => { if (!open) setReset2faId(null) }}
+        title="Restablecer verificación en dos pasos"
+        description="Úselo sólo si la persona perdió el celular y sus códigos de respaldo. Se cerrarán sus sesiones y, al ingresar de nuevo, tendrá que escanear un código QR nuevo."
+        headerBorder={false}
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={() => setReset2faId(null)}>Cancelar</Button>
+            <Button variant="danger" loading={reseteando2fa} onClick={confirmReset2fa}>Restablecer</Button>
+          </div>
+        }
+      >
+        <p className="text-sm" style={{ color: "var(--ink)" }}>
+          Confirme la identidad de la persona antes de continuar: quien ingrese con su contraseña podrá dar de alta un celular nuevo.
+        </p>
+      </Dialog>
+
       <Dialog
         open={deleteId !== null}
         onOpenChange={(open) => { if (!open) setDeleteId(null) }}
@@ -513,6 +553,16 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
                           <Button variant="ghost" size="icon" onClick={() => startEdit(user)} title="Editar">
                             <Pencil size={13} strokeWidth={1.6} />
                           </Button>
+                          {user.id !== currentUserId && user.tiene2fa && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setReset2faId(user.id)}
+                              title="Restablecer verificación en dos pasos"
+                            >
+                              <ShieldOff size={13} strokeWidth={1.6} />
+                            </Button>
+                          )}
                           {user.id !== currentUserId && (
                             <Button variant="ghost" size="icon" onClick={() => setDeleteId(user.id)} title="Eliminar">
                               <Trash2 size={13} strokeWidth={1.6} />
@@ -690,6 +740,9 @@ function InviteStatus({
     return (
       <div className="inline-flex flex-col gap-0.5">
         <Badge tone="success">Activo</Badge>
+        <span className="text-[10px]" style={{ color: user.tiene2fa ? "var(--ink-faint)" : "var(--warning, #b45309)" }}>
+          {user.tiene2fa ? "Con verificación en dos pasos" : "Sin verificación en dos pasos: la configura al ingresar"}
+        </span>
         {acceptedAt && (
           <span className="text-[10px]" style={{ color: "var(--ink-faint)" }}>Aceptó el {acceptedAt}</span>
         )}

@@ -31,9 +31,10 @@ describe("AdminShell: menú por grupos", () => {
     }
   })
 
-  it("el operador sólo ve Mensajes", () => {
+  it("el operador sólo ve Mensajes y Seguridad", () => {
     const sinRol = entradas.filter((l) => !l.includes("minRole"))
-    expect(sinRol).toHaveLength(1)
+    expect(sinRol).toHaveLength(2)
     expect(sinRol[0]).toContain('"/admin/inbox"')
+    expect(sinRol[1]).toContain('"/admin/seguridad"')
   })
 })

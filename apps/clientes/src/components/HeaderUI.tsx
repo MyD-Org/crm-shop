@@ -103,21 +103,20 @@ function SincronizarBusqueda({ setBusqueda }: { setBusqueda: (texto: string) => 
 }
 
 /**
- * WhatsApp de la tienda, a mano en todas las páginas: en las acciones del header (desde lg, con
- * texto), junto a la cuenta en el celular y en la barra compacta. Verde de WhatsApp oscurecido
+ * WhatsApp de la tienda, a mano en todas las páginas: junto a la cuenta en el celular y en la
+ * barra compacta (desde lg, sin scroll, va en la barra superior del layout). Verde de WhatsApp oscurecido
  * para llegar a 3:1 sobre el fondo claro.
  */
-function BotonWhatsapp({ href, conTexto = false }: { href: string; conTexto?: boolean }) {
+function BotonWhatsapp({ href }: { href: string }) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={conTexto ? undefined : "Consultar por WhatsApp"}
+      aria-label="Consultar por WhatsApp"
       className="flex shrink-0 items-center gap-2 text-[13.5px] font-bold text-text transition-colors hover:text-accent"
     >
       <IconoWhatsapp className="size-[22px] text-[#1DAA61]" />
-      {conTexto ? <span>WhatsApp</span> : null}
     </a>
   );
 }
@@ -283,11 +282,7 @@ function HeaderVista({
             {ubicacion ? <div className="hidden lg:flex">{ubicacion}</div> : null}
             {/* Desde lg; debajo, la cuenta va a la izquierda de la marca (mobileStart). */}
             <div className="hidden lg:flex">{cuentaNodo("end")}</div>
-            {whatsapp ? (
-              <div className="hidden lg:flex">
-                <BotonWhatsapp href={whatsapp} conTexto />
-              </div>
-            ) : null}
+            {/* Desde lg el WhatsApp va en la barra superior (layout) y, al scrollear, en la compacta. */}
 
             <CartPreview pathname={pathname} />
           </>

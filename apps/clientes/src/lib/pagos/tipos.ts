@@ -184,6 +184,11 @@ export interface EstadoPago {
   pedidoId?: string;
   /** Código crudo del proveedor, sin traducir. Para poder diagnosticar. */
   detalle: string;
+  /**
+   * El POST de cobro falló (5xx, timeout, respuesta ilegible) y se recuperó como pendiente por consulta.
+   * Diagnóstico YA SANEADO para `pago_intentos.error_proveedor`; no cambia el estado del intento.
+   */
+  errorProveedor?: { detalle: string; status: number | null };
   /** Solo cuando `estado === "fallido"`. */
   motivo?: MotivoRechazo;
   /**
@@ -365,6 +370,11 @@ export class ErrorProveedor extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /**
+     * Diagnóstico del procesador YA SANEADO (`sanearDetalleProveedor`: lista blanca, sin PII, <= 500), para
+     * guardarlo en `pago_intentos.error_proveedor`. null = el cuerpo no traía nada útil. Nunca va al comprador.
+     */
+    readonly detalle: string | null = null,
   ) {
     super(message);
     this.name = "ErrorProveedor";

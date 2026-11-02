@@ -34,6 +34,7 @@ import {
   statusEfectivo,
   type RespuestaMercadoPago,
 } from "./mercadopago-estados";
+import { sanearDetalleProveedor } from "./detalle-proveedor";
 import { credencialesMercadoPago, cuentaConfigurada } from "./credenciales";
 import { firmaValida } from "./mercadopago-firma";
 import type { Preferencia } from "./mercadopago-preferencia";
@@ -197,7 +198,7 @@ async function pedir(
       }
     }
 
-    throw new ErrorProveedor(`Mercado Pago respondió ${res.status}`, res.status);
+    throw new ErrorProveedor(`Mercado Pago respondió ${res.status}`, res.status, sanearDetalleProveedor(cuerpo));
   }
 
   return cuerpo;

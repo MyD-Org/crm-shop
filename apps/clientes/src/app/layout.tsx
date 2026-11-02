@@ -115,19 +115,11 @@ export default async function RootLayout({
   const tema = atributosHtmlTema(temaTenant);
   const vAnuncio = visibilidadDe(visibilidad, "anuncio");
   const hayAnuncio = vAnuncio !== "nunca" && !!anuncio.texto;
-  // WhatsApp de la tienda en la barra superior, sólo desde lg (donde el header tiene la fila de
-  // acciones): arriba de todo sin scroll; al scrollear lo lleva la barra compacta del header.
+  // WhatsApp de la tienda en la barra superior, en todos los tamaños: arriba de todo sin scroll;
+  // al scrollear (desde lg) lo lleva la barra compacta del header.
   const whatsapp = numeroWhatsapp ? hrefWhatsapp(numeroWhatsapp) : null;
-  // Qué esconde la barra entera: con redes se ve siempre; si no, lo que pida el anuncio, salvo que
-  // el WhatsApp la sostenga en desktop.
-  const clasesBarra =
-    redes.length > 0
-      ? ""
-      : !whatsapp
-        ? clasesVisibilidad(vAnuncio)
-        : hayAnuncio && vAnuncio !== "desktop"
-          ? ""
-          : "max-lg:hidden";
+  // Qué esconde la barra entera: con redes o WhatsApp se ve siempre; si no, lo que pida el anuncio.
+  const clasesBarra = redes.length > 0 || whatsapp ? "" : clasesVisibilidad(vAnuncio);
 
   return (
     // Tema: el shell trae el de la tienda (base de `shop_tema`; geo-IP apagada, ver
@@ -169,14 +161,14 @@ export default async function RootLayout({
                   ) : (
                     <span aria-hidden className="max-md:hidden" />
                   )}
-                  <div className="flex items-center justify-center gap-x-5 md:justify-end">
-                    <RedesSociales redes={redes} className="justify-center md:flex-nowrap md:justify-end" />
+                  <div className="flex items-center justify-center gap-x-4 md:gap-x-5 md:justify-end">
+                    <RedesSociales redes={redes} className="flex-nowrap justify-center md:justify-end" claseSeguinos="max-md:hidden" />
                     {whatsapp ? (
                       <a
                         href={whatsapp}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex shrink-0 items-center gap-1.5 text-[12.5px] font-semibold text-on-primary/85 transition-colors hover:text-highlight max-lg:hidden"
+                        className="flex shrink-0 items-center gap-1.5 text-[12.5px] font-semibold text-on-primary/85 transition-colors hover:text-highlight"
                       >
                         <IconoWhatsapp className="size-4 text-[#25D366]" />
                         WhatsApp

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Button, Dialog, Field, Input } from "@myd-org/ui";
 import type { CuponAplicado, CuponError } from "@/lib/cupones/tipos";
 import { avisoVencimiento } from "@/lib/cupones/ui";
+import { mensajeCupon } from "@/lib/cupones/mensajes";
+import { limpiarCupon } from "@/lib/carrito-cliente";
 import { BotonQuitarCupon, cuponTieneLinea } from "./LineaCupon";
 
 /**
@@ -30,35 +32,59 @@ export function CampoCupon({
 }) {
   const [texto, setTexto] = useState("");
   const [condiciones, setCondiciones] = useState(false);
+  // Un código que el carrito descartaría (menos de 4 o más de 24 letras o números, otros caracteres)
+  // no llega al servidor: se avisa acá con el mismo mensaje que un código inexistente.
+  const [formatoInvalido, setFormatoInvalido] = useState(false);
   const aplicar = () => {
-    if (texto.trim() && !cargando) onAplicar(texto.trim());
+    if (!texto.trim() || cargando) return;
+    if (!limpiarCupon(texto)) {
+      setFormatoInvalido(true);
+      return;
+    }
+    onAplicar(texto.trim());
   };
 
   if (!cupon) {
     return (
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
-          <Field label="¿Tiene un código de descuento?">
-            <Input
-              value={texto}
-              onChange={(e) => setTexto(e.target.value.slice(0, 32))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") aplicar();
-              }}
-              placeholder="Código"
-              autoComplete="off"
-              autoCapitalize="characters"
-            />
-          </Field>
+      <div className="space-y-1">
+        <div className="flex items-end gap-2">
+          <div className="flex-1">
+            <Field label="¿Tiene un código de descuento?">
+              <Input
+                value={texto}
+                onChange={(e) => {
+                  setTexto(e.target.value.slice(0, 32));
+                  setFormatoInvalido(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") aplicar();
+                }}
+                placeholder="Código"
+                autoComplete="off"
+                autoCapitalize="characters"
+              />
+            </Field>
+          </div>
+          <Button
+            variant="outline"
+            onClick={aplicar}
+            disabled={!texto.trim() || cargando}
+          >
+            Aplicar
+          </Button>
         </div>
-        <Button variant="outline" onClick={aplicar} disabled={!texto.trim() || cargando}>
-          Aplicar
-        </Button>
+        {formatoInvalido && (
+          <p className="text-xs text-danger" role="alert">
+            {mensajeCupon("no_existe")}
+          </p>
+        )}
       </div>
     );
   }
 
-  const vence = aplicado ? avisoVencimiento(aplicado.venceEn, new Date()) : null;
+  const vence = aplicado
+    ? avisoVencimiento(aplicado.venceEn, new Date())
+    : null;
   // Con línea propia en el resumen (`LineaCupon`), el código y la X ya están ahí: acá sólo "Condiciones".
   const conLinea = !!aplicado && cuponTieneLinea(aplicado);
   const codigo = (aplicado?.codigo ?? cupon).toUpperCase();
@@ -86,8 +112,15 @@ export function CampoCupon({
       )}
       {vence && <p className="text-xs text-muted">{vence}</p>}
       {aplicado?.condiciones && (
-        <Dialog open={condiciones} onOpenChange={setCondiciones} title={`Condiciones del cupón ${aplicado.codigo}`} size="md">
-          <p className="whitespace-pre-line text-sm text-text">{aplicado.condiciones}</p>
+        <Dialog
+          open={condiciones}
+          onOpenChange={setCondiciones}
+          title={`Condiciones del cupón ${aplicado.codigo}`}
+          size="md"
+        >
+          <p className="whitespace-pre-line text-sm text-text">
+            {aplicado.condiciones}
+          </p>
         </Dialog>
       )}
     </div>

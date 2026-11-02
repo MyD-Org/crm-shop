@@ -41,7 +41,8 @@ import { dispDelVisitante } from "@/lib/zona-servidor";
 import { contextoUnion } from "@/lib/disponibilidad-contexto";
 import { contextoParaProvincia, disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
 import { claveProvincia } from "@/lib/sucursales";
-import { CuponCanjeError, resolverCupon, type QuienCupon } from "@/lib/cupones/repo";
+import { CuponCanjeError, type QuienCupon } from "@/lib/cupones/repo";
+import { consultarCupon } from "@/lib/cupones/consulta";
 import { mensajeCupon } from "@/lib/cupones/mensajes";
 
 /**
@@ -438,7 +439,8 @@ export async function POST(req: Request) {
       email: (cliente?.email ?? email) || null,
       listaPrivada: Boolean(idListaPrivada),
     };
-    const cuponResuelto = body.cupon == null || body.cupon === "" ? null : await resolverCupon(body.cupon, quienCupon);
+    // Mismo límite de consultas que el carrito (por cuenta), contado antes de leer la base.
+    const cuponResuelto = await consultarCupon(body.cupon, quienCupon, clerkUserId ?? cliente!.codigocliente!);
     const cuponParaCotizar = cuponResuelto?.ok ? cuponResuelto : undefined;
     const resuelto = await cotizarConMedio({
       lineas,

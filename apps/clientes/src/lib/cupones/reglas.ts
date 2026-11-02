@@ -142,3 +142,13 @@ export function promoDesdePedido(s: CuponPedido): PromocionCupon {
     activa: true,
   };
 }
+
+/**
+ * La foto del cupón de un pedido después de recotizarlo (cambio de medio): la misma con el descuento
+ * de la lista nueva si el cupón siguió aplicando; null si la opción nueva no es elegible (el pedido
+ * pierde el cupón y se libera el canje).
+ */
+export function cuponTrasRecotizar(previo: CuponPedido | null, c: Cotizacion): CuponPedido | null {
+  if (!previo || !c.cupon) return null;
+  return { ...previo, descuento: c.cupon.descuento };
+}

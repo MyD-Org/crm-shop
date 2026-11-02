@@ -6,14 +6,14 @@
  * Cuando eso cambie, el único lugar a tocar es `crearPedido`.
  */
 
-import { reservarCanjeEnTx, type QuienCupon } from "./cupones/repo";
+import { liberarCanjeEnTx, reservarCanjeEnTx, type QuienCupon } from "./cupones/repo";
 import { cuponPedidoDesde } from "./cupones/reglas";
-import type { PromocionCupon } from "./cupones/tipos";
+import type { CuponPedido, PromocionCupon } from "./cupones/tipos";
 import { validarUnidadesEnTx } from "./campanias/unidades";
 import { cache } from "react";
 import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { orderItems, orders, pagoIntentos } from "@/db/schema";
+import { cuponCanjes, orderItems, orders, pagoIntentos } from "@/db/schema";
 import {
   ESTADOS_EN_CURSO,
   type EntregaTipoPedido,
@@ -2093,6 +2093,8 @@ export async function pedidoParaCambiarMedio(
   contacto: { nombre: string; telefono: string };
   /** Cuándo se creó: al recotizar rigen las campañas de precios activas ese día (decisión C). */
   creadoEn: Date;
+  /** Foto del cupón congelado (null = sin cupón): se recotiza con ella, sin volver a leer la promoción. */
+  cupon: CuponPedido | null;
 } | null> {
   const db = getDb();
   const [p] = await db
@@ -2111,6 +2113,7 @@ export async function pedidoParaCambiarMedio(
       contactoNombre: orders.contactoNombre,
       contactoTelefono: orders.contactoTelefono,
       avisosEnviadosEn: orders.avisosEnviadosEn,
+      cupon: orders.cupon,
     })
     .from(orders)
     .where(and(eq(orders.id, id), esDeSuDueno(dueno), eq(orders.estado, "pendiente")))
@@ -2140,6 +2143,7 @@ export async function pedidoParaCambiarMedio(
     },
     contacto: { nombre: p.contactoNombre, telefono: p.contactoTelefono },
     creadoEn: p.createdAt,
+    cupon: p.cupon ?? null,
   };
 }
 
@@ -2186,6 +2190,11 @@ export async function cambiarMedioPedido(
     /** Lista efectivamente usada para cotizar (privada del comprador, o la del medio). */
     idPriceList: string | null;
     cotizacion: Cotizacion;
+    /**
+     * Cupón tras la recotización (`cuponTrasRecotizar`): la foto con el descuento nuevo, o null si la
+     * opción nueva no es elegible (se libera el canje). Ausente = el pedido no se toca en esto.
+     */
+    cupon?: CuponPedido | null;
   },
 ): Promise<ResultadoCambioMedio> {
   const cot = nuevo.cotizacion;
@@ -2200,6 +2209,7 @@ export async function cambiarMedioPedido(
         costoEnvio: orders.costoEnvio,
         clerkUserId: orders.clerkUserId,
         pagoRevision: orders.pagoRevision,
+        cupon: orders.cupon,
       })
       .from(orders)
       .where(
@@ -2273,8 +2283,16 @@ export async function cambiarMedioPedido(
           campaniaId: l.campaniaId ?? null,
           campaniaReglaId: l.campaniaReglaId ?? null,
           precioNormal: l.precioNormal != null ? String(l.precioNormal) : null,
+          precioSinCupon: l.precioSinCupon != null ? String(l.precioSinCupon) : null,
         })
         .where(and(eq(orderItems.orderId, id), eq(orderItems.alegraItemId, l.id)));
+    }
+    // Cupón: se conserva con el descuento de la lista nueva o se pierde (y el código vuelve a servir).
+    if (nuevo.cupon !== undefined) {
+      if (pedido.cupon && !nuevo.cupon) await liberarCanjeEnTx(tx, id);
+      if (nuevo.cupon) {
+        await tx.update(cuponCanjes).set({ descuentoTotal: nuevo.cupon.descuento.toFixed(2) }).where(eq(cuponCanjes.orderId, id));
+      }
     }
     await tx
       .update(orders)
@@ -2284,6 +2302,7 @@ export async function cambiarMedioPedido(
         idPriceList: nuevo.idPriceList,
         cuotas: nuevo.cuotas,
         formaCobro: nuevo.formaCobro ?? null,
+        ...(nuevo.cupon !== undefined ? { cupon: nuevo.cupon } : {}),
         subtotal: String(cot.subtotal),
         iva: String(cot.iva),
         total: String(total),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Cotizacion, LineaCotizada } from "../cotizacion";
-import { aplicarCupon, cuponPedidoDesde, motivoVigencia, normalizarCodigo, opcionElegible, promoDesdePedido } from "./reglas";
+import { aplicarCupon, cuponPedidoDesde, cuponTrasRecotizar, motivoVigencia, normalizarCodigo, opcionElegible, promoDesdePedido } from "./reglas";
 import type { ContextoCupon, PromocionCupon } from "./tipos";
 
 function linea(l: { id: string; precioUnitario: number; qty: number; ivaPorcentaje: number; campaniaId?: string; problema?: LineaCotizada["problema"] }): LineaCotizada {
@@ -171,5 +171,18 @@ describe("foto del pedido", () => {
     });
     const vuelta = promoDesdePedido(foto);
     expect(aplicarCupon(cot, vuelta, { ...ctx, congelado: true }).cupon?.descuento).toBe(242);
+  });
+});
+
+describe("cuponTrasRecotizar", () => {
+  it("con cupón aplicado conserva la foto con el descuento nuevo; sin él, null", () => {
+    const p = promo({ medios: ["transferencia"] });
+    const foto = cuponPedidoDesde(aplicarCupon(cot, p, ctx).cupon!, p);
+    const otraLista = cotizacionDe([{ id: "a", precioUnitario: 2000, qty: 1, ivaPorcentaje: 21 }]);
+    const conCupon = aplicarCupon(otraLista, promoDesdePedido(foto), { ...ctx, congelado: true });
+    expect(cuponTrasRecotizar(foto, conCupon)).toEqual({ ...foto, descuento: 242 });
+    const sinCupon = aplicarCupon(otraLista, promoDesdePedido(foto), { ...ctx, congelado: true, opcion: { slug: "efectivo", forma: null, cuotasSinInteres: false } });
+    expect(cuponTrasRecotizar(foto, sinCupon)).toBeNull();
+    expect(cuponTrasRecotizar(null, conCupon)).toBeNull();
   });
 });

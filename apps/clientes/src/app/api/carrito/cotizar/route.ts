@@ -31,10 +31,10 @@ import { idsAPedido } from "@/lib/venta-sin-stock";
 import { localDeRetiro } from "@/lib/sucursales-pedido";
 import { sinProcesadoresNoConfigurados } from "@/lib/medios-pago-datos";
 import { listaAConfirmar } from "@/lib/medios-precio";
-import { cuponDelPedido, resolverCupon } from "@/lib/cupones/repo";
+import { cuponDelPedido } from "@/lib/cupones/repo";
+import { consultarCupon } from "@/lib/cupones/consulta";
 import { aplicadorDeCupon, nombresDeMedios, opcionCupon, type AplicadorCupon } from "@/lib/cupones/aplicar";
 import { promoDesdePedido } from "@/lib/cupones/reglas";
-import { mensajeCupon } from "@/lib/cupones/mensajes";
 import type { CuponError } from "@/lib/cupones/tipos";
 import type { Cotizacion } from "@/lib/cotizacion";
 
@@ -54,13 +54,6 @@ const MAX_POR_MINUTO = 20;
  * wifi de un local); una persona real no llega.
  */
 const MAX_POR_MINUTO_VISITANTE = 60;
-
-/**
- * Consultas de cupón por cuenta o IP: 60 cada 10 minutos. Holgado para el carrito y el checkout (que
- * recotizan con el mismo código); hace inviable recorrer los ~28 millones de códigos de un prefijo.
- */
-const MAX_CUPONES_POR_VENTANA = 60;
-const VENTANA_CUPONES_MS = 10 * 60_000;
 
 /** Primera IP de `x-forwarded-for` (la pone Vercel), o null. */
 function ipDe(req: Request): string | null {
@@ -290,19 +283,13 @@ export async function POST(req: Request) {
     let cuponError: CuponError | null = null;
     const pedidoId = typeof body.pedidoId === "string" ? body.pedidoId.trim().slice(0, 40) : "";
     const cuponPedido = pedidoId && clerkUserId ? await cuponDelPedido(pedidoId, clerkUserId) : null;
-    const pideCupon = !pedidoId && body.cupon != null && body.cupon !== "";
-    // Límite propio de las consultas de cupón (por cuenta o IP), contado ANTES de leer la base: frena
-    // probar códigos al azar sin molestar al carrito que recotiza con el mismo código.
-    const cuponPermitido = pideCupon
-      ? await permitirAsync(`cupon:${quien ?? `ip:${ipDe(req) ?? "desconocida"}`}`, MAX_CUPONES_POR_VENTANA, VENTANA_CUPONES_MS)
-      : true;
-    const resuelto: Awaited<ReturnType<typeof resolverCupon>> = !pideCupon
+    // Con límite propio de consultas (frena probar códigos al azar), compartido con POST /api/pedidos.
+    const resuelto = pedidoId
       ? null
-      : !cuponPermitido
-        ? { ok: false, error: { motivo: "no_disponible", mensaje: mensajeCupon("no_disponible") } }
-        : await resolverCupon(
+      : await consultarCupon(
           body.cupon,
           clerkUserId || cliente ? { clerkUserId: clerkUserId ?? null, email: email ?? null, listaPrivada: Boolean(idListaPrivada) } : null,
+          quien ?? `ip:${ipDe(req) ?? "desconocida"}`,
         );
     const cuponParaCotizar = cuponPedido
       ? { promo: promoDesdePedido(cuponPedido), motivoCuenta: null, verificado: true, congelado: true }

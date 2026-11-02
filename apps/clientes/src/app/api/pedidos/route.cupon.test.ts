@@ -15,7 +15,14 @@ const resolverCupon = vi.fn();
 let precio = 1000;
 let config: ConfigEnvio = { domicilioActivo: true, gratis: null };
 
-vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async () => true }));
+let cuponesPermitidos = true;
+const clavesLimite: string[] = [];
+vi.mock("@/lib/rate-limit", () => ({
+  permitirAsync: async (clave: string) => {
+    clavesLimite.push(clave);
+    return clave.startsWith("cupon:") ? cuponesPermitidos : true;
+  },
+}));
 vi.mock("@/lib/pedido-avisos", () => ({ avisoOperadorAlCrear: () => true, avisarPedidoRecibido: vi.fn() }));
 vi.mock("next/server", async (orig) => ({ ...(await orig<typeof import("next/server")>()), after: () => {} }));
 vi.mock("@/lib/auth", () => ({
@@ -76,6 +83,8 @@ const post = (extra: Record<string, unknown> = {}) =>
 const conEnvio = { entregaTipo: "envio", entregaCiudad: "Mar del Plata", entregaDireccion: "Calle 1", entregaProvincia: "Buenos Aires" };
 
 beforeEach(() => {
+  cuponesPermitidos = true;
+  clavesLimite.length = 0;
   precio = 1000;
   config = { domicilioActivo: true, gratis: null };
   crearPedido.mockReset();
@@ -127,6 +136,15 @@ describe("POST /api/pedidos con cupón", () => {
     expect(j).toMatchObject({ motivo: "cupon", error: "Este cupón ya fue usado." });
     expect(j.cotizacion.total).toBe(1000);
     expect(j.cotizacion.cupon ?? null).toBeNull();
+  });
+
+  it("comparte el límite de consultas de cupón con el carrito: superado, no se lee la base", async () => {
+    cuponesPermitidos = false;
+    const r = await post({ cupon: "LUZ-7KQ2M", totalVisto: 900 });
+    expect(r.status).toBe(409);
+    expect(resolverCupon).not.toHaveBeenCalled();
+    expect(clavesLimite).toContain("cupon:user_1");
+    expect((await r.json()).cotizacion.cuponError.motivo).toBe("no_disponible");
   });
 
   it("envío gratis del cupón a domicilio en la provincia alcanzada", async () => {

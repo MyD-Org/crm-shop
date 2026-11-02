@@ -118,7 +118,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const campanias = await campaniasActivasEn(pedido.creadoEn);
     const { opciones: cotizadas } = await opcionesCuotasDePedido({
       lineas: pedido.lineas,
-      medio: { condicionesCuotas: conSinInteres ? (medio.condicionesCuotas ?? []) : [] },
+      medio: { slug: medio.slug, condicionesCuotas: conSinInteres ? (medio.condicionesCuotas ?? []) : [] },
       // El pago único a la lista de la forma congelada (null = la del medio).
       idListaUnPago: idListaDelMedio(medios, pedido.entregaTipo, pedido.pagoMetodo, undefined, 1, pedido.formaCobro),
       opcionesCotizar: {
@@ -132,6 +132,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       },
       // El pedido ya reserva sus unidades.
       ignorarStock: true,
+      // Cupón congelado: con descuento las cantidades elegibles (1 pago; las sin interés si la promoción lo permite).
+      cupon: pedido.cupon,
+      forma: pedido.formaCobro,
     });
     const precioUnPago = cotizadas.find((o) => o.cuotas === 1)?.total;
     if (precioUnPago === undefined) {

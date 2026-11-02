@@ -3,12 +3,12 @@
 // lo ve en "Mis pedidos". El resultado sólo se loguea.
 
 import { sendEmail } from "@/lib/email"
-import { safeLogoUrl } from "@/lib/email-layout"
 import { buildPedidoEstadoEmail, seAvisaTransicion, type AvisoPedido } from "@/lib/pedido-estado-email"
 import { formatearNumeroPedido, type PedidoRow } from "@/lib/pedidos-repo"
 import type { EstadoPedido } from "@/lib/pedidos-transiciones"
 import { urlPublicaShopDeTenant } from "@/lib/shop-destino"
 import { getTenantByIdFromDb } from "@/lib/tenants"
+import { logoMailDeTenant } from "@/lib/email-logo"
 
 export type AvisoResult =
   | { status: "sent" }
@@ -43,7 +43,7 @@ export async function avisarClientePedido(input: {
 
     const { subject, html, text } = buildPedidoEstadoEmail({
       tenantName: tenant.name,
-      logoUrl: safeLogoUrl(tenant.logoPath),
+      logoUrl: logoMailDeTenant(tenant),
       numero: formatearNumeroPedido(pedido.numero),
       contactoNombre: pedido.contactoNombre,
       aviso,

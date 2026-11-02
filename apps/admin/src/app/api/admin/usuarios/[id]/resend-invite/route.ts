@@ -7,9 +7,9 @@ import { adminLinkBase } from "@/lib/admin-links"
 import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { canActOnRole, canManageUsers } from "@/lib/roles"
 import { sendEmail } from "@/lib/email"
-import { safeLogoUrl } from "@/lib/email-layout"
 import { buildInvitacionEmail } from "@/lib/invitacion-email"
 import { EMPTY_TENANT, tenantConfigFromRow } from "@/lib/tenants"
+import { logoMailDeTenant } from "@/lib/email-logo"
 
 // POST /api/admin/usuarios/:id/resend-invite
 // Genera un token nuevo (invalida el anterior) y reintenta el envío del email.
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const { subject, html, text } = buildInvitacionEmail({
       tenantName: tenant.name,
-      logoUrl: safeLogoUrl(tenant.logoPath),
+      logoUrl: logoMailDeTenant(tenant),
       nombre: user.name,
       role: user.role,
       inviteUrl,

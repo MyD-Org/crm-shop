@@ -8,7 +8,7 @@ vi.mock("resend", () => ({
   },
 }))
 
-import { sendEmail } from "@/lib/email"
+import { remitenteConNombre, sendEmail } from "@/lib/email"
 import type { TenantConfig } from "@/lib/tenants"
 
 const tenant: TenantConfig = {
@@ -116,5 +116,18 @@ describe("sendEmail", () => {
   it("Resend rechaza ⇒ lanza", async () => {
     sendMock.mockResolvedValue({ data: null, error: { message: "from no verificado" } })
     await expect(sendEmail(tenant, "cliente@example.com", "Hola", "<p>Hola</p>")).rejects.toThrow("from no verificado")
+  })
+})
+
+describe("remitenteConNombre", () => {
+  it("suma el nombre de la tienda a una dirección sola", () => {
+    expect(remitenteConNombre("no-reply@tienda.example", "Central LED")).toBe("Central LED <no-reply@tienda.example>")
+  })
+  it("un from que ya trae nombre queda como está", () => {
+    expect(remitenteConNombre("Ventas <ventas@tienda.example>", "Central LED")).toBe("Ventas <ventas@tienda.example>")
+  })
+  it("limpia comillas, <> y saltos del nombre; sin nombre, la dirección sola", () => {
+    expect(remitenteConNombre("a@tienda.example", 'Mi "Tienda" <x>\n')).toBe("Mi Tienda x <a@tienda.example>")
+    expect(remitenteConNombre("a@tienda.example", "  ")).toBe("a@tienda.example")
   })
 })

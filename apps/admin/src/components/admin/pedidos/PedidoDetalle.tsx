@@ -13,6 +13,7 @@ import { CuentaFacturaInfo } from "./CuentaFacturaInfo"
 import { ContactoControl } from "./ContactoControl"
 import { EmitirFacturaControl } from "./EmitirFacturaControl"
 import { ReservaControl } from "./ReservaControl"
+import { IntentosPedido } from "./IntentosPedido"
 import { PagosComprobantes } from "./PagosComprobantes"
 import { RegistrarPagoControl } from "./RegistrarPagoControl"
 import { RemitoControl } from "./RemitoControl"
@@ -432,6 +433,8 @@ export function PedidoDetalle({
             esAdminPlus={esAdminPlus}
             onChanged={() => void recargar(false)}
           />
+
+          <IntentosPedido intentos={pedido.intentos} nombresSucursal={nombresSucursal} />
 
           <Seccion titulo="Actividad y notas">
             <dl className="mb-3 grid grid-cols-1 gap-3">

@@ -8,6 +8,7 @@ import {
   getPedidoParaPago,
   motivoNoCobrable,
   registrarCobro,
+  registrarErrorIntento,
   registrarIntentoFallido,
   reservarIntento,
 } from "@/lib/pedidos";
@@ -19,6 +20,7 @@ import {
   type DatosAntifraude,
   type DatosPago,
 } from "@/lib/pagos/tipos";
+import { errorDeCatch } from "@/lib/pagos/detalle-proveedor";
 import { infoAdicionalDelPedido, sanearDeviceId, sanearIssuerId } from "@/lib/pagos/calidad-cobro";
 import { proveedorPago, rasgosProcesador } from "@/lib/pagos";
 import { credencialesMercadoPago, hayCuentaConfigurada } from "@/lib/pagos/credenciales";
@@ -451,6 +453,9 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
       await fijarReferenciaIntento(intentoId, referenciaPrevia);
     } catch (err) {
       console.error(`[/api/pagos/${proveedor.id}] no se pudo anotar la referencia del intento:`, err);
+      await registrarErrorIntento(intentoId, { detalle: "no_se_pudo_anotar_referencia", status: null }).catch((e) =>
+        console.error(`[/api/pagos/${proveedor.id}] no se pudo registrar el error del intento:`, e),
+      );
       await registrarIntentoFallido(
         pedido.id,
         err instanceof Error ? err.message : String(err),
@@ -501,6 +506,14 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
         : {}),
     });
 
+    // El POST falló (5xx/timeout) y el adaptador lo recuperó como pendiente: se deja el diagnóstico en el
+    // intento. No cambia su estado; un fallo acá no afecta la respuesta.
+    if (resultado.errorProveedor) {
+      await registrarErrorIntento(intentoId, resultado.errorProveedor).catch((e) =>
+        console.error(`[/api/pagos/${proveedor.id}] no se pudo registrar el error del intento:`, e),
+      );
+    }
+
     /**
      * Aparte del `try` del cobro: si el procesador ya respondió y lo que falla es guardar el resultado
      * (la base), el cobro existe igual. Antes caía al `catch` de abajo y el comprador veía "No pudimos
@@ -548,6 +561,12 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
     });
   } catch (err) {
     console.error(`[/api/pagos/${proveedor.id}] error:`, err);
+
+    // Diagnóstico para el CRM (Intentos de pago), ANTES de cerrar o descartar nada: va en columnas propias
+    // del intento y sobrevive a `descartarReserva`. Sólo diagnóstico: un fallo acá nunca rompe la respuesta.
+    await registrarErrorIntento(intentoId, errorDeCatch(err)).catch((e) =>
+      console.error(`[/api/pagos/${proveedor.id}] no se pudo registrar el error del intento:`, e),
+    );
 
     /**
      * El procesador rechazó las credenciales de la cuenta: no hay pago. Se cierra el intento con la

@@ -32,6 +32,7 @@ vi.mock("@/lib/pedidos", async (original) => ({
   getItemsParaAntifraude: vi.fn(),
   registrarCobro: vi.fn(),
   registrarIntentoFallido: vi.fn(async () => {}),
+  registrarErrorIntento: async () => undefined,
   fijarReferenciaIntento: vi.fn(),
   cerrarIntentoSinPago: vi.fn(),
 }));

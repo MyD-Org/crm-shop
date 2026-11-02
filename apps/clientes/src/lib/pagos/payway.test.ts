@@ -242,6 +242,54 @@ describe("crearPago — respuestas", () => {
   });
 });
 
+describe("ErrorProveedor.detalle (diagnóstico saneado para el intento)", () => {
+  it("4xx: el detalle sale de error_type/message/validation_errors, sin campos desconocidos", async () => {
+    fetchMock.mockImplementation(async () =>
+      json(400, {
+        error_type: "invalid_request_error",
+        message: "param invalido para comprador@cliente.example",
+        validation_errors: [{ code: "invalid_param", param: "bin" }],
+        extra: "DATO-INTERNO-NO-FILTRAR",
+      }),
+    );
+    const err = await payway.crearPago(datos()).catch((e) => e);
+    expect(err).toBeInstanceOf(ErrorProveedor);
+    expect(err.detalle).toContain("invalid_request_error");
+    expect(err.detalle).toContain("invalid_param");
+    expect(err.detalle).not.toContain("cliente.example");
+    expect(err.detalle).not.toContain("DATO-INTERNO");
+  });
+
+  it("POST con 5xx y consulta sin resultado: pendiente con errorProveedor saneado", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) =>
+      init?.method === "POST"
+        ? json(503, { error_type: "service_error", message: "caido para a@cliente.example" })
+        : json(200, { results: [] }),
+    );
+    const e = await payway.crearPago(datos());
+    expect(e).toMatchObject({ estado: "pendiente", detalle: "sin_respuesta_de_payway" });
+    expect(e.errorProveedor?.status).toBe(503);
+    expect(e.errorProveedor?.detalle).toContain("service_error");
+    expect(e.errorProveedor?.detalle).not.toContain("cliente.example");
+  });
+
+  it("POST con timeout: errorProveedor con 504 y sin el mensaje de la causa", async () => {
+    fetchMock.mockImplementation(async (_u: string, init?: RequestInit) => {
+      if (init?.method === "POST") throw abortError();
+      return json(200, { results: [] });
+    });
+    const e = await payway.crearPago(datos());
+    expect(e.errorProveedor).toEqual({ detalle: "sin_respuesta: TimeoutError", status: 504 });
+  });
+
+  it("consulta sin respuesta (504): detalle sin_respuesta con el nombre del error, sin su mensaje", async () => {
+    fetchMock.mockRejectedValue(Object.assign(new Error("fetch failed https://payway.example/x?apikey=SECRETO"), { name: "TimeoutError" }));
+    const err = await payway.consultarPago(REF).catch((e) => e);
+    expect(err).toMatchObject({ status: 504, detalle: "sin_respuesta: TimeoutError" });
+    expect(String(err.detalle)).not.toContain("SECRETO");
+  });
+});
+
 describe("crearPago — control de fraude (Cybersource)", () => {
   const antifraude = {
     clienteId: "user_sintetico123",

@@ -26,6 +26,7 @@ import {
   type EstadoPago,
   type ProveedorPago,
 } from "./tipos";
+import { sanearDetalleProveedor, sanearTexto } from "./detalle-proveedor";
 import { credencialesPayway, cuentaConfigurada, paywayBaseUrl } from "./credenciales";
 import { armarFraudDetection } from "./payway-antifraude";
 import {
@@ -103,8 +104,9 @@ export function crearPayway(deps: Deps): ProveedorPago & { requiereBin: true; re
       });
     } catch (err) {
       // Sin el mensaje de la causa: a veces trae la URL o headers.
-      console.error(`[payway] sin respuesta (${init.method} ${ruta.split("?")[0]}):`, (err as Error)?.name ?? "error");
-      throw new ErrorProveedor("Payway no respondió", 504);
+      const nombre = (err as Error)?.name ?? "error";
+      console.error(`[payway] sin respuesta (${init.method} ${ruta.split("?")[0]}):`, nombre);
+      throw new ErrorProveedor("Payway no respondió", 504, `sin_respuesta: ${sanearTexto(nombre)}`);
     }
     const cuerpo = await res.json().catch(() => null);
     return { status: res.status, cuerpo };
@@ -120,7 +122,7 @@ export function crearPayway(deps: Deps): ProveedorPago & { requiereBin: true; re
     if (r.status === 401 || r.status === 403) {
       console.error("[payway] error de credenciales o de habilitación del site: revisar las keys y las habilitaciones.");
     }
-    return new ErrorProveedor(`Payway respondió ${r.status}`, r.status);
+    return new ErrorProveedor(`Payway respondió ${r.status}`, r.status, sanearDetalleProveedor(r.cuerpo));
   }
 
   /** Pago de esa referencia, o null si Payway no lo conoce. */
@@ -147,17 +149,20 @@ export function crearPayway(deps: Deps): ProveedorPago & { requiereBin: true; re
    * reintenta el POST). Si no se puede saber, queda `pendiente` con la referencia, y el cron de
    * conciliación lo resuelve.
    */
-  async function recuperar(referencia: string): Promise<EstadoPago> {
+  async function recuperar(
+    referencia: string,
+    error?: { detalle: string; status: number | null },
+  ): Promise<EstadoPago> {
     for (let i = 0; i < CONSULTAS_TRAS_TIMEOUT; i++) {
       if (i > 0) await pausa(PAUSA_MS);
       try {
         const encontrado = await buscar(referencia);
-        if (encontrado) return encontrado;
+        if (encontrado) return error && encontrado.estado === "pendiente" ? { ...encontrado, errorProveedor: error } : encontrado;
       } catch {
         // Ya se logueó adentro. Se sigue: lo peor que pasa es quedar pendiente.
       }
     }
-    return { estado: "pendiente", referencia, detalle: "sin_respuesta_de_payway" };
+    return { estado: "pendiente", referencia, detalle: "sin_respuesta_de_payway", ...(error ? { errorProveedor: error } : {}) };
   }
 
   /** Valida lo que Payway rechazaría de todos modos: falla antes de la red, seguro sin pago. */
@@ -230,7 +235,9 @@ export function crearPayway(deps: Deps): ProveedorPago & { requiereBin: true; re
       try {
         r = await pedir("/payments", { method: "POST", body: cuerpo });
       } catch (err) {
-        if (err instanceof ErrorProveedor && err.status === 504) return recuperar(referencia);
+        if (err instanceof ErrorProveedor && err.status === 504) {
+          return recuperar(referencia, { detalle: err.detalle ?? "sin_respuesta", status: 504 });
+        }
         throw err;
       }
 
@@ -245,12 +252,12 @@ export function crearPayway(deps: Deps): ProveedorPago & { requiereBin: true; re
         }
         // Respuesta exitosa pero ilegible: el pago pudo crearse. Se consulta.
         console.error(`[payway] respuesta ${r.status} sin estado de pago`);
-        return recuperar(referencia);
+        return recuperar(referencia, { detalle: sanearDetalleProveedor(r.cuerpo) ?? "respuesta_ilegible", status: r.status });
       }
 
       if (r.status >= 500) {
         console.error(`[payway] /payments respondió ${r.status}`);
-        return recuperar(referencia);
+        return recuperar(referencia, { detalle: sanearDetalleProveedor(r.cuerpo) ?? `respondio ${r.status}`, status: r.status });
       }
 
       // 400, 401, 403, 404 y demás 4xx: Payway rechazó el request, seguro que no hay pago.

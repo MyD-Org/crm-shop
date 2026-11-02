@@ -3,6 +3,7 @@ import { getGuardedAdminSession } from "@/lib/admin-session"
 import { PEDIDOS_DEFAULT_LIMIT, listarPedidos, toPedidoDto } from "@/lib/pedidos-repo"
 import { roleRank } from "@/lib/roles"
 import { listarSucursales } from "@/lib/sucursales-repo"
+import { PedidosPestanas } from "@/components/admin/pedidos/PedidosPestanas"
 import { PedidosShell } from "@/components/admin/pedidos/PedidosShell"
 
 export const dynamic = "force-dynamic"
@@ -10,9 +11,11 @@ export const dynamic = "force-dynamic"
 // Solo admin y superadmin, igual que `requireAdminPlus` en la API; el operador recibe 404. El layout protegido ya
 // corrió el guard y redirige si no hay sesión; acá se repite para tener el tenant verificado
 // por host y el rol FRESCO de la base, nunca los de la cookie.
-export default async function PedidosPage() {
+export default async function PedidosPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
   const guard = await getGuardedAdminSession()
   if (!guard.ok || roleRank(guard.user.role) < roleRank("admin")) notFound()
+
+  const { tab } = await searchParams
 
   // Primera página sin filtro, directo del repo (no se le pega a la propia API). El shell
   // refetcha por la API al montar y al cambiar de filtro/página.
@@ -30,11 +33,18 @@ export default async function PedidosPage() {
           Pedidos realizados desde la tienda
         </p>
       </div>
-      <PedidosShell
-        initialItems={items.map(toPedidoDto)}
-        initialTotal={total}
-        pageSize={PEDIDOS_DEFAULT_LIMIT}
+      <PedidosPestanas
+        inicial={typeof tab === "string" ? tab : undefined}
+        pestanas={["pedidos", "intentos"]}
         sucursales={sucursales.map((s) => ({ slug: s.slug, nombre: s.nombre }))}
+        pedidos={
+          <PedidosShell
+            initialItems={items.map(toPedidoDto)}
+            initialTotal={total}
+            pageSize={PEDIDOS_DEFAULT_LIMIT}
+            sucursales={sucursales.map((s) => ({ slug: s.slug, nombre: s.nombre }))}
+          />
+        }
       />
     </div>
   )

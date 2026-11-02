@@ -114,3 +114,18 @@ describe("cambio de medio de un pedido con cupón", () => {
     expect((await leerPedido(id)).cupon).toMatchObject({ descuento: 100 });
   });
 });
+
+describe("carrera entre dos cambios de medio", () => {
+  it("una recotización con cupón vieja no le devuelve el descuento a un pedido que ya lo perdió", async () => {
+    await sembrar(["transferencia"]);
+    const id = await crearConCupon((await leerPromocionCupon("LUZ7KQ2M"))!);
+    const leida = (await pedidoParaCambiarMedio(id, dueno))!;
+    const conCupon = aplicarCupon(await cotizar(leida.lineas, { excluirPedidoId: id }), promoDesdePedido(leida.cupon!), ctx("transferencia", true));
+    await cambiar(id, "mercadopago", GENERAL); // la otra pestaña: pierde el cupón y libera el canje
+    const r = await cambiarMedioPedido(id, dueno, {
+      pagoMetodo: "transferencia", cuotas: null, idPriceList: GENERAL, cotizacion: conCupon, cupon: cuponTrasRecotizar(leida.cupon, conCupon),
+    });
+    expect(r).toEqual({ ok: false, motivo: "lineas_distintas" });
+    expect((await leerPedido(id)).cupon).toBeNull();
+  });
+});

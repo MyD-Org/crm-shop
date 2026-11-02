@@ -2247,6 +2247,11 @@ export async function cambiarMedioPedido(
       actuales.size === cot.lineas.length && cot.lineas.every((l) => actuales.get(l.id) === l.qty);
     if (!mismas) return { ok: false, motivo: "lineas_distintas" };
 
+    // Cupón: una recotización con descuento sólo vale si el pedido (bloqueado) sigue teniendo ESE
+    // cupón; otra pestaña pudo haberlo soltado (y liberado el canje) en el medio. Nunca un pedido con
+    // descuento sin su canje: el checkout recotiza.
+    if (nuevo.cupon && pedido.cupon?.codigoId !== nuevo.cupon.codigoId) return { ok: false, motivo: "lineas_distintas" };
+
     // Límite de unidades de campaña: mismo control que al crear (lock por regla y relectura), sin
     // contar las unidades de este mismo pedido. Una cotización vieja no le suma una unidad que no queda.
     await validarUnidadesEnTx(tx, cot.lineas, id);
@@ -2291,7 +2296,12 @@ export async function cambiarMedioPedido(
     if (nuevo.cupon !== undefined) {
       if (pedido.cupon && !nuevo.cupon) await liberarCanjeEnTx(tx, id);
       if (nuevo.cupon) {
-        await tx.update(cuponCanjes).set({ descuentoTotal: nuevo.cupon.descuento.toFixed(2) }).where(eq(cuponCanjes.orderId, id));
+        const canje = await tx
+          .update(cuponCanjes)
+          .set({ descuentoTotal: nuevo.cupon.descuento.toFixed(2) })
+          .where(eq(cuponCanjes.orderId, id))
+          .returning({ id: cuponCanjes.id });
+        if (canje.length === 0) throw new Error(`pedido ${id} con cupón y sin canje`);
       }
     }
     await tx

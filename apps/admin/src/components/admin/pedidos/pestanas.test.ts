@@ -44,6 +44,14 @@ describe("PedidosPestanas: fuente", () => {
   it("el panel de Pedidos queda siempre montado (oculto con hidden), los demás se montan al primer uso", () => {
     expect(fuente).toContain('hidden={activa !== "pedidos"}')
     expect(fuente).toContain('vistas.has("intentos")')
+    expect(fuente).toContain('vistas.has("carritos")')
+  })
+
+  it("las tres pestañas quedan habilitadas en la página (sin recorte de `pestanas`)", () => {
+    const pagina = leer("../../../app/admin/(protected)/pedidos/page.tsx")
+    expect(pagina).not.toContain("pestanas=")
+    expect(fuente).toContain("CarritosAbandonadosShell")
+    expect(fuente).toContain("IntentosPagoShell")
   })
 
   it("la página Pedidos exige admin+ antes de armar las pestañas", () => {

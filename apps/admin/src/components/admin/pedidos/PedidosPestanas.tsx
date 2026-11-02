@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react"
 import { Tabs } from "@myd-org/ui"
+import { CarritosAbandonadosShell } from "../carritos/CarritosAbandonadosShell"
 import { IntentosPagoShell } from "../pagos-intentos/IntentosPagoShell"
 import { PESTANAS_PEDIDOS, pestanaValida, urlConPestana, type PestanaPedidos } from "./pestanas"
 
@@ -38,6 +39,11 @@ export function PedidosPestanas({ pedidos, inicial, pestanas = PESTANAS_PEDIDOS.
     <div className="flex flex-col gap-4">
       <Tabs items={habilitadas.map(({ value, label }) => ({ value, label }))} value={activa} onValueChange={cambiar} ariaLabel="Secciones de pedidos" />
       <div hidden={activa !== "pedidos"}>{pedidos}</div>
+      {pestanas.includes("carritos") && vistas.has("carritos") && (
+        <div hidden={activa !== "carritos"}>
+          <CarritosAbandonadosShell />
+        </div>
+      )}
       {pestanas.includes("intentos") && vistas.has("intentos") && (
         <div hidden={activa !== "intentos"}>
           <IntentosPagoShell sucursales={sucursales} />

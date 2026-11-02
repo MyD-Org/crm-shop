@@ -35,8 +35,7 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
       </div>
       <PedidosPestanas
         inicial={typeof tab === "string" ? tab : undefined}
-        pestanas={["pedidos", "intentos"]}
-        sucursales={sucursales.map((s) => ({ slug: s.slug, nombre: s.nombre }))}
+                sucursales={sucursales.map((s) => ({ slug: s.slug, nombre: s.nombre }))}
         pedidos={
           <PedidosShell
             initialItems={items.map(toPedidoDto)}

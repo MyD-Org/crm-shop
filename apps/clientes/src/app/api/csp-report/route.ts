@@ -5,8 +5,6 @@ import { permitirAsync } from "@/lib/rate-limit";
  * reporte; no guarda nada. Sin autenticación (lo llama el navegador del visitante), por eso el tope
  * de tamaño y el límite de uso por IP. Siempre responde 204.
  */
-export const dynamic = "force-dynamic";
-
 const MAX_BYTES = 8 * 1024;
 const MAX_POR_IP = 30;
 const VENTANA_MS = 60_000;

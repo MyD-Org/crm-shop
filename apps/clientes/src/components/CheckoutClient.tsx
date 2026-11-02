@@ -32,6 +32,7 @@ import {
   type OpcionEntregaCheckout,
 } from "@/lib/checkout-ubicacion";
 import { fmtPrecio } from "@/lib/format";
+import { BarraFija } from "@/components/checkout/BarraFija";
 import { CompletarFacturacionDialog } from "@/components/checkout/CompletarFacturacionDialog";
 import { FacturacionForm, type PerfilFacturacionUI } from "@/components/FacturacionForm";
 import {
@@ -162,31 +163,34 @@ function ResumenFacturacion({ datos }: { datos: DatosDelContactoPublico["datos"]
   );
 }
 
-/** Volver / Continuar al pie de cada paso del checkout. */
+/** Volver / Continuar al pie de cada paso del checkout (en el celular, Continuar va en la barra fija). */
 function NavPaso({
   error,
   onVolver,
   onContinuar,
+  total,
 }: {
   error?: string | null;
   onVolver?: () => void;
   onContinuar?: () => void;
+  total?: number;
 }) {
   return (
-    <div className="mt-5">
-      {error && <p className="mb-3 text-sm text-danger">{error}</p>}
-      <div className="flex items-center gap-3">
-        {onVolver && (
-          <Button variant="ghost" onClick={onVolver}>
-            Volver
-          </Button>
-        )}
-        {onContinuar && (
-          <Button className="ml-auto" onClick={onContinuar}>
-            Continuar
-          </Button>
-        )}
-      </div>
+    <div className="mt-5 flex items-center gap-3">
+      {onVolver && (
+        <Button variant="ghost" className="hidden lg:inline-flex" onClick={onVolver}>
+          Volver
+        </Button>
+      )}
+      {onContinuar && (
+        <div className="lg:ml-auto">
+          <BarraFija total={total} error={error}>
+            <Button size="lg" className="w-full lg:w-auto" onClick={onContinuar}>
+              Continuar
+            </Button>
+          </BarraFija>
+        </div>
+      )}
     </div>
   );
 }
@@ -1617,8 +1621,19 @@ export function CheckoutClient({
 
   // Los pasos van dentro de la primera card de cada paso, arriba del título:
   // afuera quedaban flotando lejos del formulario que ordenan.
+  const pasoAnterior = pasos[pasos.indexOf(pasoActual) - 1];
   const cabeceraPasos = (
     <div className="-mx-5 mb-5 border-b border-border/60 px-5 pb-5">
+      {/* Celular: "Volver" arriba del paso; el pie queda para el botón que sigue (barra fija). */}
+      {pasoAnterior && (
+        <button
+          type="button"
+          onClick={() => irAPaso(pasoAnterior)}
+          className="-mt-1 mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-primary lg:hidden"
+        >
+          <span aria-hidden>←</span> Volver
+        </button>
+      )}
       <Stepper
         ariaLabel="Pasos del pedido"
         size="sm"
@@ -1692,7 +1707,7 @@ export function CheckoutClient({
                   <div className="mt-4 rounded-lg bg-bg p-3 text-sm">
                     {!aOtraDireccion && (
                       <p className="mb-2 text-text">
-                        Se envía a su domicilio fiscal: {fiscalCalle}, {fiscalCiudad}, {fiscalProvincia}.
+                        Se envía a: {fiscalCalle}, {fiscalCiudad}, {fiscalProvincia}.
                       </p>
                     )}
                     <label className="flex items-center gap-2 text-text">
@@ -1840,21 +1855,24 @@ export function CheckoutClient({
       )}
       <p className="mb-3 text-sm text-text">{TEXTO_CARRITO_A_CONFIRMAR}</p>
       <div className="flex items-center gap-3">
-        <Button variant="ghost" onClick={() => irAPaso("datos")}>
+        <Button variant="ghost" className="hidden lg:inline-flex" onClick={() => irAPaso("datos")}>
           Volver
         </Button>
-        <Button className="ml-auto" disabled={!puedeConfirmar} onClick={confirmarSinPago}>
-          {textoBotonConfirmar}
-          <IconoFlechaConfirmar />
-        </Button>
+        <div className="lg:ml-auto">
+          <BarraFija total={cotizacion?.total} nota={motivoNoConfirmar}>
+            <Button size="lg" className="w-full lg:w-auto" disabled={!puedeConfirmar} onClick={confirmarSinPago}>
+              {textoBotonConfirmar}
+              <IconoFlechaConfirmar />
+            </Button>
+          </BarraFija>
+        </div>
       </div>
-      {motivoNoConfirmar && <p className="mt-2 text-right text-xs text-muted">{motivoNoConfirmar}</p>}
     </div>
   );
   const nombreOpcionSel = opcionSel ? tituloEnFrase(opcionSel, medioSel?.nombre ?? "") : null;
 
   return (
-    <main className={`mx-auto w-full max-w-contenido flex-1 px-4 py-8 ${pasoActual === "pago" ? "pb-56 lg:pb-8" : ""}`}>
+    <main className={`mx-auto w-full max-w-contenido flex-1 px-4 py-8 ${pasoActual === "pago" ? "pb-56" : "pb-40"} lg:pb-8`}>
       <nav className="mb-6 text-sm text-muted">
         <Link href="/carrito" className="hover:text-primary">Carrito</Link>
         {" / "}
@@ -1865,7 +1883,8 @@ export function CheckoutClient({
         <h1 className="font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
           Finalizar pedido
         </h1>
-        <Link href="/catalogo" className="text-sm text-muted hover:text-primary">
+        {/* Celular: no compite con el "← Volver" de los pasos; para salir está la miga "Carrito". */}
+        <Link href="/catalogo" className="hidden text-sm text-muted hover:text-primary lg:inline">
           ← Seguir comprando
         </Link>
       </div>
@@ -1980,6 +1999,8 @@ export function CheckoutClient({
                   </div>
                 }
                 antesDeGuardar={validarEntrega}
+                totalBarraFija={cotizacion?.total}
+                barraFija
                 // A confirmar no hay paso Pago: el guardado es la única acción del paso y confirma
                 // el pedido con lo recién guardado (sin otro botón que confirme sin guardar).
                 {...(sinPasoPago ? { textoGuardar: "Guardar y confirmar pedido", ocupado: enviando } : {})}
@@ -2035,7 +2056,7 @@ export function CheckoutClient({
                 />
               </Field>
             </div>
-            <NavPaso error={errorPaso} onContinuar={continuarDesdeContacto} />
+            <NavPaso error={errorPaso} onContinuar={continuarDesdeContacto} total={cotizacion?.total} />
           </section>
           )}
 
@@ -2050,6 +2071,7 @@ export function CheckoutClient({
               <NavPaso
                 onVolver={() => irAPaso("datos")}
                 onContinuar={continuarDesdeEntrega}
+                total={cotizacion?.total}
               />
             )}
           </section>
@@ -2102,43 +2124,25 @@ export function CheckoutClient({
                 <p className="text-sm text-muted">{AVISO_PAGO_A_COORDINAR}</p>
               </>
             )}
-            <div className="mt-5">
-              {errorEnvio && estado !== "no_auth" && (
-                <p className="mb-3 hidden rounded-lg bg-danger/5 p-3 text-xs text-danger lg:block">{errorEnvio}</p>
-              )}
-              <div className="flex items-center gap-3">
-                <Button variant="ghost" onClick={() => irAPaso("entrega")}>
-                  Volver
-                </Button>
-                <span className="ml-auto hidden lg:block">
-                  <Button size="lg" disabled={!puedeConfirmar} onClick={confirmar}>
+            <div className="mt-5 flex items-center gap-3">
+              <Button variant="ghost" className="hidden lg:inline-flex" onClick={() => irAPaso("entrega")}>
+                Volver
+              </Button>
+              <div className="lg:ml-auto">
+                <BarraFija
+                  total={cotizacion?.total}
+                  ahorro={ahorroSel?.monto}
+                  error={errorEnvio && estado !== "no_auth" ? errorEnvio : null}
+                  nota={motivoNoConfirmar ?? pieConfirmar}
+                >
+                  <Button size="lg" className="w-full lg:w-auto" disabled={!puedeConfirmar} onClick={confirmar}>
                     {textoBotonConfirmar}
                     <IconoFlechaConfirmar />
                   </Button>
-                </span>
+                </BarraFija>
               </div>
-              {motivoNoConfirmar && <p className="mt-2 hidden text-right text-xs text-muted lg:block">{motivoNoConfirmar}</p>}
-              <p className="mt-2 hidden text-right text-xs text-muted lg:block">{pieConfirmar}</p>
             </div>
           </section>
-
-          {/* Celular: total y botón siempre a mano, en una barra fija abajo. */}
-          <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2 border-t border-border bg-surface px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] lg:hidden">
-            {errorEnvio && estado !== "no_auth" && (
-              <p className="rounded-lg bg-danger/5 p-2 text-xs text-danger">{errorEnvio}</p>
-            )}
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[13px] font-bold text-text">Total</span>
-              <span className="flex items-baseline gap-2">
-                {ahorroSel && <span className="text-xs font-bold text-success">Ahorra {fmtPrecio(ahorroSel.monto)}</span>}
-                <span className="font-display text-xl font-semibold text-text tabular-nums">{fmtPrecio(cotizacion?.total ?? 0)}</span>
-              </span>
-            </div>
-            <Button size="lg" className="w-full" disabled={!puedeConfirmar} onClick={confirmar}>
-              {textoBotonConfirmar}
-            </Button>
-            <p className="text-center text-[11px] text-muted">{motivoNoConfirmar ?? pieConfirmar}</p>
-          </div>
           </>
           )}
         </div>
@@ -2249,8 +2253,9 @@ export function CheckoutClient({
           </div>
 
           {/* En el último paso el botón va al pie de la sección (en el paso Pago, en el celular, en la barra fija). */}
+          {/* En el celular cada paso tiene su barra fija con el botón que sigue: acá sólo en escritorio. */}
           {pasoActual !== pasoFinal && (
-            <>
+            <div className="hidden lg:block">
               {errorEnvio && estado !== "no_auth" && (
                 <p className="mt-4 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>
               )}
@@ -2259,7 +2264,7 @@ export function CheckoutClient({
               </Button>
               {motivoNoConfirmar && <p className="mt-2 text-center text-xs text-muted">{motivoNoConfirmar}</p>}
               <p className="mt-3 text-center text-xs text-muted">{pieConfirmar}</p>
-            </>
+            </div>
           )}
         </div>
       </div>

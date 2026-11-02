@@ -6,13 +6,16 @@
  * producción literal (el repo es público): lo propio de cada entorno sale de
  * las variables (Clerk, fotos, R2).
  *
- * CSP en modo REPORT-ONLY (`Content-Security-Policy-Report-Only`): el navegador
- * informa lo que bloquearía pero no bloquea nada. El paso a enforcing
- * (`Content-Security-Policy`) se hace DESPUÉS de mirar los reportes (consola
- * del navegador, o el endpoint de `CSP_REPORT_URI` si está cargado) recorriendo
- * login de Clerk, checkout con el Brick de Mercado Pago, Informar pago y el
- * editor de la home, y de sumar acá lo que haya faltado. Pasarla a enforcing a
- * ciegas puede romper el pago o el login sin error visible del lado del server.
+ * La CSP se manda aplicada (`Content-Security-Policy`) o en Report-Only
+ * (`Content-Security-Policy-Report-Only`, el navegador informa lo que
+ * bloquearía pero no bloquea nada); lo decide `cspAplicada`: la variable
+ * `CSP_APLICAR` si está, y si no, aplicada en los Preview de Vercel (rama
+ * staging) y Report-Only en producción. Para pasarla en producción hay que
+ * probarla antes en staging recorriendo login de Clerk, checkout con el Brick
+ * de Mercado Pago y con Payway, Informar pago, fichas técnicas y el editor de
+ * la home, mirando los reportes (consola del navegador y `/api/csp-report`).
+ * Las políticas se evalúan en build (next.config.ts): cambiar `CSP_APLICAR`
+ * exige un redeploy, sin cambio de código.
  *
  * `'unsafe-inline'` en script-src es deliberado: el layout inyecta el script de
  * tema en el <head> y Next mete los datos del RSC inline. La alternativa con
@@ -31,6 +34,10 @@ export interface EnvCsp {
   SHOP_MEDIA_HOSTS?: string;
   R2_SHOP_MEDIA_PUBLIC_URL?: string;
   CSP_REPORT_URI?: string;
+  /** "1"/"true"/"si" aplica la CSP; "0"/"false"/"no" la deja en Report-Only. Ver `cspAplicada`. */
+  CSP_APLICAR?: string;
+  /** Entorno de Vercel: `preview` (rama staging), `production`, `development`. */
+  VERCEL_ENV?: string;
   META_PIXEL_ID?: string;
   GA4_MEASUREMENT_ID?: string;
 }
@@ -119,6 +126,12 @@ const GTM = "https://www.googletagmanager.com";
 const GA = ["https://*.google-analytics.com", "https://*.analytics.google.com"];
 const VERCEL_SCRIPTS_DEV = "https://va.vercel-scripts.com";
 
+/** Telemetría de Clerk (clerk-js la manda desde el navegador). */
+const CLERK_TELEMETRY = "https://clerk-telemetry.com";
+
+/** Destino por defecto de los reportes de violaciones (ruta propia que sólo loguea). */
+export const RUTA_REPORTE_CSP = "/api/csp-report";
+
 /** Turnstile: el captcha del sign-up de Clerk. */
 const CLOUDFLARE_CHALLENGES = "https://challenges.cloudflare.com";
 
@@ -135,7 +148,7 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
     ...(proxyClerk ? [proxyClerk] : []),
   ];
 
-  const medios = [
+  const medios: string[] = [
     ...origenesDeHosts(env.SHOP_MEDIA_HOSTS),
     ...(origenHttps(env.R2_SHOP_MEDIA_PUBLIC_URL) ? [origenHttps(env.R2_SHOP_MEDIA_PUBLIC_URL)!] : []),
   ];
@@ -180,6 +193,7 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
     "connect-src": [
       "'self'",
       ...clerk,
+      CLERK_TELEMETRY,
       ...MERCADO_PAGO,
       // Subidas firmadas (comprobantes de pago, imágenes de la home) directo a R2.
       "https://*.r2.cloudflarestorage.com",
@@ -197,21 +211,34 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
       // Videos de las páginas de marca: se cargan recién al tocar "Reproducir".
       "https://www.youtube-nocookie.com",
       "https://player.vimeo.com",
+      // Fichas técnicas: el PDF se muestra en un iframe (FichaTecnicaModal) servido desde los medios.
+      ...medios,
       ...(payway ? [CYBERSOURCE_FINGERPRINT] : []),
     ],
     "worker-src": ["'self'", "blob:"],
     "form-action": ["'self'", ...MERCADO_PAGO],
     "frame-ancestors": ["'none'"],
     "base-uri": ["'self'"],
-    "object-src": ["'none'"],
+    // Chrome aplica object-src al visor de PDF de un iframe: con 'none' la ficha técnica no se abre.
+    "object-src": ["'self'", ...medios],
   };
 
   const partes = Object.entries(directivas).map(
     ([nombre, valores]) => `${nombre} ${[...new Set(valores)].join(" ")}`,
   );
-  const reporte = env.CSP_REPORT_URI?.trim();
-  if (reporte) partes.push(`report-uri ${reporte}`);
+  partes.push(`report-uri ${env.CSP_REPORT_URI?.trim() || RUTA_REPORTE_CSP}`);
   return partes.join("; ");
+}
+
+/**
+ * ¿La CSP se manda aplicada? `CSP_APLICAR` manda si es un valor reconocido; sin ella, aplicada sólo
+ * en los Preview de Vercel (staging) y Report-Only en producción y en local.
+ */
+export function cspAplicada(env: EnvCsp = process.env as EnvCsp): boolean {
+  const v = env.CSP_APLICAR?.trim().toLowerCase();
+  if (v && ["1", "true", "si", "sí", "on"].includes(v)) return true;
+  if (v && ["0", "false", "no", "off"].includes(v)) return false;
+  return env.VERCEL_ENV === "preview";
 }
 
 /** Headers para `headers()` de next.config.ts (todas las rutas). */
@@ -228,6 +255,9 @@ export function headersDeSeguridad(env: EnvCsp = process.env as EnvCsp, opciones
     // Sin includeSubDomains ni preload: el dominio raíz puede tener subdominios
     // que no son del Shop y no se decide eso desde acá.
     { key: "Strict-Transport-Security", value: "max-age=63072000" },
-    { key: "Content-Security-Policy-Report-Only", value: politicaCsp(env, opciones) },
+    {
+      key: cspAplicada(env) ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only",
+      value: politicaCsp(env, opciones),
+    },
   ];
 }

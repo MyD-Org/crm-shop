@@ -46,7 +46,7 @@ const req = (path: string, init: { method?: string; body?: unknown } = {}) =>
 const params = (alegraId: string) => ({ params: Promise.resolve({ alegraId }) })
 
 function login(userId: string, role = "admin") {
-  session = { userId, role, tenantId: A, name: "Ana", email: "ana@example.com", save: async () => {} }
+  session = { mfa: "ok", userId, role, tenantId: A, name: "Ana", email: "ana@example.com", save: async () => {} }
 }
 
 let admin: string

@@ -361,7 +361,7 @@ describe("clientes de la tienda: repo", () => {
 
 function login(userId: string) {
   session = {
-    userId,
+    mfa: "ok", userId,
     role: "admin",
     tenantId: TENANT_A,
     name: "Nombre De Cookie",

@@ -47,6 +47,9 @@ const RUTAS_PUBLICAS = [
   // ningún producto y no hay error en ningún lado. Es de solo lectura sobre el catálogo público
   // y responde 404 con el flag `chat-ia` apagado.
   "/api/chat-ia/buscar",
+  // Reportes de violaciones de la CSP: los manda el navegador sin cookie de gate. La ruta sólo
+  // loguea (con límite de uso y de tamaño).
+  "/api/csp-report",
 ];
 
 /**

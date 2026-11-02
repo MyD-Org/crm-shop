@@ -52,7 +52,7 @@ const TENANT_A = "tenant-a"
 const MENSAJE_409 = "Este comprobante no pertenece a un cliente con cuenta corriente. Regístrelo como pago del pedido."
 
 function loginAdmin(userId: string) {
-  session = { userId, role: "admin", tenantId: TENANT_A, name: "Ana Admin", email: "ana.admin@example.com", save: async () => {} }
+  session = { mfa: "ok", userId, role: "admin", tenantId: TENANT_A, name: "Ana Admin", email: "ana.admin@example.com", save: async () => {} }
 }
 
 const adminReq = (path: string, init: { method?: string; body?: unknown } = {}) => {

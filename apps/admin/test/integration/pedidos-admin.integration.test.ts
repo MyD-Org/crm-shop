@@ -43,7 +43,7 @@ const CONFLICT_MSG = "El pedido fue modificado por otra persona. Actualice la p√
 function login(userId: string, opts: { cookieRole?: string; tenantId?: string } = {}) {
   // La cookie DICE un rol y un tenant; el guard manda lo de la fila fresca y el host.
   session = {
-    userId,
+    mfa: "ok", userId,
     role: opts.cookieRole ?? "admin",
     tenantId: opts.tenantId ?? TENANT_A,
     name: "Nombre De Cookie",

@@ -1,5 +1,7 @@
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { actualizarCuenta, eliminarCuenta } from "@/lib/cuentas-bancarias-shop-repo"
+import { programarAvisoCuentaBancaria } from "@/lib/cuentas-bancarias-shop-aviso"
+import { diffCuenta } from "@/lib/cuentas-bancarias-shop-aviso-email"
 import { errorDeCuenta } from "@/lib/cuentas-bancarias-shop-respuestas"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 import { NO_STORE } from "@/lib/sucursales-respuestas"
@@ -22,6 +24,10 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const r = await actualizarCuenta(guard.tenantId, id, body)
   if (r.kind !== "ok") return errorDeCuenta(r)
 
+  // Sólo si cambió algo de verdad (un PATCH idéntico no avisa).
+  if (r.antes && diffCuenta(r.antes, r.cuenta).length > 0) {
+    programarAvisoCuentaBancaria({ tenantId: guard.tenantId, tipo: "edicion", actor: guard.user, antes: r.antes, despues: r.cuenta })
+  }
   const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado, cuenta: r.cuenta }, { headers: NO_STORE })
 }
@@ -35,6 +41,7 @@ export async function DELETE(req: Request, { params }: Ctx) {
   const r = await eliminarCuenta(guard.tenantId, id)
   if (r.kind === "not_found") return adminNotFoundResponse()
 
+  programarAvisoCuentaBancaria({ tenantId: guard.tenantId, tipo: "baja", actor: guard.user, antes: r.cuenta })
   const { propagado } = await pingShopRevalidarSucursales(guard.tenantId)
   return Response.json({ ok: true, propagado }, { headers: NO_STORE })
 }

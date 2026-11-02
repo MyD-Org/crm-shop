@@ -110,7 +110,7 @@ describe("login: query scopeada por tenant del host", () => {
     expect(values).toContain("tenant-a")
   })
 
-  it("emite la sesión con el tenant del host y el rol de la fila", async () => {
+  it("sin 2FA (cualquier rol, también operador): deja la sesión pendiente de alta, sin userId", async () => {
     const { POST } = await loadRoute()
     const passwordHash = await hashPassword("secreta")
     state.rows = [activeUser({ passwordHash, role: "operator" })]
@@ -118,10 +118,27 @@ describe("login: query scopeada por tenant del host", () => {
     const res = await POST(loginReq("tenant-a.example.com", "ana@ejemplo.com", "secreta"))
 
     expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, paso: "alta" })
     expect(state.saved).toBe(1)
-    expect(state.session.tenantId).toBe("tenant-a")
-    expect(state.session.role).toBe("operator")
-    expect(state.session.userId).toBe("11111111-1111-4111-8111-111111111111")
+    expect(state.session.userId).toBeUndefined()
+    expect(state.session.mfa).toBeUndefined()
+    const pendiente = state.session.mfaPendiente as Record<string, unknown>
+    expect(pendiente).toMatchObject({ userId: "11111111-1111-4111-8111-111111111111", tenantId: "tenant-a", modo: "alta" })
+    expect(typeof pendiente.secretoEnc).toBe("string")
+  })
+
+  it("con 2FA: deja la sesión pendiente de verificar, con el tenant del host", async () => {
+    const { POST } = await loadRoute()
+    const passwordHash = await hashPassword("secreta")
+    state.rows = [activeUser({ passwordHash, role: "admin", totpSecretEnc: "v1:a:b:c" })]
+
+    const res = await POST(loginReq("tenant-a.example.com", "ana@ejemplo.com", "secreta"))
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, paso: "verificar" })
+    expect(state.session.userId).toBeUndefined()
+    expect(state.session.mfaPendiente).toMatchObject({ tenantId: "tenant-a", modo: "verificar" })
+    expect((state.session.mfaPendiente as Record<string, unknown>).secretoEnc).toBeUndefined()
   })
 
   it("host no resoluble: 401 genérico sin consultar credenciales", async () => {

@@ -5,6 +5,7 @@ import {
   jsonb,
   timestamp,
   integer,
+  bigint,
   boolean,
   numeric,
   date,
@@ -121,6 +122,14 @@ export const adminUsers = pgTable(
     // Las cookies `admin-session` emitidas ANTES de esta fecha dejan de valer (lo setea
     // reset-password). NULL = no se revocó nada. Ver getGuardedAdminSession (0075).
     sessionsRevokedBefore: timestamp("sessions_revoked_before", { withTimezone: true }),
+    // Verificación en dos pasos (TOTP), 0096. Obligatoria para admin/superadmin. Ver lib/admin-2fa.ts.
+    // Secreto cifrado (AES-256-GCM); NULL = sin 2FA.
+    totpSecretEnc: text("totp_secret_enc"),
+    totpEnabledAt: timestamp("totp_enabled_at", { withTimezone: true }),
+    // Último paso de 30 s aceptado: un código no vale dos veces.
+    totpLastStep: bigint("totp_last_step", { mode: "number" }),
+    // SHA-256 de los códigos de respaldo sin usar.
+    totpRecoveryHashes: text("totp_recovery_hashes").array().notNull().default(sql`'{}'::text[]`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("admin_users_email").on(t.email)],

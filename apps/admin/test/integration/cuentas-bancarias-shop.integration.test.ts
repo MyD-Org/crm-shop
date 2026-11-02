@@ -189,7 +189,7 @@ describe("repo de cuentas bancarias", () => {
     if (a.kind !== "ok") throw new Error("alta")
     expect(await actualizarCuenta(B, a.cuenta.id, { activa: false })).toEqual({ kind: "not_found" })
     expect(await eliminarCuenta(B, a.cuenta.id)).toEqual({ kind: "not_found" })
-    expect(await eliminarCuenta(A, a.cuenta.id)).toEqual({ kind: "ok" })
+    expect(await eliminarCuenta(A, a.cuenta.id)).toMatchObject({ kind: "ok" })
     expect(await eliminarCuenta(A, a.cuenta.id)).toEqual({ kind: "not_found" })
   })
 })

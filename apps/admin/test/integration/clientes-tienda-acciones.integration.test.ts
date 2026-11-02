@@ -373,7 +373,7 @@ describe("clientes de la tienda: acciones (lógica)", () => {
 // ───────────────────────────── API ─────────────────────────────
 
 function login(userId: string, role = "admin") {
-  session = { userId, role, tenantId: TENANT_A, name: "Nombre De Cookie", email: "cookie@example.com", save: async () => {} }
+  session = { mfa: "ok", userId, role, tenantId: TENANT_A, name: "Nombre De Cookie", email: "cookie@example.com", save: async () => {} }
 }
 
 const req = (path: string, method = "GET", body?: unknown) =>

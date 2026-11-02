@@ -91,7 +91,7 @@ function fakeFetch(input: unknown): Promise<Response> {
 }
 
 function login(userId: string) {
-  session = { userId, role: "admin", tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
+  session = { mfa: "ok", userId, role: "admin", tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
 }
 
 const req = (path: string, init: { method?: string; body?: unknown; host?: string } = {}) => {

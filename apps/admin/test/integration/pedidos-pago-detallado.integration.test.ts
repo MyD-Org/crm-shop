@@ -70,7 +70,7 @@ describe("admin: registrar pago con monto, fecha, referencia y comprobante", () 
     await seedTenant(TENANT_B)
     operatorId = await seedOperator(TENANT_A, { role: "admin", name: "Ope Rador", email: "ope@example.com" })
     invalidateTenantRegistry()
-    session = { userId: operatorId, role: "admin", tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
+    session = { mfa: "ok", userId: operatorId, role: "admin", tenantId: TENANT_A, name: "Cookie", email: "c@example.com", save: async () => {} }
     r2Holder.client = new FakeR2()
   })
 

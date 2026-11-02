@@ -40,7 +40,7 @@ beforeEach(async () => {
   await truncateAll()
   await seedTenant(A)
   const admin = await seedOperator(A, { role: "admin", email: "a@example.com" })
-  session = { userId: admin, role: "admin", tenantId: A, name: "Ana", email: "ana@example.com", save: async () => {} }
+  session = { mfa: "ok", userId: admin, role: "admin", tenantId: A, name: "Ana", email: "ana@example.com", save: async () => {} }
   const db = getDb()
   for (const id of ["mdp:12", "mdp:120", "100"]) {
     await db.insert(catalogProducts).values({ tenantId: A, alegraId: id, name: `PRODUCTO ${id}`, status: "active", prices: [] })

@@ -92,8 +92,8 @@ const nextConfig: NextConfig = {
       permanent: false,
     },
   ],
-  // Headers de seguridad en todas las respuestas. La CSP va en Report-Only:
-  // el paso a enforcing se hace después de mirar los reportes (ver
+  // Headers de seguridad en todas las respuestas. La CSP va aplicada en staging
+  // (Preview) y en Report-Only en producción salvo CSP_APLICAR (ver
   // src/lib/headers-seguridad.ts). Se evalúa en build: cambiar las variables
   // que la alimentan exige redeploy.
   // El checkout lleva además el host de Payway en connect-src (tokenización de la tarjeta en el

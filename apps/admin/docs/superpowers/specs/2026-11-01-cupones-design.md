@@ -39,16 +39,23 @@ Se separan dos cosas:
 ### Condiciones
 
 - **Vigencia**: inicio y fin con hora de Argentina (`-03:00`), fin exclusivo, igual que las campañas. Un código único puede además vencer a los **N días de emitido** (opcional, p. ej. 7 días): vence lo que ocurra primero. Sirve para dar urgencia real ("su código vence el 12/11").
-- **Sólo primera compra** (por defecto sí): la cuenta que compra no tiene ningún pedido previo que no esté cancelado. Se mira por `clerk_user_id` y también por email (decisión mía: frena la segunda cuenta con el mismo mail; no frena un mail distinto, límite conocido).
-- **Compra mínima** (opcional): sobre el subtotal con IVA de las líneas alcanzadas, antes del descuento.
+- **Sólo primera compra** (por defecto sí). Decisiones mías:
+  - Se miran sólo los pedidos **de la tienda**, no la historia del local ni de Alegra.
+  - Un pedido previo cuenta si está **pagado** (`pago_estado = 'pagado'`) o **avanzó** de estado (`confirmado`, `preparacion`, `en_camino`, `entregado`). Un primer intento abandonado (pago vencido o rechazado, transferencia nunca hecha) **no** cuenta: ese es justamente el público de la campaña.
+  - Tampoco se puede tener **otro pedido vivo con un cupón de primera compra** (vivo = mismo criterio que la reserva de stock, ver "Shop: dueño de los canjes"). Esto frena abrir dos pedidos pendientes con dos códigos.
+  - Se compara por `clerk_user_id` y también por email: frena una segunda cuenta con el mismo mail. Un mail distinto no se frena (límite conocido).
+- **Compra mínima** (opcional): sobre el subtotal con IVA de **todo el carrito**, antes del descuento (decisión mía). Incluye las líneas en campaña: el mínimo mide el tamaño de la compra, no sobre qué se aplica el %.
 - **Límite total de canjes** de la promoción (opcional). Para una genérica es la forma de tener un tope ("los primeros 100").
 - **Usos por código**: siempre 1 en códigos únicos. En la genérica, 1 por cuenta (decisión mía).
 - **Provincias del envío gratis** (opcional): si se cargan, el envío gratis sólo vale para entregas en esas provincias. Sin cargar, vale donde la tienda ya hace envío a domicilio. Así se puede dar envío gratis sólo en Mar del Plata y zona sin regalar un envío al norte.
 
 ### Lo que el cupón NO hace (decisión mía, todas)
 
-- **No acumula con campañas de precios.** Las líneas que ya tienen precio de campaña quedan afuera del descuento y no suman para la compra mínima. Hay que avisarlo en las condiciones del cupón. La promo de lanzamiento ya trae precios agresivos y acumular come margen.
+- **El % no acumula con campañas de precios.** Las líneas que ya tienen precio de campaña quedan afuera del %. Hay que avisarlo en las condiciones del cupón. La promo de lanzamiento ya trae precios agresivos y acumular come margen.
+  - Los dos beneficios son **independientes**: si todas las líneas están en campaña, el % no se aplica pero el **envío gratis sí** (si el cupón lo trae y se cumplen mínimo y zona). El cupón queda aplicado y el checkout aclara "El descuento no se suma a productos con precio promocional".
+  - Sólo si el cupón no deja ningún beneficio, se rechaza con el mensaje de la tabla.
 - **No aplica a compradores con lista privada** (cuenta corriente con lista propia). Ya tienen precio negociado. El checkout lo dice con un mensaje claro.
+- **Exige sesión de la tienda** (cuenta de Clerk). Quien compra identificado sólo como cliente vinculado del CRM, sin cuenta de Clerk, no puede usar cupones: es una cuenta de empresa, no el público de la campaña.
 - **Un solo cupón por pedido.**
 
 ## Reglas de precio
@@ -60,6 +67,7 @@ Se separan dos cosas:
   - Para trazabilidad, cada línea alcanzada guarda su unitario antes del cupón, y el pedido guarda una foto del cupón (ver "Pedido").
 - **Envío gratis**: el costo de envío online ya es siempre 0. Hoy `envio_gratis` distingue "gratis" de "a coordinar". Un cupón con envío gratis fuerza `envio_gratis = true` cuando la entrega es a domicilio y la provincia está alcanzada. Con retiro en el local no hace nada. Para el local es un compromiso: el costo del envío lo absorbe la empresa.
   - Si el cupón sólo da envío gratis y el pedido es retiro, el cupón no se aplica y el checkout lo dice ("Este cupón es de envío gratis: elija envío a domicilio para usarlo").
+  - **El envío gratis propio de la tienda** (`evaluarEnvio`, mínimo de `reglas_venta`) se evalúa sobre el subtotal **antes** del cupón (decisión mía). Así un cupón de % nunca le hace perder al comprador el envío gratis que ya tenía. `envio_gratis` = regla de la tienda **o** cupón.
 
 ## Cómo lo usa el comprador
 
@@ -84,8 +92,9 @@ Se separan dos cosas:
 | Todavía no empezó | "Este cupón se puede usar desde el {fecha}." |
 | Ya usado (código único) | "Este cupón ya fue usado." |
 | No es la primera compra | "Este cupón es sólo para la primera compra en la tienda." |
-| Falta monto | "Este cupón requiere una compra mínima de $X en productos sin otras promociones." |
-| Todas las líneas en campaña | "Los productos de su carrito ya tienen precio promocional: el cupón no se suma." |
+| Falta monto | "Este cupón requiere una compra mínima de $X." |
+| Todas las líneas en campaña y el cupón no trae envío gratis aplicable | "Los productos de su carrito ya tienen precio promocional: el cupón no se suma." |
+| Sin sesión de la tienda (sólo cliente vinculado) | "Para usar un cupón, inicie sesión con su cuenta de la tienda." |
 | Lista privada | "Su cuenta tiene precios propios: este cupón no aplica." |
 | Límite agotado | "Se agotaron los cupones de esta promoción." |
 | Sólo envío gratis y retiro, o provincia no alcanzada | "Este cupón es de envío gratis a {zona}: elija envío a domicilio a esa zona para usarlo." |
@@ -115,16 +124,18 @@ Tablas nuevas en `public` (migración del CRM, siguiente número libre):
 
 Tabla nueva en `shop` (migración del Shop, después de la del CRM):
 
-- **`cupon_canjes`**: `id`, `codigo_id`, `promocion_id`, `order_id`, `clerk_user_id null`, `email`, `estado` (`reservado` | `usado` | `liberado`), `descuento_total` (con IVA, para reportes), timestamps.
-  - Índice único parcial en `codigo_id` donde `estado <> 'liberado'` para códigos únicos: el mismo código no puede quedar en dos pedidos vivos.
-  - En la genérica, único parcial en `(promocion_id, clerk_user_id)` con el mismo filtro.
+- **`cupon_canjes`**: `id`, `codigo_id`, `promocion_id`, `order_id` (único), `clerk_user_id`, `email`, `descuento_total` (con IVA, para reportes), `created_at`. Una fila por pedido con cupón. **Sin columna de estado** (decisión mía, ver abajo).
 
-**Ciclo del canje**, mismo criterio que la reserva de stock y las unidades de campaña (`unidades.ts`):
+**El estado del canje se calcula, no se guarda**, con el mismo criterio que la reserva de stock (`shop.stock_reservado`) y las unidades de campaña (`campanias/unidades.ts`). Así nadie tiene que acordarse de actualizarlo: ni el CRM, que marca pagos offline y cancela pedidos, ni un cron.
 
-- Al crear el pedido: `reservado`, dentro de la misma transacción de `crearPedido`. El límite total se valida ahí con advisory lock por promoción.
-- Al pagarse: `usado`.
-- Si el pedido se cancela o vence sin pagar: `liberado`. El código vuelve a servir (dentro de su vigencia) y el límite total recupera la unidad.
-- Si el índice único choca (otro pedido se llevó el código o el último cupón): `409` con motivo `cupon` y el mensaje de "ya usado" o "se agotaron".
+- Un canje está **vivo** si su pedido no está cancelado y está pagado, avanzó de estado o tiene la reserva viva (`coalesce(reserva_vence_en, created_at + 24 h) > now()`). Es la misma expresión que usa `unidades.ts`; conviene extraerla para que las dos no se separen.
+- Un canje está **usado** si su pedido está pagado o avanzó de estado. Es lo que muestra el CRM como "canjeado".
+- Lo demás está **liberado**: pedido cancelado, o pendiente con la reserva vencida. El código vuelve a servir dentro de su vigencia y el límite total recupera la unidad.
+- Una reserva sin vencimiento (`reserva_dias = 0`, `'infinity'`) mantiene el código tomado mientras el pedido siga pendiente, igual que el stock. Si se cancela, se libera.
+
+**Concurrencia:** dentro de la transacción de `crearPedido`, advisory lock por código (únicos) o por promoción (genérica y límite total), luego se cuentan los canjes vivos y recién ahí se inserta. Es el patrón de `disponiblesEnTx` y de las unidades de campaña. Si no queda lugar: `409` con motivo `cupon` y el mensaje de "ya usado" o "se agotaron".
+
+**Pago tardío de un pedido liberado** (webhook atrasado de Mercado Pago, o el CRM marca pagada una transferencia vieja) cuyo código ya se usó en otro pedido: se acepta. El pago ya entró y el pedido conserva su precio. Es un doble uso de un solo código, raro y de monto acotado. El detalle de la promoción en el CRM lo muestra con la marca "Canje duplicado" (decisión mía).
 
 ### Cotización
 
@@ -167,7 +178,7 @@ Dentro de Catálogo, junto a Campañas y Precios online, con el mismo permiso (`
 - **Listado**: nombre, tipo, beneficio, vigencia, estado (Programada / Activa / Pausada / Terminada), códigos emitidos, canjes usados y descuento total otorgado.
 - **Formulario**: todos los campos de la promoción. Para la genérica, el código. Para los únicos, el prefijo, el vencimiento desde la emisión y el token de integración ("Generar token", "Revocar").
 - **Generar lote** (sólo únicos): cantidad (hasta 500) → descarga CSV con los códigos. Para volantes o el local.
-- **Detalle**: tabla de canjes con pedido (link al pedido), fecha, estado y descuento. Sin email en la tabla por defecto (decisión mía: se ve en el pedido).
+- **Detalle**: tabla de canjes con pedido (link al pedido), fecha, estado calculado (Reservado / Canjeado / Liberado, más "Canje duplicado" si corresponde) y descuento. Sin email en la tabla por defecto (decisión mía: se ve en el pedido).
 - **Acciones**: Pausar / Reanudar (afecta canjes nuevos; los pedidos ya creados conservan su descuento), Editar (no se puede cambiar el tipo ni el % una vez que hay canjes; sí el fin, el límite, las condiciones y la pausa), Eliminar (sólo sin canjes).
 - Historial: cada guardado deja una entrada con autor, como las campañas.
 

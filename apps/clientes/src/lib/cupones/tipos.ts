@@ -1,4 +1,5 @@
 // Tipos de los cupones de descuento en el Shop (spec apps/admin/docs/superpowers/specs/2026-11-01-cupones-design.md).
+import type { EntregaTipo } from "../envio";
 import type { OpcionCobro } from "../pagos/opciones-cobro";
 
 /**
@@ -19,4 +20,103 @@ export interface CuponPedido {
   permiteCuotas: boolean;
   condiciones: string;
   descuento: number;
+}
+
+/** Lo que el Shop lee de la vista `public.cupones_shop` (CRM 0097) para un código. */
+export interface PromocionCupon {
+  codigoId: string;
+  codigo: string;
+  promocionId: string;
+  nombre: string;
+  tipo: "generica" | "unicos";
+  pct: number | null;
+  envioGratis: boolean;
+  /** Claves de `claveProvincia`; NULL = donde la tienda ya hace envío a domicilio. */
+  provinciasEnvio: string[] | null;
+  inicio: string;
+  /** Exclusivo. */
+  fin: string;
+  /** Vencimiento del código (únicos con "vence a los N días"); NULL = sólo la vigencia. */
+  venceEn: string | null;
+  soloPrimeraCompra: boolean;
+  /** Con IVA, sobre todo el carrito a la lista general. */
+  minimo: number | null;
+  medios: string[] | null;
+  formas: OpcionCobro[] | null;
+  permiteCuotas: boolean;
+  limiteCanjes: number | null;
+  condiciones: string;
+  activa: boolean;
+}
+
+export type MotivoCupon =
+  | "no_existe"
+  | "vencido"
+  | "no_empezo"
+  | "usado"
+  | "no_primera_compra"
+  | "minimo"
+  | "todo_en_campania"
+  | "lista_privada"
+  | "agotado"
+  | "solo_envio"
+  | "sin_sesion"
+  | "opcion_no_elegible"
+  | "no_disponible";
+
+/** El cupón aplicado a una cotización. */
+export interface CuponAplicado {
+  codigo: string;
+  codigoId: string;
+  promocionId: string;
+  nombre: string;
+  pct: number | null;
+  /** false = el % no alcanzó ninguna línea (todo en campaña) y queda sólo el envío gratis. */
+  pctAplicado: boolean;
+  /** El envío gratis del cupón vale para esta entrega. */
+  envioGratis: boolean;
+  /** Con IVA: diferencia de `total` antes y después. */
+  descuento: number;
+  /** Neto ANTES del cupón: la regla de envío gratis de la tienda se evalúa sobre éste. */
+  subtotalAntes: number;
+  condiciones: string;
+  venceEn: string | null;
+  /** false = invitado: faltan las reglas de la cuenta (primera compra, lista privada). */
+  verificado: boolean;
+  aviso: string | null;
+}
+
+export interface CuponError {
+  motivo: MotivoCupon;
+  mensaje: string;
+}
+
+/** Lo que eligió el comprador para pagar: decide si el cupón es elegible. */
+export interface OpcionCupon {
+  slug: string;
+  forma: OpcionCobro | null;
+  cuotasSinInteres: boolean;
+}
+
+export interface ContextoCupon {
+  ahora: Date;
+  opcion: OpcionCupon;
+  entrega: { tipo: EntregaTipo; provincia: string | null };
+  /** Total con IVA de todo el carrito a la lista general (para el mínimo). */
+  totalListaGeneral: number;
+  /** Primer motivo de la cuenta que impide el cupón (`motivoCuentaCupon`), o null. */
+  motivoCuenta: MotivoCupon | null;
+  verificado: boolean;
+  /** Recotización de un pedido ya creado: se saltean vigencia, mínimo y cuenta. */
+  congelado: boolean;
+  /** slug → nombre visible del medio (de `medios_pago_shop`), para el texto de `opcion_no_elegible`. */
+  nombresMedios?: Record<string, string>;
+}
+
+/** Lo que reciben `cotizarConMedio` y `/api/carrito/cotizar` para aplicar un cupón. */
+export interface CuponParaCotizar {
+  promo: PromocionCupon;
+  motivoCuenta: MotivoCupon | null;
+  verificado: boolean;
+  congelado?: boolean;
 }

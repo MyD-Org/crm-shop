@@ -44,7 +44,27 @@ Se separan dos cosas:
   - Un pedido previo cuenta si está **pagado** (`pago_estado = 'pagado'`) o **avanzó** de estado (`confirmado`, `preparacion`, `en_camino`, `entregado`). Un primer intento abandonado (pago vencido o rechazado, transferencia nunca hecha) **no** cuenta: ese es justamente el público de la campaña.
   - Tampoco se puede tener **otro pedido vivo con un cupón de primera compra** (vivo = mismo criterio que la reserva de stock, ver "Shop: dueño de los canjes"). Esto frena abrir dos pedidos pendientes con dos códigos.
   - Se compara por `clerk_user_id` y también por email: frena una segunda cuenta con el mismo mail. Un mail distinto no se frena (límite conocido).
-- **Compra mínima** (opcional): sobre el subtotal con IVA de **todo el carrito**, antes del descuento (decisión mía). Incluye las líneas en campaña: el mínimo mide el tamaño de la compra, no sobre qué se aplica el %.
+- **Compra mínima** (opcional): sobre el subtotal con IVA de **todo el carrito a la lista general**, antes del descuento (decisión mía). Incluye las líneas en campaña: el mínimo mide el tamaño de la compra, no sobre qué se aplica el %. Se usa la lista general y no la del medio para que cambiar de medio de pago no haga aparecer ni desaparecer el cupón (con transferencia, más barata, un carrito podría quedar debajo del mínimo).
+- **Medios de pago** (opcional): ver la sección siguiente.
+
+### Medios de pago y listas de precios
+
+**El cupón no elige listas: elige medios de pago.** La lista de precios es un mecanismo interno: la decide el servidor a partir de lo que elige el comprador (medio, forma y cuotas), con la precedencia de siempre (`lista-medio.ts`: forma > lista del medio > general; cuotas sin interés: la lista de la condición). Una misma lista puede servir a varios medios y una condición de cuotas apunta a otra lista. Restringir por lista sería confuso para quien carga el cupón y no coincidiría con lo que ve el comprador. Por eso el cupón se restringe por lo que el comprador elige, y el % se aplica sobre **la lista que rija esa elección**, sea cual sea.
+
+Tres filtros, todos opcionales, en la promoción:
+
+- **Medios**: lista de slugs de `medios_pago_shop` (p. ej. sólo `transferencia`). Vacío = todos los medios públicos. El medio de cuenta corriente (`audiencia = cuenta_corriente`) nunca acepta cupones.
+- **Formas** (sólo Mercado Pago y Payway): `credito`, `debito`, `cuenta_mp`. Vacío = todas. Un medio sin formas (transferencia, efectivo) no se ve afectado por este filtro.
+- **Cuotas**: "sólo en 1 pago" o "también en cuotas sin interés". Por defecto, **sólo en 1 pago** (decisión mía): las cuotas sin interés ya tienen el costo financiero absorbido en su lista, y sumarles un cupón come margen dos veces. Las cuotas **con interés** de Mercado Pago se calculan sobre el precio en 1 pago, así que ahí el cupón ya está incluido si el medio y la forma valen.
+
+`a_coordinar` (pedidos a confirmar por venta sin stock) cuenta como un medio más: entra si la promoción no restringe medios o si lo incluye.
+
+**Qué ve el comprador en el paso Pago:**
+
+- Cada card de forma de pago (`totalesOpciones` de `/api/carrito/cotizar`) muestra su total **con el cupón aplicado si esa opción es elegible**, y sin él si no lo es. Así compara totales reales.
+- Las opciones elegibles llevan una etiqueta "Con su cupón" (reusa los `chips` del medio). Las no elegibles, una línea gris "El cupón no aplica con este medio".
+- El selector de cuotas muestra cada cantidad con su total real: con cupón en 1 pago, y sin cupón en las cuotas sin interés si la promoción es "sólo en 1 pago".
+- Si el comprador elige una opción no elegible, el resumen deja de mostrar el descuento y aparece el aviso "Su cupón es válido sólo {pagando con transferencia | en 1 pago | …}". El cupón queda guardado: si vuelve a una opción elegible, se aplica de nuevo.
 - **Límite total de canjes** de la promoción (opcional). Para una genérica es la forma de tener un tope ("los primeros 100").
 - **Usos por código**: siempre 1 en códigos únicos. En la genérica, 1 por cuenta (decisión mía).
 - **Provincias del envío gratis** (opcional): si se cargan, el envío gratis sólo vale para entregas en esas provincias. Sin cargar, vale donde la tienda ya hace envío a domicilio. Así se puede dar envío gratis sólo en Mar del Plata y zona sin regalar un envío al norte.
@@ -95,6 +115,7 @@ Se separan dos cosas:
 | Falta monto | "Este cupón requiere una compra mínima de $X." |
 | Todas las líneas en campaña y el cupón no trae envío gratis aplicable | "Los productos de su carrito ya tienen precio promocional: el cupón no se suma." |
 | Sin sesión de la tienda (sólo cliente vinculado) | "Para usar un cupón, inicie sesión con su cuenta de la tienda." |
+| Medio, forma o cuotas no elegibles | "Su cupón es válido sólo {pagando con transferencia \| con tarjeta de débito \| en 1 pago}." (aviso, no error: el cupón queda guardado) |
 | Lista privada | "Su cuenta tiene precios propios: este cupón no aplica." |
 | Límite agotado | "Se agotaron los cupones de esta promoción." |
 | Sólo envío gratis y retiro, o provincia no alcanzada | "Este cupón es de envío gratis a {zona}: elija envío a domicilio a esa zona para usarlo." |
@@ -109,7 +130,7 @@ Antes de iniciar sesión el cupón se valida sin las reglas que dependen de la c
 
 Tablas nuevas en `public` (migración del CRM, siguiente número libre):
 
-- **`cupon_promociones`**: `id uuid`, `tenant_id`, `nombre`, `tipo` (`generica` | `unicos`), `pct smallint null` (1–50), `envio_gratis bool`, `provincias_envio text[] null`, `inicio timestamptz`, `fin timestamptz`, `vence_dias_desde_emision smallint null`, `solo_primera_compra bool default true`, `minimo numeric(14,2) null` (con IVA), `limite_canjes int null`, `condiciones text` (lo que se muestra al comprador), `prefijo text` (para los únicos, p. ej. `LUZ`), `activa bool default true` (pausa manual), `creado_por`, timestamps.
+- **`cupon_promociones`**: `id uuid`, `tenant_id`, `nombre`, `tipo` (`generica` | `unicos`), `pct smallint null` (1–50), `envio_gratis bool`, `provincias_envio text[] null`, `inicio timestamptz`, `fin timestamptz`, `vence_dias_desde_emision smallint null`, `solo_primera_compra bool default true`, `minimo numeric(14,2) null` (con IVA, a la lista general), `medios text[] null` (slugs; NULL = todos los públicos), `formas text[] null` (NULL = todas), `permite_cuotas bool default false` (cuotas sin interés), `limite_canjes int null`, `condiciones text` (lo que se muestra al comprador), `prefijo text` (para los únicos, p. ej. `LUZ`), `activa bool default true` (pausa manual), `creado_por`, timestamps.
   - CHECKs: `fin > inicio`; `pct is not null or envio_gratis`.
 - **`cupon_codigos`**: `id uuid`, `promocion_id`, `tenant_id`, `codigo text` (normalizado en mayúsculas), `origen` (`manual` | `lote` | `integracion`), `referencia_externa text null` (el id del contacto del bot, ver endpoint), `vence_en timestamptz null`, `emitido_en`.
   - Único por `(tenant_id, codigo)`.
@@ -142,7 +163,10 @@ Tabla nueva en `shop` (migración del Shop, después de la del CRM):
 - `/api/carrito/cotizar` y `POST /api/pedidos` aceptan `cupon` (texto). Una función pura nueva aplica el cupón sobre la cotización ya hecha (después de campañas y lista): decide qué líneas alcanza, aplica el % y devuelve el descuento.
   - La `Cotizacion` suma `cupon: { codigo, pct, envioGratis, descuento, condiciones, venceEn } | null` y, si no se pudo aplicar, `cuponError: { motivo, mensaje }`. Un cupón inválido **no** bloquea el pedido: el pedido se puede confirmar sin él. El checkout muestra el error y deja quitarlo.
   - El `totalVisto` que manda el checkout ya incluye el descuento. Si difiere, sale el 409 de siempre.
-- **Pedidos ya creados**: al recotizar (`/api/pedidos/[id]/medio` y `/cuotas`), el cupón se toma de la foto del pedido y se valida con la fecha de creación del pedido, igual que las campañas. No se vuelve a mirar "primera compra" ni el límite (ya están reservados). El % se aplica sobre la lista del medio nuevo.
+- **Pedidos ya creados**: al recotizar (`/api/pedidos/[id]/medio` y `/cuotas`), el cupón se toma de la foto del pedido y se valida con la fecha de creación del pedido, igual que las campañas. No se vuelve a mirar "primera compra", el mínimo ni el límite (ya están reservados). El % se aplica sobre la lista del medio, forma y cuotas nuevos.
+  - **Cambio a una opción no elegible** (otro medio, otra forma, o cuotas sin interés con una promoción "sólo en 1 pago"): el pedido se recotiza **sin descuento**, `orders.cupon` queda en NULL y se borra el canje, que libera el código. El checkout lo avisa **antes** de confirmar el cambio, con los dos totales: "Con {opción} el cupón no aplica: el total pasa de $X a $Y". Decisión mía: no se bloquea el cambio de medio, porque el comprador tiene que poder pagar aunque su tarjeta no sea la del cupón.
+  - Volver después a una opción elegible no recupera el cupón en ese pedido (ya se liberó). Puede volver a ingresarlo, y se valida de nuevo como en un pedido nuevo.
+  - Con la promoción pausada o vencida después de crear el pedido, el pedido conserva su descuento mientras no cambie a una opción no elegible.
 
 ### Pedido
 
@@ -176,11 +200,37 @@ El detalle del pedido en el CRM muestra "Cupón LUZ-7KQ2M (10 %) −$X" y, si fu
 Dentro de Catálogo, junto a Campañas y Precios online, con el mismo permiso (`requireAdminPlus`).
 
 - **Listado**: nombre, tipo, beneficio, vigencia, estado (Programada / Activa / Pausada / Terminada), códigos emitidos, canjes usados y descuento total otorgado.
-- **Formulario**: todos los campos de la promoción. Para la genérica, el código. Para los únicos, el prefijo, el vencimiento desde la emisión y el token de integración ("Generar token", "Revocar").
+- **Formulario**: todos los campos de la promoción. Medios y formas con casillas que salen de los medios activos del tenant (los de cuenta corriente no aparecen); cuotas con un interruptor "También en cuotas sin interés". Para la genérica, el código. Para los únicos, el prefijo, el vencimiento desde la emisión y el token de integración ("Generar token", "Revocar").
 - **Generar lote** (sólo únicos): cantidad (hasta 500) → descarga CSV con los códigos. Para volantes o el local.
 - **Detalle**: tabla de canjes con pedido (link al pedido), fecha, estado calculado (Reservado / Canjeado / Liberado, más "Canje duplicado" si corresponde) y descuento. Sin email en la tabla por defecto (decisión mía: se ve en el pedido).
 - **Acciones**: Pausar / Reanudar (afecta canjes nuevos; los pedidos ya creados conservan su descuento), Editar (no se puede cambiar el tipo ni el % una vez que hay canjes; sí el fin, el límite, las condiciones y la pausa), Eliminar (sólo sin canjes).
 - Historial: cada guardado deja una entrada con autor, como las campañas.
+
+## Casos de uso (validación del diseño)
+
+Cada caso dice cómo se configura y qué pasa. Sirven también como casos de prueba de punta a punta.
+
+| # | Caso | Configuración | Qué pasa |
+|---|---|---|---|
+| 1 | **Bot de Instagram**: 10 % en la primera compra, 7 días para usarlo | Únicos, prefijo `LUZ`, 10 %, primera compra, vence a los 7 días, token de integración | El bot pide el código con el id del contacto y manda el link. La persona entra, se registra y compra con el 10 % sobre la lista del medio que elija (sólo en 1 pago, por defecto). |
+| 2 | **Lo mismo, pero con envío gratis en MdP y zona** | Caso 1 + envío gratis, provincias: Buenos Aires | Envío a domicilio en Buenos Aires: 10 % + envío gratis. Envío a otra provincia: sólo el 10 %, envío a coordinar. Retiro: sólo el 10 %. |
+| 3 | **"10 % extra pagando por transferencia"** | Genérica `TRANSFER10`, 10 %, medios: transferencia, sin primera compra | El 10 % se aplica sobre la lista de transferencia, que ya es más barata. Con tarjeta, la card muestra el total sin cupón y el aviso "válido sólo pagando con transferencia". |
+| 4 | **Cupón sólo con débito o cuenta de Mercado Pago** (promo tipo banco) | 10 %, medios: mercadopago, formas: débito y cuenta_mp | Crédito muestra el total sin cupón. Débito y cuenta MP, con cupón y sobre la lista de su forma (si el medio tiene listas por forma). |
+| 5 | **Que el cupón valga también en cuotas sin interés** | Caso 1 + "También en cuotas sin interés" | El selector de cuotas muestra cada cantidad con el 10 % sobre la lista de esa condición de cuotas; la cuota es ese total ÷ N. |
+| 6 | **Cupón "sólo en 1 pago" y el comprador elige 6 cuotas** | Caso 1 (por defecto) | El selector muestra 6 cuotas sin cupón. Si elige 6 cuotas, el resumen saca el descuento y avisa "válido sólo en 1 pago". En 1 pago vuelve el descuento. |
+| 7 | **Carrito todo en campaña** (promo de lanzamiento) con un cupón de 10 % + envío gratis | Caso 2 | El % no se aplica a ninguna línea. El envío gratis sí, si la zona y el mínimo valen. El cupón queda aplicado con la aclaración "no se suma a productos con precio promocional". |
+| 8 | **Carrito todo en campaña, cupón sólo de %** | Caso 1 | El cupón no deja beneficio y se rechaza con "Los productos de su carrito ya tienen precio promocional". |
+| 9 | **Carrito mixto** (campaña + productos normales) | Caso 1 | El 10 % se aplica sólo a las líneas normales. El mínimo se mide sobre todo el carrito, a la lista general. |
+| 10 | **Cambia de medio después de crear el pedido**, de transferencia a tarjeta, con el cupón del caso 3 | Caso 3 | Antes de confirmar el cambio ve "con tarjeta el cupón no aplica: $X → $Y". Si confirma, el pedido se recotiza sin descuento y el código se libera. |
+| 11 | **Primer intento abandonado** (el pago de Mercado Pago venció) | Caso 1 | Ese pedido no cuenta como compra previa y su reserva vencida libera el código. La persona puede volver a usar el mismo código en un pedido nuevo mientras esté vigente. |
+| 12 | **Dos checkouts a la vez con el mismo código único** | Caso 1 | El advisory lock por código deja pasar al primero. El segundo recibe 409 "Este cupón ya fue usado". |
+| 13 | **Genérica con tope**: "los primeros 100" | Genérica `APERTURA`, 15 %, límite 100 | El canje 101 recibe "Se agotaron los cupones de esta promoción". Un pedido cancelado devuelve su lugar. |
+| 14 | **Cliente con lista privada** | Cualquiera | "Su cuenta tiene precios propios: este cupón no aplica." Paga su precio de siempre. |
+| 15 | **Pedido a confirmar por venta sin stock** (`a_coordinar`) | Caso 1 sin restricción de medios | El cupón se aplica sobre la lista general y queda congelado. El operador confirma el pedido con ese precio. |
+| 16 | **Vence el cupón con el pedido pendiente de pago** | Caso 1 | El pedido conserva su descuento durante su ventana de pago, como las campañas. Si cambia a una opción no elegible, lo pierde. |
+| 17 | **Volantes en el local** con códigos únicos | Únicos, lote de 200 desde el CRM (CSV) | Cada volante tiene un código. Se canjea en la tienda online como el caso 1, sin bot. |
+
+**Casos que el diseño no cubre a propósito:** dos cupones en el mismo pedido; cupón en una venta del local o en una cotización del CRM; descuento de monto fijo; cupón sobre un producto o una marca puntual.
 
 ## Fuera de alcance (v1)
 

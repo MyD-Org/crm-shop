@@ -60,7 +60,7 @@ async function sembrar(tenant: string, id: string, extra: { tipo?: string; padre
 
 async function loginComo(role: "admin" | "operator", tenant = A) {
   const id = await seedOperator(tenant, { role, email: `${role}-${tenant}@example.com` })
-  session = { userId: id, role, tenantId: tenant, name: "Ana", email: "ana@example.com", save: async () => {} }
+  session = { mfa: "ok", userId: id, role, tenantId: tenant, name: "Ana", email: "ana@example.com", save: async () => {} }
 }
 
 beforeEach(async () => {

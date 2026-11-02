@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
       canales_permitidos: adminUsers.canalesPermitidos,
       createdAt: adminUsers.createdAt,
       hasPassword: adminUsers.passwordHash,
+      totpEnabledAt: adminUsers.totpEnabledAt,
       inviteExpiresAt: adminPasswordTokens.expiresAt,
       inviteAcceptedAt: adminPasswordTokens.usedAt,
     })
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
     )
     .where(eq(adminUsers.tenantId, guard.tenantId))
 
-  return NextResponse.json(users.map((u) => ({ ...u, hasPassword: !!u.hasPassword })))
+  return NextResponse.json(users.map(({ totpEnabledAt, ...u }) => ({ ...u, hasPassword: !!u.hasPassword, tiene2fa: !!totpEnabledAt })))
 }
 
 export async function POST(req: NextRequest) {

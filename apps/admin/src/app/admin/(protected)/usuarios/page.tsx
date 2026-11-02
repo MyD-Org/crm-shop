@@ -24,6 +24,7 @@ export default async function UsuariosPage() {
       canalesPermitidos: adminUsers.canalesPermitidos,
       createdAt: adminUsers.createdAt,
       passwordHash: adminUsers.passwordHash,
+      totpEnabledAt: adminUsers.totpEnabledAt,
       inviteExpiresAt: adminPasswordTokens.expiresAt,
       inviteAcceptedAt: adminPasswordTokens.usedAt,
     })
@@ -34,8 +35,9 @@ export default async function UsuariosPage() {
     )
     .where(eq(adminUsers.tenantId, session.tenantId))
 
-  const userList = users.map(({ canalesPermitidos, ...u }) => ({
+  const userList = users.map(({ canalesPermitidos, totpEnabledAt, ...u }) => ({
     ...u,
+    tiene2fa: !!totpEnabledAt,
     canales_permitidos: canalesPermitidos,
     hasPassword: !!u.passwordHash,
     passwordHash: undefined,

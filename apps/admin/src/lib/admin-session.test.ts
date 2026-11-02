@@ -51,7 +51,7 @@ const ROW: Row = {
 }
 
 beforeEach(() => {
-  state.session = { userId: "u1", name: "Ana", email: "ana@ejemplo.com", role: "admin", tenantId: "tenant-a" }
+  state.session = { userId: "u1", name: "Ana", email: "ana@ejemplo.com", role: "admin", tenantId: "tenant-a", mfa: "ok" }
   state.rows = [ROW]
   state.selectCalls = 0
   state.requestTenantId = "tenant-a"
@@ -72,6 +72,14 @@ describe("getGuardedAdminSession", () => {
     // La cookie dice "admin"; la fila dice "operator". Manda la fila.
     expect(result.user.role).toBe("operator")
     expect(result.user.availability).toBe("available")
+  })
+
+  it("cookie sin la marca del 2FA (de antes del 2FA): rechaza con mfa", async () => {
+    delete state.session.mfa
+
+    const result = await guard()
+
+    expect(result).toEqual({ ok: false, reason: "mfa" })
   })
 
   it("sin sesión: rechaza sin consultar admin_users", async () => {

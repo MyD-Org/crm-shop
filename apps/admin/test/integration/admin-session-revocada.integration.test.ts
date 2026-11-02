@@ -28,7 +28,7 @@ beforeEach(async () => {
   invalidateTenantRegistry()
   await seedTenant("tenant-a")
   userId = await seedOperator("tenant-a", { role: "admin" })
-  session = { userId, tenantId: "tenant-a", role: "admin", name: "x", email: "x@example.com" }
+  session = { userId, tenantId: "tenant-a", role: "admin", name: "x", email: "x@example.com", mfa: "ok" }
 })
 afterAll(truncateAll)
 

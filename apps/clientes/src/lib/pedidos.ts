@@ -157,7 +157,7 @@ export interface DatosPedido {
    * `orders.cupon` y se reserva el canje en la misma transacción (`reservarCanjeEnTx`, con lock y
    * relectura). Si el canje ya no entra, `CuponCanjeError` y no se crea nada.
    */
-  cupon?: { promo: PromocionCupon; quien: QuienCupon };
+  cupon?: { promo: PromocionCupon; quien: QuienCupon; envioGratisTienda?: boolean };
   /**
    * Sólo con el flag `sucursales` prendido: modalidad, provincia, ciudad y local de retiro con los
    * que se asigna la sucursal. `crearPedido` relee las reglas SIN caché dentro de la transacción y
@@ -382,7 +382,7 @@ export async function crearPedido(
         // El plan viejo (`cuotas_max`, `cuotas_plan`) ya no se escribe: los pedidos históricos lo conservan.
         cuotas: datos.cuotas ?? null,
         formaCobro: datos.formaCobro ?? null,
-        cupon: datos.cupon && cotizacion.cupon ? cuponPedidoDesde(cotizacion.cupon, datos.cupon.promo) : null,
+        cupon: datos.cupon && cotizacion.cupon ? cuponPedidoDesde(cotizacion.cupon, datos.cupon.promo, datos.cupon.envioGratisTienda) : null,
         sucursal: asignacion?.sucursal ?? null,
         sucursalRegla: asignacion?.regla ?? null,
         sucursalAsignadaEn: asignacion ? new Date() : null,
@@ -2337,6 +2337,10 @@ export async function cambiarMedioPedido(
         cuotas: nuevo.cuotas,
         formaCobro: nuevo.formaCobro ?? null,
         ...(nuevo.cupon !== undefined ? { cupon: nuevo.cupon } : {}),
+        // Pierde el cupón y el envío gratis era sólo por él: vuelve a "a coordinar".
+        ...(pedido.cupon && nuevo.cupon === null && pedido.cupon.envioGratisAplicado && pedido.cupon.envioGratisTienda === false
+          ? { envioGratis: false }
+          : {}),
         subtotal: String(cot.subtotal),
         iva: String(cot.iva),
         total: String(total),

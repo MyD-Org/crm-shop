@@ -20,6 +20,14 @@ export interface CuponPedido {
   permiteCuotas: boolean;
   condiciones: string;
   descuento: number;
+  /**
+   * Resultado congelado al crear: ¿el envío gratis del cupón valió para esta entrega? La entrega no
+   * cambia después, así que al recotizar se usa esto y no la regla (el pedido no guarda la provincia).
+   * Ausente = foto anterior: se recotiza con la regla.
+   */
+  envioGratisAplicado?: boolean;
+  /** ¿El envío era gratis también por la regla de la tienda? Si el pedido pierde el cupón, decide `envio_gratis`. */
+  envioGratisTienda?: boolean;
 }
 
 /** Lo que el Shop lee de la vista `public.cupones_shop` (CRM 0097) para un código. */

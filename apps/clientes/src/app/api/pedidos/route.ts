@@ -561,11 +561,11 @@ export async function POST(req: Request) {
     // `null` = retiro (no aplica); true/false = envío a domicilio gratis o a coordinar. La regla de la
     // tienda se mide sobre el subtotal ANTES del cupón (un % nunca le quita el envío gratis que ya
     // tenía) o lo da el cupón (ya validado para esta entrega y zona).
-    const envioGratis =
+    const envioTienda =
       aDomicilio && configEnvio
-        ? evaluarEnvio(cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal, entregaProvincia, configEnvio).gratis ||
-          cotizacion.cupon?.envioGratis === true
+        ? evaluarEnvio(cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal, entregaProvincia, configEnvio).gratis
         : null;
+    const envioGratis = envioTienda === null ? null : envioTienda || cotizacion.cupon?.envioGratis === true;
 
 
     // Para revisión de un operador antes de facturar, con el motivo más
@@ -622,7 +622,9 @@ export async function POST(req: Request) {
           disponibilidadSucursal: disp !== undefined,
           soloVisibles,
           ...(agrupar ? { agrupar: true } : {}),
-          ...(cotizacion.cupon && cuponParaCotizar ? { cupon: { promo: cuponParaCotizar.promo, quien: quienCupon } } : {}),
+          ...(cotizacion.cupon && cuponParaCotizar
+            ? { cupon: { promo: cuponParaCotizar.promo, quien: quienCupon, envioGratisTienda: envioTienda === true } }
+            : {}),
         },
         cotizacion,
       );

@@ -168,6 +168,7 @@ describe("foto del pedido", () => {
     expect(foto).toEqual({
       codigoId: "c1", codigo: "LUZ-7KQ2M", promocionId: "p1", nombre: "Bot Instagram", pct: 10, envioGratis: true,
       provinciasEnvio: ["buenosaires"], medios: ["transferencia"], formas: null, permiteCuotas: false, condiciones: "Sólo primera compra.", descuento: 242,
+      envioGratisAplicado: true,
     });
     const vuelta = promoDesdePedido(foto);
     expect(aplicarCupon(cot, vuelta, { ...ctx, congelado: true }).cupon?.descuento).toBe(242);
@@ -184,5 +185,19 @@ describe("cuponTrasRecotizar", () => {
     const sinCupon = aplicarCupon(otraLista, promoDesdePedido(foto), { ...ctx, congelado: true, opcion: { slug: "efectivo", forma: null, cuotasSinInteres: false } });
     expect(cuponTrasRecotizar(foto, sinCupon)).toBeNull();
     expect(cuponTrasRecotizar(null, conCupon)).toBeNull();
+  });
+});
+
+describe("envío gratis congelado en la foto", () => {
+  it("recotizar sin la provincia conserva el envío gratis otorgado y no lo inventa si no se otorgó", () => {
+    const p = promo({ pct: null, envioGratis: true, provinciasEnvio: ["buenosaires"] });
+    const foto = cuponPedidoDesde(aplicarCupon(cot, p, ctx).cupon!, p, false);
+    expect(foto).toMatchObject({ envioGratisAplicado: true, envioGratisTienda: false });
+    const sinProvincia = { ...ctx, congelado: true, entrega: { tipo: "envio" as const, provincia: null } };
+    expect(aplicarCupon(cot, promoDesdePedido(foto), sinProvincia).cupon).toMatchObject({ envioGratis: true });
+    const conPct = promo({ pct: 10, envioGratis: true, provinciasEnvio: ["buenosaires"] });
+    const fotoCordoba = cuponPedidoDesde(aplicarCupon(cot, conPct, { ...ctx, entrega: { tipo: "envio", provincia: "Córdoba" } }).cupon!, conPct);
+    expect(fotoCordoba.envioGratisAplicado).toBe(false);
+    expect(aplicarCupon(cot, promoDesdePedido(fotoCordoba), { ...sinProvincia, entrega: { tipo: "envio", provincia: "Buenos Aires" } }).cupon).toMatchObject({ envioGratis: false, pctAplicado: true });
   });
 });

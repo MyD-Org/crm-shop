@@ -273,5 +273,6 @@ describe("POST /api/pedidos/[id]/cuotas con cupón", () => {
     const json = await (await llamar()).json();
     expect(json.precioUnPago).toBe(45_000);
     expect(json.opciones.find((o: { cuotas: number }) => o.cuotas === 3)?.total).toBe(52_000);
+    expect(json.avisoCupon).toBe("Su cupón es válido sólo en 1 pago: en cuotas sin interés no se aplica y no se recupera.");
   });
 });

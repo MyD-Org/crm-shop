@@ -101,7 +101,7 @@ describe("POST /api/pedidos con cupón", () => {
     const [, datos, cotizacion] = crearPedido.mock.calls[0] as [unknown, { cupon?: unknown }, Cotizacion];
     expect(cotizacion.total).toBe(900);
     expect(cotizacion.cupon).toMatchObject({ codigo: "LUZ-7KQ2M", descuento: 100 });
-    expect(datos.cupon).toEqual({ promo: promo(), quien: { clerkUserId: "user_1", email: "ana@cliente.example", listaPrivada: false } });
+    expect(datos.cupon).toEqual({ promo: promo(), quien: { clerkUserId: "user_1", email: "ana@cliente.example", listaPrivada: false }, envioGratisTienda: false });
   });
 
   it("sin cupón: crearPedido no recibe cupón", async () => {

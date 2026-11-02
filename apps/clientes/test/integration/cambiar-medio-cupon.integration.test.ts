@@ -60,7 +60,7 @@ async function crearConCupon(promo: PromocionCupon): Promise<string> {
 async function cambiar(id: string, slug: string, idLista: string) {
   const pedido = (await pedidoParaCambiarMedio(id, dueno))!;
   const base = await cotizar(pedido.lineas, { idListaMedio: idLista, excluirPedidoId: id });
-  const cot = pedido.cupon ? aplicarCupon(base, promoDesdePedido(pedido.cupon), ctx(slug, true)) : base;
+  const cot = pedido.cupon ? aplicarCupon(base, promoDesdePedido(pedido.cupon), { ...ctx(slug, true), entrega: { tipo: pedido.entregaTipo, provincia: null } }) : base;
   const r = await cambiarMedioPedido(id, dueno, { pagoMetodo: slug, cuotas: null, idPriceList: idLista, cotizacion: cot, cupon: cuponTrasRecotizar(pedido.cupon, cot) });
   expect(r.ok).toBe(true);
   return cot;
@@ -127,5 +127,32 @@ describe("carrera entre dos cambios de medio", () => {
     });
     expect(r).toEqual({ ok: false, motivo: "lineas_distintas" });
     expect((await leerPedido(id)).cupon).toBeNull();
+  });
+});
+
+describe("envío gratis del cupón al recotizar", () => {
+  async function crearEnvioGratis(medios: string[] | null): Promise<string> {
+    await sembrar(medios);
+    await getDb().execute(sql`update public.cupon_promociones set pct = null, envio_gratis = true, provincias_envio = '{buenosaires}' where id = ${PROMO}`);
+    const promo = (await leerPromocionCupon("LUZ7KQ2M"))!;
+    const c = aplicarCupon(await cotizar([{ id: "N1", qty: 1 }], {}), promo, { ...ctx("transferencia"), entrega: { tipo: "envio", provincia: "Buenos Aires" } });
+    return (await crearPedido(
+      { clerkUserId: "user_ana", email: "ana@cliente.example" },
+      { ...datos, entregaTipo: "envio", envioGratis: true, cupon: { promo, quien: ana, envioGratisTienda: false } },
+      c,
+    )).id;
+  }
+
+  it("a un medio elegible conserva el cupón aunque el pedido no guarde la provincia", async () => {
+    const id = await crearEnvioGratis(null);
+    await cambiar(id, "efectivo", GENERAL);
+    expect((await leerPedido(id)).cupon).toMatchObject({ envioGratisAplicado: true });
+  });
+
+  it("si pierde el cupón y el envío gratis era sólo por el cupón, envio_gratis vuelve a false", async () => {
+    const id = await crearEnvioGratis(["transferencia"]);
+    await cambiar(id, "mercadopago", GENERAL);
+    const [o] = (await getDb().execute(sql`select cupon, envio_gratis from shop.orders where id = ${id}`)) as unknown as { cupon: unknown; envio_gratis: boolean }[];
+    expect(o).toEqual({ cupon: null, envio_gratis: false });
   });
 });

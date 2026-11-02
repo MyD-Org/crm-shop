@@ -98,7 +98,7 @@ export function aplicarCupon(c: Cotizacion, p: PromocionCupon, ctx: ContextoCupo
 }
 
 /** La foto que congela el pedido (`orders.cupon`). */
-export function cuponPedidoDesde(c: CuponAplicado, p: PromocionCupon): CuponPedido {
+export function cuponPedidoDesde(c: CuponAplicado, p: PromocionCupon, envioGratisTienda?: boolean): CuponPedido {
   return {
     codigoId: p.codigoId,
     codigo: p.codigo,
@@ -112,6 +112,8 @@ export function cuponPedidoDesde(c: CuponAplicado, p: PromocionCupon): CuponPedi
     permiteCuotas: p.permiteCuotas,
     condiciones: p.condiciones,
     descuento: c.descuento,
+    envioGratisAplicado: c.envioGratis,
+    ...(envioGratisTienda !== undefined ? { envioGratisTienda } : {}),
   };
 }
 
@@ -127,8 +129,9 @@ export function promoDesdePedido(s: CuponPedido): PromocionCupon {
     nombre: s.nombre,
     tipo: "unicos",
     pct: s.pct,
-    envioGratis: s.envioGratis,
-    provinciasEnvio: s.provinciasEnvio,
+    // El envío gratis ya se decidió al crear (la entrega no cambia): se recotiza con ese resultado.
+    envioGratis: s.envioGratisAplicado ?? s.envioGratis,
+    provinciasEnvio: s.envioGratisAplicado === undefined ? s.provinciasEnvio : null,
     inicio: new Date(0).toISOString(),
     fin: new Date(8.64e15).toISOString(),
     venceEn: null,

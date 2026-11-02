@@ -230,6 +230,22 @@ describe("cobrarPedido — referencia del intento antes de cobrar", () => {
     expect(cerrarIntentoSinPago).toHaveBeenCalledWith("i1", expect.any(String));
   });
 
+  it("estado pendiente recuperado con errorProveedor (Payway 5xx): lo guarda en el intento", async () => {
+    crearPago.mockResolvedValue({
+      estado: "pendiente",
+      referencia: "ref-i1",
+      detalle: "sin_respuesta_de_payway",
+      errorProveedor: { detalle: "message: boom", status: 503 },
+    });
+    await pagarCon(conReferencia());
+    expect(registrarErrorIntento).toHaveBeenCalledWith("i1", { detalle: "message: boom", status: 503 });
+  });
+
+  it("sin errorProveedor en el estado no se guarda nada", async () => {
+    await pagarCon(conReferencia());
+    expect(registrarErrorIntento).not.toHaveBeenCalled();
+  });
+
   it("timeout: texto fijo y sin status", async () => {
     crearPago.mockRejectedValue(Object.assign(new Error("agotado"), { name: "TimeoutError" }));
     await pagarCon(conReferencia());

@@ -184,6 +184,11 @@ export interface EstadoPago {
   pedidoId?: string;
   /** Código crudo del proveedor, sin traducir. Para poder diagnosticar. */
   detalle: string;
+  /**
+   * El POST de cobro falló (5xx, timeout, respuesta ilegible) y se recuperó como pendiente por consulta.
+   * Diagnóstico YA SANEADO para `pago_intentos.error_proveedor`; no cambia el estado del intento.
+   */
+  errorProveedor?: { detalle: string; status: number | null };
   /** Solo cuando `estado === "fallido"`. */
   motivo?: MotivoRechazo;
   /**

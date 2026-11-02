@@ -506,6 +506,14 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
         : {}),
     });
 
+    // El POST falló (5xx/timeout) y el adaptador lo recuperó como pendiente: se deja el diagnóstico en el
+    // intento. No cambia su estado; un fallo acá no afecta la respuesta.
+    if (resultado.errorProveedor) {
+      await registrarErrorIntento(intentoId, resultado.errorProveedor).catch((e) =>
+        console.error(`[/api/pagos/${proveedor.id}] no se pudo registrar el error del intento:`, e),
+      );
+    }
+
     /**
      * Aparte del `try` del cobro: si el procesador ya respondió y lo que falla es guardar el resultado
      * (la base), el cobro existe igual. Antes caía al `catch` de abajo y el comprador veía "No pudimos

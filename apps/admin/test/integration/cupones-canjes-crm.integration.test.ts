@@ -64,7 +64,7 @@ describe("canjes de una promoción", () => {
   })
 
   it("dos pedidos pagados con el mismo código único: los dos marcados como duplicado", async () => {
-    for (const _ of [1, 2]) {
+    for (let i = 0; i < 2; i++) {
       const p = await seedShopOrder(A, { pagoEstado: "pagado" })
       await canje(p.id, "100.00")
     }

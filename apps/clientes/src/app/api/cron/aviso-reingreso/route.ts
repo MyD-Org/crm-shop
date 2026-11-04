@@ -7,7 +7,8 @@ export const maxDuration = 120;
 
 /**
  * Avisa a quienes pidieron «Avisarme cuando ingrese» que el producto volvió a estar disponible. Lo
- * dispara un workflow de GitHub Actions cada 15 minutos (`clientes-aviso-reingreso.yml`), autenticado con
+ * normal es que el barrido corra solo, con el aviso del CRM de que cambió el catálogo
+ * (`api/internal/catalogo/revalidar`). Esta ruta queda para dispararlo a mano, autenticada con
  * CRON_SECRET. Con el flag `aviso-reingreso` apagado no envía nada. Para probar a mano:
  *
  *   curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/aviso-reingreso

@@ -1,6 +1,7 @@
 /**
- * Barrido del aviso de reingreso (change `aviso-reingreso`, S2). SOLO servidor. Lo llama la ruta
- * `api/cron/aviso-reingreso` (GitHub Actions cada 15 minutos).
+ * Barrido del aviso de reingreso (change `aviso-reingreso`, S2). SOLO servidor. Lo dispara el aviso del CRM
+ * de que cambió el catálogo (`api/internal/catalogo/revalidar`, tras webhooks de stock y la sync
+ * diaria); `api/cron/aviso-reingreso` queda para correrlo a mano.
  *
  * Orden: purga de retención (corre siempre: la retención no depende del flag) → flag (apagado: sale sin
  * enviar ni marcar) → productos con avisos pendientes (sin pendientes no consulta stock) → cuáles
@@ -53,7 +54,7 @@ async function dependenciasPorDefecto(): Promise<DependenciasAvisos> {
     db: getDb(),
     tenantId: shopTenantId(),
     activo: avisoReingresoActivo,
-    // Sin caché: las sucursales activas deciden qué es "disponible" y esto corre cada 15 minutos.
+    // Sin caché: las sucursales activas deciden qué es "disponible" y esto corre con cada cambio de stock.
     sucursales: async () => (await leerSucursalesYZonas()).sucursales,
     enviar: enviarEmail,
     sitio: () => urlSitioMail(),

@@ -82,4 +82,23 @@ describe("enviarEmail", () => {
       tags: [{ name: "type", value: "payment_receipt" }],
     });
   });
+
+  it("pasa las cabeceras propias a Resend y, sin ellas, no manda el campo", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    const fetchMock = vi.fn(async () => Response.json({ id: "m2" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const base = { to: "a@cliente.example", subject: "s", html: "h", text: "t" };
+    await enviarEmail({
+      ...base,
+      headers: { "List-Unsubscribe": "<https://tienda.example/baja>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
+    });
+    await enviarEmail(base);
+    const cuerpo = (n: number) =>
+      JSON.parse(((fetchMock.mock.calls[n] as unknown as [string, RequestInit])[1]).body as string);
+    expect(cuerpo(0).headers).toEqual({
+      "List-Unsubscribe": "<https://tienda.example/baja>",
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    });
+    expect(cuerpo(1)).not.toHaveProperty("headers");
+  });
 });

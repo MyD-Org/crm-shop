@@ -62,3 +62,26 @@ export const ERRORES = {
   noDisponible: "No es posible pedir el aviso para este producto.",
   generico: "No se pudo registrar el aviso. Inténtelo de nuevo en unos minutos.",
 } as const;
+
+/** Mail «Volvió a estar disponible» y página de baja (rebanada S2). */
+export const MAIL = {
+  asunto: (producto: string) => `Ya hay disponible: ${producto}`,
+  titulo: "Volvió a estar disponible",
+  bajada: (producto: string) => `El producto que nos consultó volvió a estar disponible: ${producto}.`,
+  aclaracion: "Las unidades son limitadas y la disponibilidad está sujeta a stock al momento de la compra.",
+  boton: "Ver producto",
+  preheader: (producto: string) => `${producto} volvió a estar disponible.`,
+  pieMotivo: "Recibe este mensaje porque pidió que le avisáramos cuando este producto volviera a estar disponible.",
+  pieUnaVez: "Se lo enviamos una sola vez.",
+  pieBaja: "Si ya no desea recibir este aviso, puede darse de baja:",
+} as const;
+
+export const BAJA = {
+  titulo: "Baja del aviso de reingreso",
+  descripcion: "Confirme si desea dejar de recibir el aviso de reingreso de este producto.",
+  boton: "Confirmar baja",
+  hecho: "Se dio de baja del aviso. No recibirá más correos sobre este producto.",
+  invalido: "Este enlace no es válido o el aviso ya no existe.",
+  error: "No se pudo procesar la baja. Inténtelo de nuevo en unos minutos.",
+  volver: "Volver a la tienda",
+} as const;

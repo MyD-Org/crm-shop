@@ -3,13 +3,14 @@
  * poder testear la forma del SQL con `dbGrabadora` y correrlas contra la DB local en integración.
  * Toda consulta lleva `tenant_id` (aislamiento por tenant).
  *
- * Rebanada S1: alta idempotente y conteo de pendientes por email. El cron, la baja y la purga
- * (reclamar, marcar, purgar) llegan en la rebanada S2.
+ * S1: alta idempotente y conteo de pendientes por email. S2: lo que usa el cron (pendientes por
+ * producto, reclamar, marcar avisado o con error), la baja por token y la purga de retención.
  */
 import { randomBytes } from "node:crypto";
-import { and, count, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { avisosReingreso as t } from "@/db/schema";
+import { CLAIM_VENCE_MIN, MAX_INTENTOS, RETENCION_DIAS, RETENCION_PENDIENTES_DIAS } from "./aviso-reingreso-textos";
 
 /** Cualquier cliente Postgres de drizzle: `getDb()` en runtime, `dbGrabadora` en tests. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,4 +69,127 @@ export async function insertarAviso(db: Db, fila: FilaAviso): Promise<{ id: stri
   const r = Array.isArray(filas) ? filas[0] : undefined;
   if (!r) throw new Error("El insert del aviso no devolvió fila");
   return { id: r.id, creado: r.creado === true };
+}
+
+/**
+ * Elegible para el cron: pendiente, con intentos por gastar y sin otro envío en curso (un claim de
+ * más de `CLAIM_VENCE_MIN` minutos se da por muerto: la corrida que lo tomó se cortó).
+ */
+const sinReclamo = and(
+  pendiente,
+  sql`${t.intentos} < ${MAX_INTENTOS}`,
+  or(isNull(t.avisandoEn), sql`${t.avisandoEn} < now() - make_interval(mins => ${CLAIM_VENCE_MIN})`),
+);
+
+/** Los `alegra_id` distintos con avisos por enviar en el tenant. Sin pendientes no hay nada que consultar. */
+export async function pendientesAgrupados(db: Db, tenantId: string): Promise<string[]> {
+  const filas = await db
+    .selectDistinct({ alegraId: t.alegraId })
+    .from(t)
+    .where(and(eq(t.tenantId, tenantId), sinReclamo))
+    .orderBy(asc(t.alegraId));
+  return filas.map((f) => f.alegraId);
+}
+
+export interface AvisoPendiente {
+  id: string;
+  alegraId: string;
+  email: string;
+  tokenBaja: string;
+}
+
+/** Hasta `limite` avisos por enviar de esos productos, los más viejos primero. */
+export async function listarPendientesDe(
+  db: Db,
+  tenantId: string,
+  alegraIds: string[],
+  limite: number,
+): Promise<AvisoPendiente[]> {
+  if (alegraIds.length === 0 || limite <= 0) return [];
+  return db
+    .select({ id: t.id, alegraId: t.alegraId, email: t.email, tokenBaja: t.tokenBaja })
+    .from(t)
+    .where(and(eq(t.tenantId, tenantId), inArray(t.alegraId, alegraIds), sinReclamo))
+    .orderBy(asc(t.createdAt), asc(t.id))
+    .limit(limite);
+}
+
+/**
+ * Toma el aviso para enviarlo (anti doble envío entre corridas solapadas): un único UPDATE atómico.
+ * Gasta un intento ya al reclamar, así una corrida que se corta a mitad también cuenta. `false` =
+ * otro lo tiene, ya se avisó, se dio de baja o se agotaron los intentos.
+ */
+export async function reclamarAviso(db: Db, tenantId: string, id: string): Promise<boolean> {
+  const filas = await db
+    .update(t)
+    .set({ avisandoEn: sql`now()`, intentos: sql`${t.intentos} + 1` })
+    .where(and(eq(t.tenantId, tenantId), eq(t.id, id), sinReclamo))
+    .returning({ id: t.id });
+  return filas.length > 0;
+}
+
+/** El proveedor confirmó el envío: recién ahí se marca. Limpia el error y el reclamo. */
+export async function marcarAvisado(db: Db, tenantId: string, id: string): Promise<void> {
+  await db
+    .update(t)
+    .set({ avisadoAt: sql`now()`, emailError: null, avisandoEn: null })
+    .where(and(eq(t.tenantId, tenantId), eq(t.id, id), isNull(t.avisadoAt)));
+}
+
+/**
+ * El envío falló: guarda el motivo (sin datos personales) y libera el reclamo para reintentar en la
+ * próxima corrida. Con `devolverIntento` (falta configurar el proveedor: no es culpa del aviso) no
+ * gasta el intento. Nunca marca `avisado_at`.
+ */
+export async function marcarError(
+  db: Db,
+  tenantId: string,
+  id: string,
+  mensaje: string,
+  opciones: { devolverIntento?: boolean } = {},
+): Promise<void> {
+  await db
+    .update(t)
+    .set({
+      emailError: mensaje.slice(0, 200),
+      avisandoEn: null,
+      ...(opciones.devolverIntento ? { intentos: sql`greatest(${t.intentos} - 1, 0)` } : {}),
+    })
+    .where(and(eq(t.tenantId, tenantId), eq(t.id, id), isNull(t.avisadoAt)));
+}
+
+/**
+ * Baja por token (sin sesión). Idempotente: una segunda baja deja la fecha de la primera. `false` =
+ * el token no existe en este tenant (el llamador responde un mensaje neutro).
+ */
+export async function bajaPorToken(db: Db, tenantId: string, token: string): Promise<boolean> {
+  if (!token || token.length > 128) return false;
+  const filas = await db
+    .update(t)
+    .set({ unsubscribedAt: sql`coalesce(${t.unsubscribedAt}, now())` })
+    .where(and(eq(t.tenantId, tenantId), eq(t.tokenBaja, token)))
+    .returning({ id: t.id });
+  return filas.length > 0;
+}
+
+/**
+ * Retención: borra (hay GRANT DELETE) los avisos ya enviados o dados de baja hace más de 180 días y los
+ * pendientes sin atender hace más de 365. Un pendiente más nuevo nunca se toca. Devuelve cuántos borró.
+ */
+export async function purgar(db: Db, tenantId: string): Promise<number> {
+  const hace = (dias: number) => sql`now() - make_interval(days => ${dias})`;
+  const filas = await db
+    .delete(t)
+    .where(
+      and(
+        eq(t.tenantId, tenantId),
+        or(
+          lt(t.avisadoAt, hace(RETENCION_DIAS)),
+          lt(t.unsubscribedAt, hace(RETENCION_DIAS)),
+          and(pendiente, lt(t.createdAt, hace(RETENCION_PENDIENTES_DIAS))),
+        ),
+      ),
+    )
+    .returning({ id: t.id });
+  return filas.length;
 }

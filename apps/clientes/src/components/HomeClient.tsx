@@ -194,6 +194,8 @@ export function HomeClient({
           <SeccionEditable seccion="hero" visibilidad={vis("hero")}>
             <InteractiveHero enabled={isStudioImage(hero.imagen)}>
             <Hero
+              // Compacto: el hero y las promos de pago entran en la primera pantalla.
+              size="compact"
               className="[&_em]:not-italic [&_h1]:font-bold [&_a.rounded-full:first-of-type]:bg-accent [&_a.rounded-full:first-of-type:hover]:bg-primary"
               eyebrow={hero.eyebrow}
               eyebrowVisibleOn={textoVisibleOn(hero, "eyebrow")}

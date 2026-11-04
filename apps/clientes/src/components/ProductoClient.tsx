@@ -22,6 +22,8 @@ import { estadoFicha, type TonoFicha } from "@/lib/ficha-venta-sin-stock";
 import { agotadoSinModalidad, esAPedido, TEXTO_SE_CONFIRMA_POR_CONTACTO } from "@/lib/venta-sin-stock";
 import { maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
 import { useCart } from "@/context/CartContext";
+import { AvisoReingresoForm } from "@/components/AvisoReingresoForm";
+import { mostrarAvisoReingreso } from "@/lib/aviso-reingreso-visibilidad";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { BotonCompartir } from "@/components/BotonCompartir";
 import { GaleriaProducto } from "@/components/GaleriaProducto";
@@ -97,10 +99,16 @@ export function ProductoClient({
   logosTarjetas = [],
   quedanPromo,
   slugDestacadoPromo,
+  avisoReingreso = false,
 }: {
   producto: Product;
   /** Promo de la home: unidades a precio de apertura que quedan si es la estrella (ver PromoFicha). */
   quedanPromo?: number | null;
+  /**
+   * Flag `aviso-reingreso`, resuelto en el server component de la ficha. Con él, un producto agotado
+   * (la variante elegida) ofrece "Avisarme cuando ingrese". Apagado = solo "Sin stock", como siempre.
+   */
+  avisoReingreso?: boolean;
   /** Slug del medio destacado de las cards: el % de ahorro de la promo usa su precio, como la home. */
   slugDestacadoPromo?: string;
   /**
@@ -203,6 +211,9 @@ export function ProductoClient({
   const sinPrecio = !(producto.price > 0);
   // Mientras llega el precio de su cuenta no se puede agregar (el precio real todavía no se conoce).
   const noComprable = sinPrecio || precioPendiente;
+  // Aviso de reingreso: sobre la variante ELEGIDA (un ítem real de Alegra); al elegir otra con stock
+  // desaparece solo.
+  const ofreceAviso = mostrarAvisoReingreso({ habilitado: avisoReingreso, producto, noComprable });
   // La línea verde es la del producto solo. Debajo, el nivel mayor que da una compra más grande
   // ("Hasta 8 cuotas… desde $X", datos públicos: sirve en la ficha cacheada). Con carrito, el
   // recuadro de abajo lo reemplaza (ya tiene / cuánto falta), para no decir lo mismo dos veces.
@@ -435,6 +446,7 @@ export function ProductoClient({
                 {TEXTO_SE_CONFIRMA_POR_CONTACTO}
               </p>
             )}
+            {ofreceAviso && <AvisoReingresoForm key={producto.id} alegraId={producto.id} />}
 
             <EntregaProducto
               configEnvio={configEnvio}

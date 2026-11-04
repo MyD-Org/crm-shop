@@ -1134,6 +1134,59 @@ export const solicitudesArrepentimiento = shop.table(
 );
 
 /**
+ * Avisos de reingreso (change `aviso-reingreso`, migración `0043`): una persona deja su email en un
+ * producto/variante agotado y el cron le manda UN mail cuando el disponible pasa a ser mayor que 0.
+ *
+ * - `alegra_id` es el de la variante elegida (la que lleva stock) o la representante; nunca el padre.
+ * - `email` se guarda normalizado (trim + minúsculas). Un aviso está PENDIENTE mientras `avisado_at` y
+ *   `unsubscribed_at` sean NULL; el único parcial `avisos_pendiente_uq` impide dos pendientes del mismo
+ *   (tenant, producto, email). Tras avisar o dar de baja, la misma persona puede pedir de nuevo.
+ * - `avisando_en` es el claim del cron (anti doble envío); `intentos` y `email_error` llevan los reintentos.
+ * - `whatsapp` solo con `consentimiento_contacto` (CHECK `avisos_whatsapp_consentimiento`).
+ * - `token_baja` aleatorio y único: baja sin sesión desde el mail. Sin IP ni user agent.
+ * - `tenant_id` obligatorio y sin default, como en `orders`.
+ */
+export const avisosReingreso = shop.table(
+  "avisos_reingreso",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    alegraId: text("alegra_id").notNull(),
+    email: text("email").notNull(),
+    whatsapp: text("whatsapp"),
+    cantidad: integer("cantidad").notNull().default(1),
+    quiereEncargar: boolean("quiere_encargar").notNull().default(false),
+    consentimientoContacto: boolean("consentimiento_contacto").notNull().default(false),
+    clerkUserId: text("clerk_user_id"),
+    tokenBaja: text("token_baja").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    avisandoEn: timestamp("avisando_en", { withTimezone: true }),
+    intentos: integer("intentos").notNull().default(0),
+    avisadoAt: timestamp("avisado_at", { withTimezone: true }),
+    unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+    emailError: text("email_error"),
+  },
+  (t) => [
+    uniqueIndex("avisos_token_baja_uq").on(t.tokenBaja),
+    uniqueIndex("avisos_pendiente_uq")
+      .on(t.tenantId, t.alegraId, sql`lower(${t.email})`)
+      .where(sql`${t.avisadoAt} is null and ${t.unsubscribedAt} is null`),
+    index("avisos_pendientes_idx")
+      .on(t.tenantId, t.alegraId)
+      .where(sql`${t.avisadoAt} is null and ${t.unsubscribedAt} is null`),
+    index("avisos_email_pendientes_idx")
+      .on(t.tenantId, sql`lower(${t.email})`)
+      .where(sql`${t.avisadoAt} is null and ${t.unsubscribedAt} is null`),
+    check("avisos_cantidad", sql`${t.cantidad} between 1 and 999`),
+    check(
+      "avisos_largos",
+      sql`char_length(${t.email}) <= 254 and char_length(coalesce(${t.whatsapp}, '')) <= 40 and char_length(${t.alegraId}) <= 64`,
+    ),
+    check("avisos_whatsapp_consentimiento", sql`${t.whatsapp} is null or ${t.consentimientoContacto}`),
+  ],
+);
+
+/**
  * Espejo de los usuarios de Clerk de la tienda (migración 0018).
  *
  * El CRM no tiene clave de Clerk: sabe quién se registró en la tienda leyendo

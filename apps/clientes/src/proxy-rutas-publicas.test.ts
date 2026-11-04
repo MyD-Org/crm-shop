@@ -62,6 +62,10 @@ describe("proxy: RUTAS_PUBLICAS", () => {
     for (const ruta of rutas) expect(texto).toContain(`"${ruta}"`);
   });
 
+  it("incluye la baja de un clic del aviso de reingreso (la llama el servidor de correo)", () => {
+    expect(readFileSync(PROXY, "utf8")).toContain('"/api/aviso-reingreso/baja"');
+  });
+
   describe("con el gate de Próximamente activo", () => {
     afterEach(() => {
       delete process.env.SITE_AUTH_USER;

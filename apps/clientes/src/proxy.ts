@@ -50,6 +50,10 @@ const RUTAS_PUBLICAS = [
   // Reportes de violaciones de la CSP: los manda el navegador sin cookie de gate. La ruta sólo
   // loguea (con límite de uso y de tamaño).
   "/api/csp-report",
+  // Baja de un clic del aviso de reingreso (RFC 8058): la hace el servidor del proveedor de correo
+  // (Gmail, etc.), sin cookie de gate ni sesión; se autentica con el token del enlace. Sin esto la
+  // cortina responde 200 con HTML y la baja nunca se registra.
+  "/api/aviso-reingreso/baja",
 ];
 
 /**

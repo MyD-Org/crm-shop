@@ -53,13 +53,29 @@ export async function consultarCuotasSinInteres(
   return maxCuotasSinInteresComun(entradas);
 }
 
-async function tokenPredeterminada(): Promise<string | null> {
-  const { predeterminada } = await leerDatosCuentas();
-  return predeterminada ? credencialesMercadoPago(predeterminada).accessToken : null;
+/**
+ * Token de la primera sucursal con cuenta de Mercado Pago: la predeterminada si tiene credenciales; si
+ * no, la siguiente que las tenga (`slugs` viene con la predeterminada primero). Pasa cuando sólo una
+ * sucursal cobra con MP y no es la predeterminada.
+ */
+export function primerTokenMP(
+  cuentas: { predeterminada: string | null; slugs: readonly string[] },
+  token: (slug: string) => string | null = (slug) => credencialesMercadoPago(slug).accessToken,
+): string | null {
+  const orden = [...(cuentas.predeterminada ? [cuentas.predeterminada] : []), ...cuentas.slugs];
+  for (const slug of orden) {
+    const t = token(slug);
+    if (t) return t;
+  }
+  return null;
+}
+
+async function tokenDeReferencia(): Promise<string | null> {
+  return primerTokenMP(await leerDatosCuentas());
 }
 
 /**
- * Cuotas sin interés de la cuenta de MP de la sucursal PREDETERMINADA (como las tarjetas del footer).
+ * Cuotas sin interés de la cuenta de MP de la sucursal predeterminada, o de la primera con credenciales.
  * Cacheado por horas: un cambio en MP se ve en la tienda en menos de 1 hora. Si falla, se reintenta
  * a los pocos minutos (perfil `degradado`).
  */
@@ -67,7 +83,7 @@ export async function cuotasSinInteresMP(): Promise<number | null> {
   "use cache";
   cacheTag(TAG_CUOTAS_MP);
   try {
-    const token = await tokenPredeterminada();
+    const token = await tokenDeReferencia();
     if (!token) {
       cacheLife("degradado");
       return null;

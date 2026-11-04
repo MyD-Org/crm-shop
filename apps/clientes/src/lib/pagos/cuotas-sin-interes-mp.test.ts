@@ -3,7 +3,7 @@ import type { PlanMP, PlanesMP } from "./mercadopago-planes";
 
 vi.mock("next/cache", () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
 
-const { consultarCuotasSinInteres, maxCuotasSinInteresComun } = await import("./cuotas-sin-interes-mp");
+const { consultarCuotasSinInteres, maxCuotasSinInteresComun, primerTokenMP } = await import("./cuotas-sin-interes-mp");
 
 const plan = (cuotas: number, sinInteres: boolean): PlanMP => ({
   cuotas,
@@ -73,5 +73,23 @@ describe("consultarCuotasSinInteres", () => {
   it("si MP responde error, lanza (quien llama no anuncia nada)", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response("{}", { status: 500 }));
     await expect(consultarCuotasSinInteres("tok", { fetch })).rejects.toThrow("HTTP 500");
+  });
+});
+
+describe("primerTokenMP", () => {
+  const tokens: Record<string, string> = { igz: "tok-igz" };
+  const token = (slug: string) => tokens[slug] ?? null;
+
+  it("la predeterminada sin credenciales cae a la primera sucursal que las tiene", () => {
+    expect(primerTokenMP({ predeterminada: "mdp", slugs: ["mdp", "igz"] }, token)).toBe("tok-igz");
+  });
+
+  it("la predeterminada con credenciales manda", () => {
+    expect(primerTokenMP({ predeterminada: "igz", slugs: ["igz", "mdp"] }, (s) => `tok-${s}`)).toBe("tok-igz");
+  });
+
+  it("sin predeterminada o sin ninguna con credenciales", () => {
+    expect(primerTokenMP({ predeterminada: null, slugs: ["mdp", "igz"] }, token)).toBe("tok-igz");
+    expect(primerTokenMP({ predeterminada: "mdp", slugs: ["mdp"] }, token)).toBeNull();
   });
 });

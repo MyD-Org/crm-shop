@@ -52,6 +52,8 @@ const CON_CACHE = [
   "lib/medios-pago-datos.ts",
   "lib/cuentas-bancarias-datos.ts",
   "lib/pagos/tarjetas-aceptadas-mp.ts",
+  // Cuotas sin interés de la cuenta de Mercado Pago (iguales para todos los visitantes).
+  "lib/pagos/cuotas-sin-interes-mp.ts",
   "lib/venta-sin-stock-repo.ts",
   // Las VENTANAS de las campañas de precios (iguales para todos). Qué campaña rige se decide afuera,
   // con el reloj del request; el checkout las lee sin caché (`campaniasActivasEn`).

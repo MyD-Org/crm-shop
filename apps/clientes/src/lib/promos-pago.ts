@@ -86,7 +86,7 @@ export function promosPago(args: {
       tipo: "cuotas",
       cuotas: c.cuotas,
       titulo: `Hasta ${c.cuotas} cuotas sin interés`,
-      texto: `${conPunto(t.cuotasTexto?.trim() || "Con tarjeta de crédito.")}${c.minimo ? ` En compras desde ${fmtPrecioCorto(c.minimo)}.` : ""}`,
+      texto: `${conPunto(t.cuotasTexto?.trim() || "Con tarjeta de crédito.")}${c.minimo ? ` En compras desde ${fmtPrecioCorto(c.minimo).replace(/\s/g, "\u00a0")}.` : ""}`,
     });
   }
 

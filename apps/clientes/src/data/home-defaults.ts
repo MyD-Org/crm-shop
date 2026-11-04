@@ -150,6 +150,15 @@ export type TiendaOficialContent = {
   imagenAlt?: string;
 };
 
+/**
+ * Promos de pago ("Hasta N cuotas sin interés", "10 % de descuento pagando con Transferencia"). Los
+ * avisos salen de datos reales (cuotas de los medios de cobro y medio destacado, `lib/promos-pago.ts`):
+ * del contenido sólo se edita el título opcional. Sin avisos la sección no se muestra.
+ */
+export type PromosPagoContent = {
+  titulo?: string;
+};
+
 export type HomeContent = {
   anuncio: { texto?: string };
   hero: HeroContent;
@@ -158,6 +167,7 @@ export type HomeContent = {
   destacados: DestacadosContent;
   tiendaOficial: TiendaOficialContent;
   promociones: PromocionesContent;
+  promosPago: PromosPagoContent;
   bannerDeco: BannerDecoContent;
   decoGrid: DecoGridContent;
   servicios: ServiciosContent;
@@ -196,6 +206,7 @@ export const SECCIONES_HOME = [
   "whatsapp",
   "busquedaAsistida",
   "promociones",
+  "promosPago",
 ] as const;
 
 export type SeccionHome = (typeof SECCIONES_HOME)[number];
@@ -208,6 +219,7 @@ export type SeccionHome = (typeof SECCIONES_HOME)[number];
 export const ORDEN_HOME = [
   "hero",
   "promociones",
+  "promosPago",
   "marquee",
   "busquedaAsistida",
   "ambientes",
@@ -327,6 +339,7 @@ export const DEFAULTS_HOME: HomeContent = {
     ],
   },
   navBadge: { categoria: "ILUMINACION", texto: "Nuevo" },
+  promosPago: {},
   whatsapp: {
     titulo: "¿Necesita asesoramiento?",
     texto: "Escríbanos por WhatsApp y lo ayudamos a elegir el producto correcto.",
@@ -405,6 +418,7 @@ export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent 
     navBadge: null,
     tiendaOficial: { cta: DEFAULTS_HOME.tiendaOficial.cta, skus: [] },
     promociones: DEFAULTS_HOME.promociones,
+    promosPago: DEFAULTS_HOME.promosPago,
     whatsapp: DEFAULTS_HOME.whatsapp,
     busquedaAsistida: DEFAULTS_HOME.busquedaAsistida,
     visibilidad: {
@@ -650,6 +664,9 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       if (Array.isArray(o.skus) && o.skus.length > 3) errores.push("skus admite hasta 3 productos");
       if (o.imagen !== undefined) imagen("imagen", o.imagen);
       texto("imagenAlt", true);
+      break;
+    case "promosPago":
+      texto("titulo", true);
       break;
     case "promociones":
       errores.push(...erroresPromociones(o, texto, textosTitulo, linkOpcional));

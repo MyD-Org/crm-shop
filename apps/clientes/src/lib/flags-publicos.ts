@@ -15,6 +15,7 @@ import { cuotasHabilitadas } from "./cuotas-flag";
 import { variantesSelector } from "./variantes-flag";
 import { mediosOfrecibles } from "./medios-pago-datos";
 import { SIN_MEDIOS_PRECIO, seleccionarMediosPrecio, type MediosPrecio } from "./medios-precio";
+import { cuotasSinInteresMP } from "./pagos/cuotas-sin-interes-mp";
 
 export interface FlagsPublicos {
   /** `catalogo-solo-visibles`: los listados públicos sólo con lo curado en el CRM. */
@@ -37,7 +38,12 @@ const mensaje = (err: unknown) => (err instanceof Error ? err.message : err);
 
 async function leerMediosPrecio(cuotasEncendido: boolean): Promise<MediosPrecio> {
   try {
-    return seleccionarMediosPrecio(await mediosOfrecibles(), false, cuotasEncendido);
+    // Las cuotas sin interés de Mercado Pago se leen de su cuenta (cacheadas por horas; null si falla).
+    const [medios, cuotasMP] = await Promise.all([
+      mediosOfrecibles(),
+      cuotasEncendido ? cuotasSinInteresMP().catch(() => null) : Promise.resolve(null),
+    ]);
+    return seleccionarMediosPrecio(medios, false, cuotasEncendido, cuotasMP);
   } catch (err) {
     console.warn("[flags-publicos] medios con precio no disponibles:", mensaje(err));
     return SIN_MEDIOS_PRECIO;

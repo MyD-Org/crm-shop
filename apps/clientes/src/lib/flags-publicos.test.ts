@@ -2,8 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setFlag } from "@/test/flags";
 import type { MedioPago } from "./medios-pago";
 
-const { mediosOfrecibles } = vi.hoisted(() => ({ mediosOfrecibles: vi.fn() }));
+const { mediosOfrecibles, cuotasSinInteresMP } = vi.hoisted(() => ({
+  mediosOfrecibles: vi.fn(),
+  cuotasSinInteresMP: vi.fn(),
+}));
 vi.mock("./medios-pago-datos", () => ({ mediosOfrecibles }));
+vi.mock("./pagos/cuotas-sin-interes-mp", () => ({ cuotasSinInteresMP }));
 
 import { flagsPublicos } from "./flags-publicos";
 
@@ -26,6 +30,8 @@ describe("flagsPublicos", () => {
   beforeEach(() => {
     mediosOfrecibles.mockReset();
     mediosOfrecibles.mockResolvedValue([]);
+    cuotasSinInteresMP.mockReset();
+    cuotasSinInteresMP.mockResolvedValue(null);
   });
 
   it("apagados por defecto (igual que el defaultValue de Vercel Flags)", async () => {
@@ -82,6 +88,30 @@ describe("flagsPublicos", () => {
         condiciones: [{ cuotas: 6, idListaPrecios: "L6" }],
       },
     ]);
+  });
+
+  it("mediosPrecio.cuotas: Mercado Pago sin condiciones toma las cuotas sin interés de su cuenta", async () => {
+    mediosOfrecibles.mockResolvedValue([medio("mercadopago", { cobroOnline: true, idListaPrecios: "LU" })]);
+    cuotasSinInteresMP.mockResolvedValue(3);
+    expect((await flagsPublicos()).mediosPrecio.cuotas).toBeUndefined();
+    expect(cuotasSinInteresMP).not.toHaveBeenCalled();
+    setFlag("cuotas-cobro", true);
+    vi.resetModules();
+    const { flagsPublicos: nuevo } = await import("./flags-publicos");
+    expect((await nuevo()).mediosPrecio.cuotas).toEqual([
+      { slug: "mercadopago", nombre: "MERCADOPAGO", idListaPagoUnico: "LU", condiciones: [{ cuotas: 3, idListaPrecios: "LU" }] },
+    ]);
+  });
+
+  it("si la lectura de MP falla, los medios siguen sin cuotas de MP", async () => {
+    mediosOfrecibles.mockResolvedValue([medio("mercadopago", { cobroOnline: true, destacarEnCatalogo: true })]);
+    cuotasSinInteresMP.mockRejectedValue(new Error("MP caído"));
+    setFlag("cuotas-cobro", true);
+    vi.resetModules();
+    const { flagsPublicos: nuevo } = await import("./flags-publicos");
+    const { mediosPrecio } = await nuevo();
+    expect(mediosPrecio.cuotas).toBeUndefined();
+    expect(mediosPrecio.destacado?.slug).toBe("mercadopago");
   });
 
   it("medios ilegibles: degrada a vacío sin romper", async () => {

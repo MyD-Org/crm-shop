@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MedioPago } from "./medios-pago";
 import { preciosFormaDelModal } from "./precios-forma-modal";
-import { armarPreciosMedios, listaAConfirmar, seleccionarMediosPrecio } from "./medios-precio";
+import { LISTA_GENERAL_MP, armarPreciosMedios, listaAConfirmar, seleccionarMediosPrecio } from "./medios-precio";
 
 function medio(slug: string, extra: Partial<MedioPago> = {}): MedioPago {
   return {
@@ -220,6 +220,50 @@ describe("cuotas sin interés (rebanada D)", () => {
     const r = seleccionarMediosPrecio([medio("aa", { destacarEnCatalogo: true, mostrarEnFicha: true }), mp()], false, true);
     expect(r.destacado?.slug).toBe("aa");
     expect(r.ficha.map((m) => m.slug)).toEqual(["aa"]);
+  });
+
+  describe("Mercado Pago sin condiciones en el admin: cuotas leídas de su cuenta", () => {
+    const mpSinCondiciones = (extra: Partial<MedioPago> = {}) => mp({ condicionesCuotas: [], ...extra });
+
+    it("arma una condición con la cantidad de MP y la lista general si el medio no tiene lista", () => {
+      const r = seleccionarMediosPrecio([mpSinCondiciones()], false, true, 3);
+      expect(r.cuotas).toEqual([
+        { slug: "mercadopago", nombre: "MERCADOPAGO", idListaPagoUnico: null, condiciones: [{ cuotas: 3, idListaPrecios: LISTA_GENERAL_MP }] },
+      ]);
+    });
+
+    it("usa la lista de crédito del medio si la tiene, si no la del medio", () => {
+      const credito = seleccionarMediosPrecio([mpSinCondiciones({ idListaPrecios: "LU", listasPorForma: { credito: "LC" } })], false, true, 6);
+      expect(credito.cuotas?.[0]).toMatchObject({ idListaPagoUnico: "LC", condiciones: [{ cuotas: 6, idListaPrecios: "LC" }] });
+      const delMedio = seleccionarMediosPrecio([mpSinCondiciones({ idListaPrecios: "LU" })], false, true, 6);
+      expect(delMedio.cuotas?.[0]).toMatchObject({ idListaPagoUnico: "LU", condiciones: [{ cuotas: 6, idListaPrecios: "LU" }] });
+    });
+
+    it("sin dato de MP, con un valor inválido, con el flag apagado o inactivo: nada", () => {
+      expect(seleccionarMediosPrecio([mpSinCondiciones()], false, true, null).cuotas).toBeUndefined();
+      expect(seleccionarMediosPrecio([mpSinCondiciones()], false, true, 1).cuotas).toBeUndefined();
+      expect(seleccionarMediosPrecio([mpSinCondiciones()], false, false, 3).cuotas).toBeUndefined();
+      expect(seleccionarMediosPrecio([mpSinCondiciones({ activo: false })], false, true, 3).cuotas).toBeUndefined();
+    });
+
+    it("si MP tiene condiciones en el admin, mandan ésas", () => {
+      const r = seleccionarMediosPrecio([mp()], false, true, 12);
+      expect(r.cuotas?.[0].condiciones.map((c) => c.cuotas)).toEqual([3, 6]);
+    });
+
+    it("otro medio sin condiciones no toma el dato de MP", () => {
+      expect(seleccionarMediosPrecio([mpSinCondiciones({ slug: "payway" })], false, true, 3).cuotas).toBeUndefined();
+    });
+
+    it("con la lista general, el total de cada cuota es el precio general", () => {
+      const prices = [
+        { idPriceList: "REF", name: "Lista A", price: 1000, main: true },
+        { idPriceList: "L3", name: "Lista B", price: 900, main: false },
+      ];
+      const { cuotas } = seleccionarMediosPrecio([mpSinCondiciones()], false, true, 3);
+      const r = armarPreciosMedios(prices, 21, { destacado: null, ficha: [], cuotas });
+      expect(r.cuotasSinInteres?.medios[0].opciones.map((o) => [o.cuotas, o.total, o.montoCuota])).toEqual([[3, 1210, 403.34]]);
+    });
   });
 
   describe("armarPreciosMedios: opciones por producto", () => {

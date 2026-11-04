@@ -6,13 +6,14 @@ import { PESTANAS_PEDIDOS, pestanaValida, urlConPestana } from "./pestanas"
 const leer = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8")
 
 describe("pestañas de Pedidos", () => {
-  it("son tres, con las etiquetas pedidas y en orden", () => {
-    expect(PESTANAS_PEDIDOS.map((p) => p.label)).toEqual(["Pedidos", "Carritos abandonados", "Intentos de pago"])
+  it("son cuatro, con las etiquetas pedidas y en orden", () => {
+    expect(PESTANAS_PEDIDOS.map((p) => p.label)).toEqual(["Pedidos", "Carritos abandonados", "Intentos de pago", "Avisos de stock"])
   })
 
   it("?tab= inválido o deshabilitado cae en Pedidos", () => {
     expect(pestanaValida("intentos")).toBe("intentos")
     expect(pestanaValida("carritos")).toBe("carritos")
+    expect(pestanaValida("avisos")).toBe("avisos")
     expect(pestanaValida("zzz")).toBe("pedidos")
     expect(pestanaValida(null)).toBe("pedidos")
     expect(pestanaValida(undefined)).toBe("pedidos")
@@ -45,13 +46,15 @@ describe("PedidosPestanas: fuente", () => {
     expect(fuente).toContain('hidden={activa !== "pedidos"}')
     expect(fuente).toContain('vistas.has("intentos")')
     expect(fuente).toContain('vistas.has("carritos")')
+    expect(fuente).toContain('vistas.has("avisos")')
   })
 
-  it("las tres pestañas quedan habilitadas en la página (sin recorte de `pestanas`)", () => {
+  it("las cuatro pestañas quedan habilitadas en la página (sin recorte de `pestanas`)", () => {
     const pagina = leer("../../../app/admin/(protected)/pedidos/page.tsx")
     expect(pagina).not.toContain("pestanas=")
     expect(fuente).toContain("CarritosAbandonadosShell")
     expect(fuente).toContain("IntentosPagoShell")
+    expect(fuente).toContain("AvisosReingresoShell")
   })
 
   it("la página Pedidos exige admin+ antes de armar las pestañas", () => {

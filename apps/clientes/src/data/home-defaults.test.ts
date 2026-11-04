@@ -741,10 +741,19 @@ describe("promosPago (promos de pago de la home)", () => {
     expect(home.orden.indexOf("promosPago")).toBe(home.orden.indexOf("promociones") + 1);
   });
 
-  it("sólo el título es editable, y es opcional", () => {
+  it("el título y los textos de las etiquetas son editables y opcionales", () => {
     expect(erroresSeccion("promosPago", {})).toEqual([]);
-    expect(erroresSeccion("promosPago", { titulo: "Beneficios para *pagar*" })).toEqual([]);
-    expect(erroresSeccion("promosPago", { titulo: "" })).not.toEqual([]);
+    expect(
+      erroresSeccion("promosPago", {
+        titulo: "Beneficios para *pagar*",
+        cuotasTexto: "Con todas las tarjetas.",
+        descuentoTitulo: "Ahorre más",
+        descuentoTexto: "Pagando por transferencia.",
+      }),
+    ).toEqual([]);
+    for (const campo of ["titulo", "cuotasTexto", "descuentoTitulo", "descuentoTexto"]) {
+      expect(erroresSeccion("promosPago", { [campo]: "" })).not.toEqual([]);
+    }
   });
 
   it("existe en la home genérica", () => {

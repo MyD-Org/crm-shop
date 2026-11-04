@@ -119,6 +119,7 @@ export function HomeClient({
   destacados,
   tiendaOficial = null,
   promociones = null,
+  promosPago = null,
   busquedaAsistida = null,
 }: {
   contenido: HomeContent;
@@ -137,6 +138,11 @@ export function HomeClient({
    * `<Suspense fallback={null}>`, armado en app/page.tsx. Fuera de vigencia no dibuja nada.
    */
   promociones?: ReactNode;
+  /**
+   * Promos de pago (cuotas sin interés y descuento del medio destacado): hueco por request con su
+   * `<Suspense fallback={null}>`, armado en app/page.tsx. Sin promos no dibuja nada.
+   */
+  promosPago?: ReactNode;
   /**
    * "Cuéntenos qué necesita" (flag `busqueda-ia`): hueco por request con su
    * `<Suspense fallback={null}>`, armado en app/page.tsx. Va debajo de la
@@ -166,6 +172,13 @@ export function HomeClient({
   // ("Ordenar secciones" de la barra de edición, `contenido.orden`). La cinta de marcas va a todo
   // el ancho; el resto, dentro del ancho del contenido.
   const secciones: Record<SeccionOrdenable, ReactNode> = {
+    promosPago: (
+      <Contenido>
+        <SeccionEditable seccion="promosPago" titulo={contenido.promosPago.titulo} visibilidad={vis("promosPago")} botonTop="top-[calc(clamp(28px,4vw,48px)+0.5rem)]">
+          {promosPago}
+        </SeccionEditable>
+      </Contenido>
+    ),
     promociones: (
       <Contenido>
         <Reveal>

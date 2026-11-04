@@ -1,11 +1,12 @@
 // Pestañas de la página Pedidos (lógica pura, testeable sin React).
 
-export type PestanaPedidos = "pedidos" | "carritos" | "intentos"
+export type PestanaPedidos = "pedidos" | "carritos" | "intentos" | "avisos"
 
 export const PESTANAS_PEDIDOS: readonly { value: PestanaPedidos; label: string }[] = [
   { value: "pedidos", label: "Pedidos" },
   { value: "carritos", label: "Carritos abandonados" },
   { value: "intentos", label: "Intentos de pago" },
+  { value: "avisos", label: "Avisos de stock" },
 ]
 
 /** Valor de `?tab=` → pestaña habilitada; cualquier otra cosa (ausente, inválida, deshabilitada) → Pedidos. */

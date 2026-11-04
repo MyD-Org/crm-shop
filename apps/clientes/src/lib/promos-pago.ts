@@ -1,13 +1,14 @@
 /**
- * Promos de pago de la home ("Hasta 6 cuotas sin interés", "10 % de descuento pagando con
- * Transferencia"). Lógica PURA: arma los avisos con datos reales, nunca con texto fijo.
+ * Promos de pago de la home ("Hasta 6 cuotas sin interés", "Grandes descuentos pagando con Transferencia").
+ * Lógica PURA: arma los avisos con datos reales, nunca con texto fijo.
  *
  * - Cuotas: las de `mediosPrecio.cuotas` (las de Mercado Pago salen de su cuenta, #760; las de otros
  *   procesadores, de las condiciones del admin). Se anuncia la mayor cantidad ofrecida.
- * - Descuento: el del medio DESTACADO de las cards. El Shop no ve los coeficientes de las listas, así
- *   que el porcentaje se deduce de los productos: el que más se repite entre los que muestran el
- *   precio con ese medio (sin campaña). Si no hay uno que valga para la mayoría, se anuncia el medio
- *   sin porcentaje.
+ * - Descuento: el del medio DESTACADO de las cards, si algún producto (sin campaña) muestra un precio
+ *   menor con ese medio. No se anuncia porcentaje (decisión de la tienda): sólo que hay descuento.
+ *
+ * Los textos de las etiquetas se pueden reemplazar desde el editor de la home (`textos`); el número de
+ * cuotas y el mínimo de compra no, porque son condiciones reales.
  *
  * Sin cuotas ni medio con descuento no hay avisos: la sección no se muestra.
  */
@@ -16,11 +17,9 @@ import type { MedioCuotas } from "./cuotas-sin-interes";
 import { fmtPrecioCorto } from "./format";
 import type { MedioPrecio } from "./medios-precio";
 
-export interface PromoPago {
-  tipo: "cuotas" | "descuento";
-  titulo: string;
-  texto: string;
-}
+export type PromoPago =
+  | { tipo: "cuotas"; cuotas: number; titulo: string; texto: string }
+  | { tipo: "descuento"; titulo: string; texto: string };
 
 /** Nombre de la forma de pago en "pagando con …" (como en "$X con débito"). */
 const ROTULO_FORMA: Record<NonNullable<PrecioMedio["forma"]>, string> = {
@@ -28,9 +27,6 @@ const ROTULO_FORMA: Record<NonNullable<PrecioMedio["forma"]>, string> = {
   debito: "tarjeta de débito",
   cuenta_mp: "dinero en cuenta de Mercado Pago",
 };
-
-/** Mínima cantidad de productos con precio del medio para deducir un porcentaje. */
-const MIN_MUESTRA = 3;
 
 /** La mayor cantidad de cuotas sin interés ofrecida, con su medio y el mínimo de compra más bajo. */
 export function mejorCuotas(
@@ -52,48 +48,45 @@ export function mejorCuotas(
   return mejor;
 }
 
-/**
- * Descuento del medio destacado deducido de los productos: el porcentaje entero que más se repite,
- * si lo comparte al menos la mitad de la muestra. `null` = no se puede afirmar un porcentaje.
- * `hay` = algún producto muestra un precio menor con el medio.
- */
+/** Mayor descuento real (entero, hacia abajo) de los productos sin campaña con precio del medio. */
 export function descuentoDelMedio(
   productos: readonly Product[],
   slug: string,
-): { hay: boolean; porcentaje: number | null; forma?: PrecioMedio["forma"] } {
-  const conteo = new Map<number, number>();
-  let muestra = 0;
+): { hay: boolean; maximo: number; forma?: PrecioMedio["forma"] } {
+  let maximo = 0;
   let forma: PrecioMedio["forma"];
   for (const p of productos) {
     const pm = p.precioMedio;
     // Con campaña el precio de la card no es el de lista: no sirve para comparar.
     if (!pm || pm.slug !== slug || p.campania || !(p.price > 0) || !(pm.price < p.price)) continue;
-    const pct = Math.round((1 - pm.price / p.price) * 100);
-    if (pct < 1) continue;
-    muestra += 1;
-    conteo.set(pct, (conteo.get(pct) ?? 0) + 1);
+    // +1e-9: que 0,2 no quede en 19 por el redondeo binario.
+    const pct = Math.floor((1 - pm.price / p.price) * 100 + 1e-9);
+    if (pct > maximo) maximo = pct;
     forma ??= pm.forma;
   }
-  if (muestra === 0) return { hay: false, porcentaje: null };
-  const [pct, veces] = [...conteo].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
-  const porcentaje = muestra >= MIN_MUESTRA && veces * 2 >= muestra ? pct : null;
-  return { hay: true, porcentaje, ...(forma ? { forma } : {}) };
+  return { hay: maximo >= 1, maximo, ...(forma ? { forma } : {}) };
 }
+
+/** Cierra con punto, para que el mínimo de compra se lea como otra oración. */
+const conPunto = (s: string) => (/[.!?]$/.test(s) ? s : `${s}.`);
 
 /** Los avisos de la sección, en orden: cuotas y descuento. Vacío = la sección no se muestra. */
 export function promosPago(args: {
   cuotas?: readonly MedioCuotas[];
   destacado?: MedioPrecio | null;
   productos: readonly Product[];
+  textos?: { cuotasTexto?: string; descuentoTitulo?: string; descuentoTexto?: string };
 }): PromoPago[] {
+  const t = args.textos ?? {};
   const avisos: PromoPago[] = [];
 
   const c = mejorCuotas(args.cuotas);
   if (c) {
     avisos.push({
       tipo: "cuotas",
+      cuotas: c.cuotas,
       titulo: `Hasta ${c.cuotas} cuotas sin interés`,
-      texto: `Con tarjeta de crédito a través de ${c.medio}.${c.minimo ? ` En compras desde ${fmtPrecioCorto(c.minimo)}.` : ""}`,
+      texto: `${conPunto(t.cuotasTexto?.trim() || "Con tarjeta de crédito.")}${c.minimo ? ` En compras desde ${fmtPrecioCorto(c.minimo)}.` : ""}`,
     });
   }
 
@@ -101,11 +94,11 @@ export function promosPago(args: {
     const d = descuentoDelMedio(args.productos, args.destacado.slug);
     if (d.hay) {
       const con = d.forma ? ROTULO_FORMA[d.forma] : args.destacado.nombre;
-      avisos.push(
-        d.porcentaje !== null
-          ? { tipo: "descuento", titulo: `${d.porcentaje} % de descuento`, texto: `Pagando con ${con}.` }
-          : { tipo: "descuento", titulo: `Mejor precio con ${con}`, texto: `Vea el precio con ${con} en cada producto.` },
-      );
+      avisos.push({
+        tipo: "descuento",
+        titulo: t.descuentoTitulo?.trim() || "Grandes descuentos",
+        texto: t.descuentoTexto?.trim() || `Pagando con ${con}.`,
+      });
     }
   }
 

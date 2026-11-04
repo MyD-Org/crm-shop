@@ -153,10 +153,17 @@ export type TiendaOficialContent = {
 /**
  * Promos de pago ("Hasta N cuotas sin interés", "10 % de descuento pagando con Transferencia"). Los
  * avisos salen de datos reales (cuotas de los medios de cobro y medio destacado, `lib/promos-pago.ts`):
- * del contenido sólo se edita el título opcional. Sin avisos la sección no se muestra.
+ * del contenido se editan el título y los textos de las etiquetas (todos opcionales: sin valor va el
+ * texto por defecto). El número de cuotas no se edita: es el real. Sin avisos la sección no se muestra.
  */
 export type PromosPagoContent = {
   titulo?: string;
+  /** Bajada de la etiqueta de cuotas. Por defecto "Con tarjeta de crédito.". */
+  cuotasTexto?: string;
+  /** Título de la etiqueta de descuento. Por defecto "Grandes descuentos". */
+  descuentoTitulo?: string;
+  /** Bajada de la etiqueta de descuento. Por defecto "Pagando con <medio destacado>.". */
+  descuentoTexto?: string;
 };
 
 export type HomeContent = {
@@ -666,7 +673,7 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       texto("imagenAlt", true);
       break;
     case "promosPago":
-      texto("titulo", true);
+      for (const campo of ["titulo", "cuotasTexto", "descuentoTitulo", "descuentoTexto"]) texto(campo, true);
       break;
     case "promociones":
       errores.push(...erroresPromociones(o, texto, textosTitulo, linkOpcional));

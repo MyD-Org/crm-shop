@@ -79,6 +79,11 @@ export function seleccionarMediosPrecio(
   especialEncendido: boolean,
   /** Flag `cuotas-cobro`: sin él no se exhiben cuotas. */
   cuotasEncendido = false,
+  /**
+   * Cuotas sin interés que da hoy la cuenta de Mercado Pago (`cuotasSinInteresMP`); null = ninguna.
+   * Las de MP no se cargan en el admin (#533): se exhiben con este dato.
+   */
+  cuotasMP: number | null = null,
 ): MediosPrecio {
   if (especialEncendido) return SIN_MEDIOS_PRECIO;
   const elegibles = medios
@@ -100,7 +105,7 @@ export function seleccionarMediosPrecio(
     };
   };
   const destacado = elegibles.find((m) => m.destacarEnCatalogo);
-  const cuotas = cuotasEncendido ? mediosCuotas(medios) : [];
+  const cuotas = cuotasEncendido ? mediosCuotas(medios, cuotasMP) : [];
   const modal = elegibles.filter((m) => m.cobroOnline && listasDeLasFormas(m) !== null).map(aMedio);
   const offline = medios
     .filter(
@@ -137,16 +142,47 @@ function listasDeLasFormas(m: MedioPago): { forma: OpcionCobro; idListaPrecios: 
  * orden del admin. `medios` ya viene sin los procesadores sin credenciales (`mediosOfrecibles`), así
  * que un medio que el checkout no ofrece tampoco se exhibe. Sin condiciones no hay nada que ofrecer.
  */
-function mediosCuotas(medios: readonly MedioPago[]): MedioCuotas[] {
+function mediosCuotas(medios: readonly MedioPago[], cuotasMP: number | null): MedioCuotas[] {
   return medios
-    .filter((x) => x.activo && x.cobroOnline && !esMedioCuentaCorriente(x) && !SLUGS_RESERVADOS.includes(x.slug) && (x.condicionesCuotas?.length ?? 0) > 0)
+    .filter((x) => x.activo && x.cobroOnline && !esMedioCuentaCorriente(x) && !SLUGS_RESERVADOS.includes(x.slug))
     .sort(porOrden)
-    .map((m) => ({
+    .flatMap((m): MedioCuotas[] => {
+      if ((m.condicionesCuotas?.length ?? 0) === 0) return m.slug === SLUG_MERCADOPAGO ? medioCuotasMP(m, cuotasMP) : [];
+      return [
+        {
+          slug: m.slug,
+          nombre: m.nombre,
+          condiciones: [...(m.condicionesCuotas ?? [])].sort((a, b) => a.cuotas - b.cuotas),
+          idListaPagoUnico: m.idListaPrecios,
+        },
+      ];
+    });
+}
+
+const SLUG_MERCADOPAGO = "mercadopago";
+/**
+ * Id que ninguna lista tiene: `precioDeLista` cae a la general, que es la que rige para un medio sin
+ * lista enlazada (igual que en la cotización). Hace falta porque una condición sin lista se descarta.
+ */
+export const LISTA_GENERAL_MP = "lista-general";
+
+/**
+ * Mercado Pago: sus cuotas sin interés vienen de su cuenta (`cuotasMP`), no del admin. Sin interés, el
+ * total es el precio de 1 pago con tarjeta de crédito: la lista de crédito del medio si tiene una
+ * propia, si no la del medio. Sólo cuando MP no tiene condiciones cargadas en el admin (anteriores a
+ * #533): si las tiene, siguen mandando ésas, como en el checkout.
+ */
+function medioCuotasMP(m: MedioPago, cuotasMP: number | null): MedioCuotas[] {
+  if (cuotasMP === null || !Number.isInteger(cuotasMP) || cuotasMP < 2) return [];
+  const lista = m.listasPorForma?.credito || m.idListaPrecios || null;
+  return [
+    {
       slug: m.slug,
       nombre: m.nombre,
-      condiciones: [...(m.condicionesCuotas ?? [])].sort((a, b) => a.cuotas - b.cuotas),
-      idListaPagoUnico: m.idListaPrecios,
-    }));
+      condiciones: [{ cuotas: cuotasMP, idListaPrecios: lista ?? LISTA_GENERAL_MP }],
+      idListaPagoUnico: lista,
+    },
+  ];
 }
 
 function precioDeUnaLista(prices: AlegraPrice[], iva: number | null, medio: MedioPrecio, idLista: string, forma?: OpcionCobro): PrecioMedio | null {

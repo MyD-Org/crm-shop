@@ -7,7 +7,7 @@
  * El estado vive en `globalThis` y no en una variable del módulo para que
  * sobreviva a `vi.resetModules()` (los tests que reimportan con `await import`).
  */
-export type FlagDeTest = "cuotas-cobro" | "catalogo-solo-visibles" | "chat-ia" | "sucursales" | "disponibilidad-sucursal" | "busqueda-ia" | "tracking" | "busqueda-medidas" | "variantes-selector" | "mercadopago";
+export type FlagDeTest = "cuotas-cobro" | "catalogo-solo-visibles" | "chat-ia" | "sucursales" | "disponibilidad-sucursal" | "busqueda-ia" | "tracking" | "busqueda-medidas" | "variantes-selector" | "mercadopago" | "aviso-reingreso";
 
 type Estado = Record<FlagDeTest, boolean>;
 
@@ -19,7 +19,7 @@ export function estadoFlags(): Estado {
 }
 
 export function apagados(): Estado {
-  return { "cuotas-cobro": false, "catalogo-solo-visibles": false, "chat-ia": false, sucursales: false, "disponibilidad-sucursal": false, "busqueda-ia": false, tracking: false, "busqueda-medidas": false, "variantes-selector": false,
+  return { "cuotas-cobro": false, "catalogo-solo-visibles": false, "chat-ia": false, sucursales: false, "disponibilidad-sucursal": false, "busqueda-ia": false, tracking: false, "busqueda-medidas": false, "variantes-selector": false, "aviso-reingreso": false,
     // Prendido: los tests de cobro dan Mercado Pago por ofrecido; los del flag lo apagan.
     mercadopago: true };
 }

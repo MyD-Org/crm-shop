@@ -7,6 +7,7 @@ import { notFound, redirect } from "next/navigation";
 import { idDeRuta } from "@/lib/id-producto";
 import { alternativaDeVariantePublica, productoPublico, rutaCategoriaPublica } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
+import { avisoReingresoActivo } from "@/lib/aviso-reingreso-flag";
 import { metadataProducto } from "@/lib/producto-metadata";
 import { getMarca } from "@/lib/marca";
 import { jsonLdProductoHtml } from "@/lib/producto-jsonld";
@@ -58,7 +59,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProductoPage({ params }: Props) {
   const id = idDeRuta((await params).id);
-  const [producto, reglas, { soloVisibles, variantes, mediosPrecio }, disp, dispEntrega, tarjetas, { promociones }, campanias] = await Promise.all([
+  const [producto, reglas, { soloVisibles, variantes, mediosPrecio }, disp, dispEntrega, tarjetas, { promociones }, campanias, avisoReingreso] = await Promise.all([
     productoDe(id),
     reglasVentaCacheadas(),
     flagsPublicos(),
@@ -67,6 +68,8 @@ export default async function ProductoPage({ params }: Props) {
     getTarjetasMercadoPago(),
     getContenidoHome(),
     campaniasVigentes(),
+    // Flag `aviso-reingreso`: se resuelve acá, por request, y baja como prop (nunca dentro de `use cache`).
+    avisoReingresoActivo(),
   ]);
   // Local de retiro elegido en "Enviar a" (si la lectura falla, sin local elegido).
   const eleccion = (await ubicacionDelVisitante().catch(() => null))?.eleccion;
@@ -127,6 +130,7 @@ export default async function ProductoPage({ params }: Props) {
         localElegido={localElegido}
         quedanPromo={quedanPromo}
         slugDestacadoPromo={mediosPrecio?.destacado?.slug}
+        avisoReingreso={avisoReingreso}
         envioElegido={envioElegido}
         // La ubicación sale de la cookie: va en un hueco por request, con la regla general de
         // fallback, para que la ficha siga con su shell estático.

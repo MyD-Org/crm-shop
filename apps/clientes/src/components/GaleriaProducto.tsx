@@ -5,7 +5,7 @@ import Image from "next/image";
 import { cn } from "@myd-org/ui";
 import type { ProductImage, VideoProducto } from "@/data/products";
 import { LightbulbIcon } from "@/components/catalogo/iconos";
-import { VisorFotos } from "@/components/VisorFotos";
+import { VisorFotos, Chevron, etiquetaFlecha } from "@/components/VisorFotos";
 import { VideoFacade, IconoPlay } from "@/components/producto/VideoFacade";
 import { armarItems, claveItem, debeMontarIframe } from "@/components/galeria-items";
 
@@ -27,6 +27,9 @@ import { armarItems, claveItem, debeMontarIframe } from "@/components/galeria-it
  * (36rem, o menos en pantallas bajas: no puede taparse la ficha) y las miniaturas
  * forman una columna a la izquierda. `acciones` (compartir, favorito) flota
  * arriba a la derecha de la foto.
+ *
+ * En la compu (puntero fino: mouse o trackpad) hay flechas de anterior/siguiente a los costados
+ * de la foto grande; en el celular no, se desliza con el dedo.
  *
  * Tocar la foto grande la abre a pantalla completa (`VisorFotos`). Un
  * deslizamiento no dispara el clic, así que pasar de foto no abre el visor.
@@ -148,6 +151,14 @@ export function GaleriaProducto({
             )}
           </div>
         )}
+        {varias && (
+          <>
+            {activa > 0 && <FlechaGaleria hacia="prev" item={lista[activa - 1]} onClick={() => irA(activa - 1)} />}
+            {activa < lista.length - 1 && (
+              <FlechaGaleria hacia="next" item={lista[activa + 1]} onClick={() => irA(activa + 1)} />
+            )}
+          </>
+        )}
         {acciones && <div className="absolute right-3 top-3 flex gap-2">{acciones}</div>}
       </div>
 
@@ -208,5 +219,30 @@ export function GaleriaProducto({
         />
       )}
     </div>
+  );
+}
+
+/** Flecha de la foto grande. Sólo con puntero fino (compu): en el celular se desliza con el dedo. */
+export function FlechaGaleria({
+  hacia,
+  item,
+  onClick,
+}: {
+  hacia: "prev" | "next";
+  item: ReturnType<typeof armarItems>[number];
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={etiquetaFlecha(hacia, item)}
+      className={cn(
+        "absolute top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface text-text shadow-2 transition-[scale] duration-150 ease-out active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] motion-reduce:active:scale-100 pointer-fine:flex",
+        hacia === "prev" ? "left-3" : "right-3",
+      )}
+    >
+      <Chevron hacia={hacia} />
+    </button>
   );
 }

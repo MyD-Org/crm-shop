@@ -666,6 +666,13 @@
       "when": 1793500010000,
       "tag": "0097_cupones",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1793500020000,
+      "tag": "0098_producto_videos",
+      "breakpoints": true
     }
   ]
 }

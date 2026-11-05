@@ -30,6 +30,7 @@ const variante = (o: Partial<VarianteDto> = {}): VarianteDto => ({
   prices: [{ price: 100 }],
   stock: "5",
   fotos: [],
+  videos: [],
   manual: false,
   orden: null,
   esRepresentante: false,

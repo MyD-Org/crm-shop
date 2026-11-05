@@ -24,6 +24,7 @@ import {
   type CategoriaValida,
   type FichaTecnicaOverlay,
   type FotoOverlay,
+  type VideoOverlay,
   type MotivoNoPublicado,
   type NodoCategoria,
   tienePrecio,
@@ -520,6 +521,8 @@ export interface CamposOverlay {
   categoriaId?: string | null
   orden?: number | null
   fotos?: FotoOverlay[]
+  /** Videos de YouTube (sólo ids); la API ya los validó. */
+  videos?: VideoOverlay[]
   fichaTecnica?: FichaTecnicaOverlay | null
   /** Slugs de sucursal donde el producto NO se ofrece (vacío = visible en todas). */
   ocultoEnSucursales?: string[]
@@ -548,6 +551,7 @@ export async function guardarOverlay(
   if (campos.categoriaId !== undefined) set.categoriaId = campos.categoriaId
   if (campos.orden !== undefined) set.orden = campos.orden
   if (campos.fotos !== undefined) set.fotos = campos.fotos
+  if (campos.videos !== undefined) set.videos = campos.videos
   if (campos.fichaTecnica !== undefined) set.fichaTecnica = campos.fichaTecnica
   if (campos.ocultoEnSucursales !== undefined) set.ocultoEnSucursales = campos.ocultoEnSucursales
   if (campos.mostrarMarca !== undefined) set.mostrarMarca = campos.mostrarMarca
@@ -1040,6 +1044,7 @@ export interface ProductoAdmin {
   orden: number | null
   tagIds: string[]
   fotos: FotoOverlay[]
+  videos: VideoOverlay[]
   fichaTecnica: FichaTecnicaOverlay | null
   /** Slugs de sucursal donde NO se ofrece (vacío = visible en todas). */
   ocultoEnSucursales: string[]
@@ -1085,6 +1090,8 @@ export interface VarianteAdmin {
   stock: string | null
   /** Foto propia de la variante (overlay de la variante; el resto del overlay lo manda el ancla). */
   fotos: FotoOverlay[]
+  /** Videos propios de la variante (overlay de la variante). */
+  videos: VideoOverlay[]
   /** true = lo sumó el operador a mano (se puede quitar). */
   manual: boolean
   /** Orden manual dentro del modelo (sólo en los sumados a mano). */
@@ -1118,6 +1125,7 @@ interface FilaListadoCruda {
   categoria_nombre: string | null
   orden: number | null
   fotos: FotoOverlay[] | null
+  videos: VideoOverlay[] | null
   ficha_tecnica: FichaTecnicaOverlay | null
   oculto_en_sucursales: string[] | null
   mostrar_marca: boolean | null
@@ -1148,6 +1156,7 @@ interface FilaVarianteCruda {
   prices: unknown
   stock: string | null
   fotos: FotoOverlay[] | null
+  videos: VideoOverlay[] | null
   es_representante: boolean
   oculta_en_tienda: boolean
   manual: boolean
@@ -1180,6 +1189,7 @@ function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
     orden: f.orden,
     tagIds: f.tag_ids ?? [],
     fotos: f.fotos ?? [],
+    videos: f.videos ?? [],
     fichaTecnica: f.ficha_tecnica ?? null,
     ocultoEnSucursales: f.oculto_en_sucursales ?? [],
     mostrarMarca: f.mostrar_marca ?? true,
@@ -1228,7 +1238,7 @@ async function stockPorSucursal(
 /** Las columnas del listado y de la ficha son las mismas: una sola definición, un solo orden. */
 const columnasListado = sql`
   p.alegra_id, p.code, p.name, p.description, p.status, p.alegra_status, p.prices, p.stock, p.synced_at,
-  o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, o.oculto_en_sucursales, o.mostrar_marca, o.modalidad_sin_stock_id, o.updated_at,
+  o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.videos, o.ficha_tecnica, o.oculto_en_sucursales, o.mostrar_marca, o.modalidad_sin_stock_id, o.updated_at,
   c.nombre AS categoria_nombre,
   ac.slug AS cuenta_slug, ac.nombre AS cuenta_nombre,
   p.tipo, p.grupo_id, p.etiqueta, (p.tipo = 'padre' OR p.grupo_id = p.alegra_id) AS es_ancla,
@@ -1373,7 +1383,7 @@ async function variantesDeGrupos(tenantId: string, anclas: string[]): Promise<Ma
   if (anclas.length === 0) return mapa
   const filas = (await getDb().execute(sql`
     SELECT p.alegra_id, p.grupo_id, p.code, p.name, p.etiqueta, p.tipo, p.status, p.alegra_status, p.prices, p.stock,
-           p.es_representante, ov.fotos, coalesce(ov.oculta_en_tienda, false) AS oculta_en_tienda, (m.alegra_id IS NOT NULL) AS manual, m.orden AS manual_orden
+           p.es_representante, ov.fotos, ov.videos, coalesce(ov.oculta_en_tienda, false) AS oculta_en_tienda, (m.alegra_id IS NOT NULL) AS manual, m.orden AS manual_orden
     FROM ${catalogProducts} p
     LEFT JOIN ${catalogOverlay} ov ON (ov.tenant_id = p.tenant_id AND ov.alegra_id = p.alegra_id)
     LEFT JOIN catalog_variantes_manuales m ON (m.tenant_id = p.tenant_id AND m.alegra_id = p.alegra_id)
@@ -1395,6 +1405,7 @@ async function variantesDeGrupos(tenantId: string, anclas: string[]): Promise<Ma
       prices: f.prices,
       stock: f.stock,
       fotos: f.fotos ?? [],
+      videos: f.videos ?? [],
       manual: f.manual,
       orden: f.manual_orden,
       esRepresentante: f.es_representante,

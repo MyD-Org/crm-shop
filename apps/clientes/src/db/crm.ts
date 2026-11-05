@@ -54,6 +54,11 @@ export interface FotoCrm {
   alt?: string;
 }
 
+/** Un video de YouTube del overlay tal como lo guarda el CRM: sólo el id (11 caracteres). */
+export interface VideoCrm {
+  id: string;
+}
+
 /** La ficha técnica (PDF) del overlay tal como la guarda el CRM: la KEY en R2, no la URL. */
 export interface FichaTecnicaCrm {
   key: string;
@@ -87,6 +92,8 @@ export const crmOverlay = publico.table("catalog_overlay", {
   descripcion: text("descripcion"),
   categoriaId: uuid("categoria_id"),
   fotos: jsonb("fotos").$type<FotoCrm[]>().notNull(),
+  /** Videos de YouTube de la ficha (`[{ id }]`). Migración 0098 del CRM. */
+  videos: jsonb("videos").$type<VideoCrm[]>().notNull(),
   fichaTecnica: jsonb("ficha_tecnica").$type<FichaTecnicaCrm | null>(),
   /**
    * Slugs de `sucursales` donde el producto NO se ofrece (vacío = visible en todas). Migración

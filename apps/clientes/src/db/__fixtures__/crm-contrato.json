@@ -17,6 +17,7 @@
     "descripcion": "text",
     "categoria_id": "uuid",
     "fotos": "jsonb",
+    "videos": "jsonb",
     "ficha_tecnica": "jsonb",
     "oculto_en_sucursales": "text[]",
     "mostrar_marca": "boolean",

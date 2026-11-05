@@ -4,6 +4,13 @@ import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import type { VentaSinStock } from "@/lib/venta-sin-stock";
 import type { ProductStock } from "@myd-org/ui";
 
+/** Un video de la ficha: `embed` es el reproductor sin cookies y `poster` su miniatura. */
+export interface VideoProducto {
+  id: string;
+  embed: string;
+  poster: string;
+}
+
 /**
  * Foto de un producto, cargada en el overlay del CRM, con la URL ya compuesta
  * (el CRM guarda la key de R2, ver `FotoCrm` en src/db/crm.ts). Propia: este
@@ -137,6 +144,11 @@ export interface Product {
    * medios permitidos (ver src/lib/catalogo-medios.ts). undefined = sin fotos.
    */
   images?: ProductImage[];
+  /**
+   * Videos de YouTube del overlay del CRM, ya compuestos (embed sin cookies + poster). Se muestran
+   * después de las fotos en la ficha; la card del catálogo los ignora. undefined = sin videos.
+   */
+  videos?: VideoProducto[];
   /** Ficha técnica (PDF) del overlay del CRM, ya compuesta. undefined = sin ficha. */
   fichaTecnicaUrl?: string;
   /**

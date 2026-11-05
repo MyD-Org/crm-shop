@@ -432,4 +432,4 @@ export const estaPublicado = (fila: EstadoPublicacion): boolean => motivoNoPubli
 // son presentación y sólo los usa la UI, y traerlos desde acá metería este módulo —y con él
 // drizzle— dentro del bundle del navegador.
 
-export type { FichaTecnicaOverlay, FotoOverlay } from "@/db/schema"
+export type { FichaTecnicaOverlay, FotoOverlay, VideoOverlay } from "@/db/schema"

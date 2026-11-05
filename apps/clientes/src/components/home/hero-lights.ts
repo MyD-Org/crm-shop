@@ -23,6 +23,15 @@ export const COVER_X = .88;
 export const COVER_QUERY = "(max-width: 767px)";
 
 /**
+ * La foto se recorta (cover) en mobile y también en desktop cuando el hero queda más alto que la
+ * foto (3:2): con `contain` dejaría bandas lisas arriba y abajo. Más ancho que 3:2 sigue en
+ * `contain`, anclada a la derecha, para que entren todas las lámparas.
+ */
+export function usaCover(width: number, height: number, mobile: boolean) {
+  return mobile || height * 1536 > width * 1024;
+}
+
+/**
  * Where the 1536 × 1024 source lands inside the hero. Desktop matches
  * object-fit: contain; object-position: right center. Mobile matches
  * object-fit: cover; object-position: 88% center.

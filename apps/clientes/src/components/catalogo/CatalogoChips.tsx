@@ -20,8 +20,7 @@ import { chipsActivos } from "@/lib/catalogo-vista";
  *
  * También en desktop: el panel lateral muestra los tildes, pero no todo lo
  * aplicado se ve ahí (el local de "Con stock en" queda al pie del panel, y un
- * local recordado por cookie puede estar puesto sin que el visitante lo haya
- * elegido). El chip es lo que lo dice a primera vista, arriba de la grilla. En
+ * enlace con local lo pone sin que el visitante lo haya elegido). El chip es lo que lo dice a primera vista, arriba de la grilla. En
  * mobile los filtros viven escondidos en una hoja, así que estos chips son lo
  * único que dice qué está aplicado sin abrirla.
  *

@@ -43,6 +43,7 @@ import {
   crmOverlay,
   type FichaTecnicaCrm,
   type FotoCrm,
+  type VideoCrm,
 } from "@/db/crm";
 import { mapPrecios, precioDeLista } from "./alegra";
 import { esIdProducto } from "./id-producto";
@@ -50,6 +51,7 @@ import { activoSql, preciosSql, stockSql } from "./stock-disponible";
 import { enListado, enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
 import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
+import { videoYoutubePorId, type VideoYoutube } from "./marcas/video";
 import {
   PATRON_CATEGORIA_ACCESORIO,
   PATRON_NOMBRE_ACCESORIO,
@@ -152,6 +154,8 @@ interface FilaCatalogo {
   overlayDescripcion?: string | null;
   /** Fotos del overlay, con la key de R2. null = sin fila de overlay (left join). */
   overlayFotos: FotoCrm[] | null;
+  /** Videos de YouTube del overlay (`[{ id }]`). Opcional por los fixtures de test. null = sin overlay. */
+  overlayVideos?: VideoCrm[] | null;
   /**
    * Ficha técnica del overlay, con la key de R2. null = sin overlay o sin ficha cargada.
    * Opcional (no `| undefined` explícito) para no obligar a los fixtures de test existentes a
@@ -257,6 +261,7 @@ export function mapFilaToProduct(
     category: fila.categoryName || undefined,
     categoriaPropiaId: fila.overlayCategoriaId ?? undefined,
     images: fotosPermitidas(urlsDeFotos(fila.overlayFotos, baseMedios), hostsMedios),
+    ...videosDeFicha(fila.overlayVideos),
     fichaTecnicaUrl: urlDeFicha(fila.overlayFichaTecnica, baseMedios),
     ...(atributosEstructurados ? { atributosEstructurados } : {}),
     ...(especificaciones.length ? { especificaciones } : {}),
@@ -308,6 +313,28 @@ function prefijoDeFoto(key: string): string {
  * mejor se ve en el detalle, y `next/image` la redimensiona solo para las
  * miniaturas y la card, así que no hace falta cargar las tres.
  */
+/** Máximo de videos que se muestran en una ficha (el admin ya limita; acá es el tope de lectura). */
+const MAX_VIDEOS_FICHA = 3;
+
+/**
+ * Videos de la ficha: ids del overlay compuestos a reproductor + poster. Los ids inválidos se
+ * descartan y se corta en `MAX_VIDEOS_FICHA`. Sin videos válidos no agrega la clave (`videos`
+ * ausente), así un producto sin videos queda idéntico al de antes.
+ */
+export function videosDeFicha(videos: VideoCrm[] | null | undefined): { videos?: VideoYoutube[] } {
+  if (!Array.isArray(videos) || !videos.length) return {};
+  const vistos = new Set<string>();
+  const lista: VideoYoutube[] = [];
+  for (const v of videos) {
+    const compuesto = videoYoutubePorId(v?.id);
+    if (!compuesto || vistos.has(compuesto.id)) continue;
+    vistos.add(compuesto.id);
+    lista.push(compuesto);
+    if (lista.length === MAX_VIDEOS_FICHA) break;
+  }
+  return lista.length ? { videos: lista } : {};
+}
+
 function agruparFotos(fotos: FotoCrm[]): FotoCrm[] {
   const orden: string[] = [];
   const porPrefijo = new Map<string, FotoCrm[]>();
@@ -417,7 +444,8 @@ const columnasCatalogo = (
     : conVariantes;
   // Campañas de precios (CRM 0095), siempre AL FINAL: una fila sin la columna (fixtures posicionales
   // de los tests) queda sin campañas, que es el precio de siempre.
-  return { ...conModalidad, campaniasOnline: crmCatalogo.campaniasOnline };
+  // Videos del overlay (CRM 0098) también al final, por lo mismo: sin la columna, sin videos.
+  return { ...conModalidad, campaniasOnline: crmCatalogo.campaniasOnline, overlayVideos: crmOverlay.videos };
 };
 
 /**
@@ -843,12 +871,16 @@ export async function getProductosPorIds(
 
   // Con el flag: la foto propia de cada variante, si la tiene (si no, la del modelo).
   const propias = new Map<string, FotoCrm[]>();
+  const videosPropios = new Map<string, VideoCrm[]>();
   if (opts?.agrupar && filas.length) {
     const fotos = await getDb()
-      .select({ alegraId: crmOverlay.alegraId, fotos: crmOverlay.fotos })
+      .select({ alegraId: crmOverlay.alegraId, fotos: crmOverlay.fotos, videos: crmOverlay.videos })
       .from(crmOverlay)
       .where(and(eq(crmOverlay.tenantId, shopTenantId()), inArray(crmOverlay.alegraId, [...alegraIds])));
-    for (const f of fotos) if (f.fotos?.length) propias.set(f.alegraId, f.fotos);
+    for (const f of fotos) {
+      if (f.fotos?.length) propias.set(f.alegraId, f.fotos);
+      if (f.videos?.length) videosPropios.set(f.alegraId, f.videos);
+    }
   }
 
   const medios = await conQuedanCampania(filas, opts?.mediosPrecio);
@@ -859,7 +891,11 @@ export async function getProductosPorIds(
       return [
         f.alegraId,
         mapFilaToProduct(
-          { ...fila, overlayFotos: fotosPropias?.length ? fotosPropias : fila.overlayFotos },
+          {
+            ...fila,
+            overlayFotos: fotosPropias?.length ? fotosPropias : fila.overlayFotos,
+            overlayVideos: videosPropios.get(f.alegraId) ?? fila.overlayVideos,
+          },
           opts?.idPriceList,
           undefined,
           undefined,
@@ -1093,7 +1129,12 @@ export async function getVariantesDeGrupo(
 ): Promise<(OpcionFicha & { esRepresentante: boolean })[]> {
   const propio = alias(crmOverlay, "overlay_propio");
   const modalidades = await modalidadesActivas();
-  const { campaniasOnline, ...columnas } = columnasCatalogo(opts.disp, opts.atributosEstructurados, false, modalidades);
+  const { campaniasOnline, overlayVideos, ...columnas } = columnasCatalogo(
+    opts.disp,
+    opts.atributosEstructurados,
+    false,
+    modalidades,
+  );
   const filas = await getDb()
     .select({
       ...columnas,
@@ -1102,6 +1143,8 @@ export async function getVariantesDeGrupo(
       esRepresentante: crmCatalogo.esRepresentante,
       fotosPropias: propio.fotos,
       campaniasOnline, // al final, como en `columnasCatalogo`
+      overlayVideos,
+      videosPropios: propio.videos,
     })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
@@ -1120,10 +1163,16 @@ export async function getVariantesDeGrupo(
     );
   const medios = await conQuedanCampania(filas, opts.mediosPrecio);
   const opciones = filas.map((f) => {
-    const { etiqueta, esRepresentante, fotosPropias, ...fila } = f; // `tipo` queda en `fila`
+    const { etiqueta, esRepresentante, fotosPropias, videosPropios, ...fila } = f; // `tipo` queda en `fila`
     // `grupoId` no se selecciona (es el del pedido): todas las opciones son del mismo grupo.
     const producto = mapFilaToProduct(
-      { ...fila, etiqueta, grupoId, overlayFotos: fotosPropias?.length ? fotosPropias : fila.overlayFotos },
+      {
+        ...fila,
+        etiqueta,
+        grupoId,
+        overlayFotos: fotosPropias?.length ? fotosPropias : fila.overlayFotos,
+        overlayVideos: videosPropios?.length ? videosPropios : fila.overlayVideos,
+      },
       opts.idPriceList,
       undefined,
       undefined,

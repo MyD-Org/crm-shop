@@ -5,8 +5,8 @@ import { formatRubro } from "./formato-rubro";
 
 /**
  * Copy del "sin resultados" cuando el filtro "Con stock en <local>" está activo
- * (puesto a mano o recordado por la cookie del local): el visitante tiene que
- * saber que el 0 puede venir de ese filtro y cómo salir. Devuelve `null` si no
+ * (puesto a mano o por un enlace con local): el visitante tiene que saber
+ * que el 0 puede venir de ese filtro y cómo salir. Devuelve `null` si no
  * hay filtro de local; entonces rige el copy de siempre.
  *
  * La salida ("Ver en todos los locales") la resuelve el componente quitando

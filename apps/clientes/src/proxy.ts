@@ -12,7 +12,7 @@ import {
 } from "@/lib/tema-ip";
 import { escapeHtml } from "@/lib/escape-html";
 import { nombreMarcaEntorno } from "@/lib/marca-base";
-import { LOCAL_COOKIE, LOCAL_MAX_AGE, decidirLocal, type DecisionLocal } from "@/lib/local-recordado";
+import { redireccionSucursal } from "@/lib/enlace-sucursal";
 
 const GATE_COOKIE = "site_gate";
 const GATE_PATH = "/__gate";
@@ -109,26 +109,22 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
   const bloqueo = await siteGate(request);
   if (bloqueo) return bloqueo;
 
-  // Local recordado (enlace `?retiro=<local>`): `/catalogo` sin `retiro` redirige con el local
-  // puesto, así el filtro se ve en el chip y en el panel. Ver src/lib/local-recordado.ts.
-  const local = esPagina(request)
-    ? decidirLocal({
-        pathname: request.nextUrl.pathname,
-        search: request.nextUrl.searchParams,
-        cookie: request.cookies.get(LOCAL_COOKIE)?.value,
-      })
+  // Enlace con local (`/catalogo?sucursal=<local>`): se traduce a `retiro`, sin recordarlo.
+  // No depende de cookies, así que una precarga del router puede guardarla sin problema.
+  // Ver src/lib/enlace-sucursal.ts.
+  const redireccion = esPagina(request)
+    ? redireccionSucursal(request.nextUrl.pathname, request.nextUrl.searchParams)
     : undefined;
-  if (local?.redirigirA !== undefined) {
+  if (redireccion !== undefined) {
     const destino = request.nextUrl.clone();
-    destino.search = local.redirigirA;
-    return conLocal(NextResponse.redirect(destino, 307), local, request);
+    destino.search = redireccion;
+    return NextResponse.redirect(destino, 307);
   }
 
   // clerk() devuelve undefined cuando no intercepta: seguimos con la respuesta
   // base para poder inyectarle la cookie del tema.
   const res = await clerk(request, event);
-  const conCookies = conTema(res ?? NextResponse.next(), request);
-  return local ? conLocal(conCookies, local, request) : conCookies;
+  return conTema(res ?? NextResponse.next(), request);
 }
 
 /** GET de una página: nada de cookies en APIs, assets de public/ ni en el Frontend API de Clerk. */
@@ -141,25 +137,6 @@ function esPagina(request: NextRequest): boolean {
     pathname !== GATE_PATH &&
     !/\.[^/]+$/.test(pathname) // assets de public/ (imágenes, robots.txt…)
   );
-}
-
-/** Cookie del local recordado. No es httpOnly: el catálogo la borra al quitar el filtro. */
-function conLocal(res: Response, decision: DecisionLocal, request: NextRequest): Response {
-  const { cookie } = decision;
-  if (cookie.accion === "ninguna") return res;
-  const next = res instanceof NextResponse ? res : new NextResponse(res.body, res);
-  if (cookie.accion === "borrar") {
-    next.cookies.delete(LOCAL_COOKIE);
-  } else {
-    next.cookies.set(LOCAL_COOKIE, cookie.local, {
-      httpOnly: false,
-      secure: request.nextUrl.protocol === "https:",
-      sameSite: "lax",
-      path: "/",
-      maxAge: LOCAL_MAX_AGE,
-    });
-  }
-  return next;
 }
 
 function decisionTema(request: NextRequest) {

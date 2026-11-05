@@ -37,7 +37,6 @@ import { anotarBusqueda } from "@/lib/iniciativa/motor";
 import { useChatIa } from "@/hooks/useChatIa";
 import { mejorCuotaProducto, type OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { sinResultadosPorCategoria, sinResultadosPorLocal } from "@/lib/catalogo-sin-resultados";
-import { olvidarLocalRecordado } from "@/lib/local-recordado";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 /**
@@ -158,21 +157,13 @@ export function CatalogoClient({
     return () => fijarCatalogoParaChat(null);
   }, [estado, total, productos]);
 
-  // Sin `retiro` en el destino, el cliente quitó el filtro de local: se olvida el local
-  // recordado para que el proxy no lo vuelva a poner (src/lib/local-recordado.ts).
-  const navegar = (href: string) =>
-    startTransition(() => {
-      olvidarLocalRecordado(href);
-      router.push(href);
-    });
+  const navegar = (href: string) => startTransition(() => router.push(href));
   const ir = (cambios: Partial<EstadoCatalogo>) =>
     startTransition(() => {
       const siguiente = estadoConCambios(estadoVisibleRef.current, cambios);
       estadoVisibleRef.current = siguiente;
       marcar(cambios);
-      const href = hrefCatalogo(siguiente);
-      olvidarLocalRecordado(href);
-      router.push(href);
+      router.push(hrefCatalogo(siguiente));
     });
 
   // Precio de la lista privada de la cuenta (cuenta corriente con lista enlazada), superpuesto
@@ -204,8 +195,8 @@ export function CatalogoClient({
 
   const consultaVacia = interpretacionVigente(estado) ?? estado.query;
 
-  // Con el filtro de local activo (también el recordado por cookie), el sin resultados lo dice
-  // y ofrece quitarlo: `ir` también olvida la cookie, igual que el chip y el panel.
+  // Con el filtro de local activo, el sin resultados lo dice y ofrece quitarlo, igual que el
+  // chip y el panel.
   const sinLocal = sinResultadosPorLocal(estado, facetas.locales ?? [], consultaVacia);
   const quitarLocal = () => ir({ retiroEn: undefined });
   const verSinStock = () => ir({ soloStock: false });

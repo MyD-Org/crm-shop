@@ -5,9 +5,9 @@ import Image from "next/image";
 import { cn } from "@myd-org/ui";
 import type { ProductImage, VideoProducto } from "@/data/products";
 import { LightbulbIcon } from "@/components/catalogo/iconos";
-import { VisorFotos } from "@/components/VisorFotos";
+import { VisorFotos, Chevron, etiquetaFlecha } from "@/components/VisorFotos";
 import { VideoFacade, IconoPlay } from "@/components/producto/VideoFacade";
-import { armarItems, claveItem } from "@/components/galeria-items";
+import { armarItems, claveItem, debeMontarIframe } from "@/components/galeria-items";
 
 /**
  * Galería de la ficha con las fotos del overlay del CRM (portada = [0]), ya
@@ -28,13 +28,17 @@ import { armarItems, claveItem } from "@/components/galeria-items";
  * forman una columna a la izquierda. `acciones` (compartir, favorito) flota
  * arriba a la derecha de la foto.
  *
+ * En la compu (puntero fino: mouse o trackpad) hay flechas de anterior/siguiente a los costados
+ * de la foto grande; en el celular no, se desliza con el dedo.
+ *
  * Tocar la foto grande la abre a pantalla completa (`VisorFotos`). Un
  * deslizamiento no dispara el clic, así que pasar de foto no abre el visor.
  *
  * Los videos de YouTube van después de las fotos, en la pista y en las miniaturas (poster con
- * play). El slide de un video es sólo el poster y un botón de play: el carrusel nunca monta
- * iframe ni carga JS de YouTube; tocarlo abre el visor en ese video y lo reproduce allí. Un
- * producto con videos y sin fotos muestra la pista con los videos, sin placeholder.
+ * play). Hasta tocar play el slide es sólo el poster: ni iframe ni JS de YouTube. Tocarlo lo
+ * reproduce ahí mismo; al pasar a otro slide el iframe se desmonta (deja de sonar). El visor a
+ * pantalla completa se abre desde las fotos y también recorre los videos. Un producto con videos
+ * y sin fotos muestra la pista con los videos, sin placeholder.
  */
 export function GaleriaProducto({
   fotos,
@@ -52,6 +56,8 @@ export function GaleriaProducto({
     inicial: number;
     reproducir: boolean;
   } | null>(null);
+  // Video que suena en el carrusel (sólo mientras su slide es el activo).
+  const [reproduciendoId, setReproduciendoId] = useState<string | null>(null);
   const pistaRef = useRef<HTMLDivElement>(null);
   const lista = useMemo(() => armarItems(fotos, videos), [fotos, videos]);
   const varias = lista.length > 1;
@@ -61,8 +67,9 @@ export function GaleriaProducto({
   function alDesplazar() {
     const pista = pistaRef.current;
     if (!pista || pista.clientWidth === 0) return;
-    const i = Math.round(pista.scrollLeft / pista.clientWidth);
-    setActiva(Math.max(0, Math.min(i, lista.length - 1)));
+    const i = Math.max(0, Math.min(Math.round(pista.scrollLeft / pista.clientWidth), lista.length - 1));
+    if (i !== activa) setReproduciendoId(null);
+    setActiva(i);
   }
 
   function irA(i: number) {
@@ -77,6 +84,7 @@ export function GaleriaProducto({
 
   function cerrarVisor(i: number) {
     setVisor(null);
+    setReproduciendoId(null);
     // La galería queda en el slide en el que se cerró el visor, sin animar.
     const pista = pistaRef.current;
     if (pista) pista.scrollLeft = i * pista.clientWidth;
@@ -111,8 +119,8 @@ export function GaleriaProducto({
                 >
                   <VideoFacade
                     video={f}
-                    reproduciendo={false}
-                    onReproducir={() => setVisor({ inicial: i, reproducir: true })}
+                    reproduciendo={debeMontarIframe(f, i, activa, reproduciendoId)}
+                    onReproducir={() => setReproduciendoId(f.id)}
                     titulo={nombre}
                   />
                 </div>
@@ -142,6 +150,14 @@ export function GaleriaProducto({
               ),
             )}
           </div>
+        )}
+        {varias && (
+          <>
+            {activa > 0 && <FlechaGaleria hacia="prev" item={lista[activa - 1]} onClick={() => irA(activa - 1)} />}
+            {activa < lista.length - 1 && (
+              <FlechaGaleria hacia="next" item={lista[activa + 1]} onClick={() => irA(activa + 1)} />
+            )}
+          </>
         )}
         {acciones && <div className="absolute right-3 top-3 flex gap-2">{acciones}</div>}
       </div>
@@ -173,6 +189,9 @@ export function GaleriaProducto({
                       alt=""
                       loading="lazy"
                       decoding="async"
+                      onError={(e) => {
+                        if (e.currentTarget.src !== f.posterRespaldo) e.currentTarget.src = f.posterRespaldo;
+                      }}
                       className="absolute inset-0 h-full w-full object-cover"
                     />
                     <span className="absolute inset-0 flex items-center justify-center">
@@ -200,5 +219,30 @@ export function GaleriaProducto({
         />
       )}
     </div>
+  );
+}
+
+/** Flecha de la foto grande. Sólo con puntero fino (compu): en el celular se desliza con el dedo. */
+export function FlechaGaleria({
+  hacia,
+  item,
+  onClick,
+}: {
+  hacia: "prev" | "next";
+  item: ReturnType<typeof armarItems>[number];
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={etiquetaFlecha(hacia, item)}
+      className={cn(
+        "absolute top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface text-text shadow-2 transition-[scale] duration-150 ease-out active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] motion-reduce:active:scale-100 pointer-fine:flex",
+        hacia === "prev" ? "left-3" : "right-3",
+      )}
+    >
+      <Chevron hacia={hacia} />
+    </button>
   );
 }

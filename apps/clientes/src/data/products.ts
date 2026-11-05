@@ -8,7 +8,10 @@ import type { ProductStock } from "@myd-org/ui";
 export interface VideoProducto {
   id: string;
   embed: string;
+  /** Miniatura en la proporción original del video (vertical en un Short). */
   poster: string;
+  /** Miniatura clásica (4:3), por si la original no existe. */
+  posterRespaldo: string;
 }
 
 /**

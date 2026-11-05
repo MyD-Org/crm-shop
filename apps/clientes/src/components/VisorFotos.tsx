@@ -243,12 +243,12 @@ export function PieVisor({ items, activa, onIr }: { items: ItemGaleria[]; activa
   );
 }
 
-function etiquetaFlecha(hacia: "prev" | "next", item?: ItemGaleria) {
+export function etiquetaFlecha(hacia: "prev" | "next", item?: ItemGaleria) {
   const que = item?.tipo === "video" ? "Video" : "Foto";
   return hacia === "prev" ? `${que} anterior` : `${que} siguiente`;
 }
 
-function Chevron({ hacia }: { hacia: "prev" | "next" }) {
+export function Chevron({ hacia }: { hacia: "prev" | "next" }) {
   return (
     <svg
       width="20"

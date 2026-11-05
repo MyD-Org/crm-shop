@@ -7,7 +7,7 @@ import type { ProductImage, VideoProducto } from "@/data/products";
 import { LightbulbIcon } from "@/components/catalogo/iconos";
 import { VisorFotos } from "@/components/VisorFotos";
 import { VideoFacade, IconoPlay } from "@/components/producto/VideoFacade";
-import { armarItems, claveItem } from "@/components/galeria-items";
+import { armarItems, claveItem, debeMontarIframe } from "@/components/galeria-items";
 
 /**
  * Galería de la ficha con las fotos del overlay del CRM (portada = [0]), ya
@@ -32,9 +32,10 @@ import { armarItems, claveItem } from "@/components/galeria-items";
  * deslizamiento no dispara el clic, así que pasar de foto no abre el visor.
  *
  * Los videos de YouTube van después de las fotos, en la pista y en las miniaturas (poster con
- * play). El slide de un video es sólo el poster y un botón de play: el carrusel nunca monta
- * iframe ni carga JS de YouTube; tocarlo abre el visor en ese video y lo reproduce allí. Un
- * producto con videos y sin fotos muestra la pista con los videos, sin placeholder.
+ * play). Hasta tocar play el slide es sólo el poster: ni iframe ni JS de YouTube. Tocarlo lo
+ * reproduce ahí mismo; al pasar a otro slide el iframe se desmonta (deja de sonar). El visor a
+ * pantalla completa se abre desde las fotos y también recorre los videos. Un producto con videos
+ * y sin fotos muestra la pista con los videos, sin placeholder.
  */
 export function GaleriaProducto({
   fotos,
@@ -52,6 +53,8 @@ export function GaleriaProducto({
     inicial: number;
     reproducir: boolean;
   } | null>(null);
+  // Video que suena en el carrusel (sólo mientras su slide es el activo).
+  const [reproduciendoId, setReproduciendoId] = useState<string | null>(null);
   const pistaRef = useRef<HTMLDivElement>(null);
   const lista = useMemo(() => armarItems(fotos, videos), [fotos, videos]);
   const varias = lista.length > 1;
@@ -61,8 +64,9 @@ export function GaleriaProducto({
   function alDesplazar() {
     const pista = pistaRef.current;
     if (!pista || pista.clientWidth === 0) return;
-    const i = Math.round(pista.scrollLeft / pista.clientWidth);
-    setActiva(Math.max(0, Math.min(i, lista.length - 1)));
+    const i = Math.max(0, Math.min(Math.round(pista.scrollLeft / pista.clientWidth), lista.length - 1));
+    if (i !== activa) setReproduciendoId(null);
+    setActiva(i);
   }
 
   function irA(i: number) {
@@ -77,6 +81,7 @@ export function GaleriaProducto({
 
   function cerrarVisor(i: number) {
     setVisor(null);
+    setReproduciendoId(null);
     // La galería queda en el slide en el que se cerró el visor, sin animar.
     const pista = pistaRef.current;
     if (pista) pista.scrollLeft = i * pista.clientWidth;
@@ -111,8 +116,8 @@ export function GaleriaProducto({
                 >
                   <VideoFacade
                     video={f}
-                    reproduciendo={false}
-                    onReproducir={() => setVisor({ inicial: i, reproducir: true })}
+                    reproduciendo={debeMontarIframe(f, i, activa, reproduciendoId)}
+                    onReproducir={() => setReproduciendoId(f.id)}
                     titulo={nombre}
                   />
                 </div>
@@ -173,6 +178,9 @@ export function GaleriaProducto({
                       alt=""
                       loading="lazy"
                       decoding="async"
+                      onError={(e) => {
+                        if (e.currentTarget.src !== f.posterRespaldo) e.currentTarget.src = f.posterRespaldo;
+                      }}
                       className="absolute inset-0 h-full w-full object-cover"
                     />
                     <span className="absolute inset-0 flex items-center justify-center">

@@ -9,7 +9,8 @@ const videos = [
   {
     id: "dQw4w9WgXcQ",
     embed: "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
-    poster: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+    poster: "https://i.ytimg.com/vi/dQw4w9WgXcQ/oar2.jpg",
+    posterRespaldo: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
   },
 ];
 

@@ -56,6 +56,12 @@
   /* Con pie (promos de pago) la barra ocupa la mesada: el contenido va en flujo, sin el empuje hacia
      arriba ni la línea de contacto sobre la mesada, y el pie usa el velo de la escena, no el del DS. */
   .root > section:has(> [data-hero-footer]:not(:empty)) > [data-hero-content] { padding-bottom: 20px; }
+  /* Con la barra al pie el hero compacto quedaba bajo y la barra tapaba las lámparas. La foto se
+     recorta por alto: el pie de la lámpara de mesa cae al ~77 % de la tarjeta (mesada, 787/1024), así
+     que con 560px una barra de dos promos (~125px con su margen) queda debajo de la lámpara. El texto
+     crece para que el espacio extra quede arriba de la barra y no debajo. */
+  .root > section:has(> [data-hero-footer]:not(:empty)) { min-height: 560px; }
+  .root > section:has(> [data-hero-footer]:not(:empty)) > [data-hero-content] { flex: 1 0 auto; }
   .root > section:has(> [data-hero-footer]:not(:empty)) > [data-hero-content] > div:last-child { position: static; margin-top: 16px; }
   .root > section > [data-hero-footer]::before { background: none; }
 }

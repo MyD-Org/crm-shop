@@ -1,4 +1,4 @@
-import { PromoTag } from "@myd-org/ui";
+import { PromoBar, PromoTag } from "@myd-org/ui";
 import { connection } from "next/server";
 import type { PromosPagoContent } from "@/data/home-defaults";
 import { campaniasVigentes } from "@/lib/campanias/vigentes";
@@ -14,15 +14,20 @@ import { TituloSeccion } from "./TituloSeccion";
  * medio destacado se deduce de los mismos productos que los destacados de la home: mismos argumentos
  * que `DestacadosHome`, así comparten la caché y no hay otra lectura del catálogo.
  * Sin avisos no dibuja nada.
+ *
+ * `enHero`: van al pie del hero (barra translúcida del ancho del texto, sin título) en lugar de una
+ * sección propia. La sección queda sólo para cuando el hero está oculto.
  */
 export async function PromosPagoHome({
   contenido,
   skus,
   cantidad,
+  enHero = false,
 }: {
   contenido: PromosPagoContent;
   skus: string[];
   cantidad: number;
+  enHero?: boolean;
 }) {
   await connection();
   const [{ soloVisibles, variantes, mediosPrecio }, disp, campanias] = await Promise.all([
@@ -44,7 +49,22 @@ export async function PromosPagoHome({
     : [];
   const avisos = promosPago({ cuotas: mediosPrecio?.cuotas, destacado: mediosPrecio?.destacado, productos, textos: contenido });
   if (avisos.length === 0) return null;
+  if (enHero) return <PromosPagoBarra avisos={avisos} />;
   return <PromosPagoVista contenido={contenido} avisos={avisos} />;
+}
+
+export function PromosPagoBarra({ avisos }: { avisos: PromoPago[] }) {
+  return (
+    <PromoBar
+      aria-label="Promociones de pago"
+      items={avisos.map((a) =>
+        a.tipo === "cuotas"
+          ? { eyebrow: "Hasta", value: String(a.cuotas), title: "cuotas sin interés", text: a.texto }
+          : // El descuento no anuncia porcentaje: el "%" es sólo el símbolo.
+            { value: "%", decorativeValue: true, title: a.titulo, text: a.texto },
+      )}
+    />
+  );
 }
 
 export function PromosPagoVista({ contenido, avisos }: { contenido: PromosPagoContent; avisos: PromoPago[] }) {

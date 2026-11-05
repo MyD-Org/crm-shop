@@ -2,11 +2,13 @@
 /* Share one stacking context with the DS: image -20, light -15, veil -10,
    controls 0, content 1. The content box cannot swallow empty scene space. */
 .root > section { isolation: auto; }
-.root > section > div:last-child { z-index: 1; pointer-events: none; }
+.root > section > [data-hero-content] { z-index: 1; pointer-events: none; }
 /* Only links and buttons take clicks: plain text (the lead sits over the linear
    light on mobile) lets taps through to the light controls underneath. */
-.root > section > div:last-child :is(a, button) { pointer-events: auto; }
-.root > section > div:not(:last-child) { pointer-events: none; }
+.root > section > [data-hero-content] :is(a, button) { pointer-events: auto; }
+/* Pie del hero (promos de pago): por encima de las luces, como el contenido. */
+.root > section > [data-hero-footer] { z-index: 1; }
+.root > section > div:not([data-hero-content]):not([data-hero-footer]) { pointer-events: none; }
 .root > section > img { object-fit: contain; object-position: right center; background: #e4dfd5; }
 .scene { position: absolute; inset: 0; overflow: clip; border-radius: 28px; pointer-events: none; }
 /* Same layer as the DS image (-20) but later in the DOM, so it covers it on mobile. */
@@ -34,21 +36,26 @@
   /* The DS veils are made for a photo beside the text; on mobile the text column
      spans the card and together they wash the scene out. One lighter veil, denser
      on the text side, keeps the text readable and the lamps on the right visible. */
-  .root > section > div:not(:last-child) { background: linear-gradient(to right, rgba(247, 242, 234, .62) 0%, rgba(247, 242, 234, .4) 55%, rgba(247, 242, 234, .15) 100%); }
-  .root > section > div:last-child::before { background: none; }
+  .root > section > div:not([data-hero-content]):not([data-hero-footer]) { background: linear-gradient(to right, rgba(247, 242, 234, .62) 0%, rgba(247, 242, 234, .4) 55%, rgba(247, 242, 234, .15) 100%); }
+  .root > section > [data-hero-content]::before { background: none; }
   /* Over the photo the muted lead and contact line get lost: same ink as the title. */
-  .root > section > div:last-child > p,
-  .root > section > div:last-child > div:last-child { color: var(--color-text); }
+  .root > section > [data-hero-content] > p,
+  .root > section > [data-hero-content] > div:last-child { color: var(--color-text); }
   /* Centred and nudged up (80px extra bottom padding = 40px up): on common phones
      the title clears the spot, the lead the pendant and the CTAs the table lamp. */
-  .root > section > div:last-child { justify-content: center; padding-bottom: calc(clamp(28px, 5vw, 72px) + 80px); }
+  .root > section > [data-hero-content] { justify-content: center; padding-bottom: calc(clamp(28px, 5vw, 72px) + 80px); }
   /* The photo is cropped by height and anchored right, so the pendant always hugs the right edge while
      the title's line breaks depend on the phone's width: on wide phones (~430px) "proyecto necesita"
      fit on one line and ran into the pendant. Capped in em so it tracks the title's own size. */
-  .root > section > div:last-child > h1 { max-width: 7em; }
+  .root > section > [data-hero-content] > h1 { max-width: 7em; }
   /* The contact line sits on the shelf's light stone front (y ≈ 787–884 of 1024 in the photo, placed at 860;
      the cover crop scales by height, so it is the same % of the card on every phone). */
-  .root > section > div:last-child > div:last-child { position: absolute; left: clamp(28px, 5vw, 72px); top: calc(860 / 1024 * 100% - 10px); margin: 0; }
+  .root > section > [data-hero-content] > div:last-child { position: absolute; left: clamp(28px, 5vw, 72px); top: calc(860 / 1024 * 100% - 10px); margin: 0; }
+  /* Con pie (promos de pago) la barra ocupa la mesada: el contenido va en flujo, sin el empuje hacia
+     arriba ni la línea de contacto sobre la mesada, y el pie usa el velo de la escena, no el del DS. */
+  .root > section:has(> [data-hero-footer]:not(:empty)) > [data-hero-content] { padding-bottom: 20px; }
+  .root > section:has(> [data-hero-footer]:not(:empty)) > [data-hero-content] > div:last-child { position: static; margin-top: 16px; }
+  .root > section > [data-hero-footer]::before { background: none; }
 }
 /* Slower cross-fade for the first-view intro (INTRO_FADE_MS in InteractiveHero). */
 .root[data-intro] .light { transition-duration: 900ms; transition-timing-function: ease-in-out; }

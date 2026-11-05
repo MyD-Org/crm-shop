@@ -62,7 +62,12 @@ export default async function Home() {
         }
         promosPago={
           <Suspense fallback={null}>
-            <PromosPagoHome contenido={contenido.promosPago} skus={skus} cantidad={cantidad} />
+            <PromosPagoHome
+              contenido={contenido.promosPago}
+              skus={skus}
+              cantidad={cantidad}
+              enHero={visibilidadDe(contenido.visibilidad, "hero") !== "nunca"}
+            />
           </Suspense>
         }
         busquedaAsistida={

@@ -46,7 +46,6 @@ type Props = {
     vista?: ParamCrudo;
     ia?: ParamCrudo;
     car?: ParamCrudo;
-    recordado?: ParamCrudo;
   }>;
 };
 

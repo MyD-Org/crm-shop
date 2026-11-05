@@ -44,7 +44,10 @@ export function videoEmbebible(url: unknown): VideoEmbebible | null {
 export interface VideoYoutube {
   id: string;
   embed: string;
+  /** Miniatura en la proporción original del video (`oar2`: vertical en un Short). */
   poster: string;
+  /** Miniatura clásica 4:3 (`hqdefault`), si la original no existe. */
+  posterRespaldo: string;
 }
 
 /**
@@ -56,6 +59,7 @@ export function videoYoutubePorId(id: unknown): VideoYoutube | null {
   return {
     id,
     embed: `https://www.youtube-nocookie.com/embed/${id}`,
-    poster: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+    poster: `https://i.ytimg.com/vi/${id}/oar2.jpg`,
+    posterRespaldo: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
   };
 }

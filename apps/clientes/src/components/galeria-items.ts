@@ -6,7 +6,7 @@ import type { ProductImage, VideoProducto } from "@/data/products";
  * `inicial` y `onCerrar(activa)` siguen siendo un número.
  */
 export type ItemGaleria =
-  { tipo: "foto"; url: string; alt?: string } | { tipo: "video"; id: string; embed: string; poster: string };
+  { tipo: "foto"; url: string; alt?: string } | { tipo: "video"; id: string; embed: string; poster: string; posterRespaldo: string };
 
 export function armarItems(fotos?: ProductImage[], videos?: VideoProducto[]): ItemGaleria[] {
   return [
@@ -20,6 +20,7 @@ export function armarItems(fotos?: ProductImage[], videos?: VideoProducto[]): It
       id: v.id,
       embed: v.embed,
       poster: v.poster,
+      posterRespaldo: v.posterRespaldo,
     })),
   ];
 }

@@ -111,7 +111,10 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
 
   // Local recordado (enlace `?retiro=<local>`): `/catalogo` sin `retiro` redirige con el local
   // puesto, así el filtro se ve en el chip y en el panel. Ver src/lib/local-recordado.ts.
-  const local = esPagina(request)
+  // Nunca en una precarga del router: el navegador la guarda por URL y la reusa aunque la
+  // cookie cambie, así que una redirección precargada con la cookie puesta volvía a poner el
+  // local después de quitarlo (el filtro titilaba y no se iba hasta refrescar).
+  const local = esPagina(request) && !esPrecarga(request)
     ? decidirLocal({
         pathname: request.nextUrl.pathname,
         search: request.nextUrl.searchParams,
@@ -141,6 +144,14 @@ function esPagina(request: NextRequest): boolean {
     pathname !== GATE_PATH &&
     !/\.[^/]+$/.test(pathname) // assets de public/ (imágenes, robots.txt…)
   );
+}
+
+/**
+ * Precarga del router de Next (`<Link>` visible, `router.prefetch`): todas llevan
+ * `next-router-prefetch`. La navegación real no lo lleva y sí pasa por la regla del local.
+ */
+function esPrecarga(request: NextRequest): boolean {
+  return request.headers.has("next-router-prefetch");
 }
 
 /** Cookie del local recordado. No es httpOnly: el catálogo la borra al quitar el filtro. */

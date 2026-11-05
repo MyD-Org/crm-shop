@@ -4,7 +4,7 @@
  * Server action del aviso de reingreso (form de la ficha de un producto agotado). Nunca lanza: todo
  * termina en un `EstadoAviso`.
  *
- * Orden: flag → trampa → tiempo de llenado → validar campos → rate limit por IP → tope de pendientes
+ * Con sesión de Clerk el email sale de la cuenta (el del form se ignora). Orden: flag → trampa → tiempo de llenado → validar campos → rate limit por IP → tope de pendientes
  * por email → verificar en el servidor que el producto existe, se vende, es inventariable y no tiene
  * disponible → INSERT idempotente. Un aviso duplicado responde igual que uno nuevo (no revela si el
  * email ya estaba). NO manda mail de confirmación (evita usar el form para spamear a terceros). La IP
@@ -42,11 +42,18 @@ async function ipDelPedido(): Promise<string> {
   }
 }
 
-/** Id de la cuenta de Clerk si hay sesión. Solo se guarda como dato; el email nunca es identidad. */
-async function clerkUserIdActual(): Promise<string | null> {
+/**
+ * Cuenta de Clerk si hay sesión: su id (se guarda como dato) y su email principal. Con sesión el aviso
+ * va a ese email y se ignora el del form (la ficha ni lo pide). Sin sesión, o si Clerk falla, null.
+ */
+async function cuentaActual(): Promise<{ userId: string; email: string | null } | null> {
   try {
-    const { auth } = await import("@clerk/nextjs/server");
-    return (await auth()).userId ?? null;
+    const { auth, currentUser } = await import("@clerk/nextjs/server");
+    const { userId } = await auth();
+    if (!userId) return null;
+    const user = await currentUser();
+    const email = user?.primaryEmailAddress?.emailAddress?.trim().toLowerCase() || null;
+    return { userId, email };
   } catch {
     return null;
   }
@@ -66,7 +73,9 @@ export async function solicitarAvisoReingreso(_prev: EstadoAviso, fd: FormData):
     const alegraId = typeof fd.get("alegraId") === "string" ? (fd.get("alegraId") as string).trim() : "";
     if (!alegraId || alegraId.length > LARGOS.alegraId) return falla(ERRORES.noDisponible);
 
+    const cuenta = await cuentaActual();
     const { campos, whatsappCrudo } = leerCamposAviso(fd);
+    if (cuenta?.email) campos.email = cuenta.email;
     const errores = validarCamposAviso(campos, whatsappCrudo);
     if (Object.keys(errores).length > 0) return { estado: "error", errores };
 
@@ -92,7 +101,7 @@ export async function solicitarAvisoReingreso(_prev: EstadoAviso, fd: FormData):
       cantidad: campos.cantidad,
       quiereEncargar: campos.quiereEncargar,
       consentimientoContacto: campos.consentimientoContacto,
-      clerkUserId: await clerkUserIdActual(),
+      clerkUserId: cuenta?.userId ?? null,
     });
     return { estado: "ok", encargar: campos.quiereEncargar };
   } catch (err) {

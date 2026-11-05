@@ -5,7 +5,12 @@ import { CAMPO_TRAMPA, ERRORES } from "./aviso-reingreso-textos";
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded-for": "203.0.113.7" }) }));
 vi.mock("@/db", () => ({ getDb: () => ({}) }));
 vi.mock("@/lib/tenant", () => ({ shopTenantId: () => "tenant-test" }));
-vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId: null }) }));
+let sesion: { userId: string | null; email?: string } = { userId: null };
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: async () => ({ userId: sesion.userId }),
+  currentUser: async () =>
+    sesion.userId ? { primaryEmailAddress: sesion.email ? { emailAddress: sesion.email } : null } : null,
+}));
 
 const permitirAsync = vi.fn<(...a: unknown[]) => Promise<boolean>>(async () => true);
 vi.mock("./rate-limit", () => ({ permitirAsync: (...a: unknown[]) => permitirAsync(...a) }));
@@ -41,6 +46,7 @@ function form(over: Record<string, string> = {}): FormData {
 
 beforeEach(() => {
   setFlag("aviso-reingreso", true);
+  sesion = { userId: null };
   permitirAsync.mockReset().mockResolvedValue(true);
   contarPendientesPorEmail.mockReset().mockResolvedValue(0);
   insertarAviso.mockClear();
@@ -60,6 +66,27 @@ describe("solicitarAvisoReingreso", () => {
       whatsapp: null,
       quiereEncargar: false,
     });
+  });
+
+  it("con sesión usa el email de la cuenta, aunque el form no lo mande", async () => {
+    sesion = { userId: "user_1", email: "Cuenta@Cliente.example" };
+    const f = form();
+    f.delete("email");
+    const r = await solicitarAvisoReingreso(INICIAL, f);
+    expect(r).toEqual({ estado: "ok", encargar: false });
+    expect(insertarAviso.mock.calls[0][1]).toMatchObject({ email: "cuenta@cliente.example", clerkUserId: "user_1" });
+  });
+
+  it("con sesión ignora un email distinto mandado en el form", async () => {
+    sesion = { userId: "user_1", email: "cuenta@cliente.example" };
+    await solicitarAvisoReingreso(INICIAL, form({ email: "otro@cliente.example" }));
+    expect(insertarAviso.mock.calls[0][1]).toMatchObject({ email: "cuenta@cliente.example" });
+  });
+
+  it("cuenta sin email: usa el del form", async () => {
+    sesion = { userId: "user_1" };
+    await solicitarAvisoReingreso(INICIAL, form());
+    expect(insertarAviso.mock.calls[0][1]).toMatchObject({ email: "ana@cliente.example", clerkUserId: "user_1" });
   });
 
   it("flag OFF: no guarda nada", async () => {

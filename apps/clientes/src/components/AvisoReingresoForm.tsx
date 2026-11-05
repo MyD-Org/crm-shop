@@ -14,8 +14,8 @@ import { useHidratado } from "@/lib/hidratado";
  * navegador: la acción rechaza los envíos hechos en menos de 3 s) y se muestra el form. El campo trampa
  * queda fuera de pantalla y del orden de tabulación.
  *
- * El email de la sesión de Clerk solo PRECARGA el campo (editable) y se usa como destino del aviso,
- * nunca como identidad. WhatsApp y su consentimiento aparecen solo si la persona tilda "Me interesa
+ * Con sesión de Clerk no se pide el correo: se muestra a cuál se avisará y la acción lo toma de la
+ * cuenta en el servidor. Sin sesión se pide. WhatsApp y su consentimiento aparecen solo si la persona tilda "Me interesa
  * encargarlo". No promete reserva ni precio.
  *
  * `alegraId` es el de la variante elegida; la ficha lo monta con `key` por producto, así que cambiar
@@ -23,7 +23,8 @@ import { useHidratado } from "@/lib/hidratado";
  */
 const INICIAL: EstadoAviso = { estado: "inicial" };
 
-function useEmailPrecargado(): string {
+/** Email principal de la cuenta si hay sesión (después de hidratar); "" sin sesión. */
+function useEmailDeCuenta(): string {
   const hidratado = useHidratado();
   const { user } = useUser();
   return (hidratado ? user?.primaryEmailAddress?.emailAddress : undefined) ?? "";
@@ -35,7 +36,7 @@ export function AvisoReingresoForm({ alegraId }: { alegraId: string }) {
   const [iniciado, setIniciado] = useState("");
   const [encargar, setEncargar] = useState(false);
   const [consentimiento, setConsentimiento] = useState(false);
-  const emailInicial = useEmailPrecargado();
+  const emailCuenta = useEmailDeCuenta();
 
   if (estado.estado === "ok") {
     return (
@@ -71,26 +72,27 @@ export function AvisoReingresoForm({ alegraId }: { alegraId: string }) {
       className="relative flex flex-col gap-4 rounded-xl border border-border bg-surface p-4"
       aria-label={TEXTOS.titulo}
     >
-      <p className="text-sm text-muted">{TEXTOS.descripcion}</p>
+      <p className="text-sm text-muted">
+        {emailCuenta ? TEXTOS.descripcionConCuenta(emailCuenta) : TEXTOS.descripcion}
+      </p>
       {estado.estado === "error" && estado.mensaje ? (
         <Alert tone="danger" role="alert">
           {estado.mensaje}
         </Alert>
       ) : null}
 
-      <Field label={TEXTOS.etiquetaEmail} error={errores.email}>
-        <Input
-          // El valor llega con Clerk después de hidratar: `key` lo vuelve a tomar una sola vez.
-          key={emailInicial}
-          name="email"
-          type="email"
-          inputMode="email"
-          autoComplete="email"
-          required
-          maxLength={LARGOS.email}
-          defaultValue={emailInicial}
-        />
-      </Field>
+      {emailCuenta ? null : (
+        <Field label={TEXTOS.etiquetaEmail} error={errores.email}>
+          <Input
+            name="email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            required
+            maxLength={LARGOS.email}
+          />
+        </Field>
+      )}
       <Field label={TEXTOS.etiquetaCantidad} error={errores.cantidad}>
         <Input
           name="cantidad"

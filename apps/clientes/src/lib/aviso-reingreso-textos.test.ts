@@ -5,7 +5,10 @@ import { fileURLToPath } from "node:url";
 import { ERRORES, TEXTOS } from "./aviso-reingreso-textos";
 
 const fuente = readFileSync(fileURLToPath(new URL("./aviso-reingreso-textos.ts", import.meta.url)), "utf8");
-const todos = [...Object.values(TEXTOS), ...Object.values(ERRORES)];
+// Los textos con parámetro se evalúan con un valor de ejemplo.
+const todos = [...Object.values(TEXTOS), ...Object.values(ERRORES)].map((t) =>
+  typeof t === "function" ? t("ana@cliente.example") : t,
+);
 
 describe("textos del aviso de reingreso", () => {
   it("están en usted: sin tuteo ni voseo", () => {

@@ -16,6 +16,7 @@ import {
   type ProductoDto,
   type Sincronizacion,
   type VarianteDto,
+  type VideoDto,
   type SucursalOpcionDto,
   type TagDto,
 } from "./tipos"
@@ -25,6 +26,7 @@ import { opcionesModalidad } from "../venta-sin-stock-ui"
 import { AYUDA_VISIBLE_EN } from "./ayudas"
 import { estadoAlegraTexto } from "./inactivos"
 import { FotosProducto } from "./FotosProducto"
+import { VideosProducto } from "./VideosProducto"
 import { FichaTecnicaProducto } from "./FichaTecnicaProducto"
 import { AtributosProducto } from "./AtributosProducto"
 import { formularioDeOrden, ordenDeFormulario } from "./destacado"
@@ -79,6 +81,7 @@ export function ProductoDialog({ producto, categorias, tags, modalidades, sucurs
   // persiste solo, porque la subida ya ocurrió y perderla al cancelar el diálogo dejaría
   // objetos huérfanos en R2.
   const [fotos, setFotos] = useState(producto.fotos)
+  const [videos, setVideos] = useState<VideoDto[]>(producto.videos)
   const [fichaTecnica, setFichaTecnica] = useState<FichaDto | null>(producto.fichaTecnica)
   const [nuevoTag, setNuevoTag] = useState("")
   const [guardando, setGuardando] = useState(false)
@@ -374,6 +377,13 @@ export function ProductoDialog({ producto, categorias, tags, modalidades, sucurs
           titulo={modelo ? "Fotos del modelo" : "Fotos del producto"}
         />
 
+        <VideosProducto
+          alegraId={producto.alegraId}
+          videos={videos}
+          onCambio={setVideos}
+          titulo={modelo ? "Videos del modelo" : "Videos del producto"}
+        />
+
         <FichaTecnicaProducto alegraId={producto.alegraId} ficha={fichaTecnica} onCambio={setFichaTecnica} />
 
         {!esPadre && <AtributosProducto alegraId={producto.alegraId} tieneFicha={fichaTecnica !== null} />}
@@ -498,11 +508,12 @@ const TEXTO_MOTIVO_MODELO: typeof TEXTO_MOTIVO = {
 function FotoPropiaVariante({ variante }: { variante: VarianteDto }) {
   const [abierto, setAbierto] = useState(false)
   const [fotos, setFotos] = useState<FotoDto[]>(variante.fotos)
+  const [videos, setVideos] = useState<VideoDto[]>(variante.videos)
   if (variante.esAncla) return null
   return (
     <div className="mt-2">
       <Button variant="ghost" size="sm" aria-expanded={abierto} onClick={() => setAbierto((v) => !v)}>
-        {abierto ? "Ocultar la foto propia" : fotos.length > 0 ? "Ver la foto propia" : "Agregar una foto propia"}
+        {abierto ? "Ocultar la foto y los videos propios" : fotos.length > 0 || videos.length > 0 ? "Ver la foto y los videos propios" : "Agregar foto o videos propios"}
       </Button>
       {abierto && (
         <div className="mt-2">
@@ -513,6 +524,15 @@ function FotoPropiaVariante({ variante }: { variante: VarianteDto }) {
             alcance="variante"
             titulo={`Foto propia: ${nombreDeVariante(variante)}`}
           />
+          <div className="mt-3">
+            <VideosProducto
+              alegraId={variante.alegraId}
+              videos={videos}
+              onCambio={setVideos}
+              alcance="variante"
+              titulo={`Videos propios: ${nombreDeVariante(variante)}`}
+            />
+          </div>
         </div>
       )}
     </div>

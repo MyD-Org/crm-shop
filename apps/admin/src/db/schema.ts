@@ -721,6 +721,11 @@ export interface FotoOverlay {
   alt?: string
 }
 
+/** Un video de YouTube del producto: sólo el id (11 caracteres). El embed y el poster se componen al leer. */
+export interface VideoOverlay {
+  id: string
+}
+
 /**
  * La ficha técnica (PDF) de un producto, o null si no tiene. Igual que las fotos: se guarda la
  * KEY del objeto en R2, nunca la URL (la url se compone al leer, en `urlPublicaFicha()`).
@@ -780,6 +785,9 @@ export const catalogOverlay = pgTable(
     categoriaId: uuid("categoria_id").references(() => shopCategories.id, { onDelete: "set null" }),
     orden: integer("orden"), // null = sin destacar (NULLS LAST en la vidriera)
     fotos: jsonb("fotos").$type<FotoOverlay[]>().notNull().default([]),
+    // Videos de YouTube del producto: sólo el id de 11 caracteres (el embed y el poster se componen
+    // al leer). Máx. 3. Migración 0098; el Shop lo lee directo del overlay (GRANT por columna).
+    videos: jsonb("videos").$type<VideoOverlay[]>().notNull().default([]),
     // Ficha técnica (PDF), opcional. A diferencia de `fotos` (array de variantes) es un solo
     // archivo: null = sin ficha cargada.
     fichaTecnica: jsonb("ficha_tecnica").$type<FichaTecnicaOverlay | null>(),

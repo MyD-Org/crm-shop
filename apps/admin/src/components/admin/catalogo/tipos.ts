@@ -23,6 +23,11 @@ export interface FotoDto {
   alt?: string
 }
 
+/** Video de YouTube de un producto: sólo el id (11 caracteres). */
+export interface VideoDto {
+  id: string
+}
+
 /** Ficha técnica (PDF) de un producto, con la url ya compuesta. null = sin ficha cargada. */
 export interface FichaDto {
   key: string
@@ -50,6 +55,7 @@ export interface ProductoDto {
   orden: number | null
   tagIds: string[]
   fotos: FotoDto[]
+  videos: VideoDto[]
   fichaTecnica: FichaDto | null
   /** Slugs de sucursal donde NO se ofrece (vacío = visible en todas). */
   ocultoEnSucursales: string[]
@@ -85,6 +91,7 @@ export interface VarianteDto {
   prices: unknown
   stock: string | null
   fotos: FotoDto[]
+  videos: VideoDto[]
   /** true = lo sumó el operador a mano (se puede quitar). */
   manual: boolean
   orden: number | null

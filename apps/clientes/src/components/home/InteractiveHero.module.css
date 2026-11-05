@@ -10,6 +10,8 @@
 .root > section > [data-hero-footer] { z-index: 1; }
 .root > section > div:not([data-hero-content]):not([data-hero-footer]) { pointer-events: none; }
 .root > section > img { object-fit: contain; object-position: right center; background: #e4dfd5; }
+/* Hero más alto que la foto (lo marca InteractiveHero, ver usaCover): recortar en vez de dejar bandas. */
+.root[data-fit="cover"] > section > img { object-fit: cover; object-position: 88% center; background: none; }
 .scene { position: absolute; inset: 0; overflow: clip; border-radius: 28px; pointer-events: none; }
 /* Same layer as the DS image (-20) but later in the DOM, so it covers it on mobile. */
 .mobilePhoto { display: none; }

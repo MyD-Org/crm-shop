@@ -167,7 +167,7 @@ describe("getProducto con el flag (agrupar)", () => {
   const contestar = (grupo: string | null, opciones: unknown[][], fotosPropias: unknown[][] = []) => (c: ConsultaGrabada) => {
     if (c.sql.includes('"overlay_propio"')) return opciones;
     // La foto propia de la variante pedida (overlay de ella misma, sólo con el flag).
-    if (c.sql.startsWith('select "alegra_id", "fotos" from "public"."catalog_overlay"')) return fotosPropias;
+    if (c.sql.startsWith('select "alegra_id", "fotos", "videos" from "public"."catalog_overlay"')) return fotosPropias;
     if (c.sql.startsWith('select "grupo_id" from')) return grupo ? [[grupo]] : [];
     return [base("12")];
   };
@@ -189,6 +189,16 @@ describe("getProducto con el flag (agrupar)", () => {
     responder = contestar(null, []);
     const sinPropia = await getProducto("12", { soloVisibles: true, agrupar: true });
     expect(sinPropia?.images?.[0]?.url).toContain("productos/t/g1/aaa");
+  });
+
+  it("la variante pedida usa sus videos propios si los tiene", async () => {
+    const videos = JSON.stringify([{ id: "dQw4w9WgXcQ" }]);
+    responder = contestar(null, [], [["12", null, videos]]);
+    const p = await getProducto("12", { soloVisibles: true, agrupar: true });
+    expect(p?.videos?.map((v) => v.id)).toEqual(["dQw4w9WgXcQ"]);
+    responder = contestar(null, []);
+    const sin = await getProducto("12", { soloVisibles: true, agrupar: true });
+    expect(sin?.videos).toBeUndefined();
   });
 
   it("un modelo con una sola opción activa se muestra sin selector", async () => {

@@ -1,11 +1,13 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { cn } from "@myd-org/ui";
-import type { ProductImage } from "@/data/products";
+import type { ProductImage, VideoProducto } from "@/data/products";
 import { LightbulbIcon } from "@/components/catalogo/iconos";
 import { VisorFotos } from "@/components/VisorFotos";
+import { VideoFacade, IconoPlay } from "@/components/producto/VideoFacade";
+import { armarItems, claveItem } from "@/components/galeria-items";
 
 /**
  * Galería de la ficha con las fotos del overlay del CRM (portada = [0]), ya
@@ -28,21 +30,33 @@ import { VisorFotos } from "@/components/VisorFotos";
  *
  * Tocar la foto grande la abre a pantalla completa (`VisorFotos`). Un
  * deslizamiento no dispara el clic, así que pasar de foto no abre el visor.
+ *
+ * Los videos de YouTube van después de las fotos, en la pista y en las miniaturas (poster con
+ * play). El slide de un video es sólo el poster y un botón de play: el carrusel nunca monta
+ * iframe ni carga JS de YouTube; tocarlo abre el visor en ese video y lo reproduce allí. Un
+ * producto con videos y sin fotos muestra la pista con los videos, sin placeholder.
  */
 export function GaleriaProducto({
   fotos,
+  videos,
   nombre,
   acciones,
 }: {
   fotos?: ProductImage[];
+  videos?: VideoProducto[];
   nombre: string;
   acciones?: ReactNode;
 }) {
   const [activa, setActiva] = useState(0);
-  const [visor, setVisor] = useState(false);
+  const [visor, setVisor] = useState<{
+    inicial: number;
+    reproducir: boolean;
+  } | null>(null);
   const pistaRef = useRef<HTMLDivElement>(null);
-  const lista = fotos ?? [];
+  const lista = useMemo(() => armarItems(fotos, videos), [fotos, videos]);
   const varias = lista.length > 1;
+  const nFotos = lista.filter((x) => x.tipo === "foto").length;
+  const nVideos = lista.length - nFotos;
 
   function alDesplazar() {
     const pista = pistaRef.current;
@@ -55,12 +69,15 @@ export function GaleriaProducto({
     const pista = pistaRef.current;
     if (!pista) return;
     const quieto = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    pista.scrollTo({ left: i * pista.clientWidth, behavior: quieto ? "instant" : "smooth" });
+    pista.scrollTo({
+      left: i * pista.clientWidth,
+      behavior: quieto ? "instant" : "smooth",
+    });
   }
 
   function cerrarVisor(i: number) {
-    setVisor(false);
-    // La galería queda en la foto en la que se cerró el visor, sin animar.
+    setVisor(null);
+    // La galería queda en el slide en el que se cerró el visor, sin animar.
     const pista = pistaRef.current;
     if (pista) pista.scrollLeft = i * pista.clientWidth;
     setActiva(i);
@@ -86,30 +103,44 @@ export function GaleriaProducto({
             // sigue de largo como "atrás" del navegador.
             className="no-scrollbar flex h-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]"
           >
-            {lista.map((f, i) => (
-              <button
-                key={f.url}
-                type="button"
-                onClick={() => setVisor(true)}
-                aria-label={`Ampliar foto ${i + 1} de ${lista.length}`}
-                className="relative block h-full w-full shrink-0 cursor-zoom-in snap-center snap-always focus-visible:outline-none"
-              >
-                <Image
-                  src={f.url}
-                  alt={f.alt || nombre}
-                  fill
-                  // La galería ocupa ~la mitad del contenido desde lg; debajo, todo el ancho.
-                  sizes="(min-width: 1024px) 50vw, 100vw"
-                  className="object-contain p-6"
-                  // La portada es el elemento más grande de la ficha (LCP).
-                  preload={i === 0}
-                  // Las vecinas de la activa se cargan ya: al deslizar tienen
-                  // que estar listas. El resto, cuando haga falta. (La portada
-                  // no lleva `loading`: con `preload` no se combina.)
-                  loading={i === 0 ? undefined : Math.abs(i - activa) <= 1 ? "eager" : "lazy"}
-                />
-              </button>
-            ))}
+            {lista.map((f, i) =>
+              f.tipo === "video" ? (
+                <div
+                  key={claveItem(f)}
+                  className="flex h-full w-full shrink-0 snap-center snap-always items-center justify-center p-4"
+                >
+                  <VideoFacade
+                    video={f}
+                    reproduciendo={false}
+                    onReproducir={() => setVisor({ inicial: i, reproducir: true })}
+                    titulo={nombre}
+                  />
+                </div>
+              ) : (
+                <button
+                  key={claveItem(f)}
+                  type="button"
+                  onClick={() => setVisor({ inicial: i, reproducir: false })}
+                  aria-label={`Ampliar foto ${i + 1} de ${nFotos}`}
+                  className="relative block h-full w-full shrink-0 cursor-zoom-in snap-center snap-always focus-visible:outline-none"
+                >
+                  <Image
+                    src={f.url}
+                    alt={f.alt || nombre}
+                    fill
+                    // La galería ocupa ~la mitad del contenido desde lg; debajo, todo el ancho.
+                    sizes="(min-width: 1024px) 50vw, 100vw"
+                    className="object-contain p-6"
+                    // La portada es el elemento más grande de la ficha (LCP).
+                    preload={i === 0}
+                    // Las vecinas de la activa se cargan ya: al deslizar tienen
+                    // que estar listas. El resto, cuando haga falta. (La portada
+                    // no lleva `loading`: con `preload` no se combina.)
+                    loading={i === 0 ? undefined : Math.abs(i - activa) <= 1 ? "eager" : "lazy"}
+                  />
+                </button>
+              ),
+            )}
           </div>
         )}
         {acciones && <div className="absolute right-3 top-3 flex gap-2">{acciones}</div>}
@@ -118,28 +149,56 @@ export function GaleriaProducto({
       {varias && (
         <ul
           className="flex min-w-0 gap-2 overflow-x-auto pb-1 lg:w-16 lg:shrink-0 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto lg:pb-0"
-          aria-label="Fotos del producto"
+          aria-label={lista.some((x) => x.tipo === "video") ? "Fotos y videos del producto" : "Fotos del producto"}
         >
           {lista.map((f, i) => (
-            <li key={f.url} className="shrink-0">
+            <li key={claveItem(f)} className="shrink-0">
               <button
                 type="button"
                 onClick={() => irA(i)}
-                aria-label={`Ver foto ${i + 1} de ${lista.length}`}
+                aria-label={
+                  f.tipo === "video" ? `Ver video ${i - nFotos + 1} de ${nVideos}` : `Ver foto ${i + 1} de ${nFotos}`
+                }
                 aria-pressed={i === activa}
                 className={cn(
                   "relative block h-16 w-16 overflow-hidden rounded-xl border bg-surface transition-[border-color,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] motion-reduce:active:scale-100",
                   i === activa ? "border-primary" : "border-border hover:border-muted",
                 )}
               >
-                <Image src={f.url} alt="" fill sizes="64px" className="object-contain p-1" />
+                {f.tipo === "video" ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- poster de i.ytimg.com: <img> común */}
+                    <img
+                      src={f.poster}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white">
+                        <IconoPlay className="ml-px h-3 w-3" />
+                      </span>
+                    </span>
+                  </>
+                ) : (
+                  <Image src={f.url} alt="" fill sizes="64px" className="object-contain p-1" />
+                )}
               </button>
             </li>
           ))}
         </ul>
       )}
 
-      {visor && <VisorFotos fotos={lista} nombre={nombre} inicial={activa} onCerrar={cerrarVisor} />}
+      {visor && (
+        <VisorFotos
+          items={lista}
+          nombre={nombre}
+          inicial={visor.inicial}
+          reproducirInicial={visor.reproducir}
+          onCerrar={cerrarVisor}
+        />
+      )}
     </div>
   );
 }

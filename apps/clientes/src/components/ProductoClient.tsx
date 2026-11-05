@@ -318,6 +318,7 @@ export function ProductoClient({
               // Cada opción tiene sus fotos: la galería arranca de cero al cambiar.
               key={producto.id}
               fotos={producto.images}
+              videos={producto.videos}
               nombre={nombreParaMostrar}
               acciones={
                 <>

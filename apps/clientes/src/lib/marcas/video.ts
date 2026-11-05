@@ -39,3 +39,23 @@ export function videoEmbebible(url: unknown): VideoEmbebible | null {
   }
   return null;
 }
+
+/** Un video de YouTube ya compuesto a partir del id guardado en el overlay. */
+export interface VideoYoutube {
+  id: string;
+  embed: string;
+  poster: string;
+}
+
+/**
+ * Compone el reproductor (youtube-nocookie) y la miniatura de un video de la ficha a partir del
+ * id que guarda el CRM. Un id con otra forma no es un video válido (no se arman URLs libres).
+ */
+export function videoYoutubePorId(id: unknown): VideoYoutube | null {
+  if (typeof id !== "string" || !ID_YOUTUBE.test(id)) return null;
+  return {
+    id,
+    embed: `https://www.youtube-nocookie.com/embed/${id}`,
+    poster: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+  };
+}

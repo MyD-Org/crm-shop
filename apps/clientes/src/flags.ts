@@ -81,6 +81,14 @@ export const busquedaMedidasFlag = flag<boolean>({
   adapter: vercelAdapter,
 });
 
+export const avisoReingresoFlag = flag<boolean>({
+  key: "aviso-reingreso",
+  description:
+    "Aviso de reingreso: en la ficha de un producto agotado se ofrece 'Avisarme cuando ingrese' y el cron manda un mail al volver a haber disponible. Apagado: la ficha muestra solo 'Sin stock' y el cron no envía. La baja desde el mail sigue funcionando",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});
+
 /** Quién compra, para las reglas de Vercel Flags (`user.id`, `user.email`). Vacío = visitante. */
 export interface EntidadesComprador {
   user?: { id: string; email?: string };

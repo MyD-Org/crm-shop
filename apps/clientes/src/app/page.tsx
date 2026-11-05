@@ -4,6 +4,7 @@ import { DestacadosHome, DestacadosHomeSkeleton } from "@/components/home/Destac
 import { EdicionSiAdmin } from "@/components/home/EdicionSiAdmin";
 import { TiendaOficialHome } from "@/components/home/TiendaOficialHome";
 import { PromocionesHome } from "@/components/home/PromocionesHome";
+import { PromosPagoHome } from "@/components/home/PromosPagoHome";
 import { CuentenosSiBusquedaIa } from "@/components/home/CuentenosQueNecesita";
 import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
 import { getContenidoHome } from "@/lib/home-datos";
@@ -19,7 +20,7 @@ import { getMarca } from "@/lib/marca";
  *
  * Shell estático (Cache Components): el contenido sale de `getContenidoHome`
  * (`'use cache'`, tag `home`). Lo que es por request va en huecos: los
- * destacados (catálogo, cuotas y sus flags), "Cuéntenos qué necesita" (flag
+ * destacados (catálogo, cuotas y sus flags), las promos de pago, "Cuéntenos qué necesita" (flag
  * `busqueda-ia`) y el editor.
  *
  * Editor: la página es la misma para todos. No calcula `esAdmin()`: eso lo
@@ -57,6 +58,16 @@ export default async function Home() {
         promociones={
           <Suspense fallback={null}>
             <PromocionesHome contenido={contenido.promociones} />
+          </Suspense>
+        }
+        promosPago={
+          <Suspense fallback={null}>
+            <PromosPagoHome
+              contenido={contenido.promosPago}
+              skus={skus}
+              cantidad={cantidad}
+              enHero={visibilidadDe(contenido.visibilidad, "hero") !== "nunca"}
+            />
           </Suspense>
         }
         busquedaAsistida={

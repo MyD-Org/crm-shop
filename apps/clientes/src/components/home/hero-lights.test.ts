@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COVER_X, HERO_LIGHTS, SHELF_STRIP, STUDIO_IMAGE, isStudioImage, proximity, sceneRect } from "./hero-lights";
+import { COVER_X, HERO_LIGHTS, SHELF_STRIP, STUDIO_IMAGE, isStudioImage, proximity, sceneRect, usaCover } from "./hero-lights";
 
 describe("studio lighting geometry", () => {
   it("keeps the entire source aligned with contain at desktop and touch sizes", () => {
@@ -62,5 +62,14 @@ describe("studio lighting geometry", () => {
     expect(isStudioImage("/images/central-led/studio-bell-bamboo-v2.webp")).toBe(true);
     expect(isStudioImage(STUDIO_IMAGE)).toBe(true);
     expect(isStudioImage("/images/custom.webp")).toBe(false);
+  });
+});
+
+describe("usaCover", () => {
+  it("recorta en mobile y en desktop sólo si el hero es más alto que la foto (3:2)", () => {
+    expect(usaCover(375, 600, true)).toBe(true);
+    expect(usaCover(1800, 815, false)).toBe(false);
+    expect(usaCover(1536, 1024, false)).toBe(false);
+    expect(usaCover(1070, 900, false)).toBe(true);
   });
 });

@@ -8,6 +8,7 @@ import { EditorHero } from "./EditorHero";
 import { EditorMarquee } from "./EditorMarquee";
 import { EditorNavBadge } from "./EditorNavBadge";
 import { EditorPromociones } from "./EditorPromociones";
+import { EditorPromosPago } from "./EditorPromosPago";
 import { EditorServicios } from "./EditorServicios";
 import { EditorTiendaOficial } from "./EditorTiendaOficial";
 import { EditorTiles } from "./EditorTiles";
@@ -38,4 +39,5 @@ export const EDITORES: Record<SeccionHome, ComponentType<EditorProps<any>>> = {
   whatsapp: EditorWhatsapp,
   busquedaAsistida: EditorBusquedaAsistida,
   promociones: EditorPromociones,
+  promosPago: EditorPromosPago,
 };

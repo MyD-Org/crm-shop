@@ -119,6 +119,7 @@ export function HomeClient({
   destacados,
   tiendaOficial = null,
   promociones = null,
+  promosPago = null,
   busquedaAsistida = null,
 }: {
   contenido: HomeContent;
@@ -138,6 +139,11 @@ export function HomeClient({
    */
   promociones?: ReactNode;
   /**
+   * Promos de pago (cuotas sin interés y descuento del medio destacado): hueco por request con su
+   * `<Suspense fallback={null}>`, armado en app/page.tsx. Sin promos no dibuja nada.
+   */
+  promosPago?: ReactNode;
+  /**
    * "Cuéntenos qué necesita" (flag `busqueda-ia`): hueco por request con su
    * `<Suspense fallback={null}>`, armado en app/page.tsx. Va debajo de la
    * cinta de marcas, fuera de la primera pantalla: al llegar por streaming no
@@ -156,6 +162,17 @@ export function HomeClient({
   const decoGrid = sinCamposOcultos(contenido.decoGrid);
   const whatsapp = sinCamposOcultos(contenido.whatsapp);
   const vis = (s: SeccionHome) => visibilidadDe(contenido.visibilidad, s);
+  const promosEnHero = vis("hero") !== "nunca";
+  const promosPagoEditable = (
+    <SeccionEditable
+      seccion="promosPago"
+      titulo={contenido.promosPago.titulo}
+      visibilidad={vis("promosPago")}
+      botonTop={promosEnHero ? "top-2" : "top-[calc(clamp(28px,4vw,48px)+0.5rem)]"}
+    >
+      {promosPago}
+    </SeccionEditable>
+  );
 
   // La foto del hero es el LCP de la home: el Hero del DS la pide con
   // `priority` e `imagenNext` la precarga desde el <head> (una sola vez, ya
@@ -166,6 +183,9 @@ export function HomeClient({
   // ("Ordenar secciones" de la barra de edición, `contenido.orden`). La cinta de marcas va a todo
   // el ancho; el resto, dentro del ancho del contenido.
   const secciones: Record<SeccionOrdenable, ReactNode> = {
+    // Con el hero visible las promos van a su pie (mismo criterio que app/page.tsx); la sección
+    // propia queda para cuando el hero está oculto.
+    promosPago: promosEnHero ? null : <Contenido>{promosPagoEditable}</Contenido>,
     promociones: (
       <Contenido>
         <Reveal>
@@ -181,6 +201,10 @@ export function HomeClient({
           <SeccionEditable seccion="hero" visibilidad={vis("hero")}>
             <InteractiveHero enabled={isStudioImage(hero.imagen)}>
             <Hero
+              // Compacto: el hero y las promos de pago entran en la primera pantalla.
+              size="compact"
+              // Promos de pago al pie, del ancho del texto (no tapan la foto). Vacío ⇒ no ocupa lugar.
+              footer={promosEnHero ? promosPagoEditable : undefined}
               className="[&_em]:not-italic [&_h1]:font-bold [&_a.rounded-full:first-of-type]:bg-accent [&_a.rounded-full:first-of-type:hover]:bg-primary"
               eyebrow={hero.eyebrow}
               eyebrowVisibleOn={textoVisibleOn(hero, "eyebrow")}

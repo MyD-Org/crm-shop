@@ -302,6 +302,13 @@
       "when": 1793634300213,
       "tag": "0042_cupones",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793760071887,
+      "tag": "0043_avisos_reingreso",
+      "breakpoints": true
     }
   ]
 }

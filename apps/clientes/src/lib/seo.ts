@@ -33,6 +33,7 @@ export const RUTAS_PRIVADAS = [
   "/mi-cuenta",
   "/ingresar",
   "/registro",
+  "/baja-aviso/",
   "/__gate",
 ] as const;
 

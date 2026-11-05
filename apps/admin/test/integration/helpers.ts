@@ -5,6 +5,7 @@ import { tenants, adminUsers, paymentReceipts } from "@/db/schema"
 import {
   shopClientLinks,
   shopCarts,
+  shopAvisosReingreso,
   shopClientes,
   shopOrderEventos,
   shopOrderRemitos,
@@ -12,6 +13,7 @@ import {
   shopOrderItems,
   shopCuponCanjes,
   shopPagoIntentos,
+  type ShopAvisoReingresoRow,
   type ShopCartRow,
   type ShopClienteRow,
   type ShopClientLinkRow,
@@ -41,7 +43,7 @@ function guard() {
 export async function truncateAll(): Promise<void> {
   guard()
   await getDb().execute(
-    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, correo_eventos,${shopOrderEventos}, ${shopOrderRemitos}, ${shopOrderItems}, ${shopOrders}, ${shopClientes}, ${shopClientLinks}, ${shopCuponCanjes}, ${shopPagoIntentos}, ${shopCarts} restart identity cascade`,
+    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, correo_eventos,${shopOrderEventos}, ${shopOrderRemitos}, ${shopOrderItems}, ${shopOrders}, ${shopClientes}, ${shopClientLinks}, ${shopCuponCanjes}, ${shopPagoIntentos}, ${shopCarts}, ${shopAvisosReingreso} restart identity cascade`,
   )
 }
 
@@ -259,6 +261,21 @@ export async function seedShopCart(
       conItemsDesde: opts.conItemsDesde === undefined ? (items.length ? new Date() : null) : opts.conItemsDesde,
       ...(opts.updatedAt ? { updatedAt: opts.updatedAt } : {}),
     })
+    .returning()
+  return row
+}
+
+/** Aviso de reingreso (`shop.avisos_reingreso`) sembrado directo. Datos inventados, dominio `.example`. */
+export async function seedShopAviso(
+  tenantId: string,
+  alegraId: string,
+  email: string,
+  overrides: Partial<typeof shopAvisosReingreso.$inferInsert> = {},
+): Promise<ShopAvisoReingresoRow> {
+  guard()
+  const [row] = await getDb()
+    .insert(shopAvisosReingreso)
+    .values({ tenantId, alegraId, email, tokenBaja: randomUUID(), ...overrides })
     .returning()
   return row
 }

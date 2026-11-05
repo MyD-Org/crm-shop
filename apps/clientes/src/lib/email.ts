@@ -42,6 +42,11 @@ export interface OpcionesEmail {
   tags?: { name: string; value: string }[];
   /** Clave de deduplicación del lado de Resend (header `Idempotency-Key`). */
   idempotencyKey?: string;
+  /**
+   * Cabeceras propias del mensaje (p. ej. `List-Unsubscribe` y `List-Unsubscribe-Post` en los avisos
+   * de reingreso). Resend las suma a las que arma él.
+   */
+  headers?: Record<string, string>;
 }
 
 export async function enviarEmail(opts: OpcionesEmail): Promise<EmailEnviado> {
@@ -78,6 +83,7 @@ export async function enviarEmail(opts: OpcionesEmail): Promise<EmailEnviado> {
             }
           : {}),
         ...(opts.tags ? { tags: opts.tags } : {}),
+        ...(opts.headers && Object.keys(opts.headers).length ? { headers: opts.headers } : {}),
       }),
     });
 

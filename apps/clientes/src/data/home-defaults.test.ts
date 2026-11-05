@@ -712,6 +712,7 @@ describe("orden de las secciones de la home", () => {
     expect(ORDEN_HOME).toEqual([
       "hero",
       "promociones",
+      "promosPago",
       "marquee",
       "busquedaAsistida",
       "ambientes",
@@ -729,5 +730,33 @@ describe("orden de las secciones de la home", () => {
     expect(home.orden[0]).toBe("whatsapp");
     expect(home.orden[1]).toBe("hero");
     expect([...home.orden].sort()).toEqual([...ORDEN_HOME].sort());
+  });
+});
+
+describe("promosPago (promos de pago de la home)", () => {
+  it("va después de Promociones y entra sola en un orden guardado antes de que existiera", () => {
+    expect(ORDEN_HOME.indexOf("promosPago")).toBe(ORDEN_HOME.indexOf("promociones") + 1);
+    const viejo = ORDEN_HOME.filter((s) => s !== "promosPago");
+    const home = combinarContenidoHome([{ key: "orden", payload: { secciones: viejo } }]);
+    expect(home.orden.indexOf("promosPago")).toBe(home.orden.indexOf("promociones") + 1);
+  });
+
+  it("el título y los textos de las etiquetas son editables y opcionales", () => {
+    expect(erroresSeccion("promosPago", {})).toEqual([]);
+    expect(
+      erroresSeccion("promosPago", {
+        titulo: "Beneficios para *pagar*",
+        cuotasTexto: "Con todas las tarjetas.",
+        descuentoTitulo: "Ahorre más",
+        descuentoTexto: "Pagando por transferencia.",
+      }),
+    ).toEqual([]);
+    for (const campo of ["titulo", "cuotasTexto", "descuentoTitulo", "descuentoTexto"]) {
+      expect(erroresSeccion("promosPago", { [campo]: "" })).not.toEqual([]);
+    }
+  });
+
+  it("existe en la home genérica", () => {
+    expect(defaultsHomeGenerica({ nombre: "Tienda" }).promosPago).toEqual({});
   });
 });

@@ -51,6 +51,7 @@ export const TITULOS_SECCION: Record<SeccionHome, string> = {
   destacados: "Destacados",
   tiendaOficial: "Tienda oficial",
   promociones: "Promociones",
+  promosPago: "Promociones de pago",
   bannerDeco: "Banner decorativo",
   decoGrid: "Grilla decorativa",
   servicios: "Servicios",

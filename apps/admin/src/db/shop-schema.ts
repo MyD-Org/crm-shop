@@ -359,3 +359,24 @@ export const shopCuponCanjes = shop.table("cupon_canjes", {
   descuentoTotal: numeric("descuento_total", { precision: 14, scale: 2 }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 })
+
+// Avisos de reingreso (0043 del Shop): alguien deja su email en un producto agotado para que le avisen
+// cuando vuelva. Los escribe el Shop; el CRM solo lee la demanda. Pendiente = avisado_at y
+// unsubscribed_at NULL. Subset: se omiten las columnas del cron (avisando_en, intentos,
+// email_error); token_baja se declara porque es NOT NULL sin default (los seeds lo necesitan).
+export const shopAvisosReingreso = shop.table("avisos_reingreso", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  alegraId: text("alegra_id").notNull(),
+  email: text("email").notNull(),
+  whatsapp: text("whatsapp"),
+  cantidad: integer("cantidad").notNull().default(1),
+  quiereEncargar: boolean("quiere_encargar").notNull().default(false),
+  consentimientoContacto: boolean("consentimiento_contacto").notNull().default(false),
+  tokenBaja: text("token_baja").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  avisadoAt: timestamp("avisado_at", { withTimezone: true }),
+  unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+})
+
+export type ShopAvisoReingresoRow = typeof shopAvisosReingreso.$inferSelect

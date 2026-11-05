@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { COVER_QUERY, HERO_LIGHTS, MIN_TARGET_PX, SHELF_STRIP, STUDIO_IMAGE, STUDIO_IMAGE_MOBILE, proximity, sceneRect } from "./hero-lights";
+import { COVER_QUERY, HERO_LIGHTS, MIN_TARGET_PX, SHELF_STRIP, STUDIO_IMAGE, STUDIO_IMAGE_MOBILE, proximity, sceneRect, usaCover } from "./hero-lights";
 import styles from "./InteractiveHero.module.css";
 
 /** Each lamp of the first-view intro stays on this long; the fade matches `[data-intro]` in the CSS module. */
@@ -50,7 +50,10 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
     };
     stopIntro.current = stop;
     const resize = new ResizeObserver(() => {
-      setRect(sceneRect(surface.clientWidth, surface.clientHeight, cover.matches));
+      const fitCover = usaCover(surface.clientWidth, surface.clientHeight, cover.matches);
+      // El CSS cambia object-fit con este atributo; las luces usan el mismo cálculo.
+      if (fitCover) host.dataset.fit = "cover"; else delete host.dataset.fit;
+      setRect(sceneRect(surface.clientWidth, surface.clientHeight, fitCover));
     });
     resize.observe(surface);
     let visible = false;
@@ -101,7 +104,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const bounds = surface.getBoundingClientRect();
-        const fit = sceneRect(bounds.width, bounds.height, cover.matches);
+        const fit = sceneRect(bounds.width, bounds.height, usaCover(bounds.width, bounds.height, cover.matches));
         if (!fit.scale) return;
         const x = (event.clientX - bounds.left - fit.left) / fit.scale;
         const y = (event.clientY - bounds.top - fit.top) / fit.scale;

@@ -36,8 +36,11 @@ export const RETENCION_PENDIENTES_DIAS = 365;
 export const TEXTOS = {
   boton: "Avisarme cuando ingrese",
   titulo: "Avisarme cuando ingrese",
-  descripcion: "Déjenos su correo y le avisaremos una sola vez cuando este producto vuelva a estar disponible.",
+  descripcion: "Déjenos su correo y le avisaremos cuando este producto vuelva a estar disponible.",
   etiquetaEmail: "Correo electrónico",
+  /** Con sesión iniciada no se pide el correo: se usa el de la cuenta. */
+  descripcionConCuenta: (email: string) =>
+    `Le avisaremos a ${email} cuando este producto vuelva a estar disponible.`,
   etiquetaCantidad: "Cantidad que necesita",
   etiquetaEncargar: "Me interesa encargarlo",
   ayudaEncargar: "El local podrá contactarlo para coordinar el encargo. Esto no genera un pedido ni una reserva.",

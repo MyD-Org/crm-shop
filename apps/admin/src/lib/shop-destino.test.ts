@@ -7,6 +7,8 @@ import {
   resolverDestinosShop,
   slugEnvTenant,
   urlPublicaShop,
+  urlPublicaShopParaPedido,
+  urlsPublicasShop,
 } from "@/lib/shop-destino"
 
 const SIN_FILA = { shopUrl: "", shopInternalUrl: "" }
@@ -296,5 +298,52 @@ describe("resolverDestinosShop", () => {
   it("un extra no se mezcla con el secreto de otro tenant", () => {
     const r = resolverDestinosShop("tenant-a", filaConExtras, { ...envBase, SHOP_CRM_SECRET_TENANT_B__TIENDA_B: "secreto-ajeno" })
     expect(JSON.stringify(r)).not.toContain("secreto-ajeno")
+  })
+})
+
+describe("urlsPublicasShop / urlPublicaShopParaPedido", () => {
+  const tenant = {
+    id: "tenant-b",
+    shopUrl: "https://b.example/",
+    shopInternalUrl: "",
+    shopDestinosExtra: [
+      { etiqueta: "otro", url: "https://tienda-b.example/" },
+      { etiqueta: "malo", url: "http://inseguro.example" },
+    ],
+  }
+
+  it("urlsPublicasShop: principal + extras válidos, normalizados", () => {
+    expect(urlsPublicasShop(tenant, {})).toEqual(["https://b.example", "https://tienda-b.example"])
+  })
+
+  it("sitio del extra → la URL configurada del extra", () => {
+    expect(urlPublicaShopParaPedido(tenant, "https://tienda-b.example", {})).toBe("https://tienda-b.example")
+  })
+
+  it("sitio del principal → el principal", () => {
+    expect(urlPublicaShopParaPedido(tenant, "https://b.example", {})).toBe("https://b.example")
+  })
+
+  it("NULL, desconocido o inválido → el principal", () => {
+    expect(urlPublicaShopParaPedido(tenant, null, {})).toBe("https://b.example")
+    expect(urlPublicaShopParaPedido(tenant, undefined, {})).toBe("https://b.example")
+    expect(urlPublicaShopParaPedido(tenant, "https://ajeno.example", {})).toBe("https://b.example")
+    expect(urlPublicaShopParaPedido(tenant, "no es una url", {})).toBe("https://b.example")
+    expect(urlPublicaShopParaPedido(tenant, "http://inseguro.example", {})).toBe("https://b.example")
+  })
+
+  it("nunca devuelve el string crudo guardado (path, mayúsculas)", () => {
+    expect(urlPublicaShopParaPedido(tenant, "https://TIENDA-B.example/x?y=1", {})).toBe("https://tienda-b.example")
+  })
+
+  it("tenant sin URL propia: extras ignorados, rige el legado", () => {
+    const sin = { id: "tenant-a", shopDestinosExtra: [{ etiqueta: "otro", url: "https://tienda-b.example" }] }
+    expect(urlPublicaShopParaPedido(sin, "https://tienda-b.example", { NEXT_PUBLIC_SHOP_URL: "https://legacy.example/" })).toBe(
+      "https://legacy.example",
+    )
+  })
+
+  it("sin ninguna URL → null", () => {
+    expect(urlPublicaShopParaPedido({ id: "x" }, "https://tienda-b.example", { SHOP_TENANT_LEGACY: "otro" })).toBeNull()
   })
 })

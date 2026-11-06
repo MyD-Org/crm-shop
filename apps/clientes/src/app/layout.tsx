@@ -22,6 +22,7 @@ import { PromoProvider } from "@/components/promociones/PromoProvider";
 import { datosPromoCliente } from "@/lib/promociones/promo";
 import { getMarca } from "@/lib/marca";
 import { metadataDeMarca } from "@/lib/metadata-marca";
+import { urlCanonicaDelSitio } from "@/lib/sitio-url";
 import "./globals.css";
 
 // Fuentes del diseño aprobado, self-hosted vía next/font; la paleta cálida las
@@ -48,7 +49,7 @@ const sora = Sora({
  */
 export async function generateMetadata(): Promise<Metadata> {
   return metadataDeMarca(await getMarca(), {
-    siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+    siteUrl: urlCanonicaDelSitio(),
     facebookToken: process.env.FACEBOOK_DOMAIN_VERIFICATION,
   });
 }

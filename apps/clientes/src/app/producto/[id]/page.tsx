@@ -23,6 +23,7 @@ import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { estadoEnvio } from "@/lib/disponibilidad-textos";
+import { urlCanonicaDelSitio } from "@/lib/sitio-url";
 import { EnvioProductoUbicacion } from "@/components/producto/EnvioProductoUbicacion";
 
 type Props = { params: Promise<{ id: string }> };
@@ -54,7 +55,7 @@ const productoDe = cache(async (id: string) => {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const [producto, marca] = await Promise.all([productoDe(idDeRuta((await params).id)), getMarca()]);
   if (!producto) return {};
-  return metadataProducto(producto, Boolean(process.env.NEXT_PUBLIC_SITE_URL), marca.nombre);
+  return metadataProducto(producto, Boolean(urlCanonicaDelSitio()), marca.nombre);
 }
 
 export default async function ProductoPage({ params }: Props) {
@@ -121,7 +122,7 @@ export default async function ProductoPage({ params }: Props) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: jsonLdProductoHtml(producto, process.env.NEXT_PUBLIC_SITE_URL),
+          __html: jsonLdProductoHtml(producto, urlCanonicaDelSitio()),
         }}
       />
       <ProductoClient

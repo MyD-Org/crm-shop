@@ -10,6 +10,7 @@ import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
 import { getContenidoHome } from "@/lib/home-datos";
 import { sinCamposOcultos, sinMarcasDeAcento, visibilidadDe } from "@/data/home-defaults";
 import { jsonLdSitioHtml } from "@/lib/sitio-jsonld";
+import { urlCanonicaDelSitio } from "@/lib/sitio-url";
 import { getMarca } from "@/lib/marca";
 
 /**
@@ -33,7 +34,7 @@ export default async function Home() {
   const { cantidad, skus = [] } = contenido.destacados;
   const secDestacados = sinCamposOcultos(contenido.destacados);
   const label = sinMarcasDeAcento(secDestacados.titulo ?? "") || "Productos destacados";
-  const jsonLdSitio = jsonLdSitioHtml(process.env.NEXT_PUBLIC_SITE_URL, marca.titulo);
+  const jsonLdSitio = jsonLdSitioHtml(urlCanonicaDelSitio(), marca.titulo);
 
   return (
     <ModoEdicionProvider>

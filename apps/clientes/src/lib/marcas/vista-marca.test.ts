@@ -42,6 +42,12 @@ describe("metadataMarca", () => {
     expect(m.title).toEqual({ absolute: "Led Premium — Tienda oficial | Central Led" });
   });
 
+  it("el gate del canonical usa la base canónica: solo CANONICAL también emite canonical", () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_CANONICAL_URL", "https://tienda-b.example");
+    expect(metadataMarca(pagina(), "Tienda", false).alternates?.canonical).toBe("/marcas/led-premium");
+  });
+
   it("título de tienda oficial, descripción y canonical", () => {
     const m = metadataMarca(pagina(), "Central Led", false);
     expect(m.title).toEqual({ absolute: "Led Premium — Tienda oficial | Central Led" });

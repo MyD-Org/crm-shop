@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import type { FiltrosSinTexto } from "@/lib/catalog";
 import { enlaceWhatsapp } from "@/lib/contacto-pedido";
 import { IMAGEN_SITIO, openGraphDelSitio } from "@/lib/metadata-marca";
+import { urlCanonicaDelSitio } from "@/lib/sitio-url";
 import { hrefMarca, type CotizacionMarca, type PaginaMarca } from "./pagina-marca";
 
 export { videoEmbebible, type VideoEmbebible } from "./video";
@@ -33,7 +34,7 @@ export function metadataMarca(p: PaginaMarca, nombreTienda: string, conQuery: bo
   const descripcion = p.seo?.descripcion ?? (p.bajada || undefined);
   // Canonical e imagen relativos sólo con la base del sitio (como `/catalogo` y la ficha): sin
   // `NEXT_PUBLIC_SITE_URL` un canonical relativo rompe el build y uno a localhost es peor que nada.
-  const conBase = Boolean(process.env.NEXT_PUBLIC_SITE_URL);
+  const conBase = Boolean(urlCanonicaDelSitio());
   const imagen = conBase ? (p.seo?.imagenOg ?? p.logo ?? IMAGEN_SITIO) : undefined;
   return {
     title: { absolute: titulo },

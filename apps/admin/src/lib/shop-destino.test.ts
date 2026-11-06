@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { resolverDestinoShop, slugEnvTenant, urlPublicaShop } from "@/lib/shop-destino"
+import {
+  MAX_DESTINOS_EXTRA,
+  nombreSecretoExtra,
+  parsearDestinosExtra,
+  resolverDestinoShop,
+  resolverDestinosShop,
+  slugEnvTenant,
+  urlPublicaShop,
+} from "@/lib/shop-destino"
 
 const SIN_FILA = { shopUrl: "", shopInternalUrl: "" }
 const filaA = { shopUrl: "https://a.example", shopInternalUrl: "https://interno-a.example/" }
@@ -111,5 +119,182 @@ describe("urlPublicaShop", () => {
   it("sin URL propia: NEXT_PUBLIC_SHOP_URL solo si el legacy es de este tenant o no está definido", () => {
     expect(urlPublicaShop("tenant-a", SIN_FILA, LEGACY)).toBe("https://legacy.example")
     expect(urlPublicaShop("tenant-b", SIN_FILA, { ...LEGACY, SHOP_TENANT_LEGACY: "tenant-a" })).toBeNull()
+  })
+})
+
+describe("parsearDestinosExtra", () => {
+  const item = (o: Record<string, unknown> = {}) => ({ etiqueta: "tienda-b", url: "https://tienda-b.example", ...o })
+
+  it("lo que no es un array da lista vacía, sin tirar", () => {
+    for (const raw of [null, undefined, {}, "x", 7, { etiqueta: "a" }]) {
+      expect(parsearDestinosExtra(raw)).toEqual({ validos: [], descartados: [] })
+    }
+  })
+
+  it("un ítem válido: urlInterna por defecto = url", () => {
+    expect(parsearDestinosExtra([item()])).toEqual({
+      validos: [{ etiqueta: "tienda-b", url: "https://tienda-b.example", urlInterna: "https://tienda-b.example" }],
+      descartados: [],
+    })
+  })
+
+  it("urlInterna propia se respeta y se normaliza", () => {
+    const r = parsearDestinosExtra([item({ urlInterna: "https://interno-b.example/" })])
+    expect(r.validos[0].urlInterna).toBe("https://interno-b.example")
+  })
+
+  it("un ítem inválido se descarta sin tirar la lista", () => {
+    const r = parsearDestinosExtra([null, item({ etiqueta: "otra", url: "" }), item({ etiqueta: "buena", url: "https://buena.example" })])
+    expect(r.validos.map((v) => v.etiqueta)).toEqual(["buena"])
+    expect(r.descartados).toEqual(["#0", "otra"])
+  })
+
+  it("etiqueta: reservada, con guion bajo, mayúsculas, >24 o vacía se descartan", () => {
+    const r = parsearDestinosExtra([
+      item({ etiqueta: "principal" }),
+      item({ etiqueta: "tienda_b" }),
+      item({ etiqueta: "Tienda-B" }),
+      item({ etiqueta: "a".repeat(25) }),
+      item({ etiqueta: "" }),
+      item({ etiqueta: "-x" }),
+    ])
+    expect(r.validos).toEqual([])
+    expect(r.descartados).toHaveLength(6)
+  })
+
+  it("etiqueta de 24 caracteres es válida", () => {
+    expect(parsearDestinosExtra([item({ etiqueta: "a".repeat(24) })]).validos).toHaveLength(1)
+  })
+
+  it("etiqueta duplicada: se conserva solo la primera", () => {
+    const r = parsearDestinosExtra([item(), item({ url: "https://otra.example" })])
+    expect(r.validos).toHaveLength(1)
+    expect(r.validos[0].url).toBe("https://tienda-b.example")
+    expect(r.descartados).toEqual(["tienda-b"])
+  })
+
+  it("url http fuera de localhost se descarta; en localhost se acepta", () => {
+    expect(parsearDestinosExtra([item({ url: "http://tienda-b.example" })]).validos).toEqual([])
+    expect(parsearDestinosExtra([item({ url: "http://localhost:3001" })]).validos[0].url).toBe("http://localhost:3001")
+    expect(parsearDestinosExtra([item({ url: "http://127.0.0.1:3001" })]).validos).toHaveLength(1)
+    expect(parsearDestinosExtra([item({ url: "http://tienda.localhost:3001" })]).validos).toHaveLength(1)
+  })
+
+  it("url con credenciales o de otro protocolo se descarta", () => {
+    expect(parsearDestinosExtra([item({ url: "https://user:pass@tienda-b.example" })]).validos).toEqual([])
+    expect(parsearDestinosExtra([item({ url: "ftp://tienda-b.example" })]).validos).toEqual([])
+    expect(parsearDestinosExtra([item({ url: "no es una url" })]).validos).toEqual([])
+  })
+
+  it("url con path/query se reduce al origin", () => {
+    expect(parsearDestinosExtra([item({ url: "https://Tienda-B.example/algo?x=1#h" })]).validos[0].url).toBe("https://tienda-b.example")
+  })
+
+  it("urlInterna informada pero inválida descarta el ítem (no cae a la url)", () => {
+    const r = parsearDestinosExtra([item({ urlInterna: "http://interno-b.example" })])
+    expect(r.validos).toEqual([])
+    expect(r.descartados).toEqual(["tienda-b"])
+  })
+
+  it("url duplicada de otro extra o del principal se descarta", () => {
+    const r = parsearDestinosExtra(
+      [item({ etiqueta: "uno", url: "https://uno.example" }), item({ etiqueta: "dos", url: "https://uno.example/otra" }), item({ etiqueta: "tres", url: "https://principal.example" })],
+      ["https://principal.example/"],
+    )
+    expect(r.validos.map((v) => v.etiqueta)).toEqual(["uno"])
+    expect(r.descartados).toEqual(["dos", "tres"])
+  })
+
+  it(`más de ${MAX_DESTINOS_EXTRA} extras: se descarta el resto`, () => {
+    const raw = Array.from({ length: 6 }, (_, i) => item({ etiqueta: `t${i}`, url: `https://t${i}.example` }))
+    const r = parsearDestinosExtra(raw)
+    expect(MAX_DESTINOS_EXTRA).toBe(4)
+    expect(r.validos.map((v) => v.etiqueta)).toEqual(["t0", "t1", "t2", "t3"])
+    expect(r.descartados).toEqual(["t4", "t5"])
+  })
+})
+
+describe("nombreSecretoExtra", () => {
+  it("SHOP_CRM_SECRET_<TENANT>__<ETIQUETA> con guion bajo y mayúsculas", () => {
+    expect(nombreSecretoExtra("central-led", "tienda-b")).toBe("SHOP_CRM_SECRET_CENTRAL_LED__TIENDA_B")
+    expect(nombreSecretoExtra("tenant-a", "b")).toBe("SHOP_CRM_SECRET_TENANT_A__B")
+  })
+})
+
+describe("resolverDestinosShop", () => {
+  const extras = [{ etiqueta: "tienda-b", url: "https://tienda-b.example", urlInterna: "https://interno-b.example" }]
+  const filaConExtras = { ...filaA, shopDestinosExtra: extras }
+  const envBase = { SHOP_CRM_SECRET_TENANT_A: "secreto-a", SHOP_CRM_SECRET_TENANT_A__TIENDA_B: "secreto-b" }
+
+  it("sin extras: solo el principal, igual que resolverDestinoShop", () => {
+    const r = resolverDestinosShop("tenant-a", filaA, envBase)
+    expect(r.omitidos).toEqual([])
+    expect(r.destinos).toEqual([{ ...resolverDestinoShop("tenant-a", filaA, envBase)!, etiqueta: "principal" }])
+  })
+
+  it("shopDestinosExtra [] o ausente da lo mismo", () => {
+    expect(resolverDestinosShop("tenant-a", { ...filaA, shopDestinosExtra: [] }, envBase)).toEqual(resolverDestinosShop("tenant-a", filaA, envBase))
+  })
+
+  it("principal + extra, cada uno con su URL y su secreto", () => {
+    const r = resolverDestinosShop("tenant-a", filaConExtras, envBase)
+    expect(r.omitidos).toEqual([])
+    expect(r.destinos.map((d) => [d.etiqueta, d.urlInterna, d.secret])).toEqual([
+      ["principal", "https://interno-a.example", "secreto-a"],
+      ["tienda-b", "https://interno-b.example", "secreto-b"],
+    ])
+  })
+
+  it("extra sin secreto (o en blanco): omitido y NO cae a ningún otro secreto", () => {
+    const env = { ...LEGACY, SHOP_CRM_SECRET_TENANT_A: "secreto-a" }
+    for (const e of [env, { ...env, SHOP_CRM_SECRET_TENANT_A__TIENDA_B: "  " }]) {
+      const r = resolverDestinosShop("tenant-a", filaConExtras, e)
+      expect(r.destinos.map((d) => d.etiqueta)).toEqual(["principal"])
+      expect(r.omitidos).toEqual(["tienda-b"])
+      expect(JSON.stringify(r.destinos)).not.toContain("secreto-sin-sufijo")
+    }
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("SHOP_CRM_SECRET_TENANT_A__TIENDA_B"))
+  })
+
+  it("el warn nombra la env pero nunca imprime un valor", () => {
+    resolverDestinosShop("tenant-a", filaConExtras, { SHOP_CRM_SECRET_TENANT_A: "secreto-a" })
+    const log = JSON.stringify((console.warn as unknown as { mock: { calls: unknown[] } }).mock.calls)
+    expect(log).not.toContain("secreto-a")
+  })
+
+  it("extra con url vacía o no https: omitido, el resto sigue", () => {
+    const fila = { ...filaA, shopDestinosExtra: [{ etiqueta: "roto", url: "" }, { etiqueta: "http", url: "http://x.example" }, ...extras] }
+    const r = resolverDestinosShop("tenant-a", fila, envBase)
+    expect(r.destinos.map((d) => d.etiqueta)).toEqual(["principal", "tienda-b"])
+    expect(r.omitidos).toEqual(["roto", "http"])
+  })
+
+  it("jsonb inválido: se conserva el principal sin tirar", () => {
+    const r = resolverDestinosShop("tenant-a", { ...filaA, shopDestinosExtra: { no: "array" } }, envBase)
+    expect(r.destinos.map((d) => d.etiqueta)).toEqual(["principal"])
+    expect(r.omitidos).toEqual([])
+  })
+
+  it("principal con URL propia pero sin secreto: va a omitidos y el extra igual se resuelve", () => {
+    const r = resolverDestinosShop("tenant-a", filaConExtras, { SHOP_CRM_SECRET_TENANT_A__TIENDA_B: "secreto-b" })
+    expect(r.destinos.map((d) => d.etiqueta)).toEqual(["tienda-b"])
+    expect(r.omitidos).toEqual(["principal"])
+  })
+
+  it("extras ignorados si el principal no tiene URL propia (par histórico)", () => {
+    const r = resolverDestinosShop("tenant-a", { ...SIN_FILA, shopDestinosExtra: extras }, { ...LEGACY, ...envBase })
+    expect(r.destinos.map((d) => d.etiqueta)).toEqual(["principal"])
+    expect(r.destinos[0].secret).toBe("secreto-sin-sufijo")
+    expect(r.omitidos).toEqual([])
+  })
+
+  it("sin URL propia ni legacy: nada, y 'principal' no figura como omitido", () => {
+    const r = resolverDestinosShop("tenant-a", SIN_FILA, {})
+    expect(r).toEqual({ destinos: [], omitidos: [] })
+  })
+
+  it("un extra no se mezcla con el secreto de otro tenant", () => {
+    const r = resolverDestinosShop("tenant-a", filaConExtras, { ...envBase, SHOP_CRM_SECRET_TENANT_B__TIENDA_B: "secreto-ajeno" })
+    expect(JSON.stringify(r)).not.toContain("secreto-ajeno")
   })
 })

@@ -84,6 +84,11 @@ export const tenants = pgTable("tenants", {
   // (rige el par histórico de envs). Ver src/lib/shop-destino.ts.
   shopUrl: text("shop_url").notNull().default(""),
   shopInternalUrl: text("shop_internal_url").notNull().default(""),
+  // Shops ADICIONALES del tenant (0099, change `dominios-clerk-por-host`): mismo código, otro dominio.
+  // Lista de `{ etiqueta, url, urlInterna? }`; el principal sigue siendo shopUrl/shopInternalUrl.
+  // Llega sin validar: la lee `parsearDestinosExtra` (src/lib/shop-destino.ts). El secreto de cada
+  // uno NO va acá: env SHOP_CRM_SECRET_<SLUG>__<ETIQUETA>. Sin GRANT a `shop_app` (el Shop no la lee).
+  shopDestinosExtra: jsonb("shop_destinos_extra").$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
   // Marca de la tienda (0085): '{}' = el Shop se ve como siempre. Forma y validación en
   // src/lib/tienda-online.ts; el Shop (`shop_app`) la lee con GRANT por columna.
   shopMarca: jsonb("shop_marca").$type<ShopMarca>().notNull().default(sql`'{}'::jsonb`),

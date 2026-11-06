@@ -673,6 +673,13 @@
       "when": 1793500020000,
       "tag": "0098_producto_videos",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1793987030934,
+      "tag": "0099_tenants_shop_destinos_extra",
+      "breakpoints": true
     }
   ]
 }

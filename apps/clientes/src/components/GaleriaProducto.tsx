@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { cn } from "@myd-org/ui";
 import type { ProductImage, VideoProducto } from "@/data/products";
@@ -59,6 +59,18 @@ export function GaleriaProducto({
   // Video que suena en el carrusel (sólo mientras su slide es el activo).
   const [reproduciendoId, setReproduciendoId] = useState<string | null>(null);
   const pistaRef = useRef<HTMLDivElement>(null);
+
+  // Al salir de la ficha Next la oculta (<Activity>) sin desmontarla: al volver tiene que verse el
+  // poster con el play, no un video a mitad de camino ni el visor abierto. (El audio lo corta
+  // VideoFacade en el momento de ocultarse.)
+  useLayoutEffect(
+    () => () => {
+      setReproduciendoId(null);
+      setVisor(null);
+    },
+    [],
+  );
+
   const lista = useMemo(() => armarItems(fotos, videos), [fotos, videos]);
   const varias = lista.length > 1;
   const nFotos = lista.filter((x) => x.tipo === "foto").length;

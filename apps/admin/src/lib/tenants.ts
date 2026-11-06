@@ -20,6 +20,8 @@ export interface TenantConfig {
   // propio, rige el par histórico de envs). Resolución en src/lib/shop-destino.ts.
   shopUrl?: string
   shopInternalUrl?: string
+  // Shops adicionales (0099), SIN validar: los lee `parsearDestinosExtra` (shop-destino.ts).
+  shopDestinosExtra?: unknown
 }
 
 /** Fila de la tabla `tenants` → `TenantConfig`. Único lugar con ese mapeo (antes duplicado). */
@@ -41,6 +43,7 @@ export function tenantConfigFromRow(row: typeof tenantsTable.$inferSelect): Tena
     aiTenantId: row.aiTenantId,
     shopUrl: row.shopUrl,
     shopInternalUrl: row.shopInternalUrl,
+    shopDestinosExtra: row.shopDestinosExtra,
   }
 }
 

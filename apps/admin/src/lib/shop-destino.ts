@@ -10,10 +10,21 @@
 //      siempre) o es igual al tenant. Con `SHOP_TENANT_LEGACY=<slug>` el par histórico queda atado
 //      a ese tenant y los demás no lo reciben.
 //   3. Cualquier otro caso: null (no-op, `propagado:false`, igual que "sin Shop").
+//
+// Destinos extra (change `dominios-clerk-por-host`, 0099): un tenant con URL propia puede declarar
+// hasta MAX_DESTINOS_EXTRA Shops más (mismo código, otro dominio). El principal sigue siendo
+// `shop_url`/`shop_internal_url`. Cada extra lleva SU secreto, `SHOP_CRM_SECRET_<TENANT>__<ETIQUETA>`,
+// y jamás cae al del principal, al sin sufijo ni al de otro extra.
 
 export interface FilaShop {
   shopUrl: string
   shopInternalUrl: string
+  /**
+   * Destinos adicionales (`tenants.shop_destinos_extra`, 0099). Llega SIN validar (viene de un
+   * jsonb): pasa por `parsearDestinosExtra` antes de usarse. Opcional para no tocar a quien
+   * arma una fila a mano.
+   */
+  shopDestinosExtra?: unknown
 }
 
 export interface DestinoShop {
@@ -90,4 +101,144 @@ export function urlPublicaShopDeTenant(
   env: EnvShop,
 ): string | null {
   return urlPublicaShop(tenant.id, { shopUrl: tenant.shopUrl ?? "", shopInternalUrl: tenant.shopInternalUrl ?? "" }, env)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Destinos extra
+// ---------------------------------------------------------------------------------------------
+
+export const MAX_DESTINOS_EXTRA = 4
+const ETIQUETA_PRINCIPAL = "principal"
+const ETIQUETA_MAX = 24
+const ETIQUETA_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
+
+export interface DestinoExtra {
+  etiqueta: string
+  /** Origin público (https). */
+  url: string
+  /** Origin al que va el ping; por defecto, `url`. */
+  urlInterna: string
+}
+
+export interface DestinoShopEtiquetado extends DestinoShop {
+  /** "principal" o la etiqueta del extra. */
+  etiqueta: string
+}
+
+export interface ResolucionDestinos {
+  destinos: DestinoShopEtiquetado[]
+  /** Etiquetas configuradas pero inutilizables (sin secreto, URL inválida, descartadas). */
+  omitidos: string[]
+}
+
+function esHostLocal(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname.endsWith(".localhost")
+}
+
+/** Origin normalizado (https; http solo en localhost; sin credenciales) o null. */
+function origenSeguro(v: unknown): string | null {
+  if (typeof v !== "string" || v.trim() === "") return null
+  let u: URL
+  try {
+    u = new URL(v.trim())
+  } catch {
+    return null
+  }
+  if (u.username || u.password) return null
+  if (u.protocol === "https:") return u.origin
+  if (u.protocol === "http:" && esHostLocal(u.hostname)) return u.origin
+  return null
+}
+
+/**
+ * Valida el jsonb `shop_destinos_extra` (NO se confía en la base). Puro y sin tirar: un ítem inválido
+ * se descarta solo y su etiqueta (o `#<idx>`) va a `descartados`. `urlsOcupadas` son las URLs del
+ * principal: un extra con el mismo origin se descarta.
+ */
+export function parsearDestinosExtra(
+  raw: unknown,
+  urlsOcupadas: readonly (string | null | undefined)[] = [],
+): { validos: DestinoExtra[]; descartados: string[] } {
+  const validos: DestinoExtra[] = []
+  const descartados: string[] = []
+  if (!Array.isArray(raw)) {
+    if (raw !== null && raw !== undefined) console.warn("[shop-destino] shop_destinos_extra no es una lista: se ignora")
+    return { validos, descartados }
+  }
+  const etiquetas = new Set<string>()
+  const origenes = new Set<string>()
+  for (const o of urlsOcupadas) {
+    const origen = origenSeguro(o)
+    if (origen) origenes.add(origen)
+  }
+  raw.forEach((it, idx) => {
+    const obj = typeof it === "object" && it !== null && !Array.isArray(it) ? (it as Record<string, unknown>) : null
+    const etiqueta = typeof obj?.etiqueta === "string" ? obj.etiqueta : ""
+    const nombre = etiqueta || `#${idx}`
+    const interna = obj?.urlInterna
+    const hayInterna = typeof interna === "string" && interna.trim() !== ""
+    const url = origenSeguro(obj?.url)
+    const urlInterna = hayInterna ? origenSeguro(interna) : url
+    const valido =
+      obj !== null &&
+      ETIQUETA_RE.test(etiqueta) &&
+      etiqueta.length <= ETIQUETA_MAX &&
+      etiqueta !== ETIQUETA_PRINCIPAL &&
+      !etiquetas.has(etiqueta) &&
+      url !== null &&
+      urlInterna !== null &&
+      !origenes.has(url) &&
+      validos.length < MAX_DESTINOS_EXTRA
+    if (!valido || url === null || urlInterna === null) {
+      descartados.push(nombre)
+      console.warn(`[shop-destino] destino extra "${nombre}" descartado por configuración inválida`)
+      return
+    }
+    etiquetas.add(etiqueta)
+    origenes.add(url)
+    validos.push({ etiqueta, url, urlInterna })
+  })
+  return { validos, descartados }
+}
+
+/** Nombre de la env con el secreto de un destino extra (solo el NOMBRE; el valor nunca se loguea). */
+export function nombreSecretoExtra(tenantId: string, etiqueta: string): string {
+  return `SHOP_CRM_SECRET_${slugEnvTenant(tenantId)}__${slugEnvTenant(etiqueta)}`
+}
+
+/**
+ * Principal + extras utilizables. El principal es exactamente `resolverDestinoShop` (etiqueta
+ * "principal"). Los extras rigen solo si el principal tiene URL propia. Un extra sin secreto va a
+ * `omitidos`: jamás se le presta otro secreto.
+ */
+export function resolverDestinosShop(tenantId: string, fila: FilaShop, env: EnvShop): ResolucionDestinos {
+  const destinos: DestinoShopEtiquetado[] = []
+  const omitidos: string[] = []
+
+  const principal = resolverDestinoShop(tenantId, fila, env)
+  if (principal && principal.urlInterna && principal.secret) {
+    destinos.push({ ...principal, etiqueta: ETIQUETA_PRINCIPAL })
+  } else if (tieneUrlPropia(fila)) {
+    omitidos.push(ETIQUETA_PRINCIPAL)
+  }
+
+  const hayExtras = Array.isArray(fila.shopDestinosExtra) && fila.shopDestinosExtra.length > 0
+  if (!tieneUrlPropia(fila)) {
+    if (hayExtras) console.warn(`[shop-destino] el tenant ${tenantId} tiene destinos extra pero no URL de Shop propia: se ignoran`)
+    return { destinos, omitidos }
+  }
+
+  const { validos, descartados } = parsearDestinosExtra(fila.shopDestinosExtra, [fila.shopUrl, fila.shopInternalUrl])
+  omitidos.push(...descartados)
+  for (const extra of validos) {
+    const nombre = nombreSecretoExtra(tenantId, extra.etiqueta)
+    const secret = limpio(env[nombre])
+    if (!secret) {
+      console.warn(`[shop-destino] el destino extra "${extra.etiqueta}" de ${tenantId} no tiene ${nombre}: no se avisa a ese Shop`)
+      omitidos.push(extra.etiqueta)
+      continue
+    }
+    destinos.push({ etiqueta: extra.etiqueta, urlInterna: extra.urlInterna, urlPublica: extra.url, secret })
+  }
+  return { destinos, omitidos }
 }

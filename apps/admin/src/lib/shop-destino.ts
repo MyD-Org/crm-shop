@@ -242,3 +242,37 @@ export function resolverDestinosShop(tenantId: string, fila: FilaShop, env: EnvS
   }
   return { destinos, omitidos }
 }
+
+type TenantShopUrls = { id: string; shopUrl?: string; shopInternalUrl?: string; shopDestinosExtra?: unknown }
+
+/** Extras válidos del tenant; solo rigen si el principal tiene URL propia (igual que el ping). */
+function extrasPublicos(tenant: TenantShopUrls): DestinoExtra[] {
+  const fila = { shopUrl: tenant.shopUrl ?? "", shopInternalUrl: tenant.shopInternalUrl ?? "" }
+  if (!tieneUrlPropia(fila)) return []
+  return parsearDestinosExtra(tenant.shopDestinosExtra, [fila.shopUrl, fila.shopInternalUrl]).validos
+}
+
+/** URLs públicas del Shop del tenant: la principal primero, después los extras válidos. */
+export function urlsPublicasShop(tenant: TenantShopUrls, env: EnvShop = process.env): string[] {
+  const principal = urlPublicaShopDeTenant(tenant, env)
+  const urls = principal ? [principal] : []
+  for (const e of extrasPublicos(tenant)) urls.push(e.url)
+  return urls
+}
+
+/**
+ * URL pública del Shop donde se hizo un pedido. Si `sitioOrigen` coincide con el principal o con
+ * un extra, devuelve la URL CONFIGURADA (nunca el texto guardado); NULL, desconocido o inválido
+ * → el principal.
+ */
+export function urlPublicaShopParaPedido(
+  tenant: TenantShopUrls,
+  sitioOrigen: string | null | undefined,
+  env: EnvShop = process.env,
+): string | null {
+  const principal = urlPublicaShopDeTenant(tenant, env)
+  const origen = origenSeguro(sitioOrigen)
+  if (!origen) return principal
+  const extra = extrasPublicos(tenant).find((e) => e.url === origen)
+  return extra ? extra.url : principal
+}

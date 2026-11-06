@@ -61,6 +61,9 @@ export const shopOrders = shop.table("orders", {
 
   // --- Entrega ---
   entregaTipo: text("entrega_tipo").notNull(), // 'retiro' | 'envio'
+  // Origin del Shop donde se hizo el pedido (0044 del Shop); NULL = pedidos viejos. Define a qué
+  // dominio apuntan los mails del pedido.
+  sitioOrigen: text("sitio_origen"),
   entregaCiudad: text("entrega_ciudad"),
   entregaDireccion: text("entrega_direccion"),
 

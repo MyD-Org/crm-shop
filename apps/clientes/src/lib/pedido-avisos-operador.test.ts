@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Aviso al local por pedido nuevo (`avisarOperadorPedidoNuevo`). La base se simula con una cola
@@ -197,5 +197,39 @@ describe("venta sin stock en los avisos", () => {
     colas[3] = [{ nombre: "Panel", cantidad: "2", ventaSinStock: SNAPSHOT }];
     await avisarOperadorPedidoNuevo("p1");
     expect(enviarEmail.mock.calls[0][0].text).toContain("- Panel × 2 (A pedido)");
+  });
+});
+
+describe("links al sitio de origen del pedido", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("con sitio guardado, el mail al comprador linkea a ese host", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://cliente.example");
+    colas.length = 0;
+    colas.push([{ ...PEDIDO, pagoMetodo: "mercadopago", sitioOrigen: "https://tienda-b.example" }], [{ nombre: "Lámpara", cantidad: "1" }]);
+    await avisarCobro("p1", { antes: "pendiente", despues: "fallido", reversion: false, referencia: "r1" });
+    const o = enviarEmail.mock.calls[0][0];
+    expect(o.text).toContain("https://tienda-b.example/mi-cuenta/pedidos");
+    expect(o.text).toContain("https://tienda-b.example/checkout?pedido=p1");
+    expect(o.text).not.toContain("cliente.example/mi-cuenta");
+  });
+
+  it("sin sitio guardado usa NEXT_PUBLIC_SITE_URL", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://cliente.example");
+    colas.length = 0;
+    colas.push([{ ...PEDIDO, pagoMetodo: "mercadopago", sitioOrigen: null }], [{ nombre: "Lámpara", cantidad: "1" }]);
+    await avisarCobro("p1", { antes: "pendiente", despues: "fallido", reversion: false, referencia: "r1" });
+    const o = enviarEmail.mock.calls[0][0];
+    expect(o.text).toContain("https://cliente.example/checkout?pedido=p1");
+  });
+
+  it("el aviso al local también usa el sitio guardado en el pie", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://cliente.example");
+    cargar({ sucursalEmail: "centro@tienda.cliente.example", receipts: "" });
+    colas[0] = [{ ...PEDIDO, sitioOrigen: "https://tienda-b.example" }];
+    await avisarOperadorPedidoNuevo("p1");
+    const o = enviarEmail.mock.calls[0][0];
+    expect(`${o.html}${o.text}`).toContain("https://tienda-b.example");
+    expect(`${o.html}${o.text}`).not.toContain("https://cliente.example");
   });
 });

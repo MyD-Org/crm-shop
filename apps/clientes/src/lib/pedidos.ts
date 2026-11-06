@@ -54,6 +54,7 @@ import {
 import { avisarCobro } from "./pedido-avisos";
 import { esPagoEnLinea, slugsPagoEnLinea } from "./medios-pago";
 import { shopTenantId } from "./tenant";
+import { sitioOrigenDeEntorno } from "./sitio-origen";
 import type { Asignacion, EntradaAsignacion } from "./sucursales";
 import { leerReglasVenta, leerSucursalesYZonas, type ReglasVentaTenant } from "./sucursales-repo";
 import { decidirSucursalDePedido } from "./sucursales-pedido";
@@ -352,6 +353,8 @@ export async function crearPedido(
         // ven el pedido. Los campos se copian uno por uno a propósito: nada que
         // venga de más en `datos` llega a la fila.
         tenantId: shopTenantId(),
+        // Sitio de este despliegue (entorno), nunca de headers: los mails linkean a él.
+        sitioOrigen: sitioOrigenDeEntorno(),
         idempotencyKey: datos.idempotencyKey ?? null,
         clerkUserId: cliente.clerkUserId,
         clienteCodigo: cliente.codigo ?? null,

@@ -28,6 +28,7 @@ import {
   type LineaMail,
 } from "./pedido-mail";
 import { shopTenantId } from "./tenant";
+import { sitioParaMailDelPedido } from "./sitio-origen";
 import { urlLogoMarca } from "./vinculacion-mail";
 import { getMarca } from "./marca";
 import { leerSnapshot, pedidoAConfirmarPorModalidad } from "./venta-sin-stock";
@@ -114,15 +115,17 @@ async function enviarAviso(
     const medios = confirma ? await leerMediosPagoTolerante() : null;
     const contacto = confirma ? await contactoDeSucursal(pedido.sucursal, numero) : null;
 
+    // Links al sitio donde se hizo el pedido (o al del entorno si es anterior a 0044).
+    const sitio = sitioParaMailDelPedido(pedido.sitioOrigen);
     const mail = armarMailPedido({
       aviso,
       numero,
       contactoNombre: pedido.contactoNombre,
       comercio: comercio || "Su pedido",
-      logoUrl: urlLogoMarca(await getMarca()),
-      pedidosUrl: urlPedidos(),
-      checkoutUrl: aviso === "pago_rechazado" ? urlPedidos(undefined, `${RUTA_CHECKOUT}?pedido=${encodeURIComponent(pedidoId)}`) : null,
-      sitioUrl: urlSitioMail(),
+      logoUrl: urlLogoMarca(await getMarca(), sitio),
+      pedidosUrl: urlPedidos(sitio),
+      checkoutUrl: aviso === "pago_rechazado" ? urlPedidos(sitio, `${RUTA_CHECKOUT}?pedido=${encodeURIComponent(pedidoId)}`) : null,
+      sitioUrl: urlSitioMail(sitio),
       lineas: lineas.map(lineaParaMail),
       total: Number(pedido.total),
       cupon: cuponParaResumen(pedido.cupon),
@@ -326,6 +329,7 @@ export async function avisarOperadorPedidoNuevo(
       .where(eq(orderItems.orderId, pedidoId))
       .orderBy(asc(orderItems.id));
 
+    const sitio = sitioParaMailDelPedido(pedido.sitioOrigen);
     const mail = armarMailPedidoOperador({
       numero: `PED-${String(pedido.numero).padStart(8, "0")}`,
       comercio: comercio || "Tienda",
@@ -342,8 +346,8 @@ export async function avisarOperadorPedidoNuevo(
         ? { pagado: { total: Number(pedido.pagoTotalPagado), cuotas: pedido.pagoCuotas } }
         : {}),
       pedidoUrl: urlPedidoAdmin(pedidoId),
-      logoUrl: urlLogoMarca(await getMarca()),
-      sitioUrl: urlSitioMail(),
+      logoUrl: urlLogoMarca(await getMarca(), sitio),
+      sitioUrl: urlSitioMail(sitio),
       ...(cambio ? { medioAnterior: nombreDelPago(cambio.medioAnterior, null) } : {}),
     });
 

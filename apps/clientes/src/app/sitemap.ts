@@ -5,6 +5,7 @@ import { getPaginasPublicadas } from "@/lib/institucional/datos";
 import { getPaginasMarcaPublicadas } from "@/lib/marcas/marcas-datos";
 import { rutasSitemapMarcas } from "@/lib/marcas/vista-marca";
 import { baseDelSitio, entradasSitemap } from "@/lib/seo";
+import { esSitioSecundarioDelEntorno, urlCanonicaDelSitio } from "@/lib/sitio-url";
 
 /**
  * Páginas públicas + una ficha por producto publicado (mismo criterio que el
@@ -12,7 +13,9 @@ import { baseDelSitio, entradasSitemap } from "@/lib/seo";
  * lo curado). Los ids salen de la caché del catálogo (tag `catalogo`).
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const sitio = process.env.NEXT_PUBLIC_SITE_URL;
+  // Un sitemap no puede listar URLs de otro host: el secundario sale vacío.
+  if (esSitioSecundarioDelEntorno()) return [];
+  const sitio = urlCanonicaDelSitio();
   if (!baseDelSitio(sitio)) return [];
   const { soloVisibles, variantes } = await flagsPublicos();
   const [ids, paginas, marcas] = await Promise.all([

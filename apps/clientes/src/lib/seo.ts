@@ -47,8 +47,12 @@ export function baseDelSitio(sitio: string | undefined): string | null {
   }
 }
 
-export function reglasRobots(sitio: string | undefined): MetadataRoute.Robots {
-  const base = baseDelSitio(sitio);
+/**
+ * `secundario`: el sitio declara otra URL canónica; no hay sitemap que anunciar
+ * (sale vacío) y no se bloquea el rastreo para que el buscador vea el canonical.
+ */
+export function reglasRobots(sitio: string | undefined, secundario = false): MetadataRoute.Robots {
+  const base = secundario ? null : baseDelSitio(sitio);
   return {
     rules: { userAgent: "*", allow: "/", disallow: [...RUTAS_PRIVADAS] },
     ...(base ? { sitemap: `${base}/sitemap.xml` } : {}),

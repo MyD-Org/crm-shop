@@ -205,3 +205,25 @@ describe("crearPedido: carrito del servidor", () => {
     expect(vaciarCarritoTx).not.toHaveBeenCalled();
   });
 });
+
+describe("crearPedido: sitio de origen", () => {
+  it("guarda el sitio del entorno, sin mirar headers ni datos del request", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://Tienda-B.example/");
+    try {
+      await crear({ sitioOrigen: "https://intruso.example" } as never);
+      expect(valoresPedido[0].sitioOrigen).toBe("https://tienda-b.example");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("sin NEXT_PUBLIC_SITE_URL queda null", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
+    try {
+      await crear();
+      expect(valoresPedido[0].sitioOrigen).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});

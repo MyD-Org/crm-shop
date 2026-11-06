@@ -433,6 +433,11 @@ export const orders = shop.table(
      */
     formaCobro: text("forma_cobro"),
     /**
+     * Sitio (origen https) donde se hizo el pedido (migración 0044). Sale del entorno del despliegue,
+     * nunca del request. Los mails del pedido linkean a este sitio. null = pedido anterior.
+     */
+    sitioOrigen: text("sitio_origen"),
+    /**
      * Cuándo salieron los avisos "Recibimos su pedido" (comprador) y "Nuevo pedido" (local) de un
      * pedido sin cobro en línea. Con transferencia no salen al crearlo: salen al irse de la pantalla
      * de transferencia, al informar el comprobante o, como respaldo, desde el cron a los 15 minutos
@@ -565,6 +570,10 @@ export const orders = shop.table(
     check(
       "orders_forma_cobro_check",
       sql`${t.formaCobro} is null or ${t.formaCobro} in ('credito','debito','cuenta_mp')`,
+    ),
+    check(
+      "orders_sitio_origen_check",
+      sql`${t.sitioOrigen} is null or ${t.sitioOrigen} ~ '^https?://[^/[:space:]]+$'`,
     ),
     // Cancelado ⇒ motivo. Vale para el CRM y para el Shop por igual.
     check(

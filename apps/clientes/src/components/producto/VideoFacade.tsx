@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { VideoProducto } from "@/data/products";
 
 /** Proporción mientras no se conoce la del poster (la de un video horizontal). */
 const ASPECTO_INICIAL = 16 / 9;
+
+/** URL del reproductor: sin cookies, con autoplay, sin relacionados y en línea en iOS. */
+export const urlReproductor = (embed: string) => `${embed}?autoplay=1&rel=0&playsinline=1`;
 
 /**
  * Video de YouTube de la ficha, controlado desde afuera. Mientras `reproduciendo` es false sólo
@@ -19,6 +22,10 @@ const ASPECTO_INICIAL = 16 / 9;
  *
  * Lo usan el carrusel de la ficha (reproduce en el lugar) y el visor a pantalla completa; los dos
  * montan el iframe sólo en el slide activo.
+ *
+ * Al salir de la ficha, Next no la desmonta: la oculta con `<Activity>` (cacheComponents) y el
+ * iframe oculto seguiría sonando. El cleanup de layout corre al ocultarse, antes de que React
+ * procese el estado del padre, y corta el audio en el acto vaciando el `src`.
  */
 export function VideoFacade({
   video,
@@ -33,6 +40,16 @@ export function VideoFacade({
 }) {
   const [aspecto, setAspecto] = useState(ASPECTO_INICIAL);
   const [poster, setPoster] = useState(video.poster);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const src = urlReproductor(video.embed);
+
+  useLayoutEffect(() => {
+    const iframe = iframeRef.current;
+    if (!reproduciendo || !iframe) return;
+    // StrictMode (dev) monta, limpia y vuelve a montar: se repone el src que vació el cleanup.
+    if (iframe.getAttribute("src") !== src) iframe.setAttribute("src", src);
+    return () => iframe.setAttribute("src", "about:blank");
+  }, [reproduciendo, src]);
 
   return (
     <div className="flex h-full w-full items-center justify-center" style={{ containerType: "size" }}>
@@ -58,7 +75,8 @@ export function VideoFacade({
         />
         {reproduciendo ? (
           <iframe
-            src={`${video.embed}?autoplay=1&rel=0&playsinline=1`}
+            ref={iframeRef}
+            src={src}
             title={`Video de ${titulo}`}
             allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
             allowFullScreen

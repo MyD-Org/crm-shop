@@ -11,6 +11,7 @@ import { DialogoDatosLegales } from "@/components/legales/DialogoDatosLegales";
 import { DialogoFooter } from "@/components/footer/DialogoFooter";
 import { useModoEdicion } from "./ModoEdicion";
 import { DialogoSeccion } from "./DialogoSeccion";
+import { InterruptorPiedra } from "./InterruptorPiedra";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 /**
@@ -33,11 +34,14 @@ export function BarraEdicion({
   orden,
   legal,
   footer,
+  piedra,
 }: {
   visibilidad: MapaVisibilidad;
   orden: SeccionOrdenable[];
   legal: DatosLegales;
   footer: DatosFooter;
+  /** Textura de piedra encendida en este sitio (fila `decoracion`). */
+  piedra: boolean;
 }) {
   const { activo, setActivo } = useModoEdicion();
   const [abrirAnuncio, setAbrirAnuncio] = useState(false);
@@ -62,6 +66,7 @@ export function BarraEdicion({
       className="fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-border bg-surface px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-lg"
     >
       <Switch label="Modo edición" checked={activo} onCheckedChange={setActivo} />
+      <InterruptorPiedra inicial={piedra} />
       <Button variant="outline" size="sm" onClick={() => setAbrirOrden(true)}>
         Ordenar secciones
       </Button>

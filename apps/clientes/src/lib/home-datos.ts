@@ -9,8 +9,9 @@ import {
   type HomeContent,
 } from "@/data/home-defaults";
 import { KEY_FOOTER, defaultsFooterDe, resolverDatosFooter, type DatosFooter } from "@/data/footer";
+import { DECORACION_POR_DEFECTO, KEY_DECORACION, resolverDecoracion, type Decoracion } from "@/data/decoracion";
 import { getMarca } from "@/lib/marca";
-import { leerSeccionesHome, leerTodasSeccionesHome, leerWhatsappDelPrincipal } from "@/lib/home-guardar";
+import { leerSeccionHome, leerSeccionesHome, leerTodasSeccionesHome, leerWhatsappDelPrincipal } from "@/lib/home-guardar";
 import { TAG_HOME } from "@/lib/cache-tags";
 import { claveSitio, resolverSitioPorClave } from "@/lib/sitio";
 import { leerDestinosExtra } from "@/lib/sitio-datos";
@@ -117,5 +118,28 @@ async function footerDelSitio(sitio: string): Promise<DatosFooter> {
     console.error("[footer] no se pudo leer el WhatsApp del principal:", err);
     cacheLife("degradado");
     return footer;
+  }
+}
+
+/**
+ * Decoración del sitio (fila `decoracion`: hoy sólo `piedra`, la textura de la piedra de Mar del
+ * Plata). Cacheada con el tag `home`; la clave del sitio viaja como argumento. Sin fila, con un
+ * payload inválido o si la DB falla: todo apagado (el aspecto de siempre).
+ */
+export async function getDecoracion(): Promise<Decoracion> {
+  return decoracionDelSitio(claveSitio());
+}
+
+async function decoracionDelSitio(sitio: string): Promise<Decoracion> {
+  "use cache";
+  cacheTag(TAG_HOME);
+  try {
+    const raw = await leerSeccionHome(KEY_DECORACION, sitio);
+    cacheLife("home");
+    return resolverDecoracion(raw);
+  } catch (err) {
+    console.error("[decoracion] home_content no disponible, queda apagada:", err);
+    cacheLife("degradado");
+    return DECORACION_POR_DEFECTO;
   }
 }

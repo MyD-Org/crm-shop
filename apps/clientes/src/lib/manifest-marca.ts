@@ -1,14 +1,13 @@
 import type { MetadataRoute } from "next";
-import { ICONOS_CENTRAL, esMarcaCentral, type Marca } from "@/lib/marca-base";
+import { ICONOS_CENTRAL, ICONO_NEUTRO, type Marca } from "@/lib/marca-base";
 import type { ColoresPwa } from "@/lib/tema-tenant";
 
 /**
  * Manifest PWA de una marca. `name`: el mismo texto que `metadata.title` (`marca.titulo`);
  * `short_name`: el nombre.
  *
- * Íconos: `src/app/icon.svg` (servido por Next en `/icon.svg` — se verificó en `.next/server/app/`
- * tras `next build`, no en la doc genérica); la tienda de Central suma sus PNG de 192 y 512 y el
- * "maskable" (`ICONOS_CENTRAL`). Una marca con su propio ícono usa sólo ese.
+ * Íconos: el de la marca; la tienda de Central (`recursosCentral`) usa los suyos (SVG, PNG de 192
+ * y 512 y el "maskable", `ICONOS_CENTRAL`); cualquier otra sin ícono, el neutro sin marca.
  *
  * `display: "browser"`: el sitio no se ofrece como app instalable ("standalone"); los PNG sirven
  * para el acceso directo de Android.
@@ -19,17 +18,16 @@ import type { ColoresPwa } from "@/lib/tema-tenant";
  * su `bg` y su `primary`.
  */
 export function manifestDeMarca(marca: Marca, pwa: ColoresPwa | null = null): MetadataRoute.Manifest {
-  const svg = { src: ICONOS_CENTRAL.svg, sizes: "any", type: "image/svg+xml" };
   const iconos: MetadataRoute.Manifest["icons"] = marca.faviconUrl
     ? [{ src: marca.faviconUrl, sizes: "any", type: tipoImagen(marca.faviconUrl) }]
-    : esMarcaCentral(marca)
+    : marca.recursosCentral
       ? [
-          svg,
+          { src: ICONOS_CENTRAL.svg, sizes: "any", type: "image/svg+xml" },
           { src: ICONOS_CENTRAL.pwa192, sizes: "192x192", type: "image/png" },
           { src: ICONOS_CENTRAL.pwa512, sizes: "512x512", type: "image/png" },
           { src: ICONOS_CENTRAL.maskable, sizes: "512x512", type: "image/png", purpose: "maskable" },
         ]
-      : [svg];
+      : [{ src: ICONO_NEUTRO, sizes: "any", type: "image/svg+xml" }];
   return {
     name: marca.titulo,
     short_name: marca.nombre,

@@ -12,7 +12,7 @@ import type { EditorProps } from "./index";
 
 export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
   // La foto del estudio es un recurso de la tienda de Central: no se ofrece a otra marca.
-  const esCentral = useMarca().base === "central";
+  const esCentral = useMarca().recursosCentral;
   return (
     <div className="flex flex-col gap-4">
       <CamposTitulo valor={valor} onChange={onChange} conEyebrow />

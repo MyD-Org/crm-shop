@@ -7,6 +7,8 @@ import { MARCA_POR_DEFECTO } from "@/lib/marca-base";
 export interface MarcaCliente {
   /** "central": con los recursos propios de Central (fotos del editor); "generica": sin ellos. */
   base: "central" | "generica";
+  /** true sólo para la tienda de Central con su nombre: la única que usa sus logos y fotos. */
+  recursosCentral: boolean;
   nombre: string;
   /** Línea bajo el nombre en el header. Vacío = sin línea. */
   lema: string;
@@ -15,6 +17,7 @@ export interface MarcaCliente {
 
 const MarcaContext = createContext<MarcaCliente>({
   base: "central",
+  recursosCentral: true,
   nombre: MARCA_POR_DEFECTO.nombre,
   lema: MARCA_POR_DEFECTO.lema,
 });

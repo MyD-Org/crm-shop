@@ -283,6 +283,15 @@ export function partesNombre(marca: Pick<Marca, "nombre" | "recursosCentral">): 
   return { principal: marca.nombre };
 }
 
+/**
+ * Qué logo dibuja el header: el cargado por la marca, el SVG de código de Central (sólo
+ * `recursosCentral`) o ninguno (va el nombre en texto).
+ */
+export function fuenteLogo(marca: Pick<Marca, "logoUrl" | "recursosCentral">): "propio" | "central" | "texto" {
+  if (marca.logoUrl) return "propio";
+  return marca.recursosCentral ? "central" : "texto";
+}
+
 /** Texto alternativo del logo de código (SVG de Central) o nombre de la tienda. */
 export function altLogo(marca: Pick<Marca, "nombre" | "recursosCentral">): string {
   return marca.recursosCentral ? ALT_LOGO_CENTRAL : marca.nombre;

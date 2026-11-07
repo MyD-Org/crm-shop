@@ -118,6 +118,37 @@ export interface DestinoExtra {
   url: string
   /** Origin al que va el ping; por defecto, `url`. */
   urlInterna: string
+  /**
+   * Marca propia del sitio (change `marca-por-dominio`): misma forma que `tenants.shop_marca`.
+   * Ausente = el sitio es un alias del principal. Llega sin validar el contenido: el admin la valida
+   * al guardar (`parseShopMarca`) y el Shop la vuelve a sanear al leerla.
+   */
+  marca?: Record<string, unknown>
+  /** Tema propio del sitio: misma forma que `tenants.shop_tema`. Ausente = el del principal. */
+  tema?: Record<string, unknown>
+  /** Dirección desde la que salen los mails de los pedidos hechos en este sitio. */
+  remitente?: string
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function objetoPlano(v: unknown): Record<string, unknown> | null {
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null
+}
+
+/** Marca, tema y remitente del destino: lo inválido se ignora sin descartar el destino (el ping sigue). */
+function marcaDelDestino(obj: Record<string, unknown>, nombre: string): Pick<DestinoExtra, "marca" | "tema" | "remitente"> {
+  const out: Pick<DestinoExtra, "marca" | "tema" | "remitente"> = {}
+  const marca = objetoPlano(obj.marca)
+  if (marca) out.marca = marca
+  const tema = objetoPlano(obj.tema)
+  if (tema) out.tema = tema
+  if (typeof obj.remitente === "string" && obj.remitente.trim() !== "") {
+    const r = obj.remitente.trim()
+    if (EMAIL_RE.test(r)) out.remitente = r
+    else console.warn(`[shop-destino] el remitente del destino extra "${nombre}" no es un email: se ignora`)
+  }
+  return out
 }
 
 export interface DestinoShopEtiquetado extends DestinoShop {
@@ -196,7 +227,7 @@ export function parsearDestinosExtra(
     }
     etiquetas.add(etiqueta)
     origenes.add(url)
-    validos.push({ etiqueta, url, urlInterna })
+    validos.push({ etiqueta, url, urlInterna, ...marcaDelDestino(obj, etiqueta) })
   })
   return { validos, descartados }
 }

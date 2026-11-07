@@ -41,6 +41,7 @@ const DIRECTIVA = /^\s*["']use cache(?::\s*(?:remote|private))?["'];?\s*$/m;
 const CON_CACHE = [
   "app/opengraph-image.tsx",
   "lib/home-datos.ts",
+  "lib/home-guardar.ts",
   "lib/institucional/datos.ts",
   "lib/marcas/marcas-datos.ts",
   "lib/marca.ts",

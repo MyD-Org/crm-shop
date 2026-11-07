@@ -26,8 +26,13 @@ export function openGraphDelSitio(nombreTienda: string) {
  */
 export function metadataDeMarca(
   marca: Marca,
-  entorno: { siteUrl?: string; facebookToken?: string },
+  entorno: { siteUrl?: string; facebookToken?: string; googleToken?: string },
 ): Metadata {
+  const google = entorno.googleToken?.trim()
+  const verification = {
+    ...(google ? { google } : {}),
+    ...(entorno.facebookToken ? { other: { "facebook-domain-verification": entorno.facebookToken } } : {}),
+  }
   return {
     // Base de las URLs absolutas de metadata (canonical). Por entorno: el repo no lleva el
     // dominio. Sin la variable, las páginas omiten el canonical.
@@ -49,10 +54,9 @@ export function metadataDeMarca(
             },
           }
         : {}),
-    // Verificación del dominio en Meta: el token es de la cuenta de la tienda y va por entorno
-    // (repo público). Sin la variable no se emite el meta.
-    ...(entorno.facebookToken
-      ? { verification: { other: { "facebook-domain-verification": entorno.facebookToken } } }
-      : {}),
+    // Verificación del dominio en Meta y en Google Search Console: los tokens son de las cuentas de
+    // la tienda y van por entorno (repo público). Sin variables no se emite ningún meta. La de Google
+    // sirve cuando el DNS del dominio no está a mano (verificación por "etiqueta HTML").
+    ...(Object.keys(verification).length > 0 ? { verification } : {}),
   };
 }

@@ -83,6 +83,7 @@ La tabla sale de las `process.env.*` que lee `apps/clientes/src`. "Propia" = val
 | `CRM_ADMIN_URL`, `JEV_API_KEY`, `GEOCODE_CONTACT_EMAIL` | Compartida | |
 | `HOSTS_IMAGENES`, `SHOP_MEDIA_HOSTS`, `NEXT_PUBLIC_SHOP_MARCA_NOMBRE` | Compartida | |
 | `FACEBOOK_DOMAIN_VERIFICATION` | Propia | Meta verifica por dominio (U8). |
+| `GOOGLE_SITE_VERIFICATION` | Propia (opcional) | Search Console por etiqueta HTML cuando el DNS del dominio no está a mano. |
 | `POSTHOG_REGION`, `DEBUG_SQL`, `SITE_AUTH_USER`, `SITE_AUTH_PASSWORD` | Según el caso | El gate "Próximamente" y el debug, solo si B los necesita. |
 
 Mercado Pago: la `notification_url` se arma con el origin del request, así que cada proyecto

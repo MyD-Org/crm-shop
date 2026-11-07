@@ -51,6 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return metadataDeMarca(await getMarca(), {
     siteUrl: urlCanonicaDelSitio(),
     facebookToken: process.env.FACEBOOK_DOMAIN_VERIFICATION,
+    googleToken: process.env.GOOGLE_SITE_VERIFICATION,
   });
 }
 

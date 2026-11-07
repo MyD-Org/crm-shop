@@ -167,7 +167,7 @@ function esHostLocal(hostname: string): boolean {
 }
 
 /** Origin normalizado (https; http solo en localhost; sin credenciales) o null. */
-function origenSeguro(v: unknown): string | null {
+export function origenSeguro(v: unknown): string | null {
   if (typeof v !== "string" || v.trim() === "") return null
   let u: URL
   try {
@@ -274,10 +274,10 @@ export function resolverDestinosShop(tenantId: string, fila: FilaShop, env: EnvS
   return { destinos, omitidos }
 }
 
-type TenantShopUrls = { id: string; shopUrl?: string; shopInternalUrl?: string; shopDestinosExtra?: unknown }
+export type TenantShopUrls = { id: string; shopUrl?: string; shopInternalUrl?: string; shopDestinosExtra?: unknown }
 
 /** Extras válidos del tenant; solo rigen si el principal tiene URL propia (igual que el ping). */
-function extrasPublicos(tenant: TenantShopUrls): DestinoExtra[] {
+export function extrasPublicos(tenant: TenantShopUrls): DestinoExtra[] {
   const fila = { shopUrl: tenant.shopUrl ?? "", shopInternalUrl: tenant.shopInternalUrl ?? "" }
   if (!tieneUrlPropia(fila)) return []
   return parsearDestinosExtra(tenant.shopDestinosExtra, [fila.shopUrl, fila.shopInternalUrl]).validos

@@ -6,6 +6,8 @@
  */
 
 import { getMarca } from "./marca";
+import { claveSitio, resolverSitioPorClave, type SitioResuelto } from "./sitio";
+import { leerDestinosExtra } from "./sitio-datos";
 
 const API_URL = "https://api.resend.com/emails";
 
@@ -13,12 +15,35 @@ const API_URL = "https://api.resend.com/emails";
  * Remitente. Resend solo despacha desde un dominio verificado; hasta que
  * `cliente.example` lo esté, `onboarding@resend.dev` funciona pero SOLO
  * entrega al dueño de la cuenta de Resend. Sirve para probar, no para producción.
+ *
+ * Orden: 1) EMAIL_FROM del proyecto; 2) si el sitio tiene marca propia, su remitente con el nombre
+ * de su marca; 3) lo de siempre. Un sitio propio sin remitente ni EMAIL_FROM devuelve null: jamás
+ * sale con la dirección ni el nombre de Central.
  */
-async function remitente(): Promise<string> {
+async function remitente(): Promise<string | null> {
   if (process.env.EMAIL_FROM) return process.env.EMAIL_FROM;
+  const sitio = await sitioPropio();
+  if (sitio) {
+    if (!sitio.remitente) return null;
+    return `${(await getMarca()).nombre} <${sitio.remitente}>`;
+  }
   // Sin EMAIL_FROM: el remitente de prueba de Resend con el nombre de la tienda (no tira: `getMarca`
   // cae a la marca de entorno).
   return `${(await getMarca()).nombre} <onboarding@resend.dev>`;
+}
+
+/** El sitio propio de este despliegue, o null (principal, alias o sin poder leer los extras). */
+async function sitioPropio(): Promise<SitioResuelto | null> {
+  const clave = claveSitio();
+  // Sin sitio en el entorno ni override: es el principal, no hace falta leer los extras.
+  if (clave === "|") return null;
+  try {
+    const sitio = resolverSitioPorClave(clave, await leerDestinosExtra());
+    return sitio.propio ? sitio : null;
+  } catch (err) {
+    console.error(`[email] no se pudieron leer los sitios, uso el remitente de siempre: ${err instanceof Error ? err.message : "desconocido"}`);
+    return null;
+  }
 }
 
 export interface EmailEnviado {
@@ -58,6 +83,13 @@ export async function enviarEmail(opts: OpcionesEmail): Promise<EmailEnviado> {
     return { ok: false, error: "Email no configurado", noConfigurado: true };
   }
 
+  const from = opts.from ?? (await remitente());
+  if (!from) {
+    // Sitio con marca propia sin remitente: no se usa el de Central. El pedido ya está registrado.
+    console.error("[email] el sitio tiene marca propia pero no hay remitente (EMAIL_FROM ni remitente del sitio): no se envió nada");
+    return { ok: false, error: "No se pudo enviar el email" };
+  }
+
   try {
     const res = await fetch(API_URL, {
       method: "POST",
@@ -67,7 +99,7 @@ export async function enviarEmail(opts: OpcionesEmail): Promise<EmailEnviado> {
         ...(opts.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {}),
       },
       body: JSON.stringify({
-        from: opts.from ?? (await remitente()),
+        from,
         to: [opts.to],
         subject: opts.subject,
         html: opts.html,

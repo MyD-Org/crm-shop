@@ -28,7 +28,9 @@ import {
 import { SeccionEditable } from "@/components/home/SeccionEditable";
 import { TituloSeccion } from "@/components/home/TituloSeccion";
 import { InteractiveHero } from "@/components/home/InteractiveHero";
-import { isStudioImage, STUDIO_IMAGE } from "@/components/home/hero-lights";
+import { isStudioImage, STUDIO_IMAGE, STUDIO_IMAGE_NEUTRAL } from "@/components/home/hero-lights";
+import { HeroPiedra } from "@/components/home/HeroPiedra";
+import { isPiedraImage } from "@/components/home/escena-piedra";
 import { IconoWhatsapp } from "@/components/IconoWhatsapp";
 
 /* ── Icons (mismo criterio que el header: SVG inline, sin deps) ─── */
@@ -177,7 +179,7 @@ export function HomeClient({
   // La foto del hero es el LCP de la home: el Hero del DS la pide con
   // `priority` e `imagenNext` la precarga desde el <head> (una sola vez, ya
   // con srcset/sizes del optimizador).
-  const imagenHero = isStudioImage(hero.imagen) ? STUDIO_IMAGE : hero.imagen;
+  const imagenHero = isStudioImage(hero.imagen) && hero.imagen !== STUDIO_IMAGE_NEUTRAL ? STUDIO_IMAGE : hero.imagen;
 
   // Cada sección con su propio contenedor, así se pueden dibujar en cualquier orden
   // ("Ordenar secciones" de la barra de edición, `contenido.orden`). La cinta de marcas va a todo
@@ -199,6 +201,7 @@ export function HomeClient({
       <Contenido className="pt-[clamp(20px,3vw,36px)]">
         <Reveal>
           <SeccionEditable seccion="hero" visibilidad={vis("hero")}>
+            <HeroPiedra enabled={isPiedraImage(hero.imagen)}>
             <InteractiveHero enabled={isStudioImage(hero.imagen)}>
             <Hero
               // Compacto: el hero y las promos de pago entran en la primera pantalla.
@@ -236,6 +239,7 @@ export function HomeClient({
                 .map(({ visibilidad, ...u }) => ({ ...u, visibleOn: aVisibleOn(visibilidad) }))}
             />
             </InteractiveHero>
+            </HeroPiedra>
           </SeccionEditable>
         </Reveal>
       </Contenido>

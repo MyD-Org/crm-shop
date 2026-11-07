@@ -756,10 +756,19 @@ function DatosDelLocal({ item, esAdminPlus }: { item: PedidoItemDto; esAdminPlus
   const falta = !item.ventaSinStock && item.stockActual !== null && item.stockActual < item.qty ? item.qty - item.stockActual : 0
   return (
     <div className="mt-1 text-xs tabular-nums" style={{ color: "var(--ink-faint)" }}>
-      <span style={falta > 0 ? { color: "var(--red)" } : undefined}>
-        Stock {item.stockActual === null ? "—" : fmtCantidad(item.stockActual)}
-        {falta > 0 && ` (falta ${fmtCantidad(falta)})`}
-      </span>
+      {item.stockSucursales.length > 1 ? (
+        // Con varias sucursales, el stock de cada una; el "falta" se calcula con la de la que sale
+        // la línea (stockActual), así que va aparte y en rojo.
+        <span>
+          Stock {item.stockSucursales.map((s) => `${s.nombre} ${fmtCantidad(s.stock)}`).join(" · ")}
+          {falta > 0 && <span style={{ color: "var(--red)" }}>{` (falta ${fmtCantidad(falta)})`}</span>}
+        </span>
+      ) : (
+        <span style={falta > 0 ? { color: "var(--red)" } : undefined}>
+          Stock {item.stockActual === null ? "—" : fmtCantidad(item.stockActual)}
+          {falta > 0 && ` (falta ${fmtCantidad(falta)})`}
+        </span>
+      )}
       {esAdminPlus && (
         <> · Costo {item.costoUnitario == null ? "—" : fmtMoneda(item.costoUnitario)}</>
       )}

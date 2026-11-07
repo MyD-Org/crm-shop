@@ -44,6 +44,17 @@ describe("metadataDeMarca — Central sin cambios", () => {
     });
   });
 
+  it("con verificación de Google (Search Console) emite su meta; con las dos, ambas", () => {
+    expect(metadataDeMarca(MARCA_POR_DEFECTO, { googleToken: "g-tok_1" }).verification).toEqual({ google: "g-tok_1" })
+    expect(
+      metadataDeMarca(MARCA_POR_DEFECTO, { googleToken: "g-tok_1", facebookToken: "abc123" }).verification,
+    ).toEqual({ google: "g-tok_1", other: { "facebook-domain-verification": "abc123" } })
+  });
+
+  it("un token de Google vacío o con espacios no emite nada", () => {
+    expect(metadataDeMarca(MARCA_POR_DEFECTO, { googleToken: "  " })).not.toHaveProperty("verification")
+  });
+
   it("declara sus íconos: el .ico de respaldo, src/app/icon.svg y el de iOS", () => {
     expect(metadataDeMarca(MARCA_POR_DEFECTO, {}).icons).toEqual(ICONOS);
   });

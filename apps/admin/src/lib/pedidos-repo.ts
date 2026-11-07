@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, getTableColumns, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
 import { intentosDelPedido, type IntentoPedidoDto } from "@/lib/pagos-intentos-repo"
 import { getDb, type Db } from "@/db"
-import { alegraContacts, alegraCuentas, campanias, catalogProducts, mediosPagoShop, paymentReceipts, sucursales } from "@/db/schema"
+import { alegraContacts, alegraCuentas, campanias, catalogProducts, catalogStockSucursal, mediosPagoShop, paymentReceipts, sucursales } from "@/db/schema"
 import {
   shopOrderEventos,
   shopOrderPayments,
@@ -245,25 +245,50 @@ export async function listarPedidos(
  * Ítem del pedido más lo que HOY dice el espejo del catálogo (`catalog_products`) de ese mismo
  * producto, por `alegra_item_id`. Los dos son un snapshot de la última sync/webhook, no un dato
  * en vivo, y son `null` si el producto ya no está en el espejo:
- *  - `catalogoStock`: `catalog_products.stock`.
+ *  - `catalogoStock`: el stock de la SUCURSAL del pedido (`catalog_stock_sucursal`) cuando el pedido
+ *    tiene sucursal; sin fila para esa sucursal vale 0 si el ítem es inventariable (misma regla que
+ *    la tabla) y null si no lo es. Sin sucursal (pedidos viejos): `catalog_products.stock`.
  *  - `catalogoCosto`: el "costo unitario" cargado en Alegra (`raw->inventory->unitCost`); el
  *    espejo no lo tiene en columna propia, sale del ítem completo que guarda `raw`.
  */
 export type PedidoItemConCatalogo = PedidoItemRow & {
   catalogoStock: string | null
+  /** Stock por sucursal activa (null = ítem no inventariable o fuera del espejo). */
+  catalogoStockSucursales: { sucursal: string; nombre: string; stock: string }[] | null
   catalogoCosto: string | null
   /** Nombre de la campaña de precios con la que se vendió (null = sin campaña o borrada). */
   campaniaNombre: string | null
 }
 
-async function itemsDe(tenantId: string, orderId: string): Promise<PedidoItemConCatalogo[]> {
+async function itemsDe(tenantId: string, orderId: string, sucursal: string | null): Promise<PedidoItemConCatalogo[]> {
   // Orden determinístico para que el detalle no "baile" entre cargas. `order_items` no tiene
   // fecha ni posición; nombre + id alcanza. El LEFT JOIN al espejo lleva el tenant en el ON:
   // `alegra_id` sólo es único por tenant (índice `cat_tenant_alegra`).
+  // El stock que decide "falta" es el de la sucursal de la que SALE la línea (la de `a_traer_de`
+  // si se trae de otra, si no la del pedido): con dos cuentas, el de la principal no dice nada (un
+  // producto con 0 en una y stock en la otra marcaba "falta" sin faltar). Sin fila para esa
+  // sucursal vale 0 si el ítem es inventariable (misma regla que la tabla) y null si no lo es.
+  const sucursalLinea = sql`coalesce(${shopOrderItems.aTraerDe}, ${sucursal})`
+  const catalogoStock = sql<string | null>`case
+    when ${sucursalLinea} is null then ${catalogProducts.stock}::text
+    when ${catalogStockSucursal.stock} is not null then ${catalogStockSucursal.stock}::text
+    when ${catalogProducts.stock} is null then null
+    else '0' end`
+  // Stock de cada sucursal activa, en el orden del menú: el operador ve de un vistazo dónde hay.
+  const catalogoStockSucursales = sql<{ sucursal: string; nombre: string; stock: string }[] | null>`(
+    select json_agg(json_build_object(
+      'sucursal', s.slug, 'nombre', s.nombre, 'stock', coalesce(css.stock, 0)::text
+    ) order by s.orden, s.slug)
+    from ${sucursales} s
+    left join ${catalogStockSucursal} css
+      on css.tenant_id = s.tenant_id and css.sucursal = s.slug and css.alegra_id = ${shopOrderItems.alegraItemId}
+    where s.tenant_id = ${tenantId} and s.activa and ${catalogProducts.stock} is not null
+  )`
   return getDb()
     .select({
       ...getTableColumns(shopOrderItems),
-      catalogoStock: catalogProducts.stock,
+      catalogoStock,
+      catalogoStockSucursales,
       catalogoCosto: sql<string | null>`${catalogProducts.raw}->'inventory'->>'unitCost'`,
       campaniaNombre: campanias.nombre,
     })
@@ -271,6 +296,14 @@ async function itemsDe(tenantId: string, orderId: string): Promise<PedidoItemCon
     .leftJoin(
       catalogProducts,
       and(eq(catalogProducts.tenantId, tenantId), eq(catalogProducts.alegraId, shopOrderItems.alegraItemId)),
+    )
+    .leftJoin(
+      catalogStockSucursal,
+      and(
+        eq(catalogStockSucursal.tenantId, tenantId),
+        sql`${catalogStockSucursal.sucursal} = ${sucursalLinea}`,
+        eq(catalogStockSucursal.alegraId, shopOrderItems.alegraItemId),
+      ),
     )
     .leftJoin(campanias, and(eq(campanias.tenantId, tenantId), eq(campanias.id, shopOrderItems.campaniaId)))
     .where(eq(shopOrderItems.orderId, orderId))
@@ -547,7 +580,7 @@ async function remitoDe(tenantId: string, orderId: string): Promise<RemitoRow | 
  *  aplica), historial y remito. Se piden en paralelo DESPUÉS de confirmar que el pedido es de ese tenant. */
 async function detalleExtras(tenantId: string, pedido: PedidoRow): Promise<DetalleExtras> {
   const [items, listaPrecios, historial, remito, manuales, pagos, comprobantes, intentos] = await Promise.all([
-    itemsDe(tenantId, pedido.id),
+    itemsDe(tenantId, pedido.id, pedido.sucursal),
     listaParaRevision(tenantId, pedido),
     historialDe(tenantId, pedido.id, pedido.createdAt),
     remitoDe(tenantId, pedido.id),
@@ -1512,6 +1545,8 @@ export interface PedidoItemDto {
   /** Stock actual del producto según el espejo del catálogo (snapshot de la última sync o
    *  webhook, no en vivo). `null` = el producto ya no está en el espejo. */
   stockActual: number | null
+  /** Stock de cada sucursal activa (mismo snapshot). Vacío = no inventariable o fuera del espejo. */
+  stockSucursales: { sucursal: string; nombre: string; stock: number }[]
   /** Slug de la sucursal de la que se TRAE esta línea (no sale de la que despacha el pedido);
    *  null = sale de la sucursal del pedido. */
   aTraerDe: string | null
@@ -1667,7 +1702,7 @@ export function toPedidoDto(row: PedidoRow): PedidoListaDto {
 }
 
 /** Ítem con o sin los datos del espejo: los tests y algún caller viejo arman filas peladas. */
-type ItemParaDto = PedidoItemRow & Partial<Pick<PedidoItemConCatalogo, "catalogoStock" | "catalogoCosto" | "campaniaNombre">>
+type ItemParaDto = PedidoItemRow & Partial<Pick<PedidoItemConCatalogo, "catalogoStock" | "catalogoStockSucursales" | "catalogoCosto" | "campaniaNombre">>
 
 function toItemDto(item: ItemParaDto, incluirCosto: boolean): PedidoItemDto {
   const dto: PedidoItemDto = {
@@ -1683,6 +1718,7 @@ function toItemDto(item: ItemParaDto, incluirCosto: boolean): PedidoItemDto {
     iva: num(item.iva),
     total: num(item.total),
     stockActual: numONull(item.catalogoStock),
+    stockSucursales: (item.catalogoStockSucursales ?? []).map((f) => ({ sucursal: f.sucursal, nombre: f.nombre, stock: num(f.stock) })),
     aTraerDe: item.aTraerDe,
     ventaSinStock: leerVentaSinStock(item.ventaSinStock),
     precioNormal: numONull(item.precioNormal),

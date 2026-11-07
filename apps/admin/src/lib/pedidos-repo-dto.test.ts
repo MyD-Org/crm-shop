@@ -70,6 +70,27 @@ describe("toPedidoDetalleDto: stock y costo del ítem", () => {
     expect(pelado).toMatchObject({ stockActual: null, costoUnitario: null })
   })
 
+  it("trae el stock de cada sucursal como número; sin dato, lista vacía", () => {
+    const [con, sin] = toPedidoDetalleDto(pedido, [
+      item({
+        catalogoStock: "24",
+        catalogoStockSucursales: [
+          { sucursal: "igz", nombre: "Puerto Iguazú", stock: "0" },
+          { sucursal: "mdp", nombre: "Mar del Plata", stock: "24" },
+        ],
+      }),
+      item({ id: "i2", catalogoStockSucursales: null }),
+    ]).items
+    expect(con).toMatchObject({
+      stockActual: 24,
+      stockSucursales: [
+        { sucursal: "igz", nombre: "Puerto Iguazú", stock: 0 },
+        { sucursal: "mdp", nombre: "Mar del Plata", stock: 24 },
+      ],
+    })
+    expect(sin.stockSucursales).toEqual([])
+  })
+
   it("un unitCost no numérico en el raw de Alegra no rompe: queda null", () => {
     const [dto] = toPedidoDetalleDto(pedido, [item({ catalogoStock: "abc", catalogoCosto: "" })], null, [], null, {
       incluirCosto: true,

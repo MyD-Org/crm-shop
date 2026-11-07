@@ -9,6 +9,7 @@ import {
   parseSitio,
   parseTiendaOnline,
   DESCRIPCION_MAX,
+  aplicarEdicionDestinos,
 } from "./tienda-online"
 
 /** Expande `{ "$repetir": [caracter, veces] }` del fixture a la cadena larga. */
@@ -160,5 +161,69 @@ describe("parseTiendaOnline con tema", () => {
 
   it("tema inválido propaga el error", () => {
     expect(parseTiendaOnline({ tema: { base: "x" } }, ctx).ok).toBe(false)
+  })
+})
+
+describe("destinos extra: marca por dominio", () => {
+  const ctx = { hosts: ["media.example"] }
+  const ACTUAL = [
+    { etiqueta: "tienda-b", url: "https://tienda-b.example", urlInterna: "https://interno-b.example" },
+    { etiqueta: "tienda-c", url: "https://tienda-c.example", marca: { nombre: "C" }, remitente: "pedidos@tienda-c.example" },
+  ]
+
+  it("parseTiendaOnline: sin `destinos` no se tocan", () => {
+    const r = parseTiendaOnline({ marca: {} }, ctx)
+    expect(r.ok && r.value.destinos).toBeUndefined()
+  })
+
+  it("parseTiendaOnline: valida marca, tema y remitente de cada sitio", () => {
+    const r = parseTiendaOnline(
+      { destinos: [{ etiqueta: "tienda-b", marca: { base: "generica", nombre: " Tienda  B " }, tema: { base: "calido" }, remitente: "pedidos@tienda-b.example" }] },
+      ctx,
+    )
+    expect(r).toMatchObject({
+      ok: true,
+      value: { destinos: [{ etiqueta: "tienda-b", marca: { base: "generica", nombre: "Tienda B" }, tema: { base: "calido" }, remitente: "pedidos@tienda-b.example" }] },
+    })
+  })
+
+  it("marca inválida: error en usted que nombra el sitio, con el campo del sitio", () => {
+    const r = parseTiendaOnline({ destinos: [{ etiqueta: "tienda-b", marca: { logoUrl: "https://otro.example/x.png" } }] }, ctx)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.campo).toBe("tienda-b.logoUrl")
+      expect(r.error).toMatch(/^Sitio «tienda-b»: /)
+    }
+  })
+
+  it("remitente que no es email → error", () => {
+    const r = parseTiendaOnline({ destinos: [{ etiqueta: "tienda-b", remitente: "pedidos" }] }, ctx)
+    expect(r).toMatchObject({ ok: false, campo: "tienda-b.remitente" })
+  })
+
+  it("aplicarEdicionDestinos edita SOLO marca/tema/remitente del sitio indicado", () => {
+    const r = aplicarEdicionDestinos(ACTUAL, [{ etiqueta: "tienda-b", marca: { nombre: "B" }, tema: { base: "calido" }, remitente: "pedidos@tienda-b.example" }])
+    expect(r).toEqual({
+      ok: true,
+      value: [
+        { ...ACTUAL[0], marca: { nombre: "B" }, tema: { base: "calido" }, remitente: "pedidos@tienda-b.example" },
+        ACTUAL[1],
+      ],
+    })
+  })
+
+  it("marca y tema vacíos o nulos: el sitio vuelve a usar la marca del principal", () => {
+    const r = aplicarEdicionDestinos(ACTUAL, [{ etiqueta: "tienda-c", marca: null, tema: null, remitente: null }])
+    expect(r).toEqual({ ok: true, value: [ACTUAL[0], { etiqueta: "tienda-c", url: "https://tienda-c.example" }] })
+  })
+
+  it("etiqueta que no existe → error en usted, sin cambios", () => {
+    const r = aplicarEdicionDestinos(ACTUAL, [{ etiqueta: "otra", marca: null, tema: null, remitente: null }])
+    expect(r).toMatchObject({ ok: false, campo: "destinos" })
+    if (!r.ok) expect(r.error).toContain("«otra»")
+  })
+
+  it("lo guardado que no es lista → error, no se pisa", () => {
+    expect(aplicarEdicionDestinos({}, [])).toMatchObject({ ok: false })
   })
 })

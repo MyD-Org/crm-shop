@@ -217,4 +217,75 @@ describe("/api/admin/settings/tienda-online", () => {
     const { PUT } = await import("./route")
     expect((await PUT(req("PUT", { tema: { base: "calido" } }))).status).toBe(200)
   })
+
+  describe("marca por dominio (destinos extra)", () => {
+    const EXTRAS = [
+      { etiqueta: "tienda-b", url: "https://tienda-b.example", urlInterna: "https://interno-b.example" },
+      { etiqueta: "tienda-c", url: "https://tienda-c.example", marca: { nombre: "C" } },
+    ]
+    const filaConExtras = () => [{ marca: {}, tema: {}, shopUrl: "https://uno.example", shopInternalUrl: "", destinos: EXTRAS }]
+
+    it("GET devuelve cada sitio extra con su marca, tema y remitente (sin URL interna)", async () => {
+      const { GET } = await import("./route")
+      expect((await (await GET(req("GET"))).json()).destinos).toEqual([])
+      state.fila = filaConExtras()
+      expect((await (await GET(req("GET"))).json()).destinos).toEqual([
+        { etiqueta: "tienda-b", url: "https://tienda-b.example", marca: {}, tema: {}, remitente: "" },
+        { etiqueta: "tienda-c", url: "https://tienda-c.example", marca: { nombre: "C" }, tema: {}, remitente: "" },
+      ])
+    })
+
+    it("PUT sin `destinos` no escribe la columna", async () => {
+      const { PUT } = await import("./route")
+      state.fila = filaConExtras()
+      expect((await PUT(req("PUT", { marca: {} }))).status).toBe(200)
+      expect("shopDestinosExtra" in state.updates[0].set).toBe(false)
+    })
+
+    it("PUT con un sitio: cambia sólo ese sitio, conserva URLs y el otro, y avisa a los Shops", async () => {
+      const { PUT } = await import("./route")
+      state.fila = filaConExtras()
+      const res = await PUT(
+        req("PUT", {
+          marca: {},
+          destinos: [{ etiqueta: "tienda-b", marca: { base: "generica", nombre: "B", logoUrl: "https://media.example/marca/tenant-a/b.svg" }, remitente: "pedidos@tienda-b.example" }],
+        }),
+      )
+      expect(res.status).toBe(200)
+      expect(state.updates[0].set.shopDestinosExtra).toEqual([
+        { ...EXTRAS[0], marca: { base: "generica", nombre: "B", logoUrl: "https://media.example/marca/tenant-a/b.svg" }, remitente: "pedidos@tienda-b.example" },
+        EXTRAS[1],
+      ])
+      expect(state.updates[0].where).toEqual({ eq: "tenant-a" })
+      expect(state.pings).toEqual(["tenant-a"])
+    })
+
+    it("logo de un sitio cargado por OTRO tenant → 400 con el campo del sitio, sin escribir", async () => {
+      const { PUT } = await import("./route")
+      state.fila = filaConExtras()
+      const res = await PUT(req("PUT", { marca: {}, destinos: [{ etiqueta: "tienda-b", marca: { logoUrl: "https://media.example/marca/tenant-b/x.svg" } }] }))
+      expect(res.status).toBe(400)
+      expect((await res.json()).campo).toBe("tienda-b.logoUrl")
+      expect(state.updates).toEqual([])
+    })
+
+    it("paleta de poco contraste en un sitio → 400, sin escribir", async () => {
+      const { PUT } = await import("./route")
+      state.fila = filaConExtras()
+      const colores = { ...COLORES, text: "#f8f8f6" }
+      const res = await PUT(req("PUT", { marca: {}, destinos: [{ etiqueta: "tienda-b", tema: { colores } }] }))
+      expect(res.status).toBe(400)
+      expect((await res.json()).campo).toMatch(/^tienda-b\./)
+      expect(state.updates).toEqual([])
+    })
+
+    it("sitio inexistente → 400 en usted, sin escribir", async () => {
+      const { PUT } = await import("./route")
+      state.fila = filaConExtras()
+      const res = await PUT(req("PUT", { marca: {}, destinos: [{ etiqueta: "otra", marca: { nombre: "X" } }] }))
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toContain("«otra»")
+      expect(state.updates).toEqual([])
+    })
+  })
 })

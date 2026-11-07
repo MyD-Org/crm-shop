@@ -1,5 +1,5 @@
 // Genera los íconos de app de Central (pantalla de inicio de iOS y Android) desde el favicon
-// (src/app/icon.svg), para que sean el mismo dibujo: disco azul marino, anillo de color y pin relleno.
+// (public/images/central-led/icon.svg), para que sean el mismo dibujo: disco azul marino, anillo de color y pin relleno.
 // - icon-192 / icon-512: el ícono tal cual (esquinas transparentes).
 // - apple-icon: fondo azul marino de borde a borde (iOS pinta de negro lo transparente y redondea solo).
 // - icon-maskable-512: fondo azul marino y el ícono al 80 %, dentro de la zona segura que Android recorta.
@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import sharp from "sharp";
 
 const NAVY = "#162133";
-const svg = readFileSync(new URL("../src/app/icon.svg", import.meta.url));
+const svg = readFileSync(new URL("../public/images/central-led/icon.svg", import.meta.url));
 const destino = (f) => new URL(`../public/images/central-led/${f}`, import.meta.url).pathname;
 const icono = (lado) => sharp(svg, { density: 300 }).resize(lado, lado).png().toBuffer();
 const fondo = (lado) => sharp({ create: { width: lado, height: lado, channels: 4, background: NAVY } });

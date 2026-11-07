@@ -143,7 +143,7 @@ export default async function RootLayout({
             envolviendo <html>) todo el árbol pasa a depender del request. */}
         <ClerkProvider localization={esAR} appearance={aparienciaClerk}>
           <Providers>
-           <MarcaProvider marca={{ base: marca.base, nombre: marca.nombre, lema: marca.lema, logoUrl: marca.logoUrl }}>
+           <MarcaProvider marca={{ base: marca.base, recursosCentral: marca.recursosCentral, nombre: marca.nombre, lema: marca.lema, logoUrl: marca.logoUrl }}>
            <PromoProvider datos={datosPromo}>
             {/* Barra superior: anuncio global (contenido administrable) al medio y
                 cuentas de Instagram (`redes` del footer) a la derecha. Dónde se ve el

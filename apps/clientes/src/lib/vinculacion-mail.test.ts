@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { REGISTRO, infracciones } from "@/test/registro-usted";
-import { armarMailCodigoVinculacion, urlLogoMail, urlLogoMarca } from "./vinculacion-mail";
+import { armarMailCodigoVinculacion, urlLogoMarca } from "./vinculacion-mail";
 import { MARCA_POR_DEFECTO, resolverMarca } from "./marca-base";
 
 const mail = armarMailCodigoVinculacion({ codigo: "123456", vigenciaMin: 10, tienda: "Tienda Ejemplo" });
@@ -61,21 +61,17 @@ describe("armarMailCodigoVinculacion", () => {
   });
 });
 
-describe("urlLogoMail", () => {
-  it("arma la URL absoluta desde el sitio, o null sin sitio o con uno inválido", () => {
-    expect(urlLogoMail("https://tienda.cliente.example")).toBe(
+describe("urlLogoMarca", () => {
+  it("Central: el logo de siempre, URL absoluta desde el sitio; null sin sitio o con uno inválido", () => {
+    expect(urlLogoMarca(MARCA_POR_DEFECTO, "https://tienda.cliente.example")).toBe(
       "https://tienda.cliente.example/images/central-led/logo-mail.png",
     );
-    expect(urlLogoMail("")).toBeNull();
-    expect(urlLogoMail("no es una url")).toBeNull();
+    expect(urlLogoMarca(MARCA_POR_DEFECTO, "")).toBeNull();
+    expect(urlLogoMarca(MARCA_POR_DEFECTO, "no es una url")).toBeNull();
   });
-});
 
-describe("urlLogoMarca", () => {
-  it("Central: el logo de siempre, igual que urlLogoMail", () => {
-    expect(urlLogoMarca(MARCA_POR_DEFECTO, "https://tienda.cliente.example")).toBe(
-      urlLogoMail("https://tienda.cliente.example"),
-    );
+  it("otra marca sobre la base de Central (otro nombre): tampoco el logo de Central", () => {
+    expect(urlLogoMarca(resolverMarca({ nombre: "Otra Tienda" }), "https://tienda.cliente.example")).toBeNull();
   });
 
   it("marca propia con logo de mail: ese logo", () => {

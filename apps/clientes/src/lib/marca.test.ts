@@ -10,6 +10,7 @@ import {
   nombreMarcaEntorno,
   partesNombre,
   resolverMarca,
+  resolverMarcaPropia,
   sanearMarca,
 } from "./marca-base";
 
@@ -95,7 +96,7 @@ describe("resolverMarca", () => {
     expect(m.titulo).toBe("Tienda Uno — Tienda Online");
     expect(m.lema).toBe("");
     expect(m.ogTextos).toEqual({ eyebrow: "", bajada: "", lugar: "" });
-    expect(JSON.stringify(m)).not.toMatch(/central|iguaz/i);
+    expect(JSON.stringify(m).replace("recursosCentral", "")).not.toMatch(/central|iguaz/i);
   });
 
   it("genérica sin nombre toma la variable de entorno y, si no, un nombre neutro", () => {
@@ -116,7 +117,7 @@ describe("marcaDeEntorno (la base no responde)", () => {
     const m = marcaDeEntorno("Tienda Uno");
     expect(m.nombre).toBe("Tienda Uno");
     expect(m.logoUrl).toBeUndefined();
-    expect(JSON.stringify(m)).not.toMatch(/central|iguaz/i);
+    expect(JSON.stringify(m).replace("recursosCentral", "")).not.toMatch(/central|iguaz/i);
   });
   it("sin la variable: la de Central", () => {
     expect(marcaDeEntorno(undefined)).toEqual(MARCA_POR_DEFECTO);
@@ -131,16 +132,16 @@ describe("marcaDeEntorno (la base no responde)", () => {
 describe("ayudas de presentación", () => {
   it("partesNombre: Central en dos tintas, el resto entero", () => {
     expect(partesNombre(MARCA_POR_DEFECTO)).toEqual({ principal: "Central", acento: "Led" });
-    expect(partesNombre({ nombre: "Tienda Uno" })).toEqual({ principal: "Tienda Uno" });
+    expect(partesNombre({ nombre: "Tienda Uno", recursosCentral: false })).toEqual({ principal: "Tienda Uno" });
   });
   it("altLogo", () => {
     expect(altLogo(MARCA_POR_DEFECTO)).toBe("Central Led");
-    expect(altLogo({ nombre: "Tienda Uno" })).toBe("Tienda Uno");
+    expect(altLogo({ nombre: "Tienda Uno", recursosCentral: false })).toBe("Tienda Uno");
   });
   it("idTecnico: Central 'CentralLed'; otra marca, su nombre sin símbolos", () => {
     expect(idTecnico(MARCA_POR_DEFECTO)).toBe("CentralLed");
-    expect(idTecnico({ nombre: "Tienda Úno & Cía" })).toBe("TiendaUnoCia");
-    expect(idTecnico({ nombre: "&&" })).toBe("Shop");
+    expect(idTecnico({ nombre: "Tienda Úno & Cía", recursosCentral: false })).toBe("TiendaUnoCia");
+    expect(idTecnico({ nombre: "&&", recursosCentral: false })).toBe("Shop");
   });
   it("descripcionPedido: Central = el texto de siempre; otra marca sin 'Central LED'", () => {
     expect(descripcionPedido("000123", MARCA_POR_DEFECTO)).toBe("Pedido 000123 — Central LED");
@@ -153,5 +154,41 @@ describe("ayudas de presentación", () => {
       hostsDeMarca({ SHOP_MEDIA_HOSTS: "A.example, b.example", R2_SHOP_MEDIA_PUBLIC_URL: "https://c.example/x" }),
     ).toEqual(["a.example", "b.example", "c.example"]);
     expect(hostsDeMarca({})).toEqual([]);
+  });
+});
+
+describe("recursosCentral (derivado una vez)", () => {
+  it("Central con su nombre: true", () => {
+    expect(MARCA_POR_DEFECTO.recursosCentral).toBe(true);
+    expect(resolverMarca({}).recursosCentral).toBe(true);
+    expect(resolverMarca({ base: "central" }).recursosCentral).toBe(true);
+  });
+
+  it("base central pero con otro nombre: false", () => {
+    expect(resolverMarca({ nombre: "Otra Tienda" }).recursosCentral).toBe(false);
+  });
+
+  it("base genérica: false, también el respaldo de entorno", () => {
+    expect(resolverMarca({ base: "generica", nombre: "Central LED" }).recursosCentral).toBe(false);
+    expect(marcaDeEntorno("Tienda Uno").recursosCentral).toBe(false);
+    expect(marcaDeEntorno(undefined).recursosCentral).toBe(true);
+  });
+});
+
+describe("resolverMarcaPropia (sitio con marca propia)", () => {
+  it("marca parcial o inválida: genérica, nunca Central", () => {
+    for (const raw of [{ logoUrl: "https://x.example/l.svg" }, { base: "central" }, { nombre: "Central LED" }, "basura", null]) {
+      const m = resolverMarcaPropia(raw, "Tienda B", hosts);
+      expect(m.base).toBe("generica");
+      expect(m.recursosCentral).toBe(false);
+      expect(m.lema).toBe("");
+      expect(m.ogTextos).toEqual({ eyebrow: "", bajada: "", lugar: "" });
+    }
+  });
+
+  it("toma lo cargado y el nombre de partida del entorno", () => {
+    expect(resolverMarcaPropia({ nombre: "Tienda B" }).nombre).toBe("Tienda B");
+    expect(resolverMarcaPropia({ descripcion: "Algo" }, "Tienda B").nombre).toBe("Tienda B");
+    expect(JSON.stringify(resolverMarcaPropia({}, "Tienda B")).replace("recursosCentral", "")).not.toMatch(/central|iguaz/i);
   });
 });

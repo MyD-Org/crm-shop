@@ -24,6 +24,12 @@ export interface MarcaOgTextos {
 /** Marca ya resuelta: todos los textos presentes (vacío = no mostrar). */
 export interface Marca {
   base: MarcaBase;
+  /**
+   * true sólo para la tienda de Central con su nombre: es la ÚNICA que puede mostrar los recursos
+   * de Central (logos, íconos, imagen OG, foto del hero). Se deriva una vez, al resolver la marca;
+   * ningún otro código compara el nombre.
+   */
+  recursosCentral: boolean;
   /** Visible: header, mails, descripción de pago, gate. */
   nombre: string;
   /** `<title>` y nombre del manifest. */
@@ -59,6 +65,7 @@ export interface ShopMarcaCruda {
 /** Los textos de Central Led de siempre. NO editar sin querer cambiar la tienda de Central. */
 export const MARCA_POR_DEFECTO: Marca = {
   base: "central",
+  recursosCentral: true,
   nombre: "Central LED",
   titulo: "Central LED — Tienda Online",
   descripcion:
@@ -83,25 +90,24 @@ export const NOMBRE_GENERICO = "Tienda online";
 export const ALT_LOGO_CENTRAL = "Central Led";
 
 /**
- * Íconos de Central (los genera `npm run web` del kit de marca). `svg`: `src/app/icon.svg`
- * (convención de Next); `ico`: `public/favicon.ico`, respaldo para los navegadores sin favicon SVG
- * (Safari); los PNG, en public/images/central-led/. `apple`: el de la pantalla de inicio de iOS
+ * Íconos de Central (los genera `npm run web` del kit de marca), todos en public/images/central-led/:
+ * ni `app/icon.svg` ni `public/favicon.ico` (convenciones de archivo que servirían a cualquier marca).
+ * `/favicon.ico` lo resuelve `app/favicon.ico/route.ts` según la marca. `ico`: respaldo para los
+ * navegadores sin favicon SVG (Safari). `apple`: el de la pantalla de inicio de iOS
  * (cuadrado lleno, iOS redondea). `maskable`: fondo lleno y el badge dentro de la zona segura de
  * Android.
  */
 export const ICONOS_CENTRAL = {
-  svg: "/icon.svg",
-  ico: "/favicon.ico",
+  svg: "/images/central-led/icon.svg",
+  ico: "/images/central-led/favicon.ico",
   apple: "/images/central-led/apple-icon.png",
   pwa192: "/images/central-led/icon-192.png",
   pwa512: "/images/central-led/icon-512.png",
   maskable: "/images/central-led/icon-maskable-512.png",
 } as const;
 
-/** La tienda de Central con su nombre (no otra marca sobre la base de Central): lleva sus logos. */
-export function esMarcaCentral(marca: Pick<Marca, "base" | "nombre">): boolean {
-  return marca.base === "central" && marca.nombre === MARCA_POR_DEFECTO.nombre;
-}
+/** Ícono neutro (círculo liso, sin marca): lo que declara una marca que no trae el suyo. */
+export const ICONO_NEUTRO = "/images/generica/icon.svg";
 
 export const NOMBRE_MAX = 60;
 export const TITULO_MAX = 80;
@@ -206,6 +212,7 @@ export function resolverMarca(
     const cambiaNombre = nombre !== MARCA_POR_DEFECTO.nombre;
     return {
       ...MARCA_POR_DEFECTO,
+      recursosCentral: !cambiaNombre,
       nombre,
       titulo: m.titulo ?? (cambiaNombre ? `${nombre} — Tienda Online` : MARCA_POR_DEFECTO.titulo),
       descripcion: m.descripcion ?? MARCA_POR_DEFECTO.descripcion,
@@ -223,6 +230,7 @@ export function resolverMarca(
   const descripcion = m.descripcion ?? `Tienda online de ${nombre}.`;
   return {
     base: "generica",
+    recursosCentral: false,
     nombre,
     titulo: m.titulo ?? `${nombre} — Tienda Online`,
     descripcion,
@@ -235,6 +243,20 @@ export function resolverMarca(
     ...(m.ogImagenUrl ? { ogImagenUrl: m.ogImagenUrl } : {}),
     ...(m.emailContacto ? { emailContacto: m.emailContacto } : {}),
   };
+}
+
+/**
+ * Marca de un sitio con marca propia (`shop_destinos_extra[i].marca`). Siempre sobre la base
+ * "genérica", aunque lo cargado sea parcial o inválido: un sitio propio nunca hereda textos ni
+ * recursos de Central. Lo que falte sale de los valores neutros (el nombre, de `envNombre`).
+ */
+export function resolverMarcaPropia(
+  raw: unknown,
+  envNombre?: string,
+  hosts: readonly string[] = [],
+): Marca {
+  const cruda = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  return resolverMarca({ ...cruda, base: "generica" }, envNombre, hosts);
 }
 
 /**
@@ -254,21 +276,30 @@ export function nombreMarcaEntorno(envNombre = process.env.NEXT_PUBLIC_SHOP_MARC
 }
 
 /** El nombre en una o dos tintas, para `brandName`/`brandAccent` del DS. */
-export function partesNombre(marca: Pick<Marca, "nombre">): { principal: string; acento?: string } {
-  if (marca.nombre === MARCA_POR_DEFECTO.nombre) {
+export function partesNombre(marca: Pick<Marca, "nombre" | "recursosCentral">): { principal: string; acento?: string } {
+  if (marca.recursosCentral) {
     return { principal: PARTES_NOMBRE_CENTRAL[0], acento: PARTES_NOMBRE_CENTRAL[1] };
   }
   return { principal: marca.nombre };
 }
 
+/**
+ * Qué logo dibuja el header: el cargado por la marca, el SVG de código de Central (sólo
+ * `recursosCentral`) o ninguno (va el nombre en texto).
+ */
+export function fuenteLogo(marca: Pick<Marca, "logoUrl" | "recursosCentral">): "propio" | "central" | "texto" {
+  if (marca.logoUrl) return "propio";
+  return marca.recursosCentral ? "central" : "texto";
+}
+
 /** Texto alternativo del logo de código (SVG de Central) o nombre de la tienda. */
-export function altLogo(marca: Pick<Marca, "nombre">): string {
-  return marca.nombre === MARCA_POR_DEFECTO.nombre ? ALT_LOGO_CENTRAL : marca.nombre;
+export function altLogo(marca: Pick<Marca, "nombre" | "recursosCentral">): string {
+  return marca.recursosCentral ? ALT_LOGO_CENTRAL : marca.nombre;
 }
 
 /** Nombre sin espacios ni símbolos, para identificadores técnicos (User-Agent). Central: "CentralLed". */
-export function idTecnico(marca: Pick<Marca, "nombre">): string {
-  if (marca.nombre === MARCA_POR_DEFECTO.nombre) return PARTES_NOMBRE_CENTRAL.join("");
+export function idTecnico(marca: Pick<Marca, "nombre" | "recursosCentral">): string {
+  if (marca.recursosCentral) return PARTES_NOMBRE_CENTRAL.join("");
   return marca.nombre.normalize("NFD").replace(/[^A-Za-z0-9]/g, "") || "Shop";
 }
 

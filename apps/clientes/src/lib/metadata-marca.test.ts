@@ -3,12 +3,12 @@ import { MARCA_POR_DEFECTO, resolverMarca } from "./marca-base";
 
 const ICONOS = {
   icon: [
-    { url: "/favicon.ico", sizes: "48x48" },
-    { url: "/icon.svg", type: "image/svg+xml" },
+    { url: "/images/central-led/favicon.ico", sizes: "48x48" },
+    { url: "/images/central-led/icon.svg", type: "image/svg+xml" },
   ],
   apple: "/images/central-led/apple-icon.png",
 };
-import { metadataDeMarca } from "./metadata-marca";
+import { destinoFavicon, metadataDeMarca } from "./metadata-marca";
 
 /** Lo de Open Graph del sitio; la imagen la agrega src/app/opengraph-image.tsx. */
 const OG_CENTRAL = { type: "website", siteName: "Central LED", locale: "es_AR" };
@@ -55,12 +55,14 @@ describe("metadataDeMarca — Central sin cambios", () => {
     expect(metadataDeMarca(MARCA_POR_DEFECTO, { googleToken: "  " })).not.toHaveProperty("verification")
   });
 
-  it("declara sus íconos: el .ico de respaldo, src/app/icon.svg y el de iOS", () => {
+  it("declara sus íconos: el .ico de respaldo, el SVG y el de iOS (todos en public/images/central-led/)", () => {
     expect(metadataDeMarca(MARCA_POR_DEFECTO, {}).icons).toEqual(ICONOS);
   });
 
-  it("otra marca sobre la base de Central no hereda sus íconos", () => {
-    expect(metadataDeMarca(resolverMarca({ nombre: "Otra Tienda" }), {})).not.toHaveProperty("icons");
+  it("otra marca sobre la base de Central no hereda sus íconos: declara el neutro", () => {
+    const icons = metadataDeMarca(resolverMarca({ nombre: "Otra Tienda" }), {}).icons;
+    expect(icons).toEqual({ icon: [{ url: "/images/generica/icon.svg", type: "image/svg+xml" }] });
+    expect(JSON.stringify(icons)).not.toMatch(/central/i);
   });
 
   it("la marca vacía resuelta de la base da lo mismo que la constante", () => {
@@ -74,7 +76,7 @@ describe("metadataDeMarca — tienda con marca propia", () => {
     const meta = metadataDeMarca(m, {});
     expect(meta.title).toBe("Tienda Uno — Tienda Online");
     expect(JSON.stringify(meta)).not.toMatch(/central|iguaz/i);
-    expect(meta).not.toHaveProperty("icons");
+    expect(meta.icons).toEqual({ icon: [{ url: "/images/generica/icon.svg", type: "image/svg+xml" }] });
   });
 
   it("con favicon propio lo declara", () => {
@@ -82,5 +84,21 @@ describe("metadataDeMarca — tienda con marca propia", () => {
       "media.example",
     ]);
     expect(metadataDeMarca(m, {}).icons).toEqual({ icon: "https://media.example/f.png" });
+  });
+});
+
+describe("destinoFavicon (/favicon.ico)", () => {
+  it("Central: su .ico", () => {
+    expect(destinoFavicon(MARCA_POR_DEFECTO)).toBe("/images/central-led/favicon.ico");
+  });
+
+  it("con favicon propio: ese", () => {
+    const m = resolverMarca({ base: "generica", nombre: "T", faviconUrl: "https://media.example/f.png" }, undefined, ["media.example"]);
+    expect(destinoFavicon(m)).toBe("https://media.example/f.png");
+  });
+
+  it("otra marca sin favicon: el neutro, nunca el de Central", () => {
+    expect(destinoFavicon(resolverMarca({ base: "generica", nombre: "T" }))).toBe("/images/generica/icon.svg");
+    expect(destinoFavicon(resolverMarca({ nombre: "Otra Tienda" }))).toBe("/images/generica/icon.svg");
   });
 });

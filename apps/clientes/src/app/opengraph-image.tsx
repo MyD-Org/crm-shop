@@ -5,7 +5,7 @@ import { ImageResponse } from "next/og";
 import sharp from "sharp";
 import { sora, type Fuente } from "@/lib/fuente-sora";
 import { getMarca } from "@/lib/marca";
-import { MARCA_POR_DEFECTO, type Marca } from "@/lib/marca-base";
+import type { Marca } from "@/lib/marca-base";
 import { coloresPwaDeTema, type TemaTenant } from "@/lib/tema-tenant";
 import { getTemaTenant } from "@/lib/tema-tenant-datos";
 
@@ -28,8 +28,8 @@ import { getTemaTenant } from "@/lib/tema-tenant-datos";
  * Marca propia (`tenants.shop_marca`): textos, nombre e imagen salen de `getMarca()`. La de Central
  * (base "central" con su nombre) se dibuja EXACTAMENTE como antes, con la foto del hero; cualquier
  * otra, sobre fondo liso con su nombre, sus textos y, si la cargó, su imagen (PNG/JPG: Satori no
- * lee SVG ni WebP). OJO: `alt` debe ser un literal (Next lo lee en el build), así que sigue siendo
- * el de Central y no se puede derivar de la marca.
+ * lee SVG ni WebP). OJO: `alt` debe ser un literal (Next lo lee en el build) y sale en el HTML de
+ * todas las marcas: por eso es neutro, sin el nombre de ninguna.
  *
  * Sale en JPG, no en PNG: WhatsApp no muestra la vista previa cuando la imagen pasa ~300 KB, y la
  * de Central (foto del hero dentro) pesaba 301 KB en PNG; en JPG calidad 85, unos 110 KB. Satori
@@ -37,7 +37,7 @@ import { getTemaTenant } from "@/lib/tema-tenant-datos";
  * marca y tema (`jpegDe`): sin eso cada pedido lo volvía a dibujar (~2 s), y WhatsApp tampoco
  * espera mucho a la imagen.
  */
-export const alt = "Central Led — Iluminación y electricidad";
+export const alt = "Vista previa de la tienda";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/jpeg";
 
@@ -76,11 +76,6 @@ async function recursos(conFoto: boolean, nombre: string, textos: string) {
   };
 }
 
-/** La imagen de Central: la foto del hero a la derecha y su logo. */
-function esCentral(marca: Marca): boolean {
-  return marca.base === "central" && marca.nombre === MARCA_POR_DEFECTO.nombre;
-}
-
 /** Imagen propia de la marca: Satori sólo lee PNG y JPG. */
 function imagenPropia(marca: Marca): string | null {
   if (!marca.ogImagenUrl) return null;
@@ -100,7 +95,8 @@ async function jpegDe(marca: Marca, tema: TemaTenant): Promise<Uint8Array<ArrayB
 }
 
 async function dibujo(marca: Marca, tema: TemaTenant): Promise<ImageResponse> {
-  const central = esCentral(marca);
+  // Sólo la tienda de Central lleva su foto del hero y su logo; ninguna otra marca los toca.
+  const central = marca.recursosCentral;
   // Paleta propia del tenant (`tenants.shop_tema`): fondo, tinta y acento de su tema. Sin ella, los
   // de Central de siempre.
   const propiaPaleta = coloresPwaDeTema(tema);

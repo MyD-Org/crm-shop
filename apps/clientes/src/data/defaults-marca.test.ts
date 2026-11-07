@@ -52,7 +52,7 @@ describe("home genérica", () => {
 
   it("sin referencias a Central, a Puerto Iguazú ni a las marcas de Central", () => {
     const json = JSON.stringify(home);
-    expect(json).not.toMatch(/central|iguaz|\/images\/marcas|central-led/i);
+    expect(json).not.toMatch(/central|iguaz|\/images\/marcas|central-led|studio-|hero-lights/i);
   });
 
   it("combinarContenidoHome parte de los defaults genéricos; lo guardado pisa sección por sección", () => {

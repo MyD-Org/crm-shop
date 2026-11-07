@@ -5,7 +5,7 @@ import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { shopMediaConfig, basePublicaFotos } from "@/lib/shop-media"
 import { pingShopRevalidarMarca } from "@/lib/shop-revalidar"
 import { validarContrasteTema } from "@/lib/tema-contraste"
-import { parsearDestinosExtra } from "@/lib/shop-destino"
+import { destinosParaPantalla } from "@/lib/shop-destino"
 import { aplicarEdicionDestinos, hostsMedia, parseTiendaOnline, verificarPrefijoMarca, type Parse } from "@/lib/tienda-online"
 
 // GET/PUT /api/admin/settings/tienda-online — marca de la tienda (`tenants.shop_marca`) y
@@ -16,17 +16,6 @@ import { aplicarEdicionDestinos, hostsMedia, parseTiendaOnline, verificarPrefijo
 // (`shop_destinos_extra`); sólo se editan esas claves, nunca las URLs de los sitios.
 
 const NO_STORE = { "Cache-Control": "private, no-store" }
-
-/** Sitios extra válidos como los ve el formulario (sin la URL interna). */
-function destinosParaPantalla(raw: unknown, shopUrl?: string, shopInternalUrl?: string) {
-  return parsearDestinosExtra(raw, [shopUrl, shopInternalUrl]).validos.map((d) => ({
-    etiqueta: d.etiqueta,
-    url: d.url,
-    marca: d.marca ?? {},
-    tema: d.tema ?? {},
-    remitente: d.remitente ?? "",
-  }))
-}
 
 export async function GET(req: Request) {
   const guard = await requireAdminPlus(req)

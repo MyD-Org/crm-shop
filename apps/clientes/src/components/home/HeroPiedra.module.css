@@ -29,7 +29,9 @@
 .art { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -15; }
 .hit { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; touch-action: manipulation; }
 .laHit { fill: transparent; cursor: pointer; pointer-events: all; }
-.laHit:focus-visible { outline: 2px solid #FFB547; outline-offset: 3px; }
+.laHit:focus { outline: none; }
+/* El navegador dibuja un recuadro azul al hacer clic: el foco se marca solo con teclado, sobre el contorno de la piedra. */
+.laHit:focus-visible { outline: none; stroke: #FFB547; stroke-width: 6; stroke-dasharray: 18 12; }
 
 .laOn { opacity: 0; }
 .halo { opacity: 0; }

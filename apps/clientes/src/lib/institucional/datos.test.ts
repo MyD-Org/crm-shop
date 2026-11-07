@@ -33,7 +33,7 @@ describe("getPaginaInstitucional", () => {
     leerMock.mockResolvedValue(filas({}));
     await getPaginaInstitucional("garantia");
     expect(leerMock).toHaveBeenCalledTimes(1);
-    expect(leerMock).toHaveBeenCalledWith(PAGINAS_INSTITUCIONALES.map((p) => p.key));
+    expect(leerMock).toHaveBeenCalledWith(PAGINAS_INSTITUCIONALES.map((p) => p.key), "|");
     expect(cacheTagMock).toHaveBeenCalledWith("home");
   });
 

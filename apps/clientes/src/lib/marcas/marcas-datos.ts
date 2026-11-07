@@ -1,6 +1,7 @@
 import { cacheLife, cacheTag } from "next/cache";
 import { TAG_HOME } from "@/lib/cache-tags";
 import { leerSeccionesHomePorPrefijo } from "@/lib/home-guardar";
+import { claveSitio } from "@/lib/sitio";
 import { claveDeMarca, ordenarPaginas, PREFIJO_CLAVE_MARCA, sanearPaginaMarca, type PaginaMarca } from "./pagina-marca";
 
 /**
@@ -15,11 +16,15 @@ import { claveDeMarca, ordenarPaginas, PREFIJO_CLAVE_MARCA, sanearPaginaMarca, t
  * única garantía de unicidad.
  */
 export async function getPaginasMarca(): Promise<PaginaMarca[]> {
+  return paginasMarcaDelSitio(claveSitio());
+}
+
+async function paginasMarcaDelSitio(sitio: string): Promise<PaginaMarca[]> {
   "use cache";
   cacheTag(TAG_HOME);
   console.info("[cache] paginas de marca miss");
   try {
-    const filas = await leerSeccionesHomePorPrefijo(PREFIJO_CLAVE_MARCA);
+    const filas = await leerSeccionesHomePorPrefijo(PREFIJO_CLAVE_MARCA, sitio);
     cacheLife("home");
     const paginas: PaginaMarca[] = [];
     for (const [clave, payload] of filas) {

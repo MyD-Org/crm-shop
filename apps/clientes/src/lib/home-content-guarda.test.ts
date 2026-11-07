@@ -4,11 +4,11 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Guarda de fuente: `homeContent` (la tabla compartida entre tiendas) solo se
- * toca desde los dos módulos que filtran por `shopTenantId()`. Otro archivo
+ * toca desde `home-guardar.ts`, que filtra por `shopTenantId()` y por el espacio de claves del sitio. Otro archivo
  * que la importe podría leer o escribir sin tenant.
  */
 const SRC = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
-const PERMITIDOS = new Set(["/lib/home-guardar.ts", "/lib/home-datos.ts", "/db/schema.ts"]);
+const PERMITIDOS = new Set(["/lib/home-guardar.ts", "/db/schema.ts"]);
 
 function archivos(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {

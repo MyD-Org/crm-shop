@@ -52,12 +52,18 @@ export const STUDIO_IMAGE = "/images/central-led/studio-bell-bamboo-v3.webp";
 export const STUDIO_IMAGE_MOBILE = STUDIO_IMAGE;
 /** The under-shelf strip, in source px. */
 export const SHELF_STRIP = { x: 786, y: 884, width: 750 } as const;
+/**
+ * Misma foto del estudio con una ruta neutra (sin marca): es la que ofrece el editor a cualquier
+ * sitio. Se renderiza tal cual, sin pasar por STUDIO_IMAGE.
+ */
+export const STUDIO_IMAGE_NEUTRAL = "/images/estudio/studio.webp";
 /** Studio photos the home may have stored; any of them renders as STUDIO_IMAGE. */
 const STUDIO_IMAGES: ReadonlySet<string> = new Set([
   "/images/hero-neutral.webp",
   "/images/central-led/studio-off.webp",
   "/images/central-led/studio-bell-bamboo-v2.webp",
   STUDIO_IMAGE,
+  STUDIO_IMAGE_NEUTRAL,
 ]);
 export function isStudioImage(src: string) {
   return STUDIO_IMAGES.has(src);

@@ -1,4 +1,14 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { BarraSuperior } from "@/components/BarraSuperior";
+import { DEFAULTS_FOOTER, defaultsFooterDe } from "@/data/footer";
+import { DEFAULTS_LEGAL, defaultsHomeDe } from "@/data/home-defaults";
+import { base } from "./institucional/base";
+import { columnasFooter } from "./legales/footer";
+import { bloquesArrepentimiento } from "./legales/arrepentimiento";
+import { bloquesPrivacidad } from "./legales/privacidad";
+import { bloquesTerminos } from "./legales/terminos";
 import { avatarChat } from "./chat-ia-textos";
 import { manifestDeMarca } from "./manifest-marca";
 import { MARCA_POR_DEFECTO, altLogo, fuenteLogo, idTecnico, partesNombre, resolverMarca, resolverMarcaPropia, type Marca } from "./marca-base";
@@ -65,7 +75,46 @@ describe("sin fugas de Central en el sitio con marca propia", () => {
   });
 });
 
+describe("sin fugas de Central en el contenido del sitio con marca propia (home, footer, legales)", () => {
+  const b = marcaDe("https://tienda-b.example");
+  const footer = defaultsFooterDe(b);
+  const salida = JSON.stringify({
+    home: defaultsHomeDe(b),
+    footer,
+    columnas: columnasFooter({ arrepentimiento: true, footer, paginas: [] }),
+    barra: renderToStaticMarkup(createElement(BarraSuperior, { anuncio: undefined, visibilidad: "siempre", redes: footer.redes, whatsapp: footer.whatsapp })),
+    legales: [
+      bloquesTerminos(DEFAULTS_LEGAL, { cuotas: false }),
+      bloquesPrivacidad(DEFAULTS_LEGAL),
+      bloquesArrepentimiento(DEFAULTS_LEGAL),
+      base("nosotros", b, DEFAULTS_LEGAL, footer.whatsapp),
+    ],
+  });
+
+  it("no nombra a Central ni usa sus rutas", () => {
+    expect(salida).not.toMatch(/central|centralled|iguaz/i);
+    expect(salida).not.toContain("/images/central-led");
+  });
+
+  it("el footer es mínimo: sin redes, locales, WhatsApp ni enlaces, y la barra sin dirección", () => {
+    expect(footer.redes).toEqual([]);
+    expect(footer.locales).toEqual([]);
+    expect(footer.enlaces).toEqual([]);
+    expect(footer.whatsapp).toBe("");
+    expect(footer.barraDerecha).toBe("");
+    expect(DEFAULTS_LEGAL).toEqual({});
+  });
+
+  it("sin Instagram propio la barra superior no existe", () => {
+    expect(renderToStaticMarkup(createElement(BarraSuperior, { anuncio: undefined, visibilidad: "siempre", redes: footer.redes, whatsapp: "" }))).toBe("");
+  });
+});
+
 describe("el sitio principal queda igual que hoy", () => {
+  it("el footer de Central es DEFAULTS_FOOTER, la misma referencia", () => {
+    expect(defaultsFooterDe(MARCA_POR_DEFECTO)).toBe(DEFAULTS_FOOTER);
+  });
+
   it("cliente.example y un sitio desconocido usan la marca y los recursos de Central", () => {
     for (const url of ["https://cliente.example", "https://otro.example", undefined]) {
       const m = marcaDe(url as string);

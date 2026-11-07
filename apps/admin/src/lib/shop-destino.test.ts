@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
+  destinosParaPantalla,
   MAX_DESTINOS_EXTRA,
   nombreSecretoExtra,
   parsearDestinosExtra,
@@ -370,5 +371,19 @@ describe("urlsPublicasShop / urlPublicaShopParaPedido", () => {
 
   it("sin ninguna URL → null", () => {
     expect(urlPublicaShopParaPedido({ id: "x" }, "https://tienda-b.example", { SHOP_TENANT_LEGACY: "otro" })).toBeNull()
+  })
+})
+
+describe("destinosParaPantalla", () => {
+  it("devuelve los sitios válidos con marca, tema y remitente vacíos por defecto", () => {
+    const raw = [{ etiqueta: "tiendab", url: "https://tienda-b.example" }]
+    expect(destinosParaPantalla(raw, "https://cliente.example", null)).toEqual([
+      { etiqueta: "tiendab", url: "https://tienda-b.example", marca: {}, tema: {}, remitente: "" },
+    ])
+  })
+
+  it("descarta un sitio con la misma dirección que el principal", () => {
+    const raw = [{ etiqueta: "tiendab", url: "https://cliente.example" }]
+    expect(destinosParaPantalla(raw, "https://cliente.example", null)).toEqual([])
   })
 })

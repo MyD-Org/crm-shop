@@ -307,3 +307,14 @@ export function urlPublicaShopParaPedido(
   const extra = extrasPublicos(tenant).find((e) => e.url === origen)
   return extra ? extra.url : principal
 }
+
+/** Sitios extra válidos como los ve el formulario de Tienda online (sin la URL interna). */
+export function destinosParaPantalla(raw: unknown, shopUrl?: string | null, shopInternalUrl?: string | null) {
+  return parsearDestinosExtra(raw, [shopUrl, shopInternalUrl]).validos.map((d) => ({
+    etiqueta: d.etiqueta,
+    url: d.url,
+    marca: d.marca ?? {},
+    tema: d.tema ?? {},
+    remitente: d.remitente ?? "",
+  }))
+}

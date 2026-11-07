@@ -5,7 +5,7 @@ const fetchMock = vi.fn()
 
 // La fila de `tenants` (shop_url / shop_internal_url) se simula por tenant. Por defecto vacía:
 // el tenant cae al par histórico de envs, que es lo que cubren los casos originales.
-const filas = new Map<string, { shopUrl: string; shopInternalUrl: string }>()
+const filas = new Map<string, { shopUrl: string; shopInternalUrl: string; shopDestinosExtra?: unknown }>()
 vi.mock("@/lib/shop-destino-db", () => ({
   leerFilaShop: async (tenantId: string) => filas.get(tenantId) ?? { shopUrl: "", shopInternalUrl: "" },
 }))
@@ -275,5 +275,125 @@ describe("pingShopRevalidarMarca", () => {
   it("el Shop aún sin la ruta (404) → no propagado", async () => {
     fetchMock.mockResolvedValue(new Response("nf", { status: 404 }))
     await expect(pingShopRevalidarMarca("tenant-a")).resolves.toEqual({ propagado: false })
+  })
+})
+
+describe("fan-out a varios destinos", () => {
+  const ok = () => new Response(JSON.stringify({ ok: true }), { status: 200 })
+  const ctx = {
+    shopUrl: "https://a.example",
+    shopInternalUrl: "https://interno-a.example",
+    shopDestinosExtra: [{ etiqueta: "tienda-b", url: "https://tienda-b.example", urlInterna: "https://interno-b.example" }],
+  }
+
+  beforeEach(() => {
+    filas.set("tenant-a", ctx)
+    vi.stubEnv("SHOP_CRM_SECRET_TENANT_A", "secreto-a")
+    vi.stubEnv("SHOP_CRM_SECRET_TENANT_A__TIENDA_B", "secreto-b")
+  })
+
+  const bearerPorUrl = () =>
+    new Map((fetchMock.mock.calls as [string, RequestInit][]).map(([u, i]) => [u, new Headers(i.headers).get("authorization")]))
+
+  it("dos destinos OK: dos fetch, propagado y sin `fallidos`", async () => {
+    fetchMock.mockImplementation(async () => ok())
+    const r = await pingShopRevalidarCatalogo("tenant-a")
+    expect(r).toEqual({ propagado: true })
+    expect("fallidos" in r).toBe(false)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("cada fetch lleva SOLO el bearer de su destino", async () => {
+    fetchMock.mockImplementation(async () => ok())
+    await pingShopRevalidarSucursales("tenant-a")
+    expect(bearerPorUrl()).toEqual(
+      new Map([
+        ["https://interno-a.example/api/internal/sucursales/revalidar", "Bearer secreto-a"],
+        ["https://interno-b.example/api/internal/sucursales/revalidar", "Bearer secreto-b"],
+      ]),
+    )
+  })
+
+  it("uno responde 5xx: el otro igual se avisa; propagado false y fallidos con la etiqueta", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url.startsWith("https://interno-b.example") ? new Response("bad", { status: 502 }) : ok(),
+    )
+    await expect(pingShopRevalidarCatalogo("tenant-a")).resolves.toEqual({ propagado: false, fallidos: ["tienda-b"] })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("el principal cae y el extra responde: fallidos lleva 'principal'", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url.startsWith("https://interno-a.example") ? Promise.reject(new TypeError("fetch failed")) : ok(),
+    )
+    await expect(pingShopRevalidarMarca("tenant-a")).resolves.toEqual({ propagado: false, fallidos: ["principal"] })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("un destino que no contesta en 5 s no frena al otro y el total no suma los timeouts", async () => {
+    vi.useFakeTimers()
+    fetchMock.mockImplementation(
+      (url: string, init: RequestInit) =>
+        url.startsWith("https://interno-b.example")
+          ? new Promise((_, reject) => {
+              init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")))
+            })
+          : Promise.resolve(ok()),
+    )
+    const p = pingShopRevalidarCatalogo("tenant-a")
+    await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS)
+    await expect(p).resolves.toEqual({ propagado: false, fallidos: ["tienda-b"] })
+  })
+
+  it("200 con HTML en un destino cuenta como fallido de ese destino", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url.startsWith("https://interno-b.example") ? new Response("<html>Próximamente</html>", { status: 200 }) : ok(),
+    )
+    await expect(pingShopRevalidarCatalogo("tenant-a")).resolves.toEqual({ propagado: false, fallidos: ["tienda-b"] })
+  })
+
+  it("extra sin secreto: un solo fetch (al principal), propagado false y fallidos con la etiqueta", async () => {
+    vi.stubEnv("SHOP_CRM_SECRET_TENANT_A__TIENDA_B", "")
+    fetchMock.mockImplementation(async () => ok())
+    await expect(pingShopRevalidarCatalogo("tenant-a")).resolves.toEqual({ propagado: false, fallidos: ["tienda-b"] })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toBe("https://interno-a.example/api/internal/catalogo/revalidar")
+    expect(new Headers((fetchMock.mock.calls[0] as [string, RequestInit])[1].headers).get("authorization")).toBe("Bearer secreto-a")
+  })
+
+  it("sin extras: exactamente un fetch y el mismo resultado de siempre", async () => {
+    filas.set("tenant-a", { shopUrl: ctx.shopUrl, shopInternalUrl: ctx.shopInternalUrl, shopDestinosExtra: [] })
+    fetchMock.mockImplementation(async () => ok())
+    await expect(pingShopRevalidarCatalogo("tenant-a")).resolves.toEqual({ propagado: true })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("sin destinos: propagado false y ningún fetch", async () => {
+    vi.stubEnv("SHOP_CRM_SECRET_TENANT_A", "")
+    vi.stubEnv("SHOP_CRM_SECRET_TENANT_A__TIENDA_B", "")
+    await expect(pingShopRevalidarCatalogo("tenant-a")).resolves.toEqual({ propagado: false })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("los logs llevan la etiqueta y nunca la URL ni el secreto", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    fetchMock.mockImplementation(async (url: string) =>
+      url.startsWith("https://interno-b.example") ? new Response("bad", { status: 502 }) : ok(),
+    )
+    await pingShopRevalidarCatalogo("tenant-a")
+    const log = JSON.stringify(warn.mock.calls)
+    expect(log).toContain("[catalogo]")
+    expect(log).toContain("tienda-b")
+    expect(log).not.toContain("interno-b.example")
+    expect(log).not.toContain("secreto-")
+  })
+
+  it("el 200 sin JSON esperado conserva el texto y suma la etiqueta", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    fetchMock.mockImplementation(async () => new Response("<html></html>", { status: 200 }))
+    await pingShopRevalidarSucursales("tenant-a")
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("[sucursales]"))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("no es el JSON esperado"))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("(tienda-b)"))
   })
 })

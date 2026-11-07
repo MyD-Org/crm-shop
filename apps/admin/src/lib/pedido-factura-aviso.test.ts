@@ -71,6 +71,21 @@ describe("enviarFacturaPedido", () => {
     expect(Buffer.from(opts.attachments[0].content).toString()).toBe("%PDF-1.4 contenido")
   })
 
+  it("el enlace va al dominio donde se compró si el tenant lo tiene; si no, a la principal", async () => {
+    const tenant = {
+      id: "tenant-a",
+      name: "Tienda Demo",
+      alegraMock: false,
+      shopUrl: "https://tienda.cliente.example",
+      shopDestinosExtra: [{ etiqueta: "otro", url: "https://tienda-b.example" }],
+    }
+    getTenantByIdFromDb.mockResolvedValue(tenant)
+    await enviarFacturaPedido({ tenantId: "tenant-a", pedido: pedido({ sitioOrigen: "https://tienda-b.example" }) })
+    expect(sendEmail.mock.calls[0][3]).toContain("https://tienda-b.example/mi-cuenta/pedidos")
+    await enviarFacturaPedido({ tenantId: "tenant-a", pedido: pedido({ sitioOrigen: "https://ajeno.example" }) })
+    expect(sendEmail.mock.calls[1][3]).toContain("https://tienda.cliente.example/mi-cuenta/pedidos")
+  })
+
   it("reenvío: otra clave de idempotencia", async () => {
     const now = new Date("2026-09-25T12:00:00Z")
     await enviarFacturaPedido({ tenantId: "tenant-a", pedido: pedido(), reenvio: now })

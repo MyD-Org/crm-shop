@@ -28,6 +28,7 @@ import { sinTexto } from "@/lib/busqueda-v2/motor";
 import { buscarEnShop } from "@/lib/busqueda-v2/motor-servidor";
 import type { PlanBusqueda } from "@/lib/busqueda-v2/plan";
 import { planParaPagina } from "@/lib/busqueda-v2/servidor";
+import { urlCanonicaDelSitio } from "@/lib/sitio-url";
 
 type Props = {
   searchParams: Promise<{
@@ -65,7 +66,7 @@ export async function generateMetadata({
   const estado = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
   return {
     robots: { index: indexable(estado), follow: true },
-    ...(process.env.NEXT_PUBLIC_SITE_URL
+    ...(urlCanonicaDelSitio()
       ? { alternates: { canonical: hrefCanonico(estado) } }
       : {}),
   };

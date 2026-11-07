@@ -43,7 +43,41 @@ describe("pedidosUrl", () => {
   })
 })
 
+describe("pedidosUrl por sitio de origen", () => {
+  const tenant = {
+    id: "tenant-b",
+    shopUrl: "https://b.example",
+    shopDestinosExtra: [{ etiqueta: "otro", url: "https://tienda-b.example" }],
+  }
+  it("pedido hecho en el extra → enlace al extra", () => {
+    expect(pedidosUrl(tenant, "https://tienda-b.example")).toBe("https://tienda-b.example/mi-cuenta/pedidos")
+  })
+  it("sin sitio o sitio ajeno → principal", () => {
+    expect(pedidosUrl(tenant, null)).toBe("https://b.example/mi-cuenta/pedidos")
+    expect(pedidosUrl(tenant, "https://ajeno.example")).toBe("https://b.example/mi-cuenta/pedidos")
+  })
+})
+
 describe("avisarClientePedido", () => {
+  it("pedido hecho en el segundo dominio → el mail enlaza a ese dominio", async () => {
+    getTenantByIdFromDb.mockResolvedValue({
+      id: "tenant-b",
+      name: "Tienda B",
+      logoPath: "",
+      shopUrl: "https://b.example",
+      shopDestinosExtra: [{ etiqueta: "otro", url: "https://tienda-b.example" }],
+    })
+    await avisarClientePedido({
+      tenantId: "tenant-b",
+      pedido: { ...pedido, sitioOrigen: "https://tienda-b.example" } as PedidoRow,
+      aviso: "en_camino",
+      now: new Date("2026-10-13T12:00:00Z"),
+    })
+    const [, , , html] = sendEmail.mock.calls[0]
+    expect(html).toContain("https://tienda-b.example/mi-cuenta/pedidos")
+    expect(html).not.toContain("https://b.example/mi-cuenta")
+  })
+
   it("pedido de un tenant nuevo → el mail enlaza a su tienda y no a la histórica", async () => {
     getTenantByIdFromDb.mockResolvedValue({ id: "tenant-b", name: "Tienda B", logoPath: "", shopUrl: "https://b.example" })
     const r = await avisarClientePedido({ tenantId: "tenant-b", pedido, aviso: "en_camino", now: new Date("2026-10-13T12:00:00Z") })

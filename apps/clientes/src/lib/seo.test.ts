@@ -23,6 +23,19 @@ describe("reglasRobots", () => {
     expect(disallow).not.toContain("/producto");
   });
 
+  it("en el sitio secundario no declara Sitemap (el sitemap sale vacío) y no bloquea el rastreo", () => {
+    const robots = reglasRobots("https://cliente.example", true);
+    expect(robots).not.toHaveProperty("sitemap");
+    const rules = robots.rules as { allow: string; disallow: string[] };
+    expect(rules.allow).toBe("/");
+    expect(rules.disallow).not.toContain("/");
+  });
+
+  it("sin el segundo argumento es idéntico a hoy", () => {
+    expect(reglasRobots("https://cliente.example")).toEqual(reglasRobots("https://cliente.example", false));
+    expect(reglasRobots("https://cliente.example").sitemap).toBe("https://cliente.example/sitemap.xml");
+  });
+
   it("sin URL del sitio omite el sitemap (una ruta relativa no sirve)", () => {
     expect(reglasRobots(undefined)).not.toHaveProperty("sitemap");
   });

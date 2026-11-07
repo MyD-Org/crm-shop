@@ -6,7 +6,7 @@ import { sendEmail } from "@/lib/email"
 import { buildPedidoEstadoEmail, seAvisaTransicion, type AvisoPedido } from "@/lib/pedido-estado-email"
 import { formatearNumeroPedido, type PedidoRow } from "@/lib/pedidos-repo"
 import type { EstadoPedido } from "@/lib/pedidos-transiciones"
-import { urlPublicaShopDeTenant } from "@/lib/shop-destino"
+import { urlPublicaShopParaPedido } from "@/lib/shop-destino"
 import { getTenantByIdFromDb } from "@/lib/tenants"
 import { logoMailDeTenant } from "@/lib/email-logo"
 
@@ -21,9 +21,15 @@ export function looksLikeEmail(s: string | null): s is string {
   return typeof s === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)
 }
 
-/** Link absoluto a "Mis pedidos" de la tienda del tenant, o null si no tiene (ver shop-destino.ts). */
-export function pedidosUrl(tenant: { id: string; shopUrl?: string; shopInternalUrl?: string }): string | null {
-  const base = urlPublicaShopDeTenant(tenant, process.env)
+/**
+ * Link absoluto a "Mis pedidos" de la tienda donde se hizo el pedido (`sitioOrigen`), o la
+ * principal del tenant si no consta; null si no tiene (ver shop-destino.ts).
+ */
+export function pedidosUrl(
+  tenant: { id: string; shopUrl?: string; shopInternalUrl?: string; shopDestinosExtra?: unknown },
+  sitioOrigen?: string | null,
+): string | null {
+  const base = urlPublicaShopParaPedido(tenant, sitioOrigen, process.env)
   return base ? `${base}${PATH_PEDIDOS}` : null
 }
 
@@ -48,7 +54,7 @@ export async function avisarClientePedido(input: {
       contactoNombre: pedido.contactoNombre,
       aviso,
       entregaTipo: pedido.entregaTipo,
-      pedidosUrl: pedidosUrl(tenant),
+      pedidosUrl: pedidosUrl(tenant, pedido.sitioOrigen),
     })
     const enviado = await sendEmail(tenant, to, subject, html, text, {
       tags: [{ name: "tipo", value: `pedido_${aviso}` }],

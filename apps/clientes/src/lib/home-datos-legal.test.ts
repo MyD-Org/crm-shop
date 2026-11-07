@@ -29,7 +29,7 @@ describe("getDatosLegales / getDatosFooter", () => {
     );
     expect(await getDatosLegales()).toEqual({ razonSocial: "Comercio Ejemplo SA" });
     expect(await getDatosFooter()).toEqual({ ...DEFAULTS_FOOTER, descripcion: "Otra descripción" });
-    expect(leerMock).toHaveBeenCalledWith(["legal", "footer"]);
+    expect(leerMock).toHaveBeenCalledWith(["legal", "footer"], "|");
     expect(cacheTagMock).toHaveBeenCalledWith("home");
     expect(cacheLifeMock).toHaveBeenCalledWith("home");
     expect(cacheLifeMock).not.toHaveBeenCalledWith("degradado");

@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { usePathname, useRouter } from "next/navigation";
 import { ChatDrawer, type ChatPresentation, type CommerceCallbacks } from "@myd-org/ai-widget/preset";
 import "@myd-org/ai-widget/styles";
+import { useMarca } from "@/components/MarcaProvider";
 import { useCart } from "@/context/CartContext";
 import type { PropsChatIa } from "@/lib/chat-ia";
 import { hrefWhatsApp, mensajeTraspaso } from "@/lib/chat-ia-handoff";
 import { lineasAItems, type ProductoResuelto } from "@/lib/chat-ia-productos";
-import { AVATAR_CHAT, COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "@/lib/chat-ia-textos";
+import { avatarChat, COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "@/lib/chat-ia-textos";
 import { useChatIa } from "@/hooks/useChatIa";
 import { useSenalesIniciativa } from "@/hooks/useSenalesIniciativa";
 import { contextoParaChat } from "@/lib/chat-ia-puente";
@@ -121,6 +122,7 @@ export default function ChatIaWidget({ agentId, titulo, textoVacio, sugerencias 
   const router = useRouter();
   const pathname = usePathname();
   const { addItems, items, updateQty, removeItem, cambio } = useCart();
+  const marca = useMarca();
 
   // Puente con la página (lib/chat-ia-puente.ts): al montarse, el chat queda
   // disponible para los "Conversar" del catálogo; `pedido` es su `sendRequest`.
@@ -260,7 +262,7 @@ export default function ChatIaWidget({ agentId, titulo, textoVacio, sugerencias 
   return (
     <ChatDrawer
       config={config}
-      branding={{ title: titulo, subtitle: SUBTITULO_CHAT, avatarUrl: AVATAR_CHAT, primaryColor: COLOR_CHAT }}
+      branding={{ title: titulo, subtitle: SUBTITULO_CHAT, avatarUrl: avatarChat(marca), primaryColor: COLOR_CHAT }}
       // Texto del chat vacío y preguntas sugeridas: del admin del CRM, o los de chat-ia-textos.ts (propsChatIa).
       labels={{ ...ETIQUETAS_CHAT, headerTitle: titulo, emptyState: textoVacio }}
       theme="light"

@@ -64,7 +64,7 @@
 
 /* Movimiento reducido: todo quieto y el LA ya encendido, sin esperar al script. */
 @media (prefers-reduced-motion: reduce) {
-  .laOn { animation: none; opacity: 1; }
-  .root .halo { opacity: .55; transition: none; }
+  .laOn, .root[data-encendido] .laOn { animation: none; opacity: 1; }
+  .root .halo, .root[data-encendido] .halo { opacity: .55; transition: none; }
   .pista { display: none; }
 }

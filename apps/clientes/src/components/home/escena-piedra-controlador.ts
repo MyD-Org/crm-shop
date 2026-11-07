@@ -27,11 +27,32 @@ export interface EntornoEscena {
 export const ATRIBUTO_ENCENDIDO = "data-encendido";
 
 /**
+ * Enciende el LA al tocarlo (click) o con Enter / Espacio. Es lo único que comparten la escena del
+ * hero y los bloques quietos (404, carrito vacío): no mueve ninguna luz ni usa cuadros. Devuelve
+ * `encender` (para forzarlo, por ejemplo con movimiento reducido) y la limpieza.
+ */
+export function enlazarEncendido(env: { hero: ConAtributos; la: Escucha }): { encender: () => void; soltar: () => void } {
+  const encender = () => env.hero.setAttribute(ATRIBUTO_ENCENDIDO, "");
+  const tecla = (ev: Event) => {
+    const k = (ev as KeyboardEvent).key;
+    if (k === "Enter" || k === " ") { ev.preventDefault(); encender(); }
+  };
+  env.la.addEventListener("click", encender);
+  env.la.addEventListener("keydown", tecla);
+  return {
+    encender,
+    soltar: () => {
+      env.la.removeEventListener("click", encender);
+      env.la.removeEventListener("keydown", tecla);
+    },
+  };
+}
+
+/**
  * Anima la luz y enciende el LA. No usa React: la luz se mueve por atributos del SVG.
  * El loop corre sólo con el hero a la vista y la pestaña visible. Devuelve la limpieza.
  */
 export function iniciarEscena(env: EntornoEscena): () => void {
-  const encender = () => env.hero.setAttribute(ATRIBUTO_ENCENDIDO, "");
   const poner = (p: { x: number; y: number }) => {
     for (const el of [env.luz, env.ambiente]) {
       el.setAttribute("cx", p.x.toFixed(1));
@@ -40,7 +61,7 @@ export function iniciarEscena(env: EntornoEscena): () => void {
   };
 
   if (env.quieto) {
-    encender();
+    env.hero.setAttribute(ATRIBUTO_ENCENDIDO, "");
     poner(LUZ_QUIETA);
     return () => {};
   }
@@ -77,15 +98,10 @@ export function iniciarEscena(env: EntornoEscena): () => void {
     cursor = { clientX: p.clientX, clientY: p.clientY };
   };
   const salir = () => { cursor = null; };
-  const tecla = (ev: Event) => {
-    const k = (ev as KeyboardEvent).key;
-    if (k === "Enter" || k === " ") { ev.preventDefault(); encender(); }
-  };
+  const { encender, soltar } = enlazarEncendido(env);
 
   env.hero.addEventListener("pointermove", mover);
   env.hero.addEventListener("pointerleave", salir);
-  env.la.addEventListener("click", encender);
-  env.la.addEventListener("keydown", tecla);
   poner(pos);
   const sueltaVisible = env.observarVisible(visible => { enPantalla = visible; actualizar(); });
   const sueltaPestana = env.observarPestana(actualizar);
@@ -97,7 +113,6 @@ export function iniciarEscena(env: EntornoEscena): () => void {
     sueltaPestana();
     env.hero.removeEventListener("pointermove", mover);
     env.hero.removeEventListener("pointerleave", salir);
-    env.la.removeEventListener("click", encender);
-    env.la.removeEventListener("keydown", tecla);
+    soltar();
   };
 }

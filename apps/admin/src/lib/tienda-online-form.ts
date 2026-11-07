@@ -46,6 +46,65 @@ export interface DatosTiendaOnline {
   shopUrl: string
   shopInternalUrl: string
   tema?: ShopTema
+  /** Dominios extra de la tienda con su marca propia (marca por dominio). */
+  destinos?: DestinoTiendaOnline[]
+}
+
+/** Un dominio extra tal como lo devuelve la API. Marca y tema vacíos = usa los del sitio principal. */
+export interface DestinoTiendaOnline {
+  etiqueta: string
+  url: string
+  marca: ShopMarca
+  tema: ShopTema
+  remitente: string
+}
+
+/** Estado del formulario de un dominio extra. */
+export interface FormDestino {
+  etiqueta: string
+  url: string
+  /** false = el sitio usa la marca y el tema del principal. */
+  marcaPropia: boolean
+  remitente: string
+  form: FormTiendaOnline
+}
+
+/** Lo que el PUT recibe por cada dominio extra. null = usa lo del principal. */
+export interface PayloadDestino {
+  etiqueta: string
+  marca: ShopMarca | null
+  tema: ShopTema | null
+  remitente: string | null
+}
+
+const vacio = (o: object | null | undefined) => !o || Object.keys(o).length === 0
+
+export function formsDestinosDesdeDatos(d: DatosTiendaOnline): FormDestino[] {
+  return (Array.isArray(d?.destinos) ? d.destinos : []).map((x) => {
+    const marcaPropia = !vacio(x.marca) || !vacio(x.tema)
+    const form = formDesdeDatos({ marca: x.marca ?? {}, tema: x.tema ?? {}, shopUrl: "", shopInternalUrl: "" })
+    // Un sitio nuevo parte de los textos neutros: nunca de los de la marca principal.
+    if (vacio(x.marca)) form.base = "generica"
+    return { etiqueta: x.etiqueta, url: x.url, marcaPropia, remitente: x.remitente ?? "", form }
+  })
+}
+
+/**
+ * Cuerpo `destinos` del PUT. La `base` viaja siempre (el Shop no debe suponer la del principal) y
+ * un tema sin cambios queda en null (usa el del principal).
+ */
+export function construirPayloadDestinos(destinos: readonly FormDestino[]): PayloadDestino[] {
+  return destinos.map((d) => {
+    const remitente = d.remitente.trim() || null
+    if (!d.marcaPropia) return { etiqueta: d.etiqueta, marca: null, tema: null, remitente }
+    const p = construirPayload(d.form)
+    return {
+      etiqueta: d.etiqueta,
+      marca: { ...p.marca, base: d.form.base },
+      tema: vacio(p.tema) ? null : (p.tema ?? null),
+      remitente,
+    }
+  })
 }
 
 export const formVacio = (): FormTiendaOnline => ({

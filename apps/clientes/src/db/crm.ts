@@ -376,6 +376,13 @@ export const crmTenants = publico.table("tenants", {
    * tolerando que no exista (`tema-tenant-datos.ts`).
    */
   shopTema: jsonb("shop_tema").$type<unknown>().notNull(),
+  /**
+   * Dominios extra de la tienda (0099 del CRM; GRANT por columna en la 0100): lista de
+   * `{ etiqueta, url, urlInterna?, marca?, tema?, remitente? }`. Con marca propia, el dominio en
+   * el que corre este Shop se ve con ella (marca por dominio). Igual que `shopMarca`, se lee con
+   * un select de esta sola columna y tolerando que el GRANT falte.
+   */
+  shopDestinosExtra: jsonb("shop_destinos_extra").$type<unknown>().notNull(),
 });
 
 /**

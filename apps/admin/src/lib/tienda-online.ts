@@ -300,6 +300,80 @@ export interface TiendaOnline {
   shopInternalUrl: string
   /** Ausente = el cuerpo no traía `tema`: no se toca lo guardado. */
   tema?: ShopTema
+  /** Ausente = el cuerpo no traía `destinos`: no se toca la marca de los otros sitios. */
+  destinos?: EdicionDestino[]
+}
+
+/**
+ * Marca propia de un dominio extra (`tenants.shop_destinos_extra`, change `marca-por-dominio`).
+ * `null` (o un objeto vacío) = el sitio usa la marca / el tema / el remitente del principal.
+ */
+export interface EdicionDestino {
+  etiqueta: string
+  marca: ShopMarca | null
+  tema: ShopTema | null
+  remitente: string | null
+}
+
+const vacio = (o: object | null | undefined) => !o || Object.keys(o).length === 0
+
+/** Valida la lista `destinos` del PUT. Los errores nombran el sitio; el campo va como `<etiqueta>.<campo>`. */
+export function parseDestinosMarca(raw: unknown, ctx: ContextoMedia): Parse<EdicionDestino[]> {
+  if (!Array.isArray(raw)) return falla("destinos", "Los datos de los otros sitios no son válidos")
+  const out: EdicionDestino[] = []
+  const vistas = new Set<string>()
+  for (const it of raw) {
+    const o = it && typeof it === "object" && !Array.isArray(it) ? (it as Record<string, unknown>) : null
+    const etiqueta = typeof o?.etiqueta === "string" ? o.etiqueta.trim() : ""
+    if (!o || !etiqueta || vistas.has(etiqueta)) return falla("destinos", "Los datos de los otros sitios no son válidos")
+    vistas.add(etiqueta)
+    const delSitio = (r: { error: string; campo: string }) => falla(`${etiqueta}.${r.campo}`, `Sitio «${etiqueta}»: ${r.error}`)
+    const marca = parseShopMarca(o.marca, ctx)
+    if (!marca.ok) return delSitio(marca)
+    const tema = parseShopTema(o.tema)
+    if (!tema.ok) return delSitio(tema)
+    const rem = texto(o, "remitente", "El remitente de los mails", EMAIL_MAX)
+    if (!rem.ok) return delSitio(rem)
+    if (rem.value !== undefined && !EMAIL_RE.test(rem.value)) {
+      return delSitio({ campo: "remitente", error: "El remitente de los mails debe ser un email, por ejemplo pedidos@tienda.example" })
+    }
+    out.push({
+      etiqueta,
+      marca: vacio(marca.value) ? null : marca.value,
+      tema: vacio(tema.value) ? null : tema.value,
+      remitente: rem.value ?? null,
+    })
+  }
+  return { ok: true, value: out }
+}
+
+/**
+ * Reescribe el jsonb `shop_destinos_extra` completo cambiando SOLO marca, tema y remitente de los
+ * sitios editados: la URL, la URL interna y los demás sitios quedan como estaban.
+ */
+export function aplicarEdicionDestinos(actual: unknown, ediciones: readonly EdicionDestino[]): Parse<unknown[]> {
+  if (!Array.isArray(actual)) return falla("destinos", "No se pudieron leer los otros sitios de la tienda. Inténtelo nuevamente.")
+  const porEtiqueta = new Map(ediciones.map((e) => [e.etiqueta, e]))
+  const usadas = new Set<string>()
+  const value = actual.map((it) => {
+    const o = it && typeof it === "object" && !Array.isArray(it) ? (it as Record<string, unknown>) : null
+    const e = o && typeof o.etiqueta === "string" ? porEtiqueta.get(o.etiqueta) : undefined
+    if (!o || !e) return it
+    usadas.add(e.etiqueta)
+    const resto = { ...o }
+    delete resto.marca
+    delete resto.tema
+    delete resto.remitente
+    return {
+      ...resto,
+      ...(e.marca ? { marca: e.marca } : {}),
+      ...(e.tema ? { tema: e.tema } : {}),
+      ...(e.remitente ? { remitente: e.remitente } : {}),
+    }
+  })
+  const faltante = ediciones.find((e) => !usadas.has(e.etiqueta))
+  if (faltante) return falla("destinos", `El sitio «${faltante.etiqueta}» no está configurado para esta empresa`)
+  return { ok: true, value }
 }
 
 /** Valida el cuerpo completo del PUT. Cuerpo vacío o roto = todo vacío. */
@@ -316,6 +390,11 @@ export function parseTiendaOnline(body: unknown, ctx: ContextoMedia): Parse<Tien
     const tema = parseShopTema(b.tema)
     if (!tema.ok) return tema
     value.tema = tema.value
+  }
+  if (b.destinos !== undefined) {
+    const destinos = parseDestinosMarca(b.destinos, ctx)
+    if (!destinos.ok) return destinos
+    value.destinos = destinos.value
   }
   return { ok: true, value }
 }

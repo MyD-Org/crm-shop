@@ -6,6 +6,8 @@ import {
   PALETAS_TEMA,
   avisoContrasteForm,
   construirPayload,
+  construirPayloadDestinos,
+  formsDestinosDesdeDatos,
   extensionDeArchivo,
   formDesdeDatos,
   formVacio,
@@ -174,5 +176,55 @@ describe("placeholdersMarca (valores en uso cuando el campo está vacío)", () =
     expect(p.nombre).toBe("")
     expect(p.dependeDelEntorno).toBe(true)
     expect(p.ogEyebrow).toBe("")
+  })
+})
+
+describe("marca por dominio: formularios de los sitios extra", () => {
+  const DATOS = {
+    marca: { nombre: "Principal" },
+    shopUrl: "https://uno.example",
+    shopInternalUrl: "",
+    destinos: [
+      { etiqueta: "tienda-b", url: "https://tienda-b.example", marca: {}, tema: {}, remitente: "" },
+      { etiqueta: "tienda-c", url: "https://tienda-c.example", marca: { base: "generica" as const, nombre: "C" }, tema: { base: "calido" as const }, remitente: "pedidos@tienda-c.example" },
+    ],
+  }
+
+  it("sitio sin marca: usa la del principal y, si la activa, parte de textos neutros", () => {
+    const [b] = formsDestinosDesdeDatos(DATOS)
+    expect(b).toMatchObject({ etiqueta: "tienda-b", marcaPropia: false, remitente: "" })
+    expect(b.form.base).toBe("generica")
+    expect(b.form.nombre).toBe("")
+  })
+
+  it("sitio con marca: carga sus datos, no los del principal", () => {
+    const c = formsDestinosDesdeDatos(DATOS)[1]
+    expect(c).toMatchObject({ marcaPropia: true, remitente: "pedidos@tienda-c.example" })
+    expect(c.form).toMatchObject({ nombre: "C", base: "generica", temaBase: "calido" })
+  })
+
+  it("ida y vuelta: lo cargado vuelve igual en el payload", () => {
+    expect(construirPayloadDestinos(formsDestinosDesdeDatos(DATOS))).toEqual([
+      { etiqueta: "tienda-b", marca: null, tema: null, remitente: null },
+      { etiqueta: "tienda-c", marca: { base: "generica", nombre: "C" }, tema: { base: "calido" }, remitente: "pedidos@tienda-c.example" },
+    ])
+  })
+
+  it("con marca propia, la base viaja siempre aunque sea la de partida", () => {
+    const [b] = formsDestinosDesdeDatos(DATOS)
+    const p = construirPayloadDestinos([{ ...b, marcaPropia: true, form: { ...b.form, base: "central", nombre: "B" } }])
+    expect(p[0].marca).toEqual({ base: "central", nombre: "B" })
+    expect(p[0].tema).toBeNull()
+  })
+
+  it("«usar la marca del principal» descarta lo cargado en el sitio", () => {
+    const c = formsDestinosDesdeDatos(DATOS)[1]
+    expect(construirPayloadDestinos([{ ...c, marcaPropia: false }])[0]).toEqual({
+      etiqueta: "tienda-c", marca: null, tema: null, remitente: "pedidos@tienda-c.example",
+    })
+  })
+
+  it("sin destinos en los datos: lista vacía", () => {
+    expect(formsDestinosDesdeDatos({ marca: {}, shopUrl: "", shopInternalUrl: "" })).toEqual([])
   })
 })

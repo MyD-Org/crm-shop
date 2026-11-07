@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { iniciarEscena, type EntornoEscena } from "./escena-piedra-controlador";
+import { enlazarEncendido, iniciarEscena, type EntornoEscena } from "./escena-piedra-controlador";
 import { LA, LUZ_INICIAL, LUZ_QUIETA, cercaDelLA, pasoDeLuz } from "./escena-piedra";
 
 /** Elemento falso: guarda atributos y escucha eventos como un EventTarget. */
@@ -150,5 +150,49 @@ describe("geometría de la luz", () => {
   it("el LA se enciende dentro de su radio", () => {
     expect(cercaDelLA({ x: LA.x + 229, y: LA.y })).toBe(true);
     expect(cercaDelLA({ x: LA.x + 231, y: LA.y })).toBe(false);
+  });
+});
+
+describe("enlazarEncendido (lo que comparten el hero y los bloques quietos)", () => {
+  const tecla = (key: string) => Object.assign(new Event("keydown", { cancelable: true }), { key });
+
+  it("enciende con un toque, con Enter y con Espacio; otras teclas no", () => {
+    const hero = elemento();
+    const la = elemento();
+    enlazarEncendido({ hero, la });
+    la.dispatchEvent(tecla("a"));
+    expect(hero.hasAttribute("data-encendido")).toBe(false);
+    const espacio = tecla(" ");
+    la.dispatchEvent(espacio);
+    expect(hero.hasAttribute("data-encendido")).toBe(true);
+    expect(espacio.defaultPrevented).toBe(true);
+
+    const hero2 = elemento();
+    const la2 = elemento();
+    enlazarEncendido({ hero: hero2, la: la2 });
+    la2.dispatchEvent(new Event("click"));
+    expect(hero2.hasAttribute("data-encendido")).toBe(true);
+
+    const hero3 = elemento();
+    const la3 = elemento();
+    enlazarEncendido({ hero: hero3, la: la3 });
+    la3.dispatchEvent(tecla("Enter"));
+    expect(hero3.hasAttribute("data-encendido")).toBe(true);
+  });
+
+  it("soltar quita los oyentes", () => {
+    const hero = elemento();
+    const la = elemento();
+    enlazarEncendido({ hero, la }).soltar();
+    la.dispatchEvent(new Event("click"));
+    expect(hero.hasAttribute("data-encendido")).toBe(false);
+  });
+
+  it("no pide ningún cuadro de animación: es sólo eventos", () => {
+    const raf = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", raf);
+    enlazarEncendido({ hero: elemento(), la: elemento() });
+    vi.unstubAllGlobals();
+    expect(raf).not.toHaveBeenCalled();
   });
 });

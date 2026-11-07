@@ -3,13 +3,15 @@ import { identidadActual } from "@/lib/auth";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { entregaDelCarrito } from "@/lib/entrega-eleccion";
 import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
+import { getDecoracion } from "@/lib/home-datos";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { opcionesCheckoutDelVisitante } from "@/lib/zona-servidor";
 
 export default async function CarritoPage() {
-  const [{ clerkUserId, cliente }, reglas] = await Promise.all([
+  const [{ clerkUserId, cliente }, reglas, { piedra }] = await Promise.all([
     identidadActual(),
     reglasVentaCacheadas(),
+    getDecoracion(),
   ]);
   // Elección única: retiro => cotiza como retiro, sin provincia (sin envío ni barra de envío gratis);
   // envío => cotiza a la provincia elegida; sin elección o si la lectura falla => como siempre.
@@ -28,6 +30,7 @@ export default async function CarritoPage() {
       sucursalRetiro={sucursalRetiro}
       provincia={provincia}
       ubicacionConocida={ubicacionConocida}
+      piedra={piedra}
     />
   );
 }

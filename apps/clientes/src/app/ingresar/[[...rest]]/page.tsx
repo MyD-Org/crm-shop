@@ -1,5 +1,7 @@
 import { ClerkLoaded, ClerkLoading, SignIn } from "@clerk/nextjs";
 import { FormularioClerkCargando } from "@/components/FormularioClerkCargando";
+import { FondoPiedra } from "@/components/piedra/FondoPiedra";
+import { getDecoracion } from "@/lib/home-datos";
 
 /**
  * Login del shop.
@@ -11,9 +13,10 @@ import { FormularioClerkCargando } from "@/components/FormularioClerkCargando";
  * La URL queda en castellano a propósito: es la que ve el cliente. El mapeo con
  * lo que Clerk espera se hace por env (NEXT_PUBLIC_CLERK_SIGN_IN_URL).
  */
-export default function IngresarPage() {
+export default async function IngresarPage() {
+  const { piedra } = await getDecoracion();
   return (
-    <>
+    <FondoPiedra piedra={piedra}>
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-6 px-4 py-16">
         <div className="text-center">
           <h1 className="text-2xl font-extrabold text-text">Ingrese a su cuenta</h1>
@@ -34,6 +37,6 @@ export default function IngresarPage() {
           <SignIn fallbackRedirectUrl="/" signUpFallbackRedirectUrl="/" />
         </ClerkLoaded>
       </main>
-    </>
+    </FondoPiedra>
   );
 }

@@ -2,8 +2,9 @@
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { iniciarEscena } from "./escena-piedra-controlador";
-import { COLORES, ESCENA, EXTREMOS_TUBO, LUZ_INICIAL, PIEDRA, RADIO_AMBIENTE, RADIO_LINTERNA } from "./escena-piedra";
+import { COLORES, ESCENA, LUZ_INICIAL, PIEDRA, RADIO_AMBIENTE, RADIO_LINTERNA } from "./escena-piedra";
 import styles from "./HeroPiedra.module.css";
+import { CapaLA, DefinicionesPiedra, JuntasPiedra } from "@/components/piedra/escena-comun";
 
 /** Deja el Hero del DS y su contenido intactos; sólo cambia el fondo por la escena de la piedra. */
 export function HeroPiedra({ children, enabled }: { children: ReactNode; enabled: boolean }) {
@@ -51,12 +52,8 @@ export function HeroPiedra({ children, enabled }: { children: ReactNode; enabled
     {children}
     <div className={styles.scene}>
       <svg ref={svg} aria-hidden="true" className={styles.art} viewBox={vista} preserveAspectRatio="xMidYMid slice">
+        <DefinicionesPiedra uid={uid} />
         <defs>
-          <clipPath id={id("la")}><path d={PIEDRA.poligonoLA} /></clipPath>
-          <mask id={id("sinLA")} maskUnits="userSpaceOnUse" x="0" y="0" width={ESCENA.ancho} height={ESCENA.alto}>
-            <rect width={ESCENA.ancho} height={ESCENA.alto} fill="#fff" />
-            <path d={PIEDRA.poligonoLA} fill="#000" stroke="#fff" strokeWidth="14.52" />
-          </mask>
           <radialGradient id={id("cono")}>
             <stop offset="0" stopColor="#fff" /><stop offset=".45" stopColor="#fff" stopOpacity=".55" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
           </radialGradient>
@@ -64,16 +61,13 @@ export function HeroPiedra({ children, enabled }: { children: ReactNode; enabled
             <rect width={ESCENA.ancho} height={ESCENA.alto} fill="#000" />
             <circle ref={luz} cx={LUZ_INICIAL.x} cy={LUZ_INICIAL.y} r={RADIO_LINTERNA} fill={url("cono")} />
           </mask>
-          <filter id={id("desenfoque")} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="9" /></filter>
-          <filter id={id("halo")} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="70" /></filter>
           <radialGradient id={id("ambiente")} cx=".5" cy=".5" r=".5">
             <stop offset="0" stopColor={COLORES.sodio} stopOpacity=".16" /><stop offset="1" stopColor={COLORES.sodio} stopOpacity="0" />
           </radialGradient>
         </defs>
         <rect width={ESCENA.ancho} height={ESCENA.alto} fill={COLORES.noche} />
         <circle ref={ambiente} cx={LUZ_INICIAL.x} cy={LUZ_INICIAL.y} r={RADIO_AMBIENTE} fill={url("ambiente")} />
-        <path d={PIEDRA.juntas} stroke={COLORES.junta} strokeWidth="6.6" fill="none" strokeLinejoin="bevel" mask={url("sinLA")} />
-        <path d={PIEDRA.bordes} stroke={COLORES.junta} strokeWidth="6.6" fill="none" />
+        <JuntasPiedra uid={uid} />
         <g mask={url("linterna")}>
           <g mask={url("sinLA")}>
             <path d={PIEDRA.juntas} stroke={COLORES.sodio} strokeWidth="22" fill="none" strokeLinejoin="bevel" opacity=".55" filter={url("desenfoque")} />
@@ -81,15 +75,7 @@ export function HeroPiedra({ children, enabled }: { children: ReactNode; enabled
           </g>
           <path d={PIEDRA.bordes} stroke={COLORES.filamento} strokeWidth="6" fill="none" />
         </g>
-        <ellipse className={styles.halo} cx="1860" cy="700" rx="380" ry="260" fill={COLORES.sodio} filter={url("halo")} />
-        <g clipPath={url("la")}>
-          <path d={PIEDRA.laApagado} stroke={COLORES.junta} strokeWidth="6.6" fill="none" />
-          <g className={styles.laOn}>
-            <path d={PIEDRA.laBrillo} stroke={COLORES.sodio} strokeWidth="19.8" fill="none" opacity=".6" filter={url("desenfoque")} />
-            <path d={PIEDRA.laNucleo} stroke={COLORES.filamento} strokeWidth="7.92" fill="none" strokeLinecap="square" />
-            {EXTREMOS_TUBO.map(r => <rect key={r.x} x={r.x} y={r.y} width={r.ancho} height={r.alto} fill={COLORES.sodio} />)}
-          </g>
-        </g>
+        <CapaLA uid={uid} />
       </svg>
       {/* El LA es lo único interactivo y accesible de la escena. */}
       <svg className={styles.hit} viewBox={vista} preserveAspectRatio="xMidYMid slice">

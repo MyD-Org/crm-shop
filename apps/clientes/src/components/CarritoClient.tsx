@@ -23,6 +23,7 @@ import { BotonCompartirLista } from "@/components/BotonCompartirLista";
 import { hrefCompartido, MENSAJE_CARRITO } from "@/lib/carrito-compartido";
 import { topeCantidad } from "@/lib/catalogo-vista";
 import { TEXTO_CARRITO_A_CONFIRMAR } from "@/lib/venta-sin-stock";
+import { BloquePiedra } from "@/components/piedra/BloquePiedra";
 import { CampoCupon } from "@/components/checkout/CampoCupon";
 import { LineaCupon } from "@/components/checkout/LineaCupon";
 import { montosAntesDelCupon } from "@/lib/cupones/ui";
@@ -86,8 +87,11 @@ export function CarritoClient({
   entregaTipo = "retiro",
   sucursalRetiro = null,
   ubicacionConocida,
+  piedra = false,
 }: {
   conSesion: boolean;
+  /** Textura de piedra prendida en el sitio (decoración): el carrito vacío va sobre un bloque de piedra. */
+  piedra?: boolean;
   /** Configuración de envío del CRM (cacheada: sólo para mostrar; el servidor decide al pedir). */
   configEnvio?: ConfigEnvio;
   /** Provincia de la elección de envío. null = sin ubicación o con retiro elegido (sin envío). */
@@ -232,6 +236,21 @@ export function CarritoClient({
         <main className="mx-auto flex w-full max-w-contenido flex-1 items-center justify-center px-4 py-20">
           <p className="text-sm text-muted">Cargando el carrito…</p>
         </main>
+      </>
+    );
+  }
+
+  if (items.length === 0 && piedra) {
+    return (
+      <>
+        <main className="mx-auto flex w-full max-w-contenido flex-1 items-center justify-center px-4 py-20">
+          <BloquePiedra titulo="El carrito está vacío">
+            <Link href="/catalogo">
+              <Button>Ver catálogo</Button>
+            </Link>
+          </BloquePiedra>
+        </main>
+        {avisoQuitado(false)}
       </>
     );
   }

@@ -32,6 +32,7 @@ import { isStudioImage, STUDIO_IMAGE, STUDIO_IMAGE_NEUTRAL } from "@/components/
 import { HeroPiedra } from "@/components/home/HeroPiedra";
 import { isPiedraImage } from "@/components/home/escena-piedra";
 import { IconoWhatsapp } from "@/components/IconoWhatsapp";
+import { VisitenosPiedra } from "@/components/piedra/VisitenosPiedra";
 
 /* ── Icons (mismo criterio que el header: SVG inline, sin deps) ─── */
 
@@ -123,6 +124,7 @@ export function HomeClient({
   promociones = null,
   promosPago = null,
   busquedaAsistida = null,
+  piedra = false,
 }: {
   contenido: HomeContent;
   /**
@@ -152,6 +154,11 @@ export function HomeClient({
    * mueve nada de lo que ya se ve.
    */
   busquedaAsistida?: ReactNode;
+  /**
+   * Textura de piedra prendida en este sitio (`decoracion.piedra`). Sólo con ella se dibuja la banda
+   * "Visítenos"; apagada, la home es exactamente la de siempre.
+   */
+  piedra?: boolean;
 }) {
   const { marquee, servicios } = contenido;
   // Los textos apagados con "Mostrar" no se pintan. El editor no depende de
@@ -163,6 +170,7 @@ export function HomeClient({
   const bannerDeco = sinCamposOcultos(contenido.bannerDeco);
   const decoGrid = sinCamposOcultos(contenido.decoGrid);
   const whatsapp = sinCamposOcultos(contenido.whatsapp);
+  const visitenos = sinCamposOcultos(contenido.visitenos);
   const vis = (s: SeccionHome) => visibilidadDe(contenido.visibilidad, s);
   const promosEnHero = vis("hero") !== "nunca";
   const promosPagoEditable = (
@@ -366,6 +374,14 @@ export function HomeClient({
         </Reveal>
       </Contenido>
     ),
+    // Sólo con la piedra prendida en el sitio; además, el admin elige dónde se ve (nace oculta).
+    visitenos: piedra ? (
+      <Contenido>
+        <SeccionEditable seccion="visitenos" titulo={visitenos.titulo} visibilidad={vis("visitenos")} botonTop="top-[calc(clamp(56px,7vw,96px)+0.5rem)]">
+          <VisitenosPiedra contenido={visitenos} />
+        </SeccionEditable>
+      </Contenido>
+    ) : null,
     whatsapp: (
       <Contenido>
         <SeccionEditable seccion="whatsapp" visibilidad={vis("whatsapp")}>

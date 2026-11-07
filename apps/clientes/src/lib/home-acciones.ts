@@ -23,6 +23,7 @@ import {
   type SeccionHome,
 } from "@/data/home-defaults";
 import { KEY_FOOTER, validarDatosFooter } from "@/data/footer";
+import { KEY_DECORACION, validarDecoracion } from "@/data/decoracion";
 import { errorOrden } from "@/lib/orden-secciones";
 import { borrarSeccionHome, guardarSeccionHome, leerSeccionHome } from "@/lib/home-guardar";
 import { getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
@@ -62,6 +63,8 @@ const ERROR_LEER = "No se pudo cargar la sección. Inténtelo de nuevo.";
 const SIN_PERMISO_LEGAL = "No tiene permisos para editar los datos legales.";
 const ERROR_GUARDAR_LEGAL = "No se pudieron guardar los datos legales. Inténtelo de nuevo.";
 const SIN_PERMISO_FOOTER = "No tiene permisos para editar el pie de página.";
+const SIN_PERMISO_DECORACION = "No tiene permisos para cambiar la apariencia de la tienda.";
+const ERROR_GUARDAR_DECORACION = "No se pudo guardar la apariencia de la tienda. Inténtelo de nuevo.";
 const ERROR_GUARDAR_FOOTER = "No se pudo guardar el pie de página. Inténtelo de nuevo.";
 
 const ANCHO_HOME = 1600;
@@ -219,6 +222,26 @@ export async function guardarFooter(payload: unknown): Promise<ResultadoGuardar>
   } catch (err) {
     console.error("[home-acciones] no se pudo guardar el footer:", err);
     return { ok: false, errores: [ERROR_GUARDAR_FOOTER] };
+  }
+}
+
+/**
+ * Prende o apaga la textura de piedra del sitio (fila `decoracion` de home_content, por sitio).
+ * Invalida el tag `home`: la leen el login, el pie, el 404, el carrito y la home. Nunca lanza.
+ */
+export async function guardarDecoracion(payload: unknown): Promise<ResultadoGuardar> {
+  if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO_DECORACION] };
+
+  const validado = validarDecoracion(payload);
+  if (!validado.ok) return validado;
+
+  try {
+    const { updatedAt } = await guardarSeccionHome(KEY_DECORACION, validado.datos);
+    updateTag(TAG_HOME);
+    return { ok: true, updatedAt: updatedAt?.toISOString() ?? null };
+  } catch (err) {
+    console.error("[home-acciones] no se pudo guardar la decoración:", err);
+    return { ok: false, errores: [ERROR_GUARDAR_DECORACION] };
   }
 }
 

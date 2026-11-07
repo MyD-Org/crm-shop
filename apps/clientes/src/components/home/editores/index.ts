@@ -12,6 +12,7 @@ import { EditorPromosPago } from "./EditorPromosPago";
 import { EditorServicios } from "./EditorServicios";
 import { EditorTiendaOficial } from "./EditorTiendaOficial";
 import { EditorTiles } from "./EditorTiles";
+import { EditorVisitenos } from "./EditorVisitenos";
 import { EditorWhatsapp } from "./EditorWhatsapp";
 
 export interface EditorProps<T> {
@@ -40,4 +41,5 @@ export const EDITORES: Record<SeccionHome, ComponentType<EditorProps<any>>> = {
   busquedaAsistida: EditorBusquedaAsistida,
   promociones: EditorPromociones,
   promosPago: EditorPromosPago,
+  visitenos: EditorVisitenos,
 };

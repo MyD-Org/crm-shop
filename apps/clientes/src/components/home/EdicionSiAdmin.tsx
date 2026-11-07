@@ -1,6 +1,6 @@
 import type { MapaVisibilidad, SeccionOrdenable } from "@/data/home-defaults";
 import { esAdmin } from "@/lib/auth";
-import { getDatosFooter, getDatosLegales } from "@/lib/home-datos";
+import { getDatosFooter, getDatosLegales, getDecoracion } from "@/lib/home-datos";
 import { BarraEdicion } from "./BarraEdicion";
 import { HabilitarEdicion } from "./HabilitarEdicion";
 
@@ -21,11 +21,11 @@ export async function EdicionSiAdmin({
   orden: SeccionOrdenable[];
 }) {
   if (!(await esAdmin())) return null;
-  const [legal, footer] = await Promise.all([getDatosLegales(), getDatosFooter()]);
+  const [legal, footer, decoracion] = await Promise.all([getDatosLegales(), getDatosFooter(), getDecoracion()]);
   return (
     <>
       <HabilitarEdicion />
-      <BarraEdicion visibilidad={visibilidad} orden={orden} legal={legal} footer={footer} />
+      <BarraEdicion visibilidad={visibilidad} orden={orden} legal={legal} footer={footer} piedra={decoracion.piedra} />
     </>
   );
 }

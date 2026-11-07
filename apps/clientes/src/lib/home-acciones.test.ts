@@ -609,7 +609,7 @@ describe("guardarOrdenHome", () => {
   });
 
   it("guarda una permutación de las secciones y revalida la home", async () => {
-    const orden = ["whatsapp", "hero", "promociones", "promosPago", "marquee", "busquedaAsistida", "ambientes", "destacados", "tiendaOficial", "bannerDeco", "decoGrid", "servicios"];
+    const orden = ["whatsapp", "hero", "promociones", "promosPago", "marquee", "busquedaAsistida", "ambientes", "destacados", "tiendaOficial", "bannerDeco", "decoGrid", "servicios", "visitenos"];
     const r = await guardarOrdenHome(orden);
     expect(r.ok).toBe(true);
     expect(guardarMock).toHaveBeenCalledWith("orden", { secciones: orden });

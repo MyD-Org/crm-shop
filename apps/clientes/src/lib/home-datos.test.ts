@@ -19,17 +19,17 @@ describe("combinarContenidoHome (lib)", () => {
   });
 
   it("visibilidad: por defecto el anuncio solo en desktop; de la DB sólo keys y valores conocidos", () => {
-    expect(combinarContenidoHome([]).visibilidad).toEqual({ anuncio: "desktop" });
+    expect(combinarContenidoHome([]).visibilidad).toEqual({ anuncio: "desktop", visitenos: "nunca" });
     const out = combinarContenidoHome([
       { key: "ocultas", payload: { whatsapp: "mobile", cualquiera: "nunca", hero: "a veces", anuncio: "siempre" } },
     ]);
-    expect(out.visibilidad).toEqual({ anuncio: "siempre", whatsapp: "mobile" });
-    expect(combinarContenidoHome([{ key: "ocultas", payload: 42 }]).visibilidad).toEqual({ anuncio: "desktop" });
+    expect(out.visibilidad).toEqual({ anuncio: "siempre", visitenos: "nunca", whatsapp: "mobile" });
+    expect(combinarContenidoHome([{ key: "ocultas", payload: 42 }]).visibilidad).toEqual({ anuncio: "desktop", visitenos: "nunca" });
   });
 
   it("visibilidad: el formato viejo (array de ocultas) se lee como \"nunca\"", () => {
     const out = combinarContenidoHome([{ key: "ocultas", payload: ["whatsapp", "cualquiera", "hero", "hero"] }]);
-    expect(out.visibilidad).toEqual({ anuncio: "desktop", hero: "nunca", whatsapp: "nunca" });
+    expect(out.visibilidad).toEqual({ anuncio: "desktop", visitenos: "nunca", hero: "nunca", whatsapp: "nunca" });
   });
 });
 

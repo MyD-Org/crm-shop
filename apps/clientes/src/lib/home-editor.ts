@@ -58,6 +58,7 @@ export const TITULOS_SECCION: Record<SeccionHome, string> = {
   navBadge: "Badge del menú",
   whatsapp: "Contacto por WhatsApp",
   busquedaAsistida: "Búsqueda asistida",
+  visitenos: "Visítenos",
 };
 
 /** Texto plano + qué caracteres van en acento. El contrato guarda `*marcas*`;
@@ -201,7 +202,7 @@ export function normalizarPayload(seccion: SeccionHome, borrador: unknown): unkn
     else o.visibilidadTextos = textos;
   }
 
-  if (seccion === "bannerDeco" && o.cta !== undefined && sinEtiqueta(o.cta)) delete o.cta;
+  if ((seccion === "bannerDeco" || seccion === "visitenos") && o.cta !== undefined && sinEtiqueta(o.cta)) delete o.cta;
 
   if ((seccion === "ambientes" || seccion === "decoGrid") && Array.isArray(o.chips)) {
     o.chips = (o.chips as unknown[]).filter((c) => !sinEtiqueta(c));

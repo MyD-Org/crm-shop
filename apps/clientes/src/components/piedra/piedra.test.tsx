@@ -140,7 +140,9 @@ describe("con el interruptor prendido", () => {
     // El resto del pie es el de siempre.
     apagada();
     const base = html(await SiteFooter());
-    const sinCapa = h.replace(/<svg aria-hidden="true" focusable="false"[\s\S]*?<\/svg>/, "").replace("footer-global relative isolate", "footer-global");
+    // Dos capas: las juntas tenues y su brillo que respira.
+    expect(h.match(/<svg aria-hidden="true" focusable="false"/g)).toHaveLength(2);
+    const sinCapa = h.replace(/<svg aria-hidden="true" focusable="false"[\s\S]*?<\/svg>/g, "").replace("footer-global relative isolate", "footer-global");
     expect(sinCapa).toBe(base);
   });
 

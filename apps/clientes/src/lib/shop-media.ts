@@ -73,16 +73,21 @@ const TENANT_ID_RE = /^[a-z0-9-]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const ANCHO_IMAGEN_HOME = 1600;
+/** Variantes que se generan y suben por imagen de la home (la mayor es la que se guarda en el contenido). */
+export const ANCHOS_IMAGEN_HOME = [800, 1600] as const;
 
 /**
- * Key de una imagen de la home: `home/{tenant}/{uuid}-{ancho}.webp`. Prefijo
- * propio: no pisa `productos/` ni `categorias/` del CRM.
+ * Key de una imagen de la home: `home/{tenant}/v/{uuid}-{ancho}.webp`, con
+ * ancho 800 o 1600. El segmento `v/` marca las imágenes que tienen VARIANTES
+ * (lo usa `imagen-loader.ts`); las viejas, `home/{tenant}/{uuid}-1600.webp`,
+ * tienen una sola y se sirven tal cual. Prefijo propio: no pisa `productos/`
+ * ni `categorias/` del CRM.
  */
 export function homeImagenKey(tenantId: string, id: string, ancho: number = ANCHO_IMAGEN_HOME): string {
   if (!TENANT_ID_RE.test(tenantId)) throw new Error(`tenantId inválido para key de R2: ${JSON.stringify(tenantId)}`);
   if (!UUID_RE.test(id)) throw new Error(`id inválido para key de R2: ${JSON.stringify(id)}`);
-  if (ancho !== ANCHO_IMAGEN_HOME) throw new Error(`ancho inválido para key de R2: ${ancho}`);
-  return `home/${tenantId}/${id}-${ancho}.webp`;
+  if (!(ANCHOS_IMAGEN_HOME as readonly number[]).includes(ancho)) throw new Error(`ancho inválido para key de R2: ${ancho}`);
+  return `home/${tenantId}/v/${id}-${ancho}.webp`;
 }
 
 /**

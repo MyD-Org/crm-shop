@@ -26,7 +26,7 @@ import { KEY_FOOTER, validarDatosFooter } from "@/data/footer";
 import { KEY_DECORACION, validarDecoracion } from "@/data/decoracion";
 import { errorOrden } from "@/lib/orden-secciones";
 import { borrarSeccionHome, guardarSeccionHome, leerSeccionHome } from "@/lib/home-guardar";
-import { getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
+import { ANCHOS_IMAGEN_HOME, getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
 import { shopTenantId } from "@/lib/tenant";
 import { getMarca } from "@/lib/marca";
 import { precioPrincipal } from "@/lib/promociones/promo";
@@ -40,7 +40,13 @@ export type ResultadoGuardar =
 export type ResultadoLeerSeccion = { ok: true; valor: unknown } | { ok: false; error: string };
 
 export type ResultadoFirma =
-  | { ok: true; key: string; url: string; headers: { "content-type": string }; urlPublica: string }
+  | {
+      ok: true;
+      /** Una firma por variante pedida, en el mismo orden. */
+      subidas: { ancho: number; key: string; url: string; headers: { "content-type": string } }[];
+      /** URL pública de la variante MÁS GRANDE: es la que se guarda en el contenido. */
+      urlPublica: string;
+    }
   | { ok: false; errores: string[] };
 
 /** Un producto del catálogo, tal como lo necesita el selector de destacados. */
@@ -67,7 +73,6 @@ const SIN_PERMISO_DECORACION = "No tiene permisos para cambiar la apariencia de 
 const ERROR_GUARDAR_DECORACION = "No se pudo guardar la apariencia de la tienda. Inténtelo de nuevo.";
 const ERROR_GUARDAR_FOOTER = "No se pudo guardar el pie de página. Inténtelo de nuevo.";
 
-const ANCHO_HOME = 1600;
 const TTL_FIRMA_S = 600;
 const MAX_BYTES_VARIANTE = 5 * 1024 * 1024;
 /** Tope de resultados del selector: alcanza para elegir a mano, sin paginar. */
@@ -260,19 +265,37 @@ export async function restablecerFooter(): Promise<ResultadoGuardar> {
 }
 
 /**
- * Firma un PUT directo a R2 para UNA variante webp de 1600 px. La key la arma
- * el servidor (el cliente no elige key ni content-type). Nunca lanza.
+ * Firma los PUT directos a R2 para las variantes webp (800 y/o 1600 px) de UNA
+ * imagen: todas comparten el mismo uuid (`v/{uuid}-800.webp`, `v/{uuid}-1600.webp`).
+ * La key la arma el servidor (el cliente no elige key ni content-type). Devuelve
+ * también la URL pública de la variante más grande. Nunca lanza.
  */
-export async function firmarSubidaImagenHome(input: { bytes: number }): Promise<ResultadoFirma> {
+export async function firmarSubidaImagenHome(input: {
+  variantes: { ancho: number; bytes: number }[];
+}): Promise<ResultadoFirma> {
   if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO] };
 
   const r2 = getShopMediaR2();
   if (!r2) return { ok: false, errores: [R2_NO_CONFIGURADO] };
 
-  const bytes = Number(input?.bytes);
-  if (!Number.isInteger(bytes) || bytes <= 0 || bytes > MAX_BYTES_VARIANTE) {
-    return { ok: false, errores: [TAMANO_INVALIDO] };
-  }
+  const pedidas = Array.isArray(input?.variantes) ? input.variantes : [];
+  const anchos = new Set<number>();
+  const validas =
+    pedidas.length > 0 &&
+    pedidas.length <= ANCHOS_IMAGEN_HOME.length &&
+    pedidas.every((v) => {
+      const bytes = Number(v?.bytes);
+      const ancho = Number(v?.ancho);
+      const ok =
+        Number.isInteger(bytes) &&
+        bytes > 0 &&
+        bytes <= MAX_BYTES_VARIANTE &&
+        (ANCHOS_IMAGEN_HOME as readonly number[]).includes(ancho) &&
+        !anchos.has(ancho);
+      anchos.add(ancho);
+      return ok;
+    });
+  if (!validas) return { ok: false, errores: [TAMANO_INVALIDO] };
 
   let tenantId: string;
   try {
@@ -284,15 +307,21 @@ export async function firmarSubidaImagenHome(input: { bytes: number }): Promise<
   }
 
   try {
-    const key = homeImagenKey(tenantId, randomUUID(), ANCHO_HOME);
-    const { url, headers } = await r2.presignPut(key, {
-      contentType: "image/webp",
-      contentLength: bytes,
-      ttlSeconds: TTL_FIRMA_S,
-    });
-    const urlPublica = urlPublicaHome(key);
+    const id = randomUUID();
+    const subidas: Extract<ResultadoFirma, { ok: true }>["subidas"] = [];
+    for (const { ancho, bytes } of pedidas) {
+      const key = homeImagenKey(tenantId, id, Number(ancho));
+      const { url, headers } = await r2.presignPut(key, {
+        contentType: "image/webp",
+        contentLength: Number(bytes),
+        ttlSeconds: TTL_FIRMA_S,
+      });
+      subidas.push({ ancho: Number(ancho), key, url, headers });
+    }
+    const mayor = subidas.reduce((a, b) => (b.ancho > a.ancho ? b : a));
+    const urlPublica = urlPublicaHome(mayor.key);
     if (!urlPublica) return { ok: false, errores: [R2_NO_CONFIGURADO] };
-    return { ok: true, key, url, headers, urlPublica };
+    return { ok: true, subidas, urlPublica };
   } catch (err) {
     console.error("[home-acciones] no se pudo firmar la subida:", err);
     return { ok: false, errores: [ERROR_FIRMA] };

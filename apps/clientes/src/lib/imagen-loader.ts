@@ -10,22 +10,29 @@
  *   MÁS GRANDE que figura en el overlay; no todas las fotos tienen las tres
  *   (hay cargas con sólo 320 y 800), así que nunca se pide una más grande que
  *   esa. Dentro de ese tope, la más chica que cubra el ancho del srcset.
- * - Cualquier otra URL (imágenes de la home y logos de marca en `home/`, que
- *   tienen una sola variante de 1600; archivos de public/) se
- *   sirve tal cual.
+ * - Imágenes de la home SUBIDAS DESDE EL EDITOR NUEVO (`home/{tenant}/v/…`):
+ *   se guardan en 800 y 1600 con el mismo criterio (tope = la variante de la
+ *   URL; una imagen chica puede tener sólo la de 800).
+ * - Cualquier otra URL (imágenes de la home y logos de marca viejos en
+ *   `home/{tenant}/{uuid}-1600.webp`, que tienen una sola variante; archivos
+ *   de public/) se sirve tal cual: pedir una -800 que no existe daría 404.
  *
  * Módulo PURO y sin alias `@/`: lo carga next/image en cliente y en server.
  */
-// Sólo fotos de productos: las de la home y las marcas (`home/...`) tienen UNA variante (1600).
+// Fotos de productos (320/800/1600) e imágenes nuevas de la home (`home/{tenant}/v/…`, 800/1600).
+// Las de la home VIEJAS (`home/{tenant}/{uuid}-1600.webp`) no matchean: tienen UNA variante.
 const FOTO_PRODUCTO = /\/productos\/.+-(320|800|1600)\.webp$/;
+const IMAGEN_HOME_VARIANTES = /\/home\/[a-z0-9-]+\/v\/[^/]+-(800|1600)\.webp$/;
 const VARIANTE = /-(320|800|1600)\.webp$/;
 const ANCHOS = [320, 800, 1600] as const;
+const ANCHOS_HOME = [800, 1600] as const;
 
 export default function cargadorImagen({ src, width }: { src: string; width: number; quality?: number }): string {
-  const m = FOTO_PRODUCTO.exec(src);
+  const producto = FOTO_PRODUCTO.exec(src);
+  const m = producto ?? IMAGEN_HOME_VARIANTES.exec(src);
   if (!m) return src;
   const tope = Number(m[1]);
-  const disponibles = ANCHOS.filter((a) => a <= tope);
+  const disponibles = (producto ? ANCHOS : ANCHOS_HOME).filter((a) => a <= tope);
   const ancho = disponibles.find((a) => a >= width) ?? tope;
   return src.replace(VARIANTE, `-${ancho}.webp`);
 }

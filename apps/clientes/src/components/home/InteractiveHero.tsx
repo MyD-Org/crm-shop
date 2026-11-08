@@ -10,9 +10,9 @@ const INTRO_FADE_MS = 900;
 /** Intro order: shelf strip, pendant, table lamp, spot. Ends on the spot, which stays on (REST_LIGHT). */
 const INTRO_SEQUENCE = ["linear", "pendant", "bulb", "spot"].map(id => HERO_LIGHTS.findIndex(light => light.id === id));
 /**
- * En escritorio el spot queda prendido solo al terminar la intro (o apenas el visitante la corta),
- * así el LA que revela en la pared (SPOT_LA) no depende de encontrarlo. El resto de las luces sigue
- * respondiendo al cursor y al scroll por encima de él; tocar el spot lo apaga.
+ * El spot queda prendido solo al terminar la intro (o apenas el visitante la corta), así el LA que
+ * revela en la pared (SPOT_LA) no depende de encontrarlo: menos aún en celular, sin cursor. El resto
+ * de las luces sigue respondiendo al cursor y al scroll por encima de él; tocar el spot lo apaga.
  */
 const REST_LIGHT = HERO_LIGHTS.findIndex(light => light.id === "spot");
 const REST_OPACITY = .85;
@@ -59,9 +59,9 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       delete host.dataset.intro;
       paint([]);
     };
-    // Una sola vez: el spot queda en reposo en escritorio (en celular el haz cae bajo el texto).
+    // Una sola vez: el spot queda en reposo.
     const settle = () => {
-      if (settled || cover.matches) return;
+      if (settled) return;
       settled = true;
       resting.current.add(REST_LIGHT);
       syncPressed();

@@ -20,6 +20,7 @@ const PERMITIDOS: Record<string, string> = {
   "app/imagen-para-compartir/route.tsx": "rutas del logo y la foto de Central: sólo se leen con recursosCentral",
   "data/footer.ts": "DEFAULTS_FOOTER: el pie de Central (la base genérica usa defaultsFooterDe)",
   "components/HeaderUI.tsx": "el logo SVG de código de Central (assets/central-led-logo.svg)",
+  "components/consola/LogoConsola.tsx": "el logo SVG de Central en la consola (sólo con fuenteLogo = central)",
   "components/home/hero-lights.ts": "fotos del hero interactivo de Central (public/images/central-led/)",
   "components/home/editores/EditorHero.tsx": "texto alternativo de la foto del estudio de Central (sólo se ofrece con base central)",
   "lib/chat-ia-textos.ts": "ruta del avatar del chat (public/images/central-led/): sólo con recursosCentral",

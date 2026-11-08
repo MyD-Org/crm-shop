@@ -7,8 +7,15 @@ import styles from "./InteractiveHero.module.css";
 /** Each lamp of the first-view intro stays on this long; the fade matches `[data-intro]` in the CSS module. */
 const INTRO_STEP_MS = 1400;
 const INTRO_FADE_MS = 900;
-/** Intro order: shelf strip, spot, pendant, table lamp. */
-const INTRO_SEQUENCE = ["linear", "spot", "pendant", "bulb"].map(id => HERO_LIGHTS.findIndex(light => light.id === id));
+/** Intro order: shelf strip, pendant, table lamp, spot. Ends on the spot, which stays on (REST_LIGHT). */
+const INTRO_SEQUENCE = ["linear", "pendant", "bulb", "spot"].map(id => HERO_LIGHTS.findIndex(light => light.id === id));
+/**
+ * En escritorio el spot queda prendido solo al terminar la intro (o apenas el visitante la corta),
+ * así el LA que revela en la pared (SPOT_LA) no depende de encontrarlo. El resto de las luces sigue
+ * respondiendo al cursor y al scroll por encima de él; tocar el spot lo apaga.
+ */
+const REST_LIGHT = HERO_LIGHTS.findIndex(light => light.id === "spot");
+const REST_OPACITY = .85;
 /** While the hero is on screen, every this many px of scroll lights the next lamp, held this long after scrolling stops. */
 const SCROLL_STEP_PX = 90;
 const SCROLL_HOLD_MS = 700;
@@ -24,13 +31,16 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
   const scene = useRef<HTMLDivElement>(null);
   const layers = useRef<(SVGGElement | null)[]>([]);
   const pinned = useRef(new Set<number>());
+  /** Luces prendidas "en reposo" (REST_LIGHT en escritorio): no las apaga ni el cursor ni el scroll. */
+  const resting = useRef(new Set<number>());
   const stopIntro = useRef<() => void>(() => {});
   const [pressed, setPressed] = useState<number[]>([]);
   const [rect, setRect] = useState<ReturnType<typeof sceneRect> | null>(null);
   const uid = useId().replaceAll(":", "");
   const paint = useCallback((values: number[]) => layers.current.forEach((layer, i) => {
-    if (layer) layer.style.opacity = String(pinned.current.has(i) ? 1 : values[i] ?? 0);
+    if (layer) layer.style.opacity = String(pinned.current.has(i) ? 1 : Math.max(values[i] ?? 0, resting.current.has(i) ? REST_OPACITY : 0));
   }), []);
+  const syncPressed = useCallback(() => setPressed(HERO_LIGHTS.flatMap((_, i) => pinned.current.has(i) || resting.current.has(i) ? [i] : [])), []);
 
   useEffect(() => {
     if (!enabled || !root.current || !scene.current) return;
@@ -40,6 +50,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
     const cover = matchMedia(COVER_QUERY);
     let interrupted = false;
     let started = false;
+    let settled = false;
     let frame = 0;
     const timers: ReturnType<typeof setTimeout>[] = [];
     const stop = () => {
@@ -48,7 +59,15 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       delete host.dataset.intro;
       paint([]);
     };
-    stopIntro.current = stop;
+    // Una sola vez: el spot queda en reposo en escritorio (en celular el haz cae bajo el texto).
+    const settle = () => {
+      if (settled || cover.matches) return;
+      settled = true;
+      resting.current.add(REST_LIGHT);
+      syncPressed();
+    };
+    const interrupt = () => { settle(); stop(); };
+    stopIntro.current = interrupt;
     const resize = new ResizeObserver(() => {
       const fitCover = usaCover(surface.clientWidth, surface.clientHeight, cover.matches);
       // El CSS cambia object-fit con este atributo; las luces usan el mismo cálculo.
@@ -59,14 +78,15 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
     let visible = false;
     const observer = new IntersectionObserver(([entry]) => {
       visible = entry.isIntersecting;
-      if (!entry.isIntersecting || entry.intersectionRatio < .35 || started || interrupted || motion.matches) return;
+      if (!entry.isIntersecting || entry.intersectionRatio < .35 || started || interrupted) return;
       started = true;
+      if (motion.matches) { settle(); paint([]); return; }
       host.dataset.intro = "";
       const sequence = INTRO_SEQUENCE;
       sequence.forEach((index, step) => {
         timers.push(setTimeout(() => paint(HERO_LIGHTS.map((_, i) => i === index ? .85 : 0)), step * INTRO_STEP_MS));
       });
-      timers.push(setTimeout(() => paint([]), sequence.length * INTRO_STEP_MS));
+      timers.push(setTimeout(() => { settle(); paint([]); }, sequence.length * INTRO_STEP_MS));
       timers.push(setTimeout(() => { delete host.dataset.intro; }, sequence.length * INTRO_STEP_MS + INTRO_FADE_MS));
     }, { threshold: .35 });
     observer.observe(surface);
@@ -100,7 +120,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
     addEventListener("scroll", scroll, { passive: true });
     const move = (event: PointerEvent) => {
       if (event.pointerType !== "mouse") return;
-      stop();
+      interrupt();
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const bounds = surface.getBoundingClientRect();
@@ -113,27 +133,30 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
     };
     const leave = () => { cancelAnimationFrame(frame); paint([]); };
     host.addEventListener("pointermove", move);
-    host.addEventListener("pointerdown", stop);
-    host.addEventListener("keydown", stop);
+    host.addEventListener("pointerdown", interrupt);
+    host.addEventListener("keydown", interrupt);
     host.addEventListener("pointerleave", leave);
-    motion.addEventListener("change", stop);
+    motion.addEventListener("change", interrupt);
     return () => {
       stop(); cancelAnimationFrame(frame); resize.disconnect(); observer.disconnect();
       clearTimeout(scrollTimer);
       removeEventListener("scroll", scroll);
       host.removeEventListener("pointermove", move);
-      host.removeEventListener("pointerdown", stop);
-      host.removeEventListener("keydown", stop);
+      host.removeEventListener("pointerdown", interrupt);
+      host.removeEventListener("keydown", interrupt);
       host.removeEventListener("pointerleave", leave);
-      motion.removeEventListener("change", stop);
+      motion.removeEventListener("change", interrupt);
     };
-  }, [enabled, paint]);
+  }, [enabled, paint, syncPressed]);
 
   function toggle(index: number) {
+    // Prendida (fija o en reposo) se apaga del todo; si no, se fija. Se mira antes de cortar la intro,
+    // que deja el spot en reposo: tocarlo durante la intro lo prende, no lo apaga.
+    const on = pinned.current.has(index) || resting.current.has(index);
     stopIntro.current();
-    if (pinned.current.has(index)) pinned.current.delete(index);
+    if (on) { pinned.current.delete(index); resting.current.delete(index); }
     else pinned.current.add(index);
-    setPressed([...pinned.current]);
+    syncPressed();
     paint([]);
   }
 

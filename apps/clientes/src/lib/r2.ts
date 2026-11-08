@@ -43,6 +43,13 @@ export class R2TooLargeError extends Error {
 export interface R2Deps {
   fetch?: typeof fetch;
   now?: () => Date;
+  /**
+   * Cache-Control por defecto de los objetos que se suben con este cliente
+   * (presignPut y put). Sólo para el bucket PÚBLICO de medios, cuyas keys llevan
+   * un uuid/sha y nunca se pisan. Con presignPut el header va FIRMADO y se
+   * devuelve en `headers`: el navegador tiene que mandarlo tal cual en el PUT.
+   */
+  cacheControl?: string;
 }
 
 export interface R2Client {
@@ -52,7 +59,7 @@ export interface R2Client {
   presignPut(
     key: string,
     o: { contentType: string; contentLength: number; ttlSeconds: number },
-  ): Promise<{ url: string; headers: { "content-type": string }; expiresAt: Date }>;
+  ): Promise<{ url: string; headers: { "content-type": string; "cache-control"?: string }; expiresAt: Date }>;
   /** null = 404. */
   head(key: string): Promise<{ size: number; contentType: string | null; etag: string | null } | null>;
   /** 206/200; null = 404. */
@@ -115,11 +122,21 @@ export function createR2(cfg: R2Config, deps: R2Deps = {}): R2Client {
 
   return {
     async presignPut(key, o) {
+      // cache-control va firmado (allHeaders) y se devuelve para que el navegador lo mande igual.
+      const cacheControl = deps.cacheControl
       const url = await presign("PUT", key, {
-        headers: { "content-type": o.contentType, "content-length": String(o.contentLength) },
+        headers: {
+          "content-type": o.contentType,
+          "content-length": String(o.contentLength),
+          ...(cacheControl ? { "cache-control": cacheControl } : {}),
+        },
         query: [["X-Amz-Expires", String(o.ttlSeconds)]],
       });
-      return { url, headers: { "content-type": o.contentType }, expiresAt: new Date(now().getTime() + o.ttlSeconds * 1000) };
+      return {
+        url,
+        headers: { "content-type": o.contentType, ...(cacheControl ? { "cache-control": cacheControl } : {}) },
+        expiresAt: new Date(now().getTime() + o.ttlSeconds * 1000),
+      };
     },
 
     async head(key) {
@@ -184,6 +201,7 @@ export function createR2(cfg: R2Config, deps: R2Deps = {}): R2Client {
         "content-length": String(body.byteLength),
       };
       if (o.contentDisposition) headers["content-disposition"] = o.contentDisposition;
+      if (deps.cacheControl) headers["cache-control"] = deps.cacheControl;
       // Uint8Array genérico no calza con BodyInit en TS 5.7+; el runtime lo acepta.
       const res = await signedRequest("PUT", key, { headers, body: body as unknown as BodyInit });
       if (!res.ok) throw new R2Error("put", res.status, `PUT ${key} respondió ${res.status}`);

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  CACHE_CONTROL_MEDIOS,
+  cacheControlMedios,
   getShopMediaR2,
   homeImagenKey,
   resetShopMediaR2,
@@ -94,5 +96,29 @@ describe("getShopMediaR2", () => {
     for (const [k, v] of Object.entries(ENV_OK)) vi.stubEnv(k, v);
     vi.stubEnv("R2_SHOP_MEDIA_BUCKET", "");
     expect(getShopMediaR2()).toBeNull();
+  });
+});
+
+describe("cacheControlMedios", () => {
+  it("por defecto es inmutable por un año", () => {
+    expect(CACHE_CONTROL_MEDIOS).toBe("public, max-age=31536000, immutable");
+    expect(cacheControlMedios({})).toBe(CACHE_CONTROL_MEDIOS);
+  });
+
+  it("R2_SHOP_MEDIA_SIN_CACHE_CONTROL=1 lo apaga (interruptor por CORS sin actualizar)", () => {
+    expect(cacheControlMedios({ R2_SHOP_MEDIA_SIN_CACHE_CONTROL: "1" })).toBeUndefined();
+  });
+});
+
+describe("getShopMediaR2 firma Cache-Control", () => {
+  it("las subidas al bucket público llevan cache-control firmado y en headers", async () => {
+    for (const [k, v] of Object.entries(ENV_OK)) vi.stubEnv(k, v);
+    resetShopMediaR2();
+    const r2 = getShopMediaR2();
+    const { url, headers } = await r2!.presignPut("x/a.webp", { contentType: "image/webp", contentLength: 1, ttlSeconds: 600 });
+    expect(headers["cache-control"]).toBe(CACHE_CONTROL_MEDIOS);
+    expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")).toContain("cache-control");
+    vi.unstubAllEnvs();
+    resetShopMediaR2();
   });
 });

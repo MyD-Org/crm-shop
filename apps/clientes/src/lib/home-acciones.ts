@@ -43,7 +43,7 @@ export type ResultadoFirma =
   | {
       ok: true;
       /** Una firma por variante pedida, en el mismo orden. */
-      subidas: { ancho: number; key: string; url: string; headers: { "content-type": string } }[];
+      subidas: { ancho: number; key: string; url: string; headers: Record<string, string> }[];
       /** URL pública de la variante MÁS GRANDE: es la que se guarda en el contenido. */
       urlPublica: string;
     }

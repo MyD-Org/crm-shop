@@ -36,6 +36,27 @@ describe("presignPut", () => {
     expect(u.searchParams.get("X-Amz-SignedHeaders")).toContain("content-length");
     expect(u.searchParams.get("X-Amz-SignedHeaders")).toContain("content-type");
     expect(headers).toEqual({ "content-type": "image/webp" });
+    // Sin cacheControl configurado no se firma ni se devuelve (bucket de comprobantes).
+    expect(u.searchParams.get("X-Amz-SignedHeaders")).not.toContain("cache-control");
+  });
+
+  it("con cacheControl lo firma y lo devuelve para que el navegador lo mande igual", async () => {
+    const r2 = createR2(CFG, { now: () => NOW, cacheControl: "public, max-age=31536000, immutable" });
+    const { url, headers } = await r2.presignPut("home/t/a-1600.webp", {
+      contentType: "image/webp",
+      contentLength: 1234,
+      ttlSeconds: 600,
+    });
+
+    expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")).toBe("cache-control;content-length;content-type;host");
+    expect(headers).toEqual({ "content-type": "image/webp", "cache-control": "public, max-age=31536000, immutable" });
+  });
+
+  it("put con cacheControl manda el header", async () => {
+    const fetchFn = vi.fn<(input: Request) => Promise<Response>>(async () => new Response(null, { status: 200 }));
+    const r2 = createR2(CFG, { fetch: fetchFn as unknown as typeof fetch, now: () => NOW, cacheControl: "public, max-age=31536000, immutable" });
+    await r2.put("home/t/a-1600.webp", new Uint8Array([1]), { contentType: "image/webp" });
+    expect((fetchFn.mock.calls[0]![0] as Request).headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
   });
 });
 

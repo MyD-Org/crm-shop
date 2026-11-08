@@ -36,3 +36,15 @@ describe("BarraSuperior", () => {
     expect(html).toContain("max-md:hidden");
   });
 });
+
+describe("Seguinos", () => {
+  const red = [{ nombre: "Instagram", usuario: "cuenta" }];
+  it("la marca de Central lo muestra", () => {
+    expect(renderToStaticMarkup(<BarraSuperior anuncio={undefined} visibilidad="siempre" redes={red} whatsapp="" />)).toContain("Seguinos");
+  });
+  it("un sitio con marca propia muestra el Instagram sin Seguinos", () => {
+    const html = renderToStaticMarkup(<BarraSuperior anuncio={undefined} visibilidad="siempre" redes={red} whatsapp="" seguinos={false} />);
+    expect(html).toContain("https://www.instagram.com/cuenta/");
+    expect(html).not.toContain("Seguinos");
+  });
+});

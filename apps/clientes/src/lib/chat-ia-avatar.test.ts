@@ -10,6 +10,16 @@ describe("avatarChat", () => {
     expect(avatarChat({ logoUrl: "https://media.example/l.svg", recursosCentral: false })).toBe("https://media.example/l.svg");
   });
 
+  it("marca propia con ícono: el ícono cuadrado, no el logo horizontal", () => {
+    expect(
+      avatarChat({ logoUrl: "https://media.example/l.svg", faviconUrl: "https://media.example/i.svg", recursosCentral: false }),
+    ).toBe("https://media.example/i.svg");
+  });
+
+  it("la tienda de Central no cambia aunque tenga ícono", () => {
+    expect(avatarChat({ faviconUrl: "https://media.example/i.svg", recursosCentral: true })).toBe("/images/central-led/avatar.jpg");
+  });
+
   it("otra marca sin logo: sin avatar, nunca el de Central", () => {
     expect(avatarChat({ recursosCentral: false })).toBeUndefined();
   });

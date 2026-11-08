@@ -93,12 +93,13 @@ export const SUBTITULO_CHAT = "Consultas sobre productos y pedidos";
 const AVATAR_CENTRAL = "/images/central-led/avatar.jpg";
 
 /**
- * Logo de la cabecera del chat: el de la marca; el de Central sólo en la tienda de Central; si no,
- * sin avatar (nunca el de otra marca). En la hoja mobile el widget no lo dibuja.
+ * Logo de la cabecera del chat (se recorta en cuadrado). Un sitio con marca propia usa su ícono
+ * cuadrado (el favicon) y, si no tiene, su logo; la tienda de Central, su logo o su avatar de
+ * siempre. Nunca el de otra marca. En la hoja mobile el widget no lo dibuja.
  */
-export function avatarChat(marca: { logoUrl?: string; recursosCentral: boolean }): string | undefined {
-  if (marca.logoUrl) return marca.logoUrl;
-  return marca.recursosCentral ? AVATAR_CENTRAL : undefined;
+export function avatarChat(marca: { logoUrl?: string; faviconUrl?: string; recursosCentral: boolean }): string | undefined {
+  if (!marca.recursosCentral) return marca.faviconUrl || marca.logoUrl || undefined;
+  return marca.logoUrl || AVATAR_CENTRAL;
 }
 
 /** Color de marca del widget: token del DS, nunca un literal. */

@@ -16,6 +16,7 @@ import { BloqueoFavoritos } from "@/components/BloqueoFavoritos";
 import { ChatIaServidor } from "@/components/chat/ChatIaServidor";
 import { TrackingServidor } from "@/components/tracking/TrackingServidor";
 import { MarcaProvider } from "@/components/MarcaProvider";
+import { LogoConsola } from "@/components/consola/LogoConsola";
 import { PromoProvider } from "@/components/promociones/PromoProvider";
 import { datosPromoCliente } from "@/lib/promociones/promo";
 import { getMarca } from "@/lib/marca";
@@ -161,6 +162,7 @@ export default async function RootLayout({
             <Suspense fallback={null}>
               <ChatIaServidor />
             </Suspense>
+            <LogoConsola />
             <Suspense fallback={null}>
               <TrackingServidor />
             </Suspense>

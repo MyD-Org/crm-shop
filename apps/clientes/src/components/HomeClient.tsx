@@ -28,8 +28,11 @@ import {
 import { SeccionEditable } from "@/components/home/SeccionEditable";
 import { TituloSeccion } from "@/components/home/TituloSeccion";
 import { InteractiveHero } from "@/components/home/InteractiveHero";
-import { isStudioImage, STUDIO_IMAGE } from "@/components/home/hero-lights";
+import { isStudioImage, STUDIO_IMAGE, STUDIO_IMAGE_NEUTRAL } from "@/components/home/hero-lights";
+import { HeroPiedra } from "@/components/home/HeroPiedra";
+import { isPiedraImage } from "@/components/home/escena-piedra";
 import { IconoWhatsapp } from "@/components/IconoWhatsapp";
+import { VisitenosPiedra } from "@/components/piedra/VisitenosPiedra";
 
 /* ── Icons (mismo criterio que el header: SVG inline, sin deps) ─── */
 
@@ -121,6 +124,7 @@ export function HomeClient({
   promociones = null,
   promosPago = null,
   busquedaAsistida = null,
+  piedra = false,
 }: {
   contenido: HomeContent;
   /**
@@ -150,6 +154,11 @@ export function HomeClient({
    * mueve nada de lo que ya se ve.
    */
   busquedaAsistida?: ReactNode;
+  /**
+   * Textura de piedra prendida en este sitio (`decoracion.piedra`). Sólo con ella se dibuja la banda
+   * "Visítenos"; apagada, la home es exactamente la de siempre.
+   */
+  piedra?: boolean;
 }) {
   const { marquee, servicios } = contenido;
   // Los textos apagados con "Mostrar" no se pintan. El editor no depende de
@@ -161,6 +170,7 @@ export function HomeClient({
   const bannerDeco = sinCamposOcultos(contenido.bannerDeco);
   const decoGrid = sinCamposOcultos(contenido.decoGrid);
   const whatsapp = sinCamposOcultos(contenido.whatsapp);
+  const visitenos = sinCamposOcultos(contenido.visitenos);
   const vis = (s: SeccionHome) => visibilidadDe(contenido.visibilidad, s);
   const promosEnHero = vis("hero") !== "nunca";
   const promosPagoEditable = (
@@ -177,7 +187,7 @@ export function HomeClient({
   // La foto del hero es el LCP de la home: el Hero del DS la pide con
   // `priority` e `imagenNext` la precarga desde el <head> (una sola vez, ya
   // con srcset/sizes del optimizador).
-  const imagenHero = isStudioImage(hero.imagen) ? STUDIO_IMAGE : hero.imagen;
+  const imagenHero = isStudioImage(hero.imagen) && hero.imagen !== STUDIO_IMAGE_NEUTRAL ? STUDIO_IMAGE : hero.imagen;
 
   // Cada sección con su propio contenedor, así se pueden dibujar en cualquier orden
   // ("Ordenar secciones" de la barra de edición, `contenido.orden`). La cinta de marcas va a todo
@@ -199,6 +209,7 @@ export function HomeClient({
       <Contenido className="pt-[clamp(20px,3vw,36px)]">
         <Reveal>
           <SeccionEditable seccion="hero" visibilidad={vis("hero")}>
+            <HeroPiedra enabled={isPiedraImage(hero.imagen)}>
             <InteractiveHero enabled={isStudioImage(hero.imagen)}>
             <Hero
               // Compacto: el hero y las promos de pago entran en la primera pantalla.
@@ -236,6 +247,7 @@ export function HomeClient({
                 .map(({ visibilidad, ...u }) => ({ ...u, visibleOn: aVisibleOn(visibilidad) }))}
             />
             </InteractiveHero>
+            </HeroPiedra>
           </SeccionEditable>
         </Reveal>
       </Contenido>
@@ -362,6 +374,14 @@ export function HomeClient({
         </Reveal>
       </Contenido>
     ),
+    // Sólo con la piedra prendida en el sitio; además, el admin elige dónde se ve (nace oculta).
+    visitenos: piedra ? (
+      <Contenido>
+        <SeccionEditable seccion="visitenos" titulo={visitenos.titulo} visibilidad={vis("visitenos")} botonTop="top-[calc(clamp(56px,7vw,96px)+0.5rem)]">
+          <VisitenosPiedra contenido={visitenos} />
+        </SeccionEditable>
+      </Contenido>
+    ) : null,
     whatsapp: (
       <Contenido>
         <SeccionEditable seccion="whatsapp" visibilidad={vis("whatsapp")}>

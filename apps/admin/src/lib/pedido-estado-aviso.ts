@@ -8,7 +8,7 @@ import { formatearNumeroPedido, type PedidoRow } from "@/lib/pedidos-repo"
 import type { EstadoPedido } from "@/lib/pedidos-transiciones"
 import { urlPublicaShopParaPedido } from "@/lib/shop-destino"
 import { getTenantByIdFromDb } from "@/lib/tenants"
-import { logoMailDeTenant } from "@/lib/email-logo"
+import { marcaParaSitio } from "@/lib/marca-sitio"
 
 export type AvisoResult =
   | { status: "sent" }
@@ -47,16 +47,18 @@ export async function avisarClientePedido(input: {
     const tenant = await getTenantByIdFromDb(tenantId)
     if (!tenant) return { status: "skipped", reason: "tenant no encontrado" }
 
+    // Marca, logo y remitente del sitio donde se compró (sin sitio propio: los del tenant).
+    const marca = marcaParaSitio(tenant, pedido.sitioOrigen)
     const { subject, html, text } = buildPedidoEstadoEmail({
-      tenantName: tenant.name,
-      logoUrl: logoMailDeTenant(tenant),
+      tenantName: marca.name,
+      logoUrl: marca.logoUrl,
       numero: formatearNumeroPedido(pedido.numero),
       contactoNombre: pedido.contactoNombre,
       aviso,
       entregaTipo: pedido.entregaTipo,
       pedidosUrl: pedidosUrl(tenant, pedido.sitioOrigen),
     })
-    const enviado = await sendEmail(tenant, to, subject, html, text, {
+    const enviado = await sendEmail({ ...tenant, name: marca.name, resendFrom: marca.resendFrom }, to, subject, html, text, {
       tags: [{ name: "tipo", value: `pedido_${aviso}` }],
       // Un reintento del mismo cambio (misma marca de tiempo) no duplica el mail.
       idempotencyKey: `pedido-aviso/${pedido.id}/${aviso}/${now.getTime()}`,

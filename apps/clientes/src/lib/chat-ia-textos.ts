@@ -89,8 +89,17 @@ export const ETIQUETA_BOTON_ASISTENTE = "Asistente";
 
 export const SUBTITULO_CHAT = "Consultas sobre productos y pedidos";
 
-/** Logo de la cabecera del chat (public/images: fuera del gate del proxy). En la hoja mobile el widget no lo dibuja. */
-export const AVATAR_CHAT = "/images/central-led/avatar.jpg";
+/** Avatar de Central (public/images: fuera del gate del proxy). */
+const AVATAR_CENTRAL = "/images/central-led/avatar.jpg";
+
+/**
+ * Logo de la cabecera del chat: el de la marca; el de Central sólo en la tienda de Central; si no,
+ * sin avatar (nunca el de otra marca). En la hoja mobile el widget no lo dibuja.
+ */
+export function avatarChat(marca: { logoUrl?: string; recursosCentral: boolean }): string | undefined {
+  if (marca.logoUrl) return marca.logoUrl;
+  return marca.recursosCentral ? AVATAR_CENTRAL : undefined;
+}
 
 /** Color de marca del widget: token del DS, nunca un literal. */
 export const COLOR_CHAT = "var(--color-primary)";

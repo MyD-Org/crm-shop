@@ -1,7 +1,4 @@
 import { cacheLife, cacheTag } from "next/cache";
-import { eq } from "drizzle-orm";
-import { getDb } from "@/db";
-import { homeContent } from "@/db/schema";
 import {
   combinarContenidoHome as combinar,
   defaultsHomeDe,
@@ -12,10 +9,12 @@ import {
   type HomeContent,
 } from "@/data/home-defaults";
 import { KEY_FOOTER, defaultsFooterDe, resolverDatosFooter, type DatosFooter } from "@/data/footer";
+import { DECORACION_POR_DEFECTO, KEY_DECORACION, resolverDecoracion, type Decoracion } from "@/data/decoracion";
 import { getMarca } from "@/lib/marca";
-import { leerSeccionesHome } from "@/lib/home-guardar";
+import { leerSeccionHome, leerSeccionesHome, leerTodasSeccionesHome, leerWhatsappDelPrincipal } from "@/lib/home-guardar";
 import { TAG_HOME } from "@/lib/cache-tags";
-import { shopTenantId } from "@/lib/tenant";
+import { claveSitio, resolverSitioPorClave } from "@/lib/sitio";
+import { leerDestinosExtra } from "@/lib/sitio-datos";
 
 export function combinarContenidoHome(
   filas: { key: string; payload: unknown }[],
@@ -36,16 +35,18 @@ export function combinarContenidoHome(
  * Cache Components esto también corre en el build.
  */
 export async function getContenidoHome(): Promise<HomeContent> {
+  return contenidoDelSitio(claveSitio());
+}
+
+/** La clave del sitio viaja como argumento: entra en la clave de caché (un sitio no ve la de otro). */
+async function contenidoDelSitio(sitio: string): Promise<HomeContent> {
   "use cache";
   cacheTag(TAG_HOME);
   console.info("[cache] home miss");
   // Los defaults dependen de la marca (Central o genérica). `getMarca` no lanza.
   const defaults = defaultsHomeDe(await getMarca());
   try {
-    const filas = await getDb()
-      .select()
-      .from(homeContent)
-      .where(eq(homeContent.tenantId, shopTenantId()));
+    const filas = await leerTodasSeccionesHome(sitio);
     cacheLife("home");
     return combinar(filas, defaults);
   } catch (err) {
@@ -60,12 +61,12 @@ export async function getContenidoHome(): Promise<HomeContent> {
  * footer (todas las páginas) y las páginas legales. Cacheadas con el mismo
  * tag que la home (las escribe el mismo editor). `null` = la DB falló.
  */
-async function filasFooter(): Promise<{ legal: unknown; footer: unknown } | null> {
+async function filasFooter(sitio: string): Promise<{ legal: unknown; footer: unknown } | null> {
   "use cache";
   cacheTag(TAG_HOME);
   console.info("[cache] legales miss");
   try {
-    const filas = await leerSeccionesHome([KEY_LEGAL, KEY_FOOTER]);
+    const filas = await leerSeccionesHome([KEY_LEGAL, KEY_FOOTER], sitio);
     cacheLife("home");
     return { legal: filas.get(KEY_LEGAL), footer: filas.get(KEY_FOOTER) };
   } catch (err) {
@@ -81,7 +82,7 @@ async function filasFooter(): Promise<{ legal: unknown; footer: unknown } | null
  * la identificación en vez de romperse.
  */
 export async function getDatosLegales(): Promise<DatosLegales> {
-  const filas = await filasFooter();
+  const filas = await filasFooter(claveSitio());
   return filas ? resolverDatosLegales(filas.legal) : DEFAULTS_LEGAL;
 }
 
@@ -90,7 +91,55 @@ export async function getDatosLegales(): Promise<DatosLegales> {
  * los defaults: el footer de siempre.
  */
 export async function getDatosFooter(): Promise<DatosFooter> {
+  return footerDelSitio(claveSitio());
+}
+
+async function footerDelSitio(sitio: string): Promise<DatosFooter> {
+  "use cache";
+  cacheTag(TAG_HOME);
   const defaults = defaultsFooterDe(await getMarca());
-  const filas = await filasFooter();
-  return filas ? resolverDatosFooter(filas.footer, defaults) : defaults;
+  const filas = await filasFooter(sitio);
+  if (!filas) {
+    cacheLife("degradado");
+    return defaults;
+  }
+  const footer = resolverDatosFooter(filas.footer, defaults);
+  if (footer.whatsapp) {
+    cacheLife("home");
+    return footer;
+  }
+  // Sitio propio sin WhatsApp: toma el número del principal (sólo ese campo).
+  try {
+    const propio = sitio !== "|" && resolverSitioPorClave(sitio, await leerDestinosExtra()).propio;
+    const salida = propio ? { ...footer, whatsapp: await leerWhatsappDelPrincipal() } : footer;
+    cacheLife("home");
+    return salida;
+  } catch (err) {
+    console.error("[footer] no se pudo leer el WhatsApp del principal:", err);
+    cacheLife("degradado");
+    return footer;
+  }
+}
+
+/**
+ * Decoración del sitio (fila `decoracion`: hoy sólo `piedra`, la textura de la piedra de Mar del
+ * Plata). Cacheada con el tag `home`; la clave del sitio viaja como argumento. Sin fila, con un
+ * payload inválido o si la DB falla: todo apagado (el aspecto de siempre).
+ */
+export async function getDecoracion(): Promise<Decoracion> {
+  return decoracionDelSitio(claveSitio());
+}
+
+async function decoracionDelSitio(sitio: string): Promise<Decoracion> {
+  "use cache";
+  cacheTag(TAG_HOME);
+  try {
+    const raw = await leerSeccionHome(KEY_DECORACION, sitio);
+    cacheLife("home");
+    return resolverDecoracion(raw);
+  } catch (err) {
+    console.error("[decoracion] home_content no disponible, queda apagada:", err);
+    cacheLife("degradado");
+    return DECORACION_POR_DEFECTO;
+  }
 }

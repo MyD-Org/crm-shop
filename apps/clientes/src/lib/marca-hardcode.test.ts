@@ -17,13 +17,13 @@ const NOMBRE_CENTRAL = /central\s?led|centralled|central-led/i;
 /** Archivos que pueden nombrar a Central, y por qué. */
 const PERMITIDOS: Record<string, string> = {
   "lib/marca-base.ts": "los textos de partida de Central (MARCA_POR_DEFECTO): fuente única",
-  "app/opengraph-image.tsx": "`alt` debe ser un literal (Next lo lee en el build): no puede derivar de la marca",
+  "app/opengraph-image.tsx": "rutas del logo y la foto de Central: sólo se leen con recursosCentral",
   "data/footer.ts": "DEFAULTS_FOOTER: el pie de Central (la base genérica usa defaultsFooterDe)",
   "components/HeaderUI.tsx": "el logo SVG de código de Central (assets/central-led-logo.svg)",
   "components/home/hero-lights.ts": "fotos del hero interactivo de Central (public/images/central-led/)",
   "components/home/editores/EditorHero.tsx": "texto alternativo de la foto del estudio de Central (sólo se ofrece con base central)",
-  "lib/chat-ia-textos.ts": "ruta del avatar del chat (public/images/central-led/); el chat está apagado fuera de Central",
-  "lib/vinculacion-mail.ts": "ruta del logo de mail de Central (RUTA_LOGO_MAIL); otra marca usa su logoMailUrl o nada",
+  "lib/chat-ia-textos.ts": "ruta del avatar del chat (public/images/central-led/): sólo con recursosCentral",
+  "lib/vinculacion-mail.ts": "ruta del logo de mail de Central (RUTA_LOGO_MAIL): sólo con recursosCentral; otra marca usa su logoMailUrl o nada",
   "lib/tema-ip.ts": "clave de la cookie de tema: NO cambia (preferencias de los clientes de Central)",
   "lib/carrito-cliente.ts": "claves del carrito en localStorage: NO cambian (carritos de los clientes de Central)",
 };

@@ -721,6 +721,7 @@ describe("orden de las secciones de la home", () => {
       "bannerDeco",
       "decoGrid",
       "servicios",
+      "visitenos",
       "whatsapp",
     ]);
   });

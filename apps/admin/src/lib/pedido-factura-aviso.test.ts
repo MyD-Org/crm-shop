@@ -86,6 +86,44 @@ describe("enviarFacturaPedido", () => {
     expect(sendEmail.mock.calls[1][3]).toContain("https://tienda.cliente.example/mi-cuenta/pedidos")
   })
 
+  it("pedido del sitio propio → factura con su nombre, logo y remitente; el error de Resend no tira", async () => {
+    getTenantByIdFromDb.mockResolvedValue({
+      id: "tenant-a",
+      name: "Tienda Demo",
+      alegraMock: false,
+      resendFrom: "ventas@tienda.cliente.example",
+      shopUrl: "https://tienda.cliente.example",
+      shopDestinosExtra: [
+        {
+          etiqueta: "otro",
+          url: "https://tienda-b.example",
+          marca: { nombre: "Tienda B", logoMailUrl: "https://tienda-b.example/logo-mail.png" },
+          remitente: "pedidos@tienda-b.example",
+        },
+      ],
+    })
+    await enviarFacturaPedido({ tenantId: "tenant-a", pedido: pedido({ sitioOrigen: "https://tienda-b.example" }) })
+    const [tenantEnvio, , , html] = sendEmail.mock.calls[0]
+    expect(tenantEnvio).toMatchObject({ name: "Tienda B", resendFrom: "pedidos@tienda-b.example" })
+    expect(html).toContain("https://tienda-b.example/logo-mail.png")
+    sendEmail.mockRejectedValueOnce(new Error("domain is not verified"))
+    const r = await enviarFacturaPedido({ tenantId: "tenant-a", pedido: pedido({ sitioOrigen: "https://tienda-b.example" }) })
+    expect(r.resultado).toBe("fallo")
+  })
+
+  it("pedido sin sitio de origen → nombre y remitente del principal", async () => {
+    getTenantByIdFromDb.mockResolvedValue({
+      id: "tenant-a",
+      name: "Tienda Demo",
+      alegraMock: false,
+      resendFrom: "ventas@tienda.cliente.example",
+      shopUrl: "https://tienda.cliente.example",
+      shopDestinosExtra: [{ etiqueta: "otro", url: "https://tienda-b.example", marca: { nombre: "Tienda B" }, remitente: "pedidos@tienda-b.example" }],
+    })
+    await enviarFacturaPedido({ tenantId: "tenant-a", pedido: pedido({ sitioOrigen: null }) })
+    expect(sendEmail.mock.calls[0][0]).toMatchObject({ name: "Tienda Demo", resendFrom: "ventas@tienda.cliente.example" })
+  })
+
   it("reenvío: otra clave de idempotencia", async () => {
     const now = new Date("2026-09-25T12:00:00Z")
     await enviarFacturaPedido({ tenantId: "tenant-a", pedido: pedido(), reenvio: now })

@@ -7,7 +7,7 @@ import { PromocionesHome } from "@/components/home/PromocionesHome";
 import { PromosPagoHome } from "@/components/home/PromosPagoHome";
 import { CuentenosSiBusquedaIa } from "@/components/home/CuentenosQueNecesita";
 import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
-import { getContenidoHome } from "@/lib/home-datos";
+import { getContenidoHome, getDecoracion } from "@/lib/home-datos";
 import { sinCamposOcultos, sinMarcasDeAcento, visibilidadDe } from "@/data/home-defaults";
 import { jsonLdSitioHtml } from "@/lib/sitio-jsonld";
 import { urlCanonicaDelSitio } from "@/lib/sitio-url";
@@ -30,7 +30,7 @@ import { getMarca } from "@/lib/marca";
  * sección los pide el Dialog al abrirse (`leerSeccionParaEditar`).
  */
 export default async function Home() {
-  const [contenido, marca] = await Promise.all([getContenidoHome(), getMarca()]);
+  const [contenido, marca, { piedra }] = await Promise.all([getContenidoHome(), getMarca(), getDecoracion()]);
   const { cantidad, skus = [] } = contenido.destacados;
   const secDestacados = sinCamposOcultos(contenido.destacados);
   const label = sinMarcasDeAcento(secDestacados.titulo ?? "") || "Productos destacados";
@@ -42,6 +42,7 @@ export default async function Home() {
       {jsonLdSitio && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSitio }} />}
       <HomeClient
         contenido={contenido}
+        piedra={piedra}
         destacados={
           <Suspense fallback={<DestacadosHomeSkeleton label={label} cantidad={cantidad} />}>
             <DestacadosHome

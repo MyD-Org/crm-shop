@@ -118,6 +118,37 @@ export interface DestinoExtra {
   url: string
   /** Origin al que va el ping; por defecto, `url`. */
   urlInterna: string
+  /**
+   * Marca propia del sitio (change `marca-por-dominio`): misma forma que `tenants.shop_marca`.
+   * Ausente = el sitio es un alias del principal. Llega sin validar el contenido: el admin la valida
+   * al guardar (`parseShopMarca`) y el Shop la vuelve a sanear al leerla.
+   */
+  marca?: Record<string, unknown>
+  /** Tema propio del sitio: misma forma que `tenants.shop_tema`. Ausente = el del principal. */
+  tema?: Record<string, unknown>
+  /** Dirección desde la que salen los mails de los pedidos hechos en este sitio. */
+  remitente?: string
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function objetoPlano(v: unknown): Record<string, unknown> | null {
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null
+}
+
+/** Marca, tema y remitente del destino: lo inválido se ignora sin descartar el destino (el ping sigue). */
+function marcaDelDestino(obj: Record<string, unknown>, nombre: string): Pick<DestinoExtra, "marca" | "tema" | "remitente"> {
+  const out: Pick<DestinoExtra, "marca" | "tema" | "remitente"> = {}
+  const marca = objetoPlano(obj.marca)
+  if (marca) out.marca = marca
+  const tema = objetoPlano(obj.tema)
+  if (tema) out.tema = tema
+  if (typeof obj.remitente === "string" && obj.remitente.trim() !== "") {
+    const r = obj.remitente.trim()
+    if (EMAIL_RE.test(r)) out.remitente = r
+    else console.warn(`[shop-destino] el remitente del destino extra "${nombre}" no es un email: se ignora`)
+  }
+  return out
 }
 
 export interface DestinoShopEtiquetado extends DestinoShop {
@@ -136,7 +167,7 @@ function esHostLocal(hostname: string): boolean {
 }
 
 /** Origin normalizado (https; http solo en localhost; sin credenciales) o null. */
-function origenSeguro(v: unknown): string | null {
+export function origenSeguro(v: unknown): string | null {
   if (typeof v !== "string" || v.trim() === "") return null
   let u: URL
   try {
@@ -196,7 +227,7 @@ export function parsearDestinosExtra(
     }
     etiquetas.add(etiqueta)
     origenes.add(url)
-    validos.push({ etiqueta, url, urlInterna })
+    validos.push({ etiqueta, url, urlInterna, ...marcaDelDestino(obj, etiqueta) })
   })
   return { validos, descartados }
 }
@@ -243,10 +274,10 @@ export function resolverDestinosShop(tenantId: string, fila: FilaShop, env: EnvS
   return { destinos, omitidos }
 }
 
-type TenantShopUrls = { id: string; shopUrl?: string; shopInternalUrl?: string; shopDestinosExtra?: unknown }
+export type TenantShopUrls = { id: string; shopUrl?: string; shopInternalUrl?: string; shopDestinosExtra?: unknown }
 
 /** Extras válidos del tenant; solo rigen si el principal tiene URL propia (igual que el ping). */
-function extrasPublicos(tenant: TenantShopUrls): DestinoExtra[] {
+export function extrasPublicos(tenant: TenantShopUrls): DestinoExtra[] {
   const fila = { shopUrl: tenant.shopUrl ?? "", shopInternalUrl: tenant.shopInternalUrl ?? "" }
   if (!tieneUrlPropia(fila)) return []
   return parsearDestinosExtra(tenant.shopDestinosExtra, [fila.shopUrl, fila.shopInternalUrl]).validos
@@ -275,4 +306,15 @@ export function urlPublicaShopParaPedido(
   if (!origen) return principal
   const extra = extrasPublicos(tenant).find((e) => e.url === origen)
   return extra ? extra.url : principal
+}
+
+/** Sitios extra válidos como los ve el formulario de Tienda online (sin la URL interna). */
+export function destinosParaPantalla(raw: unknown, shopUrl?: string | null, shopInternalUrl?: string | null) {
+  return parsearDestinosExtra(raw, [shopUrl, shopInternalUrl]).validos.map((d) => ({
+    etiqueta: d.etiqueta,
+    url: d.url,
+    marca: d.marca ?? {},
+    tema: d.tema ?? {},
+    remitente: d.remitente ?? "",
+  }))
 }

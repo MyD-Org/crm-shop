@@ -134,6 +134,22 @@ export type BusquedaAsistidaContent = TextosSeccion & {
 };
 
 /**
+ * Banda "Visítenos": el local sobre la piedra (dirección, horarios y un enlace "Cómo llegar"). Sólo
+ * se dibuja en los sitios con la textura de piedra prendida (`decoracion.piedra`) Y con la sección
+ * visible: nace oculta ("nunca") en todos. La dirección y el enlace son datos del editor, no del
+ * código.
+ */
+export type VisitenosContent = TextosSeccion & {
+  eyebrow?: string;
+  /** Dirección del local (texto libre). */
+  direccion?: string;
+  /** Días y horas de atención (texto libre, una línea por renglón). */
+  horarios?: string;
+  /** Botón "Cómo llegar": etiqueta y enlace (ruta interna o URL https). */
+  cta?: Enlace;
+};
+
+/**
  * Bloque "Tienda oficial" de la home (spec 2026-10-20-marcas-tienda-oficial §9): destaca una
  * página de marca de nivel "oficial". Logo, nombre y bajada salen de esa página; si no existe o
  * no está publicada, el bloque no se dibuja. `slug` ausente: no destaca ninguna.
@@ -182,6 +198,7 @@ export type HomeContent = {
   navBadge: NavBadgeContent | null;
   whatsapp: WhatsappContent;
   busquedaAsistida: BusquedaAsistidaContent;
+  visitenos: VisitenosContent;
   /** Dónde se ve cada sección que el admin restringió desde el editor (las
    *  que no figuran se ven siempre). Se guarda en su propia fila de
    *  home_content (`ocultas`), así no pisa el contenido de la sección. */
@@ -214,6 +231,7 @@ export const SECCIONES_HOME = [
   "busquedaAsistida",
   "promociones",
   "promosPago",
+  "visitenos",
 ] as const;
 
 export type SeccionHome = (typeof SECCIONES_HOME)[number];
@@ -235,10 +253,18 @@ export const ORDEN_HOME = [
   "bannerDeco",
   "decoGrid",
   "servicios",
+  "visitenos",
   "whatsapp",
 ] as const satisfies readonly SeccionHome[];
 export type SeccionOrdenable = (typeof ORDEN_HOME)[number];
 export const KEY_ORDEN = "orden";
+
+/** Sin dirección ni enlace: son datos de cada sitio (repo público). */
+const DEFAULTS_VISITENOS: VisitenosContent = {
+  eyebrow: "Nuestro local",
+  titulo: "Visítenos en nuestro *local*",
+  bajada: "Venga a conocer los productos y recibir asesoramiento en persona.",
+};
 
 const CATALOGO_ILUMINACION = "/catalogo?categoria=ILUMINACION";
 
@@ -367,9 +393,11 @@ export const DEFAULTS_HOME: HomeContent = {
       { texto: "tira led para la cocina" },
     ],
   },
+  visitenos: DEFAULTS_VISITENOS,
   // El anuncio en mobile ocupa varias filas: arranca solo en desktop hasta que
   // sea un carrusel de mensajes. El admin lo puede cambiar desde el editor.
-  visibilidad: { anuncio: "desktop" },
+  // "Visítenos" nace oculta en todos los sitios: el editor la muestra cuando la arma.
+  visibilidad: { anuncio: "desktop", visitenos: "nunca" },
   orden: [...ORDEN_HOME],
 };
 
@@ -428,6 +456,7 @@ export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent 
     promosPago: DEFAULTS_HOME.promosPago,
     whatsapp: DEFAULTS_HOME.whatsapp,
     busquedaAsistida: DEFAULTS_HOME.busquedaAsistida,
+    visitenos: DEFAULTS_HOME.visitenos,
     visibilidad: {
       hero: "nunca",
       marquee: "nunca",
@@ -436,6 +465,7 @@ export function defaultsHomeGenerica(marca: Pick<Marca, "nombre">): HomeContent 
       decoGrid: "nunca",
       tiendaOficial: "nunca",
       promociones: "nunca",
+      visitenos: "nunca",
     },
     orden: [...ORDEN_HOME],
   };
@@ -527,6 +557,9 @@ function esTile(v: unknown, hosts: readonly string[]): v is TileContent {
     (o.velo === undefined || o.velo === "suave" || o.velo === "fuerte")
   );
 }
+
+/** Largos máximos de los textos libres de "Visítenos". */
+export const MAX_VISITENOS = { direccion: 200, horarios: 400 } as const;
 
 /** Devuelve la lista de problemas del payload para la sección ([] = válido). */
 export function erroresSeccion(key: string, payload: unknown, hosts: readonly string[] = hostsDeMedios()): string[] {
@@ -677,6 +710,17 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       break;
     case "promociones":
       errores.push(...erroresPromociones(o, texto, textosTitulo, linkOpcional));
+      break;
+    case "visitenos":
+      texto("eyebrow", true);
+      textosTitulo();
+      texto("direccion", true);
+      texto("horarios", true);
+      if (typeof o.direccion === "string" && o.direccion.length > MAX_VISITENOS.direccion)
+        errores.push(`direccion no puede superar los ${MAX_VISITENOS.direccion} caracteres`);
+      if (typeof o.horarios === "string" && o.horarios.length > MAX_VISITENOS.horarios)
+        errores.push(`horarios no puede superar los ${MAX_VISITENOS.horarios} caracteres`);
+      if (o.cta !== undefined && !esEnlace(o.cta)) errores.push("cta debe ser { label, href }");
       break;
     case "busquedaAsistida":
       texto("eyebrow", true);

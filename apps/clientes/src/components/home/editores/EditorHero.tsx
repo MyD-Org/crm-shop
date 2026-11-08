@@ -3,7 +3,8 @@
 import { Button, Field, Input } from "@myd-org/ui";
 import type { HeroContent } from "@/data/home-defaults";
 import { nuevoEnlace } from "@/lib/home-editor";
-import { isStudioImage, STUDIO_IMAGE } from "../hero-lights";
+import { isStudioImage, STUDIO_IMAGE, STUDIO_IMAGE_NEUTRAL } from "../hero-lights";
+import { isPiedraImage, PIEDRA_IMAGE } from "../escena-piedra";
 import { ListaEditable } from "../ListaEditable";
 import { CampoImagen } from "./CampoImagen";
 import { CamposTitulo } from "./CamposTitulo";
@@ -12,7 +13,7 @@ import type { EditorProps } from "./index";
 
 export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
   // La foto del estudio es un recurso de la tienda de Central: no se ofrece a otra marca.
-  const esCentral = useMarca().base === "central";
+  const esCentral = useMarca().recursosCentral;
   return (
     <div className="flex flex-col gap-4">
       <CamposTitulo valor={valor} onChange={onChange} conEyebrow />
@@ -30,6 +31,26 @@ export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
           onClick={() => onChange({ ...valor, imagen: STUDIO_IMAGE, imagenAlt: "Estudio con luminarias de Central Led" })}
         >
           Usar la foto interactiva del estudio
+        </Button>
+      ) : null}
+      {/* El estudio con lámparas usa una foto neutra, sin marca: se ofrece a todas las tiendas. */}
+      {!isStudioImage(valor.imagen) ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onChange({ ...valor, imagen: STUDIO_IMAGE_NEUTRAL, imagenAlt: "Estudio con lámpara de mesa, colgante y spot" })}
+        >
+          Escena interactiva: estudio con lámparas
+        </Button>
+      ) : null}
+      {/* La escena de la piedra es un dibujo propio, sin fotos de ninguna marca: se ofrece a todas. */}
+      {!isPiedraImage(valor.imagen) ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onChange({ ...valor, imagen: PIEDRA_IMAGE, imagenAlt: "Pared de piedra de Mar del Plata con el letrero LA" })}
+        >
+          Escena interactiva: piedra de Mar del Plata
         </Button>
       ) : null}
       <div>

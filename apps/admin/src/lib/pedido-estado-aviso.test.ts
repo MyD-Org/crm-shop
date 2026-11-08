@@ -13,7 +13,7 @@ vi.mock("@/lib/email", async (importOriginal) => ({
 }))
 vi.mock("@/lib/tenants", () => ({ getTenantByIdFromDb: (...a: unknown[]) => getTenantByIdFromDb(...a) }))
 
-const { avisarClientePedido, pedidosUrl } = await import("@/lib/pedido-estado-aviso")
+const { avisarClientePedido, logAviso, pedidosUrl } = await import("@/lib/pedido-estado-aviso")
 
 const pedido = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -85,5 +85,53 @@ describe("avisarClientePedido", () => {
     const [, , , html] = sendEmail.mock.calls[0]
     expect(html).toContain("https://b.example/mi-cuenta/pedidos")
     expect(html).not.toContain("legacy.example")
+  })
+})
+
+describe("avisarClientePedido: marca por sitio", () => {
+  const tenantConSitioPropio = {
+    id: "tenant-b",
+    name: "Empresa B",
+    logoPath: "https://b.example/logo-principal.png",
+    resendFrom: "ventas@b.example",
+    shopUrl: "https://b.example",
+    shopDestinosExtra: [
+      {
+        etiqueta: "tienda-b",
+        url: "https://tienda-b.example",
+        marca: { nombre: "Tienda B", logoMailUrl: "https://tienda-b.example/logo-mail.png" },
+        remitente: "pedidos@tienda-b.example",
+      },
+    ],
+  }
+  const now = new Date("2026-10-13T12:00:00Z")
+
+  it("pedido del sitio propio → nombre, logo y remitente de ese sitio", async () => {
+    getTenantByIdFromDb.mockResolvedValue(tenantConSitioPropio)
+    await avisarClientePedido({ tenantId: "tenant-b", pedido: { ...pedido, sitioOrigen: "https://tienda-b.example" } as PedidoRow, aviso: "en_camino", now })
+    const [tenantEnvio, , , html] = sendEmail.mock.calls[0]
+    expect(tenantEnvio).toMatchObject({ name: "Tienda B", resendFrom: "pedidos@tienda-b.example" })
+    expect(html).toContain("https://tienda-b.example/logo-mail.png")
+    expect(html).not.toContain("logo-principal.png")
+  })
+
+  it("pedido sin sitio de origen → marca, logo y remitente del principal", async () => {
+    getTenantByIdFromDb.mockResolvedValue(tenantConSitioPropio)
+    await avisarClientePedido({ tenantId: "tenant-b", pedido: { ...pedido, sitioOrigen: null } as PedidoRow, aviso: "en_camino", now })
+    const [tenantEnvio, , , html] = sendEmail.mock.calls[0]
+    expect(tenantEnvio).toMatchObject({ name: "Empresa B", resendFrom: "ventas@b.example" })
+    expect(html).toContain("https://b.example/logo-principal.png")
+    expect(html).not.toContain("logo-mail.png")
+  })
+
+  it("Resend rechaza el envío (dominio no verificado) → se registra y no tira", async () => {
+    getTenantByIdFromDb.mockResolvedValue(tenantConSitioPropio)
+    sendEmail.mockRejectedValue(new Error("The tienda-b.example domain is not verified"))
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    const r = await avisarClientePedido({ tenantId: "tenant-b", pedido: { ...pedido, sitioOrigen: "https://tienda-b.example" } as PedidoRow, aviso: "en_camino", now })
+    expect(r).toEqual({ status: "failed", error: "The tienda-b.example domain is not verified" })
+    logAviso("estado", { tenant: "tenant-b", orderId: "p1" }, r)
+    expect(error).toHaveBeenCalled()
+    error.mockRestore()
   })
 })

@@ -1,12 +1,14 @@
 import { ClerkLoaded, ClerkLoading, SignUp } from "@clerk/nextjs";
 import { FormularioClerkCargando } from "@/components/FormularioClerkCargando";
+import { FondoPiedra } from "@/components/piedra/FondoPiedra";
+import { getDecoracion } from "@/lib/home-datos";
 import { getMarca } from "@/lib/marca";
 
 /** Alta de cuenta. Ver la nota sobre el catch-all en /ingresar. */
 export default async function RegistroPage() {
-  const { nombre } = await getMarca();
+  const [{ nombre }, { piedra }] = await Promise.all([getMarca(), getDecoracion()]);
   return (
-    <>
+    <FondoPiedra piedra={piedra}>
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-6 px-4 py-16">
         <div className="text-center">
           <h1 className="text-2xl font-extrabold text-text">Cree su cuenta</h1>
@@ -22,6 +24,6 @@ export default async function RegistroPage() {
           <SignUp fallbackRedirectUrl="/" signInFallbackRedirectUrl="/" />
         </ClerkLoaded>
       </main>
-    </>
+    </FondoPiedra>
   );
 }

@@ -1,0 +1,72 @@
+/* Misma estructura que InteractiveHero: el Hero del DS queda intacto y sólo se cambia el fondo.
+   Capas compartidas con el DS: imagen -20, escena -15, velo -10, contenido 1, LA 0.
+   Los colores son de la escena (siempre oscura), no del tema del sitio. */
+.root { position: relative; isolation: isolate; }
+.root > section { isolation: auto; }
+.root > section > [data-hero-content] { z-index: 1; pointer-events: none; }
+.root > section > [data-hero-content] :is(a, button) { pointer-events: auto; }
+.root > section > [data-hero-footer] { z-index: 1; }
+/* El velo del DS pasa a ser el de la escena: Noche, denso del lado del texto. */
+.root > section > div:not([data-hero-content]):not([data-hero-footer]) {
+  pointer-events: none;
+  background: linear-gradient(90deg, #0F1E2E 0%, rgb(15 30 46 / .92) 30%, rgb(15 30 46 / .35) 58%, rgb(15 30 46 / 0) 75%);
+}
+.root > section > [data-hero-content]::before { background: none; }
+/* El texto del hero va en tonos claros sobre la escena, cualquiera sea el tema del sitio. */
+.root > section > [data-hero-content] {
+  --color-text: #ECEFF0;
+  --color-muted: #AEBBC7;
+  --color-accent: #FFB547;
+  --color-accent-strong: #FFB547;
+  --color-primary: #FFB547;
+  --color-on-primary: #0F1E2E;
+}
+/* El botón principal conserva el texto oscuro al pasar el cursor (el DS lo pasa a blanco). */
+.root > section > [data-hero-content] a:hover { color: #0F1E2E; }
+.root > section > [data-hero-content] a:not(:first-of-type):hover { color: #FFB547; }
+
+.scene { position: absolute; inset: 0; overflow: clip; border-radius: 28px; pointer-events: none; }
+.art { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -15; }
+.hit { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; touch-action: manipulation; }
+.laHit { fill: transparent; cursor: pointer; pointer-events: all; }
+.laHit:focus { outline: none; }
+/* El navegador dibuja un recuadro azul al hacer clic: el foco se marca solo con teclado, sobre el contorno de la piedra. */
+.laHit:focus-visible { outline: none; stroke: #FFB547; stroke-width: 6; stroke-dasharray: 18 12; }
+
+.laOn { opacity: 0; }
+.halo { opacity: 0; }
+.root[data-encendido] .laOn { animation: arranque 1.1s steps(1, end) forwards; }
+.root[data-encendido] .halo { opacity: .55; transition: opacity 1.4s ease .9s; }
+
+.pista {
+  position: absolute; right: max(20px, env(safe-area-inset-right, 0px)); bottom: 18px; z-index: 0;
+  display: none; align-items: center; gap: 8px; font-size: .78rem; letter-spacing: .04em;
+  color: #AEBBC7; pointer-events: none; transition: opacity .6s;
+}
+.pista i { width: 7px; height: 7px; border-radius: 50%; background: #FFB547; box-shadow: 0 0 10px #FFB547; }
+.pistaToque { display: none; }
+.root[data-encendido] .pista { opacity: 0; }
+@media (min-width: 768px) { .pista { display: flex; } }
+@media (hover: none) { .pistaMouse { display: none; } .pistaToque { display: inline; } }
+
+@keyframes arranque {
+  0% { opacity: .9; } 8% { opacity: 0; } 16% { opacity: .7; } 22% { opacity: .1; }
+  34% { opacity: 1; } 40% { opacity: .35; } 52%, 100% { opacity: 1; }
+}
+
+/* Celular: la escena es más alta, el texto va abajo y el velo sube desde abajo. */
+@media (max-width: 767px) {
+  .root > section { min-height: 560px; }
+  .root > section > div:not([data-hero-content]):not([data-hero-footer]) {
+    background: linear-gradient(180deg, rgb(15 30 46 / .2) 0%, rgb(15 30 46 / .75) 48%, #0F1E2E 100%);
+  }
+  .root > section > [data-hero-content] { justify-content: flex-end; padding-top: 180px; }
+  .root > section > [data-hero-footer]::before { background: none; }
+}
+
+/* Movimiento reducido: todo quieto y el LA ya encendido, sin esperar al script. */
+@media (prefers-reduced-motion: reduce) {
+  .laOn, .root[data-encendido] .laOn { animation: none; opacity: 1; }
+  .root .halo, .root[data-encendido] .halo { opacity: .55; transition: none; }
+  .pista { display: none; }
+}

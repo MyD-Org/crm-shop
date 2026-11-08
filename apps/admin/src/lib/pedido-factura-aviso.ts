@@ -14,7 +14,7 @@ import { formatearNumeroPedido, type PedidoRow } from "@/lib/pedidos-repo"
 import { ATTACH_MAX_BYTES } from "@/lib/receipt-email"
 import { configAlegraDelPedido } from "@/lib/pedido-cuenta-alegra"
 import { getTenantByIdFromDb } from "@/lib/tenants"
-import { logoMailDeTenant } from "@/lib/email-logo"
+import { marcaParaSitio } from "@/lib/marca-sitio"
 
 /** Lo que ve el operador. `destino` va enmascarado (`c***@cliente.example`). */
 export type AvisoFacturaResultado = "enviado" | "sin_email" | "sin_pdf" | "fallo"
@@ -97,16 +97,18 @@ export async function enviarFacturaPedido(input: {
     if (!descarga.ok) return { resultado: "sin_pdf", destino, motivo: descarga.motivo }
 
     const numeroFactura = pedido.facturaNumero ?? doc.number
+    // Marca, logo y remitente del sitio donde se compró (sin sitio propio: los del tenant).
+    const marca = marcaParaSitio(tenant, pedido.sitioOrigen)
     const { subject, html, text } = buildPedidoFacturaEmail({
-      tenantName: tenant.name,
-      logoUrl: logoMailDeTenant(tenant),
+      tenantName: marca.name,
+      logoUrl: marca.logoUrl,
       numeroPedido: formatearNumeroPedido(pedido.numero),
       numeroFactura,
       contactoNombre: pedido.contactoNombre,
       pedidosUrl: pedidosUrl(tenant, pedido.sitioOrigen),
     })
     const base = `pedido-factura/${pedido.id}/${alegraId}`
-    const enviado = await sendEmail(tenant, to, subject, html, text, {
+    const enviado = await sendEmail({ ...tenant, name: marca.name, resendFrom: marca.resendFrom }, to, subject, html, text, {
       attachments: [
         { filename: nombreAdjuntoFactura(numeroFactura, alegraId), content: descarga.pdf, contentType: "application/pdf" },
       ],

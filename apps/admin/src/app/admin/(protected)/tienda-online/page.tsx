@@ -5,6 +5,7 @@ import { tenants } from "@/db/schema"
 import { getGuardedAdminSession } from "@/lib/admin-session"
 import { roleRank } from "@/lib/roles"
 import { shopMediaConfig } from "@/lib/shop-media"
+import { destinosParaPantalla } from "@/lib/shop-destino"
 import { TiendaOnlineForm } from "@/components/admin/TiendaOnlineForm"
 
 export const dynamic = "force-dynamic"
@@ -15,10 +16,13 @@ export default async function TiendaOnlinePage() {
   if (!guard.ok || roleRank(guard.user.role) < 1) notFound()
 
   const [tenant] = await getDb()
-    .select({ marca: tenants.shopMarca, tema: tenants.shopTema, shopUrl: tenants.shopUrl, shopInternalUrl: tenants.shopInternalUrl })
+    .select({ marca: tenants.shopMarca, tema: tenants.shopTema, shopUrl: tenants.shopUrl, shopInternalUrl: tenants.shopInternalUrl, destinosExtra: tenants.shopDestinosExtra })
     .from(tenants)
     .where(eq(tenants.id, guard.tenantId))
   if (!tenant) notFound()
+  const { destinosExtra, ...resto } = tenant
+  // Sin `destinos`, el formulario no muestra el selector de sitio.
+  const inicial = { ...resto, destinos: destinosParaPantalla(destinosExtra, tenant.shopUrl, tenant.shopInternalUrl) }
 
   return (
     <div className="p-4 md:p-6">
@@ -29,7 +33,7 @@ export default async function TiendaOnlinePage() {
           La marca y los colores que muestra la tienda, y las direcciones a las que el CRM le avisa
         </p>
       </div>
-      <TiendaOnlineForm initial={tenant} imagenesDisponibles={shopMediaConfig() !== null} />
+      <TiendaOnlineForm initial={inicial} imagenesDisponibles={shopMediaConfig() !== null} />
     </div>
   )
 }

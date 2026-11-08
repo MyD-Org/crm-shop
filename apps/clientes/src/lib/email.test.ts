@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { enviarEmail } from "./email";
 import { getMarca } from "./marca";
 import { resolverMarca } from "./marca-base";
+import { leerDestinosExtra } from "./sitio-datos";
+import { armarMailPedido } from "./pedido-mail";
+import { urlLogoMarca } from "./vinculacion-mail";
+
+vi.mock("./sitio-datos", () => ({ leerDestinosExtra: vi.fn(async () => null) }));
 
 /** Envío por Resend (HTTP): lo que suma el aviso de comprobantes. */
 
@@ -100,5 +105,83 @@ describe("enviarEmail", () => {
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     });
     expect(cuerpo(1)).not.toHaveProperty("headers");
+  });
+});
+
+describe("remitente en un sitio con marca propia", () => {
+  const SITIO = "https://tienda-b.example";
+  const extras = (remitente?: string) => [
+    {
+      etiqueta: "tienda-b",
+      url: SITIO,
+      marca: { nombre: "Tienda B", logoMailUrl: "https://tienda-b.example/logo-mail.png" },
+      ...(remitente ? { remitente } : {}),
+    },
+  ];
+  const marcaB = () => resolverMarca(
+      { base: "generica", nombre: "Tienda B", logoMailUrl: "https://tienda-b.example/logo-mail.png" },
+      undefined,
+      ["tienda-b.example"],
+    );
+
+  function prepararFetch() {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    vi.stubEnv("EMAIL_FROM", "");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", SITIO);
+    const fetchMock = vi.fn(async () => Response.json({ id: "m1" }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("mail de pedido: sale del remitente del sitio, con su nombre y su logo", async () => {
+    const fetchMock = prepararFetch();
+    vi.mocked(leerDestinosExtra).mockResolvedValueOnce(extras("pedidos@tienda-b.example"));
+    vi.mocked(getMarca).mockResolvedValue(marcaB());
+    const marca = await getMarca();
+    const mail = armarMailPedido({
+      aviso: "recibido",
+      numero: "PED-00000001",
+      contactoNombre: "Ana",
+      comercio: marca.nombre,
+      logoUrl: urlLogoMarca(marca, SITIO),
+      pedidosUrl: `${SITIO}/mi-cuenta/pedidos`,
+      lineas: [],
+      total: 1000,
+    } as Parameters<typeof armarMailPedido>[0]);
+    const r = await enviarEmail({ to: "a@cliente.example", ...mail });
+    expect(r.ok).toBe(true);
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const cuerpo = JSON.parse(init.body as string);
+    expect(cuerpo.from).toBe("Tienda B <pedidos@tienda-b.example>");
+    expect(cuerpo.html).toContain("https://tienda-b.example/logo-mail.png");
+    expect(cuerpo.html).toContain("Tienda B");
+    expect(cuerpo.html).not.toContain("central-led");
+    vi.mocked(getMarca).mockReset();
+  });
+
+  it("EMAIL_FROM del proyecto gana sobre el remitente del sitio", async () => {
+    const fetchMock = prepararFetch();
+    vi.stubEnv("EMAIL_FROM", "Tienda B <hola@tienda-b.example>");
+    await enviarEmail({ to: "a@cliente.example", subject: "s", html: "h", text: "t" });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).from).toBe("Tienda B <hola@tienda-b.example>");
+  });
+
+  it("sin remitente ni EMAIL_FROM: no envía, lo registra y nunca usa el de Central", async () => {
+    const fetchMock = prepararFetch();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(leerDestinosExtra).mockResolvedValueOnce(extras());
+    const r = await enviarEmail({ to: "a@cliente.example", subject: "s", html: "h", text: "t" });
+    expect(r.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("no hay remitente"));
+  });
+
+  it("alias del principal (sitio sin marca): el remitente de siempre", async () => {
+    const fetchMock = prepararFetch();
+    vi.mocked(leerDestinosExtra).mockResolvedValueOnce([{ etiqueta: "alias", url: SITIO }]);
+    await enviarEmail({ to: "a@cliente.example", subject: "s", html: "h", text: "t" });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).from).toBe("Central LED <onboarding@resend.dev>");
   });
 });

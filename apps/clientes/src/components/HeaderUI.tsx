@@ -18,7 +18,7 @@ import { MenuUsuario } from "./MenuUsuario";
 import { BotonAsistente } from "./chat/BotonAsistente";
 import { IconoWhatsapp } from "./IconoWhatsapp";
 import logo from "@/assets/central-led-logo.svg";
-import { MARCA_POR_DEFECTO, altLogo, partesNombre } from "@/lib/marca-base";
+import { altLogo, fuenteLogo, partesNombre } from "@/lib/marca-base";
 import { useMarca } from "./MarcaProvider";
 
 function UserIcon() {
@@ -143,10 +143,10 @@ function HeaderVista({
   const marca = useMarca();
   const { principal, acento } = partesNombre(marca);
   const logoMarca = (className: string, prioridad: boolean) =>
-    marca.logoUrl ? (
+    fuenteLogo(marca) === "propio" && marca.logoUrl ? (
       // `unoptimized`: un SVG remoto no pasa por el optimizador y el logo ya viene dimensionado.
       <Image src={marca.logoUrl} alt={altLogo(marca)} width={160} height={32} unoptimized priority={prioridad} className={className} />
-    ) : marca.nombre === MARCA_POR_DEFECTO.nombre ? (
+    ) : fuenteLogo(marca) === "central" ? (
       <Image src={logo} alt={altLogo(marca)} priority={prioridad} className={className} />
     ) : undefined;
 

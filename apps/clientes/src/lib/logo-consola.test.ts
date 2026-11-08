@@ -7,6 +7,7 @@ describe("argumentosLogoConsola", () => {
     expect(fmt).toBe("%c %c\nTienda");
     expect(imagen).toContain('url("https://cliente.example/logo.svg")');
     expect(imagen).toContain("padding: 24px 120px");
+    expect(imagen).toContain("background: #fff");
     expect(texto).toContain("font:");
   });
 

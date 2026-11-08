@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import Script from "next/script";
-import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { PostHog } from "posthog-js";
 import type { ConfigTracking } from "@/lib/tracking/config";
@@ -16,7 +15,7 @@ import { limpiarUrl, rutaSinTracking } from "@/lib/tracking/url";
 
 type ConUrl = { url: string };
 
-/** URL limpia para Vercel (Analytics y Speed Insights); null = no se manda. */
+/** URL limpia para Speed Insights de Vercel; null = no se manda. */
 function beforeSendVercel<T extends ConUrl>(evento: T): T | null {
   const u = new URL(evento.url, window.location.origin);
   if (rutaSinTracking(u.pathname)) return null;
@@ -128,7 +127,8 @@ export function TrackingCliente({ config }: { config: ConfigTracking }) {
 
   return (
     <>
-      <Analytics beforeSend={beforeSendVercel} />
+      {/* Sin Vercel Web Analytics: está apagado en los proyectos y su script daba 404 en la consola.
+          Las visitas las miden PostHog y GA4. */}
       <SpeedInsights beforeSend={beforeSendVercel} />
       {config.metaPixelId ? (
         <Script

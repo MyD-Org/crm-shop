@@ -66,7 +66,7 @@ export async function SiteFooter() {
         barExtra={
           footer.redes.length > 0 || legal.dataFiscalUrl ? (
             <div className="flex items-center gap-5">
-              <RedesSociales redes={footer.redes} className="justify-end max-md:hidden" seguinos={marca.recursosCentral} />
+              <RedesSociales redes={footer.redes} className="justify-end max-md:hidden" />
               {legal.dataFiscalUrl ? (
                 <a href={legal.dataFiscalUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
                   {/* Imagen genérica de ARCA, local (public/images). */}

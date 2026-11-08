@@ -1,6 +1,6 @@
 /**
  * Sora (la fuente de la marca) en TTF para las imágenes que genera `next/og`
- * (src/app/opengraph-image.tsx). next/font sirve WOFF2 y
+ * (src/app/imagen-para-compartir/route.tsx). next/font sirve WOFF2 y
  * Satori no lo lee, así que se pide a Google Fonts sólo con los glifos que se
  * dibujan. Quien la usa la cachea (`'use cache'`) y degrada si falla.
  */

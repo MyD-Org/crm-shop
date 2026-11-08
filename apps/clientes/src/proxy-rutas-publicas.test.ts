@@ -104,6 +104,16 @@ describe("proxy: RUTAS_PUBLICAS", () => {
       expect(clerk).not.toHaveBeenCalled();
     });
 
+    it("la imagen para compartir llega al handler sin cookie de gate ni Clerk", async () => {
+      process.env.SITE_AUTH_USER = "equipo";
+      process.env.SITE_AUTH_PASSWORD = "clave-de-prueba";
+      const { proxy } = await import("./proxy");
+      const r = await proxy(new NextRequest("https://tienda.example/imagen-para-compartir"), {} as never);
+      expect(r.headers.get("x-middleware-next")).toBe("1");
+      expect(r.headers.get("content-type") ?? "").not.toContain("text/html");
+      expect(clerk).not.toHaveBeenCalled();
+    });
+
     it("control: otra API sin cookie sí recibe la cortina", async () => {
       process.env.SITE_AUTH_USER = "equipo";
       process.env.SITE_AUTH_PASSWORD = "clave-de-prueba";

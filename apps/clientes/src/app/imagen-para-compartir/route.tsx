@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { sora, type Fuente } from "@/lib/fuente-sora";
 import { getMarca } from "@/lib/marca";
 import type { Marca } from "@/lib/marca-base";
+import { IMAGEN_SITIO_ALTO, IMAGEN_SITIO_ANCHO } from "@/lib/metadata-marca";
 import { coloresPwaDeTema, type TemaTenant } from "@/lib/tema-tenant";
 import { getTemaTenant } from "@/lib/tema-tenant-datos";
 
@@ -13,6 +14,11 @@ import { getTemaTenant } from "@/lib/tema-tenant-datos";
  * Imagen de vista previa del sitio (WhatsApp, Facebook, Google…) para toda
  * página que no defina la suya: la ficha de producto usa la foto del producto
  * (src/lib/producto-metadata.ts).
+ *
+ * Es una ruta pública (`/imagen-para-compartir`) y no la convención `opengraph-image`: con esa,
+ * Next arma el `og:image` contra `metadataBase`, que en el sitio secundario es la URL canónica
+ * (la del principal), y la imagen salía dibujada por el otro proyecto, con la marca del otro.
+ * Acá la URL se arma con el origen PROPIO (`urlImagenDelSitio`, src/lib/metadata-marca.ts).
  *
  * Misma identidad que el header: el logo de Central (wordmark con el pin,
  * src/assets/central-led-logo-og.png, el PNG del mismo dibujo que
@@ -28,8 +34,8 @@ import { getTemaTenant } from "@/lib/tema-tenant-datos";
  * Marca propia (`tenants.shop_marca`): textos, nombre e imagen salen de `getMarca()`. La de Central
  * (base "central" con su nombre) se dibuja EXACTAMENTE como antes, con la foto del hero; cualquier
  * otra, sobre fondo liso con su nombre, sus textos y, si la cargó, su imagen (PNG/JPG: Satori no
- * lee SVG ni WebP). OJO: `alt` debe ser un literal (Next lo lee en el build) y sale en el HTML de
- * todas las marcas: por eso es neutro, sin el nombre de ninguna.
+ * lee SVG ni WebP). El `alt` (IMAGEN_SITIO_ALT) sale en el HTML de todas las marcas: por eso es
+ * neutro, sin el nombre de ninguna.
  *
  * Sale en JPG, no en PNG: WhatsApp no muestra la vista previa cuando la imagen pasa ~300 KB, y la
  * de Central (foto del hero dentro) pesaba 301 KB en PNG; en JPG calidad 85, unos 110 KB. Satori
@@ -37,9 +43,8 @@ import { getTemaTenant } from "@/lib/tema-tenant-datos";
  * marca y tema (`jpegDe`): sin eso cada pedido lo volvía a dibujar (~2 s), y WhatsApp tampoco
  * espera mucho a la imagen.
  */
-export const alt = "Vista previa de la tienda";
-export const size = { width: 1200, height: 630 };
-export const contentType = "image/jpeg";
+const size = { width: IMAGEN_SITIO_ANCHO, height: IMAGEN_SITIO_ALTO };
+const contentType = "image/jpeg";
 
 const COLOR_CENTRAL = {
   fondo: "#f8f8f6",
@@ -66,7 +71,7 @@ async function recursos(conFoto: boolean, nombre: string, textos: string) {
   try {
     fuentes = await Promise.all([sora(700, nombre), sora(400, textos)]);
   } catch (err) {
-    console.error("[opengraph-image] no se pudo cargar Sora:", err);
+    console.error("[imagen-para-compartir] no se pudo cargar Sora:", err);
     cacheLife("degradado");
   }
   return {
@@ -82,7 +87,7 @@ function imagenPropia(marca: Marca): string | null {
   return /\.(png|jpg)$/i.test(new URL(marca.ogImagenUrl).pathname) ? marca.ogImagenUrl : null;
 }
 
-export default async function OpengraphImage() {
+export async function GET() {
   const [marca, tema] = await Promise.all([getMarca(), getTemaTenant()]);
   return new Response(await jpegDe(marca, tema), { headers: { "Content-Type": contentType } });
 }

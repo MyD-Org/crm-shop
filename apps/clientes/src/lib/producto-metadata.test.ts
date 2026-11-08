@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { metadataProducto } from "./producto-metadata";
 import type { Product } from "@/data/products";
 import { fmtPrecio } from "@/lib/format";
@@ -63,10 +63,19 @@ describe("metadataProducto", () => {
     expect(metadataProducto(base, false, "Tienda Uno").openGraph).not.toHaveProperty("images");
   });
 
-  it("sin fotos y con base usa la imagen general del sitio", () => {
+  it("sin fotos y con base usa la imagen general del sitio, absoluta y con el origen propio", () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://tienda.example");
+    vi.stubEnv("NEXT_PUBLIC_CANONICAL_URL", "https://principal.example");
     expect(metadataProducto(base, true, "Tienda Uno").openGraph).toMatchObject({
-      images: [{ url: "/opengraph-image", width: 1200, height: 630 }],
+      images: [{ url: "https://tienda.example/imagen-para-compartir", width: 1200, height: 630 }],
     });
+    vi.unstubAllEnvs();
+  });
+
+  it("sin origen propio no manda la imagen general", () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
+    expect(metadataProducto(base, true, "Tienda Uno").openGraph).not.toHaveProperty("images");
+    vi.unstubAllEnvs();
   });
 
   it("canonical y og:url solo con base configurada", () => {

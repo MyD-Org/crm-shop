@@ -8,9 +8,9 @@ const ICONOS = {
   ],
   apple: "/images/central-led/apple-icon.png",
 };
-import { destinoFavicon, metadataDeMarca } from "./metadata-marca";
+import { destinoFavicon, IMAGEN_SITIO_ALT, metadataDeMarca, urlImagenDelSitio } from "./metadata-marca";
 
-/** Lo de Open Graph del sitio; la imagen la agrega src/app/opengraph-image.tsx. */
+/** Lo de Open Graph del sitio; la imagen (con el origen propio) sólo si se pasa `propioUrl`. */
 const OG_CENTRAL = { type: "website", siteName: "Central LED", locale: "es_AR" };
 
 /**
@@ -100,5 +100,31 @@ describe("destinoFavicon (/favicon.ico)", () => {
   it("otra marca sin favicon: el neutro, nunca el de Central", () => {
     expect(destinoFavicon(resolverMarca({ base: "generica", nombre: "T" }))).toBe("/images/generica/icon.svg");
     expect(destinoFavicon(resolverMarca({ nombre: "Otra Tienda" }))).toBe("/images/generica/icon.svg");
+  });
+});
+
+describe("imagen de vista previa (og:image)", () => {
+  it("con CANONICAL en otro origen, la imagen usa el origen PROPIO y metadataBase queda canónico", () => {
+    const meta = metadataDeMarca(MARCA_POR_DEFECTO, {
+      siteUrl: "https://principal.example",
+      propioUrl: "https://secundario.example",
+    });
+    expect(meta.metadataBase).toEqual(new URL("https://principal.example"));
+    expect(meta.openGraph).toMatchObject({
+      images: [
+        { url: "https://secundario.example/imagen-para-compartir", width: 1200, height: 630, alt: IMAGEN_SITIO_ALT },
+      ],
+    });
+    expect(JSON.stringify(meta.openGraph)).not.toContain("principal.example");
+  });
+
+  it("el alt no nombra a ninguna marca", () => {
+    expect(IMAGEN_SITIO_ALT).not.toMatch(/central/i);
+  });
+
+  it("sin origen propio válido no manda imagen", () => {
+    expect(urlImagenDelSitio(undefined)).toBeUndefined();
+    expect(urlImagenDelSitio("no es una url")).toBeUndefined();
+    expect(metadataDeMarca(MARCA_POR_DEFECTO, { siteUrl: "https://principal.example" }).openGraph).not.toHaveProperty("images");
   });
 });

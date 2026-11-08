@@ -194,6 +194,7 @@ export function SearchAutocomplete({
           // búsqueda inteligente rota entre ejemplos (el que no entra se
           // desvanece con el mask).
           placeholder={placeholderBuscador(busquedaIa, indicePlaceholder)}
+          name="q"
           aria-label="Buscar productos"
           // Con el flag, el campo es un combobox: abre la guía o las sugerencias.
           role={busquedaIa ? "combobox" : undefined}

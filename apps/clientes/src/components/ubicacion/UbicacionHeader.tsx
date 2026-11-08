@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { connection } from "next/server";
 import { lineasEnviarA, opcionVigente } from "@/lib/enviar-a";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
@@ -15,23 +14,22 @@ import { SelectorUbicacion } from "./SelectorUbicacion";
  * Bajo el logo (slot `brandExtra` del DS) se salía del alto fijo del header en desktop y se
  * comía el padding: por eso va en las acciones.
  *
- * Va en el shell estático con un hueco por request: mientras llega reserva el alto de las dos
- * líneas (`h-8`) para que no salte. El header no trae la lista de direcciones: la pide el modal.
+ * Dos piezas: `UbicacionReserva` va en el header de reserva (shell estático) y sólo guarda el alto
+ * de las dos líneas (`h-8`) para que no salte; `UbicacionHeader` va dentro del hueco por request del
+ * header y se resuelve con él. Sin `<Suspense>` propio a propósito: el mismo Suspense en la reserva y
+ * en el header real reusaba ids de boundary entre el shell y el resume, la respuesta del real se
+ * perdía y React tiraba el error #419. El header no trae la lista de direcciones: la pide el modal.
  */
 const BOTON = "inline-flex max-w-48 items-center rounded-sm text-left transition-colors hover:text-text xl:max-w-56";
 const BOTON_EN_LINEA = "inline-flex max-w-full items-center rounded-sm text-left";
 const ALTO = "h-8";
 const ALTO_EN_LINEA = "h-4";
 
-export function UbicacionHeader({ enLinea = false }: { enLinea?: boolean }) {
-  return (
-    <Suspense fallback={<div aria-hidden className={enLinea ? ALTO_EN_LINEA : ALTO} />}>
-      <UbicacionDinamica enLinea={enLinea} />
-    </Suspense>
-  );
+export function UbicacionReserva({ enLinea = false }: { enLinea?: boolean }) {
+  return <div aria-hidden className={enLinea ? ALTO_EN_LINEA : ALTO} />;
 }
 
-async function UbicacionDinamica({ enLinea }: { enLinea: boolean }) {
+export async function UbicacionHeader({ enLinea = false }: { enLinea?: boolean }) {
   // Lee cookie e identidad: hueco por request.
   await connection();
   const { ubicacion, origen, eleccion, nombrePila } = await ubicacionDelVisitante();

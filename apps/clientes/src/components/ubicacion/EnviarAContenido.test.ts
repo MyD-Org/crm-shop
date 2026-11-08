@@ -42,10 +42,15 @@ describe("UbicacionHeader y SelectorUbicacion (guardas de fuente)", () => {
   const header = readFileSync(join(__dirname, "UbicacionHeader.tsx"), "utf8");
   const selector = readFileSync(join(__dirname, "SelectorUbicacion.tsx"), "utf8");
 
-  it("el fallback del Suspense reserva el alto de dos líneas (h-8) o de una en mobile (h-4), sin CLS", () => {
+  it("la reserva guarda el alto de dos líneas (h-8) o de una en mobile (h-4), sin CLS", () => {
     expect(header).toMatch(/const ALTO = "h-8"/);
     expect(header).toMatch(/const ALTO_EN_LINEA = "h-4"/);
-    expect(header).toContain("<Suspense fallback={<div aria-hidden className={enLinea ? ALTO_EN_LINEA : ALTO} />}>");
+    expect(header).toContain("<div aria-hidden className={enLinea ? ALTO_EN_LINEA : ALTO} />");
+  });
+
+  it("sin Suspense propio: se resuelve con el hueco del header (evita el error #419 por ids repetidos)", () => {
+    expect(header).not.toMatch(/from "react"/);
+    expect(header).not.toMatch(/^\s*<Suspense/m);
   });
 
   it("la cookie y la identidad se leen dentro del hueco por request; el header no carga direcciones", () => {

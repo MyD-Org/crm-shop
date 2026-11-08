@@ -748,6 +748,15 @@ export async function relacionadosProducto(args: {
 }
 
 /**
+ * Productos publicados para el feed de Google Merchant Center (`/feed/google.xml`). SIN caché a
+ * propósito: Google lo lee una vez por día y el catálogo entero ocupa demasiado para una entrada de
+ * la Runtime Cache. Si la base falla, TIRA (mejor un 502 que un feed vacío que dé de baja todo).
+ */
+export function productosParaFeed(soloVisibles: boolean, agrupar = false): Promise<Product[]> {
+  return getCatalogo({ soloVisibles, ...conAgrupar(agrupar) });
+}
+
+/**
  * Ids de los productos publicados, para el sitemap. Si la base falla, vacío
  * (el sitemap sale con las páginas fijas) y guardado sólo con el perfil
  * `degradado`.

@@ -14,6 +14,7 @@
     "test:all": "vitest run",
     "test:watch": "vitest --project unit",
     "medir:js": "tsx scripts/medir-js.ts",
+    "home:variantes": "tsx --env-file-if-exists=.env.local scripts/home-variantes-800.ts",
     "clientes:backfill": "tsx --env-file-if-exists=.env.local scripts/backfill-clientes-clerk.ts",
     "busqueda:extraer": "tsx --env-file-if-exists=.env.local scripts/extraer-consultas-reales.ts",
     "busqueda:compilar-banco": "tsx scripts/compilar-banco-real.ts",

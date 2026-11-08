@@ -53,13 +53,30 @@ export function shopMediaConfig(env: Record<string, string | undefined> = proces
   return null;
 }
 
+/**
+ * Cache-Control de todo lo que se sube al bucket público de medios. Las keys
+ * llevan un uuid/sha y nunca se sobreescriben, así que son inmutables.
+ */
+export const CACHE_CONTROL_MEDIOS = "public, max-age=31536000, immutable";
+
+/**
+ * El header va FIRMADO en las URLs de subida y el navegador lo manda en el
+ * PUT, así que el CORS del bucket tiene que permitir `cache-control` en
+ * AllowedHeaders. Interruptor de emergencia: `R2_SHOP_MEDIA_SIN_CACHE_CONTROL=1`
+ * deja de firmarlo (las subidas vuelven a salir sin header) si el CORS todavía
+ * no se actualizó.
+ */
+export function cacheControlMedios(env: Record<string, string | undefined> = process.env): string | undefined {
+  return env.R2_SHOP_MEDIA_SIN_CACHE_CONTROL === "1" ? undefined : CACHE_CONTROL_MEDIOS;
+}
+
 let cached: R2Client | null | undefined;
 
 /** Cliente del bucket público, o null si no está configurado. */
 export function getShopMediaR2(): R2Client | null {
   if (cached !== undefined) return cached;
   const cfg = shopMediaConfig();
-  cached = cfg ? createR2(cfg) : null;
+  cached = cfg ? createR2(cfg, { cacheControl: cacheControlMedios() }) : null;
   return cached;
 }
 
@@ -73,16 +90,21 @@ const TENANT_ID_RE = /^[a-z0-9-]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const ANCHO_IMAGEN_HOME = 1600;
+/** Variantes que se generan y suben por imagen de la home (la mayor es la que se guarda en el contenido). */
+export const ANCHOS_IMAGEN_HOME = [800, 1600] as const;
 
 /**
- * Key de una imagen de la home: `home/{tenant}/{uuid}-{ancho}.webp`. Prefijo
- * propio: no pisa `productos/` ni `categorias/` del CRM.
+ * Key de una imagen de la home: `home/{tenant}/v/{uuid}-{ancho}.webp`, con
+ * ancho 800 o 1600. El segmento `v/` marca las imágenes que tienen VARIANTES
+ * (lo usa `imagen-loader.ts`); las viejas, `home/{tenant}/{uuid}-1600.webp`,
+ * tienen una sola y se sirven tal cual. Prefijo propio: no pisa `productos/`
+ * ni `categorias/` del CRM.
  */
 export function homeImagenKey(tenantId: string, id: string, ancho: number = ANCHO_IMAGEN_HOME): string {
   if (!TENANT_ID_RE.test(tenantId)) throw new Error(`tenantId inválido para key de R2: ${JSON.stringify(tenantId)}`);
   if (!UUID_RE.test(id)) throw new Error(`id inválido para key de R2: ${JSON.stringify(id)}`);
-  if (ancho !== ANCHO_IMAGEN_HOME) throw new Error(`ancho inválido para key de R2: ${ancho}`);
-  return `home/${tenantId}/${id}-${ancho}.webp`;
+  if (!(ANCHOS_IMAGEN_HOME as readonly number[]).includes(ancho)) throw new Error(`ancho inválido para key de R2: ${ancho}`);
+  return `home/${tenantId}/v/${id}-${ancho}.webp`;
 }
 
 /**

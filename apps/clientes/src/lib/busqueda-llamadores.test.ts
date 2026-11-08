@@ -29,9 +29,13 @@ function codigo(ruta: string): string {
 
 const rel = (ruta: string) => relative(SRC, ruta).split(sep).join("/");
 
-/** Quien PUEDE hablar con la capa del catálogo con texto: ella misma, la caché pública, el conteo de Entender, el cableado del motor y el banco. */
+/**
+ * Quien PUEDE hablar con la capa del catálogo con texto: ella misma, la caché pública, el conteo de Entender, el cableado del motor y el banco.
+ * El feed de Google lee el catálogo entero sin texto: no es una búsqueda.
+ */
 const PERMITIDOS = [
   /^lib\/catalog\.ts$/,
+  /^app\/feed\/google\.xml\/route\.ts$/,
   /^lib\/catalogo-publico\.ts$/,
   /^lib\/busqueda-v2\/conteo\.ts$/,
   /^lib\/busqueda-v2\/motor-servidor\.ts$/,

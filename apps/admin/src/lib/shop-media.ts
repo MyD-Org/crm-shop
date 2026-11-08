@@ -55,13 +55,30 @@ export function shopMediaConfig(env: Record<string, string | undefined> = proces
   return null
 }
 
+/**
+ * Cache-Control de todo lo que se sube al bucket público de medios. Las keys
+ * llevan un uuid/sha y nunca se sobreescriben, así que son inmutables.
+ */
+export const CACHE_CONTROL_MEDIOS = "public, max-age=31536000, immutable"
+
+/**
+ * El header va FIRMADO en las URLs de subida y el navegador lo manda en el
+ * PUT, así que el CORS del bucket tiene que permitir `cache-control` en
+ * AllowedHeaders. Interruptor de emergencia: `R2_SHOP_MEDIA_SIN_CACHE_CONTROL=1`
+ * deja de firmarlo (las subidas vuelven a salir sin header) si el CORS todavía
+ * no se actualizó.
+ */
+export function cacheControlMedios(env: Record<string, string | undefined> = process.env): string | undefined {
+  return env.R2_SHOP_MEDIA_SIN_CACHE_CONTROL === "1" ? undefined : CACHE_CONTROL_MEDIOS
+}
+
 let cached: R2Client | null | undefined
 
 /** Cliente del bucket público, o null si no está configurado. NUNCA el de comprobantes. */
 export function getShopMediaR2(): R2Client | null {
   if (cached !== undefined) return cached
   const cfg = shopMediaConfig()
-  cached = cfg ? createR2(cfg) : null
+  cached = cfg ? createR2(cfg, { cacheControl: cacheControlMedios() }) : null
   return cached
 }
 

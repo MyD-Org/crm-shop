@@ -55,7 +55,7 @@ export function FichaTecnicaProducto({ alegraId, ficha, onCambio }: Props) {
         key: string
         existente: boolean
         url?: string
-        headers?: { "content-type": string }
+        headers?: Record<string, string>
       }>(`/api/admin/catalogo/productos/${encodeURIComponent(alegraId)}/ficha`, {
         method: "POST",
         body: JSON.stringify({ nombre: file.name, bytes: file.size, sha256 }),

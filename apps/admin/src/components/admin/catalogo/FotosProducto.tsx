@@ -37,7 +37,7 @@ interface VarianteFirmada {
   ancho: number
   key: string
   url: string
-  headers: { "content-type": string }
+  headers: Record<string, string>
 }
 
 export function FotosProducto({ alegraId, fotos, onCambio, alcance, titulo = "Fotos del producto" }: Props) {

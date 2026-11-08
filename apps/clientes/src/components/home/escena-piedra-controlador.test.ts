@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { enlazarEncendido, iniciarEscena, type EntornoEscena } from "./escena-piedra-controlador";
+import { ESPERA_ENCENDIDO_TACTIL_MS, enlazarEncendido, iniciarEscena, type EntornoEscena } from "./escena-piedra-controlador";
 import { LA, LUZ_INICIAL, LUZ_QUIETA, cercaDelLA, pasoDeLuz } from "./escena-piedra";
 
 /** Elemento falso: guarda atributos y escucha eventos como un EventTarget. */
@@ -99,6 +99,46 @@ describe("escena de la piedra: loop", () => {
     t.ver(true);
     limpiar();
     expect(t.caf).toHaveBeenCalled();
+  });
+});
+
+describe("escena de la piedra: pantalla táctil", () => {
+  function conReloj() {
+    let pendientes: { id: number; cb: () => void }[] = [];
+    let n = 0;
+    const programar = vi.fn((cb: () => void) => { n += 1; pendientes.push({ id: n, cb }); return n; });
+    const cancelarProgramado = vi.fn((id: number) => { pendientes = pendientes.filter(p => p.id !== id); });
+    const correr = () => { const p = pendientes; pendientes = []; p.forEach(x => x.cb()); };
+    return { programar, cancelarProgramado, correr };
+  }
+
+  it("el LA se enciende solo tras unos segundos a la vista", () => {
+    const r = conReloj();
+    const t = entorno({ tactil: true, programar: r.programar, cancelarProgramado: r.cancelarProgramado });
+    iniciarEscena(t.env);
+    t.ver(true);
+    expect(r.programar).toHaveBeenCalledWith(expect.any(Function), ESPERA_ENCENDIDO_TACTIL_MS);
+    expect(t.hero.attrs["data-encendido"]).toBeUndefined();
+    r.correr();
+    expect(t.hero.attrs["data-encendido"]).toBeDefined();
+  });
+
+  it("si sale de pantalla antes, no se enciende", () => {
+    const r = conReloj();
+    const t = entorno({ tactil: true, programar: r.programar, cancelarProgramado: r.cancelarProgramado });
+    iniciarEscena(t.env);
+    t.ver(true);
+    t.ver(false);
+    r.correr();
+    expect(t.hero.attrs["data-encendido"]).toBeUndefined();
+  });
+
+  it("con cursor (no táctil) no se enciende solo", () => {
+    const r = conReloj();
+    const t = entorno({ tactil: false, programar: r.programar, cancelarProgramado: r.cancelarProgramado });
+    iniciarEscena(t.env);
+    t.ver(true);
+    expect(r.programar).not.toHaveBeenCalled();
   });
 });
 

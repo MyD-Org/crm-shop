@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COVER_X, HERO_LIGHTS, SHELF_STRIP, STUDIO_IMAGE, isStudioImage, proximity, sceneRect, usaCover } from "./hero-lights";
+import { COVER_X, HERO_LIGHTS, LA_MONOGRAM, SHELF_STRIP, SPOT_LA, STUDIO_IMAGE, isStudioImage, proximity, sceneRect, usaCover } from "./hero-lights";
 
 describe("studio lighting geometry", () => {
   it("keeps the entire source aligned with contain at desktop and touch sizes", () => {
@@ -71,5 +71,24 @@ describe("usaCover", () => {
     expect(usaCover(1800, 815, false)).toBe(false);
     expect(usaCover(1536, 1024, false)).toBe(false);
     expect(usaCover(1070, 900, false)).toBe(true);
+  });
+  it("keeps the spot's LA inside the beam's pool on desktop", () => {
+    const { x, y, height } = SPOT_LA.desktop;
+    const half = { x: height * LA_MONOGRAM.width / LA_MONOGRAM.height / 2, y: height / 2 };
+    // Glow del spot: elipse en (930, 512) de 120 × 100; el LA entero tiene que caer adentro.
+    for (const [dx, dy] of [[-half.x, -half.y], [half.x, -half.y], [-half.x, half.y], [half.x, half.y]]) {
+      expect(((x + dx - 930) / 120) ** 2 + ((y + dy - 512) / 100) ** 2).toBeLessThan(1);
+    }
+  });
+  it("keeps the mobile LA on the free wall, in frame and clear of the pendant", () => {
+    const { x, y, height } = SPOT_LA.mobile;
+    const halfWidth = height * LA_MONOGRAM.width / LA_MONOGRAM.height / 2;
+    expect(x + halfWidth).toBeLessThan(1271); // borde izquierdo de la canasta del colgante
+    for (const [width, height_] of [[324, 560], [354, 560], [394, 560], [343, 640]]) {
+      const rect = sceneRect(width, height_, true);
+      expect(rect.left + (x - halfWidth) * rect.scale).toBeGreaterThan(0);
+      expect(rect.left + (x + halfWidth) * rect.scale).toBeLessThan(width);
+      expect(rect.top + (y - height / 2) * rect.scale).toBeGreaterThan(0);
+    }
   });
 });

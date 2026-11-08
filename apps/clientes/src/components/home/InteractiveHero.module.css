@@ -18,6 +18,11 @@
 .mobilePhoto img { position: absolute; inset: 0; z-index: -20; width: 100%; height: 100%; object-fit: cover; object-position: 88% center; }
 .art { position: absolute; overflow: visible; z-index: -15; }
 .light { transition: opacity 300ms ease-out; mix-blend-mode: screen; }
+/* El LA del spot (SpotLA): tenue, se funde con el haz. Uno por ancho; el de celular trae su halo. */
+.laGlow { opacity: .3; }
+.laStroke { opacity: .5; }
+.laSpill { display: none; }
+.laMobile { display: none; }
 /* Each tap area covers the whole fixture (hit in hero-lights.ts), not just its centre. */
 .target { position: absolute; z-index: 0; transform: translate(-50%, -50%); border: 0; border-radius: 24px; background: transparent; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
 .target:focus-visible { outline: 2px solid var(--color-accent, #ad542e); outline-offset: 4px; background: #ffffff18; }
@@ -31,6 +36,11 @@
   .beamStop { stop-opacity: .85; }
   .halo { opacity: .65; }
   .glow, .halo { transform-box: fill-box; transform-origin: center; transform: scale(1.25); }
+  .laDesktop { display: none; }
+  .laMobile { display: inline; }
+  .laSpill { display: inline; opacity: .9; }
+  .laStroke { opacity: .38; }
+  .laGlow { opacity: .4; }
   /* Dim only the photograph, below the screen-blended light and DS text veil.
      Fixed, not tied to the lights: the scene stays dark with every lamp off. */
   .root > section > img, .mobilePhoto img { filter: brightness(.78); }

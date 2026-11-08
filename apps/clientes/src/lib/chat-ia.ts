@@ -3,7 +3,8 @@
  *
  * `null` = no hay chat (flag `chat-ia` apagado o sin config de ai-api): el
  * layout no renderiza nada y no sale ningún pedido a ai-api. Con chat, sólo
- * datos públicos: el id del agente, el título (nombre del tenant) y los textos
+ * datos públicos: el id del agente, el título (nombre del tenant, o el de la marca
+ * en un sitio con marca propia) y los textos
  * del chat vacío que se editan en el admin del CRM. La API key nunca llega al
  * navegador.
  */
@@ -12,6 +13,7 @@ import { identidadActual } from "./auth";
 import { chatIaHabilitado } from "./chat-ia-flag";
 import { datosTenant } from "./cuenta-corriente/tenant-cc";
 import { textosChatTenant } from "./chat-ia-textos-tenant";
+import { getMarca } from "./marca";
 
 export interface PropsChatIa {
   agentId: string;
@@ -28,17 +30,19 @@ export const TITULO_CHAT_POR_DEFECTO = "Asistente";
 export async function propsChatIa(): Promise<PropsChatIa | null> {
   const config = aiApiConfig();
   if (!config || !(await chatIaHabilitado())) return null;
-  const [tenant, textos, agentId] = await Promise.all([
+  const [tenant, marca, textos, agentId] = await Promise.all([
     datosTenant().catch((err: unknown) => {
       console.error(`[chat-ia] no se pudo leer el tenant: ${err instanceof Error ? err.name : "desconocido"}`);
       return null;
     }),
+    getMarca().catch(() => null),
     textosChatTenant(),
     agenteSegunIdentidad(config),
   ]);
   return {
     agentId,
-    titulo: tenant?.nombre || TITULO_CHAT_POR_DEFECTO,
+    // Un sitio con marca propia se presenta con su nombre, no con el de la empresa.
+    titulo: (marca && !marca.recursosCentral ? marca.nombre : tenant?.nombre) || TITULO_CHAT_POR_DEFECTO,
     textoVacio: textos.emptyState,
     sugerencias: textos.suggestions,
   };

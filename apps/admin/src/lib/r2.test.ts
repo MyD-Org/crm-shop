@@ -90,6 +90,24 @@ describe("presignPut", () => {
     expect(expiresAt.getTime()).toBe(NOW.getTime() + 600_000)
   })
 
+  it("sin cacheControl no firma ni devuelve cache-control (bucket de comprobantes)", async () => {
+    const r2 = makeR2(vi.fn<(input: Request) => Promise<Response>>())
+    const { url, headers } = await r2.presignPut("k", { contentType: "image/png", contentLength: 1, ttlSeconds: 600 })
+    expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")).toBe("content-length;content-type;host")
+    expect(headers).toEqual({ "content-type": "image/png" })
+  })
+
+  it("con cacheControl lo firma y lo devuelve para que el navegador lo mande igual", async () => {
+    const r2 = createR2(CFG, { now: () => NOW, cacheControl: "public, max-age=31536000, immutable" })
+    const { url, headers } = await r2.presignPut("productos/t/1/x-800.webp", {
+      contentType: "image/webp",
+      contentLength: 10,
+      ttlSeconds: 600,
+    })
+    expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")).toBe("cache-control;content-length;content-type;host")
+    expect(headers).toEqual({ "content-type": "image/webp", "cache-control": "public, max-age=31536000, immutable" })
+  })
+
   it("es determinista con now fijo", async () => {
     const r2 = makeR2(vi.fn<(input: Request) => Promise<Response>>())
     const a = await r2.presignPut("tmp/receipts/tenant-a/abc", {
@@ -213,6 +231,13 @@ describe("put y delete", () => {
     expect(req.method).toBe("PUT")
     expect(req.headers.get("content-type")).toBe("application/pdf")
     expect(req.headers.get("content-disposition")).toBe('inline; filename="comprobante.pdf"')
+  })
+
+  it("put con cacheControl manda el header", async () => {
+    const fetchFn = vi.fn<(input: Request) => Promise<Response>>(async () => new Response(null, { status: 200 }))
+    const r2 = createR2(CFG, { fetch: fetchFn as unknown as typeof fetch, now: () => NOW, cacheControl: "public, max-age=31536000, immutable" })
+    await r2.put("fichas/x.pdf", new Uint8Array([1]), { contentType: "application/pdf" })
+    expect((fetchFn.mock.calls[0]![0] as Request).headers.get("cache-control")).toBe("public, max-age=31536000, immutable")
   })
 
   it("put con error ⇒ R2Error", async () => {

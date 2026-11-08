@@ -22,6 +22,7 @@
     "catalogo:atributos-auditoria": "tsx scripts/atributos-auditoria.ts",
     "catalogo:seccion-cables-backfill": "tsx scripts/backfill-seccion-cables.ts",
     "catalogo:atributo-nombre-backfill": "tsx scripts/backfill-seccion-cables.ts",
+    "r2:cache-control": "tsx --env-file-if-exists=.env.local scripts/r2-cache-control-backfill.ts",
     "catalogo:leer-fichas": "tsx --env-file-if-exists=.env.local scripts/leer-fichas-catalogo.ts"
   },
   "dependencies": {

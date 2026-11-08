@@ -39,7 +39,7 @@ export function ImagenCategoria({ imagenKey, url, onCambio }: Props) {
       const variantes = await generarVariantes(file)
       const elegida = variantes.find((v) => v.ancho === ANCHO_PORTADA) ?? variantes[variantes.length - 1]
 
-      const firmada = await api<{ key: string; url: string; headers: { "content-type": string } }>(
+      const firmada = await api<{ key: string; url: string; headers: Record<string, string> }>(
         "/api/admin/catalogo/categorias/imagen",
         { method: "POST", body: JSON.stringify({ bytes: elegida.blob.size }) },
       )

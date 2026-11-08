@@ -40,7 +40,7 @@ export type ResultadoGuardar =
 export type ResultadoLeerSeccion = { ok: true; valor: unknown } | { ok: false; error: string };
 
 export type ResultadoFirma =
-  | { ok: true; key: string; url: string; headers: { "content-type": string }; urlPublica: string }
+  | { ok: true; key: string; url: string; headers: Record<string, string>; urlPublica: string }
   | { ok: false; errores: string[] };
 
 /** Un producto del catálogo, tal como lo necesita el selector de destacados. */

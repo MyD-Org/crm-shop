@@ -11,7 +11,7 @@ import { getContenidoHome, getDatosFooter } from "@/lib/home-datos"
 import { hrefWhatsapp } from "@/data/footer"
 import { visibilidadDe, type NavBadgeContent } from "@/data/home-defaults"
 import { HeaderSinRuta, HeaderUI } from "./HeaderUI"
-import { UbicacionHeader } from "./ubicacion/UbicacionHeader"
+import { UbicacionHeader, UbicacionReserva } from "./ubicacion/UbicacionHeader"
 
 /**
  * Header global. Va en el shell estático: el badge del nav sale del contenido
@@ -35,10 +35,10 @@ export async function Header() {
     categorias: null,
     navBadge,
     navBadgeVisibleOn,
-    // "Enviar a" (desktop en las acciones, mobile bajo el buscador); cada uno trae su propio hueco
-    // por request y comparten la lectura (`ubicacionDelVisitante` está cacheada por request).
-    ubicacion: <UbicacionHeader />,
-    ubicacionEnLinea: <UbicacionHeader enLinea />,
+    // "Enviar a" (desktop en las acciones, mobile bajo el buscador): en la reserva sólo el alto;
+    // el real se resuelve en HeaderDinamico.
+    ubicacion: <UbicacionReserva />,
+    ubicacionEnLinea: <UbicacionReserva enLinea />,
     whatsapp,
   }
 
@@ -56,8 +56,10 @@ export async function Header() {
       <HeaderDinamico
         navBadge={navBadge}
         navBadgeVisibleOn={navBadgeVisibleOn}
-        ubicacion={pendiente.ubicacion}
-        ubicacionEnLinea={pendiente.ubicacionEnLinea}
+        // Resueltos dentro del mismo hueco (comparten la lectura: `ubicacionDelVisitante` está
+        // cacheada por request).
+        ubicacion={<UbicacionHeader />}
+        ubicacionEnLinea={<UbicacionHeader enLinea />}
         whatsapp={whatsapp}
       />
     </Suspense>

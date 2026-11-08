@@ -378,7 +378,7 @@ export function HomeClient({
     visitenos: piedra ? (
       <Contenido>
         <SeccionEditable seccion="visitenos" titulo={visitenos.titulo} visibilidad={vis("visitenos")} botonTop="top-[calc(clamp(56px,7vw,96px)+0.5rem)]">
-          <VisitenosPiedra contenido={visitenos} />
+          <VisitenosPiedra contenido={visitenos} whatsappHref={whatsapp.href} />
         </SeccionEditable>
       </Contenido>
     ) : null,

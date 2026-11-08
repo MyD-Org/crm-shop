@@ -142,16 +142,16 @@ function HeaderVista({
   // nombre en texto.
   const marca = useMarca();
   const { principal, acento } = partesNombre(marca);
-  // Sin `priority`: la <img> ya viene en el HTML y es chica, así que no necesita precarga.
-  // Con `priority` Next mandaba un `Link: rel=preload` que Chrome marcaba como "no usado".
-  // La de arriba carga de inmediato (`eager`); la de la barra compacta, cuando hace falta.
+  // Sin precarga: la <img> ya viene en el HTML y es chica. Con `priority`, o con `eager`
+  // sin `fetchPriority="low"`, React manda un `Link: rel=preload` que Chrome marca como
+  // "no usado". La de arriba carga de inmediato; la de la barra compacta, cuando hace falta.
   const logoMarca = (className: string, inmediata: boolean) => {
     const carga = inmediata ? "eager" : "lazy";
     return fuenteLogo(marca) === "propio" && marca.logoUrl ? (
       // `unoptimized`: un SVG remoto no pasa por el optimizador y el logo ya viene dimensionado.
-      <Image src={marca.logoUrl} alt={altLogo(marca)} width={160} height={32} unoptimized loading={carga} className={className} />
+      <Image src={marca.logoUrl} alt={altLogo(marca)} width={160} height={32} unoptimized loading={carga} fetchPriority="low" className={className} />
     ) : fuenteLogo(marca) === "central" ? (
-      <Image src={logo} alt={altLogo(marca)} loading={carga} className={className} />
+      <Image src={logo} alt={altLogo(marca)} loading={carga} fetchPriority="low" className={className} />
     ) : undefined;
   };
 

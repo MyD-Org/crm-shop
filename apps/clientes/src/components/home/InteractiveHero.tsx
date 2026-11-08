@@ -203,9 +203,8 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <ellipse cx="1120" cy="149" rx="24" ry="18" transform="rotate(38 1120 149)" fill={`url(#${uid}-interior)`}/>
               <ellipse cx="1122" cy="146" rx="18" ry="11" transform="rotate(38 1122 146)" fill="#fff5dc"/>
               <ellipse cx="930" cy="512" rx="120" ry="100" className={styles.glow} fill={`url(#${uid}-glow)`}/>
-              {/* Guiño de marca: el LA que el haz revela en la pared (SPOT_LA); el CSS muestra uno según el ancho. */}
-              <SpotLA uid={uid} place="desktop" className={styles.laDesktop} />
-              <SpotLA uid={uid} place="mobile" className={styles.laMobile} />
+              {/* Guiño de marca: el LA que el haz revela en la pared (SPOT_LA); sólo en escritorio. */}
+              <SpotLA uid={uid} />
             </>}
             {light.id === "pendant" && <>
               {/* Translucent inner glow preserves the photographic bamboo weave. */}
@@ -235,18 +234,16 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
   </div>;
 }
 
-/** El monograma del kit (LA_MONOGRAM) en su lugar de SPOT_LA, apagado hacia el borde de su charco de luz. */
-function SpotLA({ uid, place, className }: { uid: string; place: keyof typeof SPOT_LA; className: string }) {
-  const { x, y, height } = SPOT_LA[place];
+/** El monograma del kit (LA_MONOGRAM) en SPOT_LA, apagado hacia el borde del charco de luz del spot. */
+function SpotLA({ uid }: { uid: string }) {
+  const { x, y, height } = SPOT_LA;
   const scale = height / LA_MONOGRAM.height;
-  const id = `${uid}-la-${place}`;
-  return <g className={className} data-spot-la={place}>
+  const id = `${uid}-la`;
+  return <g className={styles.spotLa} data-spot-la="">
     <mask id={id} maskUnits="userSpaceOnUse" x={x - height * 2} y={y - height * 2} width={height * 4} height={height * 4}>
       <ellipse cx={x} cy={y} rx={height * 1.6} ry={height * 1.4} fill={`url(#${uid}-laFade)`}/>
     </mask>
     <g mask={`url(#${id})`}>
-      {/* Fuera del charco del haz (celular): un halo propio, como el borde de la luz que se derrama. */}
-      <ellipse className={styles.laSpill} cx={x} cy={y} rx={height * 1.3} ry={height * 1.1} fill={`url(#${uid}-glow)`}/>
       <g transform={`translate(${x} ${y - height / 2}) scale(${scale})`} clipPath={`url(#${uid}-laBox)`}>
         <path className={styles.laGlow} d={LA_MONOGRAM.d} stroke="#FFB547" strokeWidth="16" fill="none" filter={`url(#${uid}-laGlow)`}/>
         <path className={styles.laStroke} d={LA_MONOGRAM.d} stroke="#FFC978" strokeWidth="4.5" fill="none" strokeMiterlimit="10"/>

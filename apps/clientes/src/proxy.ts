@@ -54,6 +54,10 @@ const RUTAS_PUBLICAS = [
   // (Gmail, etc.), sin cookie de gate ni sesión; se autentica con el token del enlace. Sin esto la
   // cortina responde 200 con HTML y la baja nunca se registra.
   "/api/aviso-reingreso/baja",
+  // Imagen de vista previa del sitio (og:image): la piden los bots de WhatsApp, Facebook, etc.,
+  // sin cookie de gate ni sesión. Con la cortina puesta recibirían el HTML de "Próximamente" en
+  // vez de la imagen. Es pública y sólo dibuja la marca de la tienda.
+  "/imagen-para-compartir",
 ];
 
 /**

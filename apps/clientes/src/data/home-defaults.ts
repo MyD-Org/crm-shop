@@ -147,6 +147,12 @@ export type VisitenosContent = TextosSeccion & {
   horarios?: string;
   /** Botón "Cómo llegar": etiqueta y enlace (ruta interna o URL https). */
   cta?: Enlace;
+  /**
+   * Llamado a WhatsApp dentro de la misma banda (absorbe la sección `whatsapp`): un renglón de
+   * texto opcional y un segundo botón que abre el WhatsApp del sitio (el `href` de la sección
+   * `whatsapp`, no se carga acá). Ausente, o con `visibilidad: "nunca"`: no se dibuja.
+   */
+  whatsapp?: { label: string; texto?: string; visibilidad?: SoloEn };
 };
 
 /**
@@ -259,11 +265,17 @@ export const ORDEN_HOME = [
 export type SeccionOrdenable = (typeof ORDEN_HOME)[number];
 export const KEY_ORDEN = "orden";
 
+/** Botón de WhatsApp de Visítenos cuando la fila guardada no lo trae (filas anteriores al botón). */
+export const WHATSAPP_VISITENOS_POR_DEFECTO: NonNullable<VisitenosContent["whatsapp"]> = {
+  label: "Consultar por WhatsApp",
+};
+
 /** Sin dirección ni enlace: son datos de cada sitio (repo público). */
 const DEFAULTS_VISITENOS: VisitenosContent = {
   eyebrow: "Nuestro local",
   titulo: "Visítenos en nuestro *local*",
   bajada: "Venga a conocer los productos y recibir asesoramiento en persona.",
+  whatsapp: WHATSAPP_VISITENOS_POR_DEFECTO,
 };
 
 const CATALOGO_ILUMINACION = "/catalogo?categoria=ILUMINACION";
@@ -559,7 +571,7 @@ function esTile(v: unknown, hosts: readonly string[]): v is TileContent {
 }
 
 /** Largos máximos de los textos libres de "Visítenos". */
-export const MAX_VISITENOS = { direccion: 200, horarios: 400 } as const;
+export const MAX_VISITENOS = { direccion: 200, horarios: 400, textoWhatsapp: 200 } as const;
 
 /** Devuelve la lista de problemas del payload para la sección ([] = válido). */
 export function erroresSeccion(key: string, payload: unknown, hosts: readonly string[] = hostsDeMedios()): string[] {
@@ -721,6 +733,12 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       if (typeof o.horarios === "string" && o.horarios.length > MAX_VISITENOS.horarios)
         errores.push(`horarios no puede superar los ${MAX_VISITENOS.horarios} caracteres`);
       if (o.cta !== undefined && !esEnlace(o.cta)) errores.push("cta debe ser { label, href }");
+      if (o.whatsapp !== undefined) {
+        const w = o.whatsapp as { label?: unknown; texto?: unknown; visibilidad?: unknown } | null;
+        const ok =
+          !!w && typeof w === "object" && !Array.isArray(w) && esTexto(w.label) && (w.texto === undefined || (esTexto(w.texto) && w.texto.length <= MAX_VISITENOS.textoWhatsapp)) && esSoloEnOpcional(w.visibilidad);
+        if (!ok) errores.push("whatsapp debe ser { label, texto?, visibilidad? }");
+      }
       break;
     case "busquedaAsistida":
       texto("eyebrow", true);

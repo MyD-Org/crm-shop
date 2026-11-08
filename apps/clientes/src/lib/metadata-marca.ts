@@ -1,8 +1,24 @@
 import type { Metadata } from "next";
+import { baseDelSitio } from "@/lib/seo";
 import { ICONOS_CENTRAL, ICONO_NEUTRO, type Marca } from "@/lib/marca-base";
 
-/** Ruta de la imagen general del sitio (src/app/opengraph-image.tsx). */
-export const IMAGEN_SITIO = "/opengraph-image";
+/** Ruta de la imagen general del sitio (src/app/imagen-para-compartir/route.tsx). */
+export const RUTA_IMAGEN_SITIO = "/imagen-para-compartir";
+export const IMAGEN_SITIO_ANCHO = 1200;
+export const IMAGEN_SITIO_ALTO = 630;
+/** Neutro: sale en el HTML de todas las marcas, así que no nombra a ninguna. */
+export const IMAGEN_SITIO_ALT = "Vista previa de la tienda";
+
+/**
+ * URL ABSOLUTA de la imagen general del sitio, siempre con el origen PROPIO (`NEXT_PUBLIC_SITE_URL`)
+ * y nunca con el de `metadataBase`: en el sitio secundario ése es el canónico (el del principal) y
+ * la imagen saldría dibujada por el otro proyecto, con la marca del otro. Sin la variable (o
+ * inválida), `undefined`: no se manda imagen.
+ */
+export function urlImagenDelSitio(sitio: string | undefined): string | undefined {
+  const base = baseDelSitio(sitio);
+  return base ? `${base}${RUTA_IMAGEN_SITIO}` : undefined;
+}
 
 /**
  * Lo de Open Graph que comparte todo el sitio (`og:type`, `og:site_name`, `og:locale`). Next
@@ -31,7 +47,7 @@ export function destinoFavicon(marca: Pick<Marca, "faviconUrl" | "recursosCentra
  */
 export function metadataDeMarca(
   marca: Marca,
-  entorno: { siteUrl?: string; facebookToken?: string; googleToken?: string },
+  entorno: { siteUrl?: string; propioUrl?: string; facebookToken?: string; googleToken?: string },
 ): Metadata {
   const google = entorno.googleToken?.trim()
   const verification = {
@@ -44,8 +60,23 @@ export function metadataDeMarca(
     metadataBase: entorno.siteUrl ? new URL(entorno.siteUrl) : undefined,
     title: marca.titulo,
     description: marca.descripcion,
-    // La imagen la agrega src/app/opengraph-image.tsx (convención de archivo, con prioridad).
-    openGraph: openGraphDelSitio(marca.nombre),
+    // La imagen va absoluta y con el origen PROPIO (`propioUrl`), no con `metadataBase` (canónico).
+    // La dibuja src/app/imagen-para-compartir/route.tsx. Sin `propioUrl`, no se manda imagen.
+    openGraph: {
+      ...openGraphDelSitio(marca.nombre),
+      ...(urlImagenDelSitio(entorno.propioUrl)
+        ? {
+            images: [
+              {
+                url: urlImagenDelSitio(entorno.propioUrl)!,
+                width: IMAGEN_SITIO_ANCHO,
+                height: IMAGEN_SITIO_ALTO,
+                alt: IMAGEN_SITIO_ALT,
+              },
+            ],
+          }
+        : {}),
+    },
     icons: marca.faviconUrl
       ? { icon: marca.faviconUrl }
       : marca.recursosCentral

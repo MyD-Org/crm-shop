@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * La textura de piedra fuera del hero (login, pie, 404, carrito vacío): sólo con `piedra: true`.
+ * La textura de piedra fuera del hero (login, 404, carrito vacío): sólo con `piedra: true`.
  * Apagada, la salida es la de siempre (caracterización) y nada de la piedra se filtra al HTML.
  * Dominios de ejemplo (.example).
  */
@@ -45,7 +45,6 @@ import IngresarPage from "@/app/ingresar/[[...rest]]/page";
 import RegistroPage from "@/app/registro/[[...rest]]/page";
 import { BloquePiedra } from "./BloquePiedra";
 import { FondoPiedra } from "./FondoPiedra";
-import { OPACIDAD_PIE, TexturaPie } from "./TexturaPie";
 import { PiedraDecorativa } from "./PiedraDecorativa";
 
 const html = (el: ReactElement) => renderToStaticMarkup(el);
@@ -61,7 +60,6 @@ beforeEach(() => { apagada(); estado.items = []; });
 describe("sin el interruptor: la salida es la de siempre", () => {
   it("el fondo y el pie, apagados, no agregan nada", () => {
     expect(html(createElement(FondoPiedra, { piedra: false } as never, createElement("p", null, "x")))).toBe("<p>x</p>");
-    expect(html(createElement(TexturaPie, { piedra: false }))).toBe("");
   });
 
   it("404: idéntica al EmptyState de antes", async () => {
@@ -131,29 +129,15 @@ describe("con el interruptor prendido", () => {
     }
   });
 
-  it("pie: juntas tenues encima, sin eventos y sin texto", async () => {
+  it("pie: con la piedra prendida es el mismo de siempre, sin capas", async () => {
     prendida();
     const h = html(await SiteFooter());
-    // La textura va en su propia caja junto al pie (el botón del admin queda afuera).
-    expect(h.startsWith('<div class="footer-global"><div class="relative isolate"><footer')).toBe(true);
-    expect(h).toContain('focusable="false"');
-    // El resto del pie es el de siempre.
+    expect(h.startsWith('<div class="footer-global"><footer')).toBe(true);
+    expect(h).not.toContain('focusable="false"');
     apagada();
     const base = html(await SiteFooter());
-    // Dos capas: las juntas tenues y su brillo que respira.
-    expect(h.match(/<svg aria-hidden="true" focusable="false"/g)).toHaveLength(2);
-    const sinCapa = h.replace(/<svg aria-hidden="true" focusable="false"[\s\S]*?<\/svg>/g, "").replace('<div class="relative isolate">', "").replace(/<\/footer><\/div><\/div>$/, "</footer></div>");
-    // Los ids que genera React cambian con la profundidad del árbol: no son parte del pie.
     const sinIds = (x: string) => x.replace(/_R_[a-z0-9]+_/g, "_R_");
-    expect(sinIds(sinCapa)).toBe(sinIds(base));
-  });
-
-  it("la textura del pie no pasa de 0,25 de opacidad ni dibuja el LA", () => {
-    expect(OPACIDAD_PIE).toBeLessThanOrEqual(0.25);
-    const h = html(createElement(TexturaPie, { piedra: true }));
-    expect(h).toContain(`opacity="${OPACIDAD_PIE}"`);
-    expect(h).not.toContain("<text");
-    expect(h).not.toContain("clipPath");
+    expect(sinIds(h)).toBe(sinIds(base));
   });
 
   it("404: bloque de piedra con el LA apagado y el texto de siempre", async () => {
@@ -184,7 +168,7 @@ describe("con el interruptor prendido", () => {
   });
 
   it("la capa decorativa es sólo dibujo: oculta a los lectores de pantalla y sin foco", () => {
-    const h = html(createElement(PiedraDecorativa, { conLA: true, brillo: true }));
+    const h = html(createElement(PiedraDecorativa, { conLA: true }));
     expect(h).toContain('aria-hidden="true"');
     expect(h).not.toContain("tabindex");
     expect(h).not.toContain("role=");
@@ -208,11 +192,8 @@ describe("rendimiento y registro", () => {
     const comun = readFileSync(join(dir, "escena-comun.tsx"), "utf8");
     expect(comun).toContain("HeroPiedra.module.css");
     expect(readFileSync(join(dir, "BloquePiedra.tsx"), "utf8")).toContain("enlazarEncendido");
-  });
-
-  it("el brillo lento se apaga con movimiento reducido", () => {
-    const css = readFileSync(join(dir, "piedra.module.css"), "utf8");
-    expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{[^}]*\.brillo\s*\{\s*animation: none/);
+    // Visítenos usa la escena viva del hero entera (luz que sigue al cursor + LA).
+    expect(readFileSync(join(dir, "VisitenosPiedra.tsx"), "utf8")).toContain("EscenaPiedraViva");
   });
 
   it("no nombran a ninguna empresa", () => {

@@ -5,8 +5,7 @@ import { linkFooter } from "@/components/footer/link-footer";
 import { BotonEditarFooterSiAdmin } from "@/components/footer/BotonEditarFooterSiAdmin";
 import { RedesSociales } from "@/components/footer/RedesSociales";
 import { textoBarra } from "@/data/footer";
-import { TexturaPie, clasePiedraDelPie } from "@/components/piedra/TexturaPie";
-import { getDatosFooter, getDatosLegales, getDecoracion } from "@/lib/home-datos";
+import { getDatosFooter, getDatosLegales } from "@/lib/home-datos";
 import { getPaginasPublicadas } from "@/lib/institucional/datos";
 import { getMarca } from "@/lib/marca";
 import { partesNombre } from "@/lib/marca-base";
@@ -37,23 +36,23 @@ import { columnasFooter } from "@/lib/legales/footer";
  * mobile no: la barra es angosta y el copyright se partía en tres líneas; ahí
  * las cuentas ya están siempre en la barra superior (layout).
  *
- * Textura de piedra (decoración del sitio, apagada por defecto): las juntas de la piedra como
- * capa muy tenue encima del pie, sin tocar sus colores ni su contraste (`TexturaPie`).
- *
  * Admin: botón "Editar footer" arriba del footer, en un hueco aparte
  * (`BotonEditarFooterSiAdmin` dentro de `<Suspense fallback={null}>`).
  */
 export async function SiteFooter() {
-  const [anio, legal, footer, marca, paginas, { piedra }] = await Promise.all([
+  const [anio, legal, footer, marca, paginas] = await Promise.all([
     anioActual(),
     getDatosLegales(),
     getDatosFooter(),
     getMarca(),
     getPaginasPublicadas(),
-    getDecoracion(),
   ]);
   const { principal, acento } = partesNombre(marca);
-  const pie = (
+  return (
+    <div className="footer-global">
+      <Suspense fallback={null}>
+        <BotonEditarFooterSiAdmin inicial={footer} />
+      </Suspense>
       <SiteFooterDS
         className="site-footer"
         renderLink={linkFooter}
@@ -66,7 +65,7 @@ export async function SiteFooter() {
         barExtra={
           footer.redes.length > 0 || legal.dataFiscalUrl ? (
             <div className="flex items-center gap-5">
-              <RedesSociales redes={footer.redes} className="justify-end max-md:hidden" seguinos={marca.recursosCentral} />
+              <RedesSociales redes={footer.redes} className="justify-end max-md:hidden" />
               {legal.dataFiscalUrl ? (
                 <a href={legal.dataFiscalUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
                   {/* Imagen genérica de ARCA, local (public/images). */}
@@ -78,22 +77,6 @@ export async function SiteFooter() {
           ) : undefined
         }
       />
-  );
-  return (
-    <div className="footer-global">
-      <Suspense fallback={null}>
-        <BotonEditarFooterSiAdmin inicial={footer} />
-      </Suspense>
-      {/* Con la piedra prendida, sus juntas muy tenues sobre el pie (sin JS). La capa va en su propia
-          caja junto al pie, así el botón del admin que está arriba no corre el recorte. */}
-      {piedra ? (
-        <div className={clasePiedraDelPie}>
-          {pie}
-          <TexturaPie piedra />
-        </div>
-      ) : (
-        pie
-      )}
     </div>
   );
 }

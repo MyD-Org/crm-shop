@@ -74,6 +74,13 @@ describe("la sección visitenos en el contrato de la home", () => {
     expect(c.visitenos.direccion).toBe(LOCAL.direccion);
   });
 
+  it("el botón de WhatsApp nace sólo con la etiqueta, sin texto encima ni número", () => {
+    const w = DEFAULTS_HOME.visitenos.whatsapp;
+    expect(w?.label).toBe("Consultar por WhatsApp");
+    expect(w?.texto).toBeUndefined();
+    expect(w).not.toHaveProperty("href");
+  });
+
   it("no trae ninguna dirección ni enlace de código", () => {
     expect(DEFAULTS_HOME.visitenos.direccion).toBeUndefined();
     expect(DEFAULTS_HOME.visitenos.horarios).toBeUndefined();
@@ -99,6 +106,20 @@ describe("validación de visitenos", () => {
     expect(erroresSeccion("visitenos", { direccion: "a".repeat(201) })).not.toEqual([]);
     expect(erroresSeccion("visitenos", { horarios: "a".repeat(401) })).not.toEqual([]);
     expect(erroresSeccion("visitenos", "x")).not.toEqual([]);
+  });
+
+  it("valida el botón de WhatsApp", () => {
+    expect(erroresSeccion("visitenos", { whatsapp: { label: "Escribir", texto: "Hola", visibilidad: "mobile" } })).toEqual([]);
+    for (const w of [{ label: " " }, { label: "x", texto: "" }, { label: "x", texto: "a".repeat(201) }, { label: "x", visibilidad: "siempre" }, "x", null]) {
+      expect(erroresSeccion("visitenos", { whatsapp: w }), JSON.stringify(w)).not.toEqual([]);
+    }
+  });
+
+  it("normalizar descarta el botón de WhatsApp sin etiqueta y el texto vacío", () => {
+    const sin = normalizarPayload("visitenos", { ...LOCAL, whatsapp: { label: " ", texto: "Hola" } }) as Record<string, unknown>;
+    expect(sin.whatsapp).toBeUndefined();
+    const conLabel = normalizarPayload("visitenos", { ...LOCAL, whatsapp: { label: "Escribir", texto: "  " } }) as { whatsapp: Record<string, unknown> };
+    expect(conLabel.whatsapp).toEqual({ label: "Escribir" });
   });
 
   it("normalizar descarta el botón sin etiqueta y los textos vacíos", () => {
@@ -148,6 +169,43 @@ describe("la home dibuja Visítenos sólo con la piedra prendida y la sección v
     expect(interno.match(/target="_blank"/g)?.length ?? 0).toBe(home(conVisitenos("siempre", { cta: undefined }), true).match(/target="_blank"/g)?.length ?? 0);
   });
 
+  it("el fondo es la piedra con el LA apagado: se enciende al tocarlo, sin juntas que respiren", () => {
+    const h = home(conVisitenos("siempre"), true);
+    expect(h).toMatch(/<section class="[^"]*root[^"]*visitenos[^"]*" data-visitenos=""/);
+    expect(h).not.toContain("data-encendido");
+    expect(h).toContain('aria-hidden="true"');
+    expect(h).not.toMatch(/brillo|respirar/);
+  });
+
+  it("WhatsApp: segundo botón al mismo número de la sección whatsapp, con su texto", () => {
+    const wa = { label: "Consultar por WhatsApp", texto: "Escríbanos y lo ayudamos." };
+    const c = conVisitenos("siempre", { whatsapp: wa });
+    const h = home({ ...c, whatsapp: { ...c.whatsapp, href: "https://wa.example/5491100000000" } }, true);
+    expect(h).toMatch(/<a [^>]*href="https:\/\/wa\.example\/5491100000000"[^>]*>Consultar por WhatsApp<\/a>/);
+    expect(h).toContain("Escríbanos y lo ayudamos.");
+    expect(h).toContain("Cómo llegar");
+  });
+
+  it("WhatsApp: oculto con 'nunca' o sin etiqueta", () => {
+    for (const w of [{ label: "Consultar por WhatsApp", visibilidad: "nunca" as const }, { label: "" }]) {
+      expect(home(conVisitenos("siempre", { whatsapp: w }), true)).not.toContain("Consultar por WhatsApp");
+    }
+  });
+
+  it("WhatsApp: sin el campo guardado va el botón por defecto, sin texto encima", () => {
+    const h = home(conVisitenos("siempre", { whatsapp: undefined }), true);
+    // Sólo la banda: la sección `whatsapp` de abajo tiene su propio texto.
+    const i = h.indexOf("data-visitenos");
+    const banda = h.slice(i, h.indexOf("</section>", i));
+    expect(banda).toContain("Consultar por WhatsApp");
+    expect(banda).not.toContain("Necesita asesoramiento");
+  });
+
+  it("la sección whatsapp sigue en el código y se dibuja como siempre", () => {
+    const h = home(conVisitenos("siempre", { whatsapp: DEFAULTS_HOME.visitenos.whatsapp }), true);
+    expect(h).toContain("Consultar ahora");
+  });
+
   it("respeta el orden elegido", () => {
     const orden = ["visitenos", ...DEFAULTS_HOME.orden.filter((s) => s !== "visitenos")] as HomeContent["orden"];
     const h = home({ ...conVisitenos("siempre"), orden }, true);
@@ -158,7 +216,7 @@ describe("la home dibuja Visítenos sólo con la piedra prendida y la sección v
 describe("el editor de Visítenos", () => {
   it("pide dirección, horarios y el enlace en usted", () => {
     const h = renderToStaticMarkup(createElement(EditorVisitenos, { valor: LOCAL, onChange: () => {} }));
-    for (const t of ["Dirección", "Horarios", "Etiqueta", "Enlace"]) expect(h).toContain(t);
+    for (const t of ["Dirección", "Horarios", "Etiqueta", "Enlace", "Botón de WhatsApp", "Texto sobre el botón"]) expect(h).toContain(t);
     expect(h).toContain("Calle Ejemplo 123");
   });
 });

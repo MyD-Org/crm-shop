@@ -17,7 +17,7 @@ const NOMBRE_CENTRAL = /central\s?led|centralled|central-led/i;
 /** Archivos que pueden nombrar a Central, y por qué. */
 const PERMITIDOS: Record<string, string> = {
   "lib/marca-base.ts": "los textos de partida de Central (MARCA_POR_DEFECTO): fuente única",
-  "app/opengraph-image.tsx": "rutas del logo y la foto de Central: sólo se leen con recursosCentral",
+  "app/imagen-para-compartir/route.tsx": "rutas del logo y la foto de Central: sólo se leen con recursosCentral",
   "data/footer.ts": "DEFAULTS_FOOTER: el pie de Central (la base genérica usa defaultsFooterDe)",
   "components/HeaderUI.tsx": "el logo SVG de código de Central (assets/central-led-logo.svg)",
   "components/home/hero-lights.ts": "fotos del hero interactivo de Central (public/images/central-led/)",

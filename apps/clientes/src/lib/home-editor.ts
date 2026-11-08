@@ -204,6 +204,13 @@ export function normalizarPayload(seccion: SeccionHome, borrador: unknown): unkn
 
   if ((seccion === "bannerDeco" || seccion === "visitenos") && o.cta !== undefined && sinEtiqueta(o.cta)) delete o.cta;
 
+  // Visítenos: el botón de WhatsApp sin etiqueta no se guarda y el renglón de texto vacío tampoco.
+  if (seccion === "visitenos" && o.whatsapp !== undefined) {
+    const w = o.whatsapp as Record<string, unknown> | null;
+    if (!w || typeof w !== "object" || sinEtiqueta(w)) delete o.whatsapp;
+    else if (!esTextoNoVacio(w.texto)) delete w.texto;
+  }
+
   if ((seccion === "ambientes" || seccion === "decoGrid") && Array.isArray(o.chips)) {
     o.chips = (o.chips as unknown[]).filter((c) => !sinEtiqueta(c));
   }

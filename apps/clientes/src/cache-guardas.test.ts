@@ -39,7 +39,7 @@ const DIRECTIVA = /^\s*["']use cache(?::\s*(?:remote|private))?["'];?\s*$/m;
  * la transacción (si difieren, no crea el pedido y vence la caché).
  */
 const CON_CACHE = [
-  "app/opengraph-image.tsx",
+  "app/imagen-para-compartir/route.tsx",
   "lib/home-datos.ts",
   "lib/home-guardar.ts",
   "lib/institucional/datos.ts",

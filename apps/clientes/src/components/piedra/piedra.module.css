@@ -1,24 +1,12 @@
-/* Texturas de la piedra fuera del hero: login, pie, 404, carrito vacío y "Visítenos".
+/* Texturas de la piedra fuera del hero: login, 404, carrito vacío y "Visítenos".
    Los colores son los de la escena (Noche, Junta, Sodio, Bruma), no los del tema del sitio. */
 .capa { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
-
-/* Juntas encendidas que respiran: capa propia, sólo cambia la opacidad (no repinta el dibujo). */
-.brillo { opacity: .15; animation: respirar 7s ease-in-out infinite alternate; will-change: opacity; }
-@keyframes respirar { from { opacity: .08; } to { opacity: .55; } }
 
 /* ── Ingresar / Crear cuenta ─────────────────────────────────────────────────── */
 .pagina { position: relative; isolation: isolate; display: flex; flex: 1 1 0%; flex-direction: column; background: #0F1E2E; }
 .pagina > .capa { z-index: -1; }
 /* Sólo el encabezado de la página va en claro; la tarjeta de Clerk conserva sus colores. */
 .pagina > main > div:first-child { --color-text: #ECEFF0; --color-muted: #AEBBC7; }
-
-/* ── Pie de página ──────────────────────────────────────────────────────────── */
-.pie { z-index: 0;
-  /* Recorta la textura a la forma del pie del DS (mt-2 y esquinas de 32px): si no, asoma arriba. */
-  clip-path: inset(0.5rem 0 0 0 round 32px 32px 0 0); }
-/* En el pie el brillo respira más tenue, para no tapar los textos. */
-.pie.brillo { animation-name: respirar-pie; }
-@keyframes respirar-pie { from { opacity: .04; } to { opacity: .22; } }
 
 /* ── Bloque con el LA (404 y carrito vacío) ───────────────────────────────────
    Mismo reparto que el hero: texto a la izquierda con el velo de la escena, LA a la derecha;
@@ -55,28 +43,41 @@
 }
 
 /* ── Banda "Visítenos" ──────────────────────────────────────────────────────── */
+/* Sobre la escena del hero (EscenaPiedraViva): texto compacto a la izquierda con el velo de la Noche. */
 .visitenos {
   position: relative; isolation: isolate; overflow: clip; border-radius: 28px; background: #0F1E2E;
-  margin-top: clamp(56px, 7vw, 96px); margin-bottom: clamp(56px, 7vw, 96px);
-  padding: clamp(40px, 6vw, 80px) clamp(24px, 5vw, 64px);
+  margin-top: clamp(48px, 6vw, 80px); margin-bottom: clamp(48px, 6vw, 80px);
+  min-height: 20rem; display: flex; align-items: center;
+  padding: clamp(32px, 4.5vw, 56px) clamp(24px, 5vw, 64px);
   --color-text: #ECEFF0; --color-muted: #AEBBC7; --color-accent: #FFB547;
   --color-primary: #FFB547; --color-primary-hover: #FFC56E; --color-on-primary: #0F1E2E;
+  /* El botón con borde del DS pinta el fondo con --color-surface: sobre la piedra va transparente. */
+  --color-surface: transparent; --color-elevated: rgb(236 239 240 / .12); --color-border: rgb(236 239 240 / .45);
 }
-.visitenos > .capa { z-index: -2; }
+/* Caja de la escena: en el celular se agranda y se corre para que el LA quede abajo a la derecha. */
+.visitenosEscena { position: absolute; inset: 0; z-index: -2; }
 .visitenos::before {
   content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background: linear-gradient(90deg, rgb(15 30 46 / .94) 0%, rgb(15 30 46 / .8) 45%, rgb(15 30 46 / .35) 100%);
+  background: linear-gradient(90deg, #0F1E2E 0%, rgb(15 30 46 / .92) 34%, rgb(15 30 46 / .35) 58%, rgb(15 30 46 / 0) 74%);
 }
-.visitenosTexto { max-width: 36rem; display: flex; flex-direction: column; gap: 1rem; align-items: flex-start; }
+.visitenosTexto {
+  position: relative; z-index: 1; pointer-events: none; max-width: 30rem;
+  display: flex; flex-direction: column; gap: .6rem; align-items: flex-start;
+}
+.visitenosTexto :is(a, button) { pointer-events: auto; }
+.visitenos .acciones { margin-top: .35rem; }
+.visitenosNota { font-size: 14px; line-height: 1.5; color: #AEBBC7; max-width: 46ch; margin-top: .25rem; }
 .eyebrow { font-size: .78rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #FFB547; }
-.visitenosTitulo { font-family: var(--font-display); font-size: clamp(28px, 3.2vw, 42px); font-weight: 700; line-height: 1.12; letter-spacing: -.02em; color: #ECEFF0; }
-.visitenosBajada { font-size: 15px; line-height: 1.6; color: #AEBBC7; max-width: 52ch; }
-.datos { display: grid; gap: .9rem; margin: 0; }
+.visitenosTitulo { font-family: var(--font-display); font-size: clamp(26px, 2.6vw, 36px); font-weight: 700; line-height: 1.1; letter-spacing: -.02em; color: #ECEFF0; }
+.visitenosBajada { font-size: 15px; line-height: 1.5; color: #AEBBC7; max-width: 46ch; }
+.datos { display: grid; gap: .5rem; margin: .15rem 0 0; }
 .datos dt { font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #FFB547; }
 .datos dd { margin: .15rem 0 0; font-size: 1rem; line-height: 1.5; color: #ECEFF0; white-space: pre-line; }
-
-/* Movimiento reducido: la piedra queda quieta. */
-@media (prefers-reduced-motion: reduce) {
-  .brillo { animation: none; opacity: .3; }
-  .pie.brillo { opacity: .12; }
+@media (max-width: 767px) {
+  /* En pantallas angostas la piedra sigue de fondo, detrás del texto. */
+  .visitenos { min-height: 0; }
+  .visitenosEscena { transform: translate(12%, 30%) scale(1.7); }
+  /* Velo sólo del lado del texto: el LA (abajo a la derecha) queda libre y brilla. */
+  .visitenos::before { background: linear-gradient(100deg, rgb(15 30 46 / .92) 0%, rgb(15 30 46 / .75) 45%, rgb(15 30 46 / .15) 72%, rgb(15 30 46 / 0) 85%); }
 }
+

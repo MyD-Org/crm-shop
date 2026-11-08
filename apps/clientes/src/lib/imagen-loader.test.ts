@@ -28,4 +28,25 @@ describe("cargadorImagen", () => {
     const logo = "https://medios.example/home/central-led/48d9ae91-da35-476b-9aaa-c8306efd9b49-1600.webp";
     expect(cargadorImagen({ src: logo, width: 320 })).toBe(logo);
   });
+
+  describe("imágenes de la home con variantes (home/{tenant}/v/…)", () => {
+    const home = (ancho: number) => `https://medios.example/home/central-led/v/48d9ae91-da35-476b-9aaa-c8306efd9b49-${ancho}.webp`;
+
+    it("elige 800 o 1600 según el ancho, sin bajar de 800", () => {
+      expect(cargadorImagen({ src: home(1600), width: 256 })).toBe(home(800));
+      expect(cargadorImagen({ src: home(1600), width: 800 })).toBe(home(800));
+      expect(cargadorImagen({ src: home(1600), width: 1080 })).toBe(home(1600));
+      expect(cargadorImagen({ src: home(1600), width: 3840 })).toBe(home(1600));
+    });
+
+    it("si la URL es la de 800 (imagen chica) nunca pide la de 1600", () => {
+      expect(cargadorImagen({ src: home(800), width: 1080 })).toBe(home(800));
+      expect(cargadorImagen({ src: home(800), width: 256 })).toBe(home(800));
+    });
+
+    it("las viejas (sin v/) siguen tal cual: no tienen -800", () => {
+      const vieja = "https://medios.example/home/central-led/48d9ae91-da35-476b-9aaa-c8306efd9b49-1600.webp";
+      expect(cargadorImagen({ src: vieja, width: 256 })).toBe(vieja);
+    });
+  });
 });

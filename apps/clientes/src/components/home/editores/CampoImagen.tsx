@@ -8,9 +8,10 @@ import { generarVariantes, ImagenInvalida } from "../redimensionar";
 const ERROR_SUBIDA = "No se pudo subir la imagen. Verifique la configuración de CORS del bucket e inténtelo de nuevo.";
 
 /**
- * Campo de imagen del editor de la home: convierte el archivo elegido a una
- * variante webp de 1600 px en el navegador, pide una URL PUT prefirmada
- * (`firmarSubidaImagenHome`) y sube directo a R2. El valor NO se persiste
+ * Campo de imagen del editor de la home: convierte el archivo elegido a
+ * variantes webp de 800 y 1600 px en el navegador, pide las URL PUT prefirmadas
+ * (`firmarSubidaImagenHome`) y sube directo a R2; el valor es la URL de la
+ * variante más grande. El valor NO se persiste
  * hasta que el Dialog hace "Guardar" — acá solo se actualiza el borrador.
  */
 export function CampoImagen({
@@ -41,22 +42,24 @@ export function CampoImagen({
     setSubiendo(true);
     try {
       const variantes = await generarVariantes(file);
-      const elegida = variantes.find((v) => v.ancho === 1600) ?? variantes[variantes.length - 1];
+      const elegida = variantes.reduce((a, b) => (b.ancho > a.ancho ? b : a));
 
-      const firma = await firmarSubidaImagenHome({ bytes: elegida.blob.size });
+      const firma = await firmarSubidaImagenHome({
+        variantes: variantes.map((v) => ({ ancho: v.ancho, bytes: v.blob.size })),
+      });
       if (!firma.ok) {
         setError(firma.errores.join(" "));
         return;
       }
 
-      let res: Response;
       try {
-        res = await fetch(firma.url, { method: "PUT", headers: firma.headers, body: elegida.blob });
+        for (const subida of firma.subidas) {
+          const variante = variantes.find((v) => v.ancho === subida.ancho);
+          if (!variante) throw new Error("variante sin firma");
+          const res = await fetch(subida.url, { method: "PUT", headers: subida.headers, body: variante.blob });
+          if (!res.ok) throw new Error(`PUT ${res.status}`);
+        }
       } catch {
-        setError(ERROR_SUBIDA);
-        return;
-      }
-      if (!res.ok) {
         setError(ERROR_SUBIDA);
         return;
       }

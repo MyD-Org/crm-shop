@@ -83,6 +83,8 @@ export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: Ad
       }
     >
       <QuantityStepper
+        name="cantidad"
+        aria-label="Cantidad"
         value={qty}
         min={0}
         // Sin stock o sin precio no se suma más, pero se puede bajar. Si ya

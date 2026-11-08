@@ -490,6 +490,8 @@ export function CarritoClient({
                         <div className="col-span-3 flex flex-wrap items-center justify-between gap-x-3.5 gap-y-2 lg:col-span-2 lg:col-start-2">
                           <div className="flex items-center gap-3.5">
                             <QuantityStepper
+                              name="cantidad"
+                              aria-label="Cantidad"
                               value={item.qty}
                               onValueChange={(qty) => updateQty(item.id, qty)}
                               min={1}

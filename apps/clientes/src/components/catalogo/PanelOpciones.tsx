@@ -204,7 +204,7 @@ export function PiePanelOpciones({
       {/* Cantidad y agregar en una fila, como en la ficha. Sin tacho: acá se elige antes de agregar. */}
       <div className="flex items-center gap-2">
         {!deshabilitado && (
-          <QuantityStepper value={cantidad} onValueChange={onCantidad} min={1} max={maximo} tone="soft" size="lg" />
+          <QuantityStepper name="cantidad" aria-label="Cantidad" value={cantidad} onValueChange={onCantidad} min={1} max={maximo} tone="soft" size="lg" />
         )}
         <Button
           className="min-w-0 flex-1 whitespace-nowrap"

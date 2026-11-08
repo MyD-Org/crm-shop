@@ -20,7 +20,7 @@ function Miniatura({ src, className = "" }: { src?: string; className?: string }
     <span
       className={`relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-elevated text-accent ring-2 ring-[var(--color-surface-dark)] lg:ring-surface ${className}`}
     >
-      {src ? <Image src={src} alt="" fill sizes="32px" className="object-contain p-0.5" /> : <IconoFoco />}
+      {src ? <Image src={src} alt="" width={32} height={32} sizes="32px" className="h-full w-full object-contain p-0.5" /> : <IconoFoco />}
     </span>
   );
 }

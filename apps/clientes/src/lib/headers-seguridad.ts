@@ -129,6 +129,10 @@ const VERCEL_SCRIPTS_DEV = "https://va.vercel-scripts.com";
 /** Telemetría de Clerk (clerk-js la manda desde el navegador). */
 const CLERK_TELEMETRY = "https://clerk-telemetry.com";
 
+/** Protección anti-bots de Clerk: script desde su CDN y sondas a un subdominio por instancia. */
+const CLERK_PROTECT_SCRIPT = "https://cdn.protect.clerk.com";
+const CLERK_PROTECT_SONDAS = "https://*.protect.clerk.com";
+
 /** Destino por defecto de los reportes de violaciones (ruta propia que sólo loguea). */
 export const RUTA_REPORTE_CSP = "/api/csp-report";
 
@@ -166,6 +170,7 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
       "'unsafe-inline'",
       ...(dev ? ["'unsafe-eval'"] : []),
       ...clerk,
+      CLERK_PROTECT_SCRIPT,
       CLOUDFLARE_CHALLENGES,
       ...MERCADO_PAGO,
       ...(payway ? [PAYWAY_SDK, CYBERSOURCE_FINGERPRINT] : []),
@@ -194,6 +199,7 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
       "'self'",
       ...clerk,
       CLERK_TELEMETRY,
+      CLERK_PROTECT_SONDAS,
       ...MERCADO_PAGO,
       // Subidas firmadas (comprobantes de pago, imágenes de la home) directo a R2.
       "https://*.r2.cloudflarestorage.com",

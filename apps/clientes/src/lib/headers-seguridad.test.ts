@@ -47,6 +47,12 @@ describe("politicaCsp", () => {
     expect(csp).toMatch(/connect-src [^;]*https:\/\/clerk-telemetry\.com/);
   });
 
+  it("protección anti-bots de Clerk: script del CDN y sondas", () => {
+    const csp = politicaCsp({});
+    expect(csp).toMatch(/script-src [^;]*https:\/\/cdn\.protect\.clerk\.com/);
+    expect(csp).toMatch(/connect-src [^;]*https:\/\/\*\.protect\.clerk\.com/);
+  });
+
   it("deriva el Frontend API de Clerk de la publishable key", () => {
     expect(hostFrontendClerk(clave("clerk.tienda.example"))).toBe("clerk.tienda.example");
     expect(hostFrontendClerk(undefined)).toBeNull();

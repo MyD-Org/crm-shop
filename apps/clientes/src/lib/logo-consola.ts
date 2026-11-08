@@ -18,7 +18,9 @@ export function argumentosLogoConsola({
   const estiloTexto = "font: 600 14px system-ui, sans-serif; color: #64748b;";
   if (!logoUrl) return [texto, estiloTexto];
   const imagen = [
-    `background: url("${logoUrl.replace(/"/g, "%22")}") no-repeat left center / contain`,
+    // Fondo claro: el logo es oscuro y la consola suele estar en modo oscuro.
+    `background: #fff url("${logoUrl.replace(/"/g, "%22")}") no-repeat center / 85% auto`,
+    "border-radius: 6px",
     `padding: ${alto / 2}px ${ancho / 2}px`,
     "font-size: 0",
     "line-height: 0",

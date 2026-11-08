@@ -63,8 +63,11 @@ const nextConfig: NextConfig = {
     // tal cual. Ver src/lib/imagen-loader.ts.
     loader: "custom",
     loaderFile: "./src/lib/imagen-loader.ts",
-    // Anchos del srcset: el loader los lleva a 320/800/1600.
-    deviceSizes: [640, 828, 1080, 1280, 1600],
+    // Anchos del srcset = las variantes que existen en R2 (320/800/1600). Con anchos
+    // intermedios (828, 1080) el loader saltaba a la de 1600 en casi todos los
+    // celulares: 800 quedaba apenas corta. Los de imageSizes, todos menores que 320.
+    deviceSizes: [320, 800, 1600],
+    imageSizes: [16, 32, 64, 128, 256],
     // Fotos del overlay del CRM: sólo los hosts de SHOP_MEDIA_HOSTS (separados
     // por coma). Sin la variable la lista queda vacía y las cards muestran el
     // placeholder (mapFilaToProduct descarta las fotos de hosts no listados).

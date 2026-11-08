@@ -145,7 +145,7 @@ export default async function RootLayout({
                 siempre: en mobile, centradas debajo del anuncio. Sin anuncio visible
                 ni redes, no hay barra. Grilla: con un anuncio largo, el texto se achica
                 y parte línea; las redes conservan su ancho a la derecha. */}
-            <BarraSuperior anuncio={hayAnuncio ? anuncio.texto : undefined} visibilidad={vAnuncio} redes={redes} whatsapp={numeroWhatsapp} />
+            <BarraSuperior anuncio={hayAnuncio ? anuncio.texto : undefined} visibilidad={vAnuncio} redes={redes} whatsapp={numeroWhatsapp} seguinos={marca.recursosCentral} />
             <Header />
             {/* Red de seguridad: una página que lea el request arriba de todo
                 (Mi cuenta, checkout, carrito) queda como hueco entero en vez

@@ -192,7 +192,8 @@ describe("rendimiento y registro", () => {
     const comun = readFileSync(join(dir, "escena-comun.tsx"), "utf8");
     expect(comun).toContain("HeroPiedra.module.css");
     expect(readFileSync(join(dir, "BloquePiedra.tsx"), "utf8")).toContain("enlazarEncendido");
-    expect(readFileSync(join(dir, "VisitenosPiedra.tsx"), "utf8")).toContain("enlazarEncendido");
+    // Visítenos usa la escena viva del hero entera (luz que sigue al cursor + LA).
+    expect(readFileSync(join(dir, "VisitenosPiedra.tsx"), "utf8")).toContain("EscenaPiedraViva");
   });
 
   it("no nombran a ninguna empresa", () => {

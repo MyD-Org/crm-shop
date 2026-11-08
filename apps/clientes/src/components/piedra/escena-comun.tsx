@@ -44,11 +44,11 @@ export function JuntasPiedra({ uid, conLA = true, opacidad }: { uid: string; con
 }
 
 /** El letrero LA: apagado (dibujo en color de junta) y, encima, la capa encendida y el halo. */
-export function CapaLA({ uid }: { uid: string }) {
+export function CapaLA({ uid, conHalo = true }: { uid: string; conHalo?: boolean }) {
   const { url } = idsDe(uid);
   return (
     <>
-      <ellipse className={hero.halo} cx="1860" cy="700" rx="380" ry="260" fill={COLORES.sodio} filter={url("halo")} />
+      {conHalo ? <ellipse className={hero.halo} cx="1860" cy="700" rx="380" ry="260" fill={COLORES.sodio} filter={url("halo")} /> : null}
       <g clipPath={url("la")}>
         <path d={PIEDRA.laApagado} stroke={COLORES.junta} strokeWidth="6.6" fill="none" />
         <g className={hero.laOn}>

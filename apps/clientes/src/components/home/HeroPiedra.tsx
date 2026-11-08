@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 import { iniciarEscena } from "./escena-piedra-controlador";
 import { COLORES, ESCENA, LUZ_INICIAL, PIEDRA, RADIO_AMBIENTE, RADIO_LINTERNA } from "./escena-piedra";
 import styles from "./HeroPiedra.module.css";
@@ -9,6 +9,28 @@ import { CapaLA, DefinicionesPiedra, JuntasPiedra } from "@/components/piedra/es
 /** Deja el Hero del DS y su contenido intactos; sólo cambia el fondo por la escena de la piedra. */
 export function HeroPiedra({ children, enabled }: { children: ReactNode; enabled: boolean }) {
   const root = useRef<HTMLDivElement>(null);
+  if (!enabled) return <>{children}</>;
+  return <div ref={root} className={styles.root} data-hero-piedra="">
+    {children}
+    <EscenaPiedraViva raiz={root} conPista />
+  </div>;
+}
+
+/**
+ * La escena de la piedra con la luz que sigue al cursor y el LA que enciende (la del hero). La
+ * usan el hero y la banda "Visítenos". `raiz` es el contenedor que recibe `data-encendido` y tiene
+ * la clase `CLASE_ENCENDIBLE`; la escena lo cubre entero (absoluta, detrás del contenido).
+ */
+export function EscenaPiedraViva({
+  raiz,
+  conPista = false,
+  sinBruma = false,
+}: {
+  raiz: RefObject<HTMLElement | null>;
+  conPista?: boolean;
+  /** Sin el halo del LA ni el resplandor que acompaña al cursor: sólo las líneas encendidas. */
+  sinBruma?: boolean;
+}) {
   const svg = useRef<SVGSVGElement>(null);
   const luz = useRef<SVGCircleElement>(null);
   const ambiente = useRef<SVGCircleElement>(null);
@@ -16,8 +38,8 @@ export function HeroPiedra({ children, enabled }: { children: ReactNode; enabled
   const uid = useId().replaceAll(":", "");
 
   useEffect(() => {
-    const hero = root.current, lienzo = svg.current, c1 = luz.current, c2 = ambiente.current, boton = la.current;
-    if (!enabled || !hero || !lienzo || !c1 || !c2 || !boton) return;
+    const hero = raiz.current, lienzo = svg.current, c1 = luz.current, c2 = ambiente.current, boton = la.current;
+    if (!hero || !lienzo || !c1 || !c2 || !boton) return;
     return iniciarEscena({
       hero, la: boton, luz: c1, ambiente: c2,
       quieto: matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -41,15 +63,12 @@ export function HeroPiedra({ children, enabled }: { children: ReactNode; enabled
       },
       pestanaVisible: () => document.visibilityState !== "hidden",
     });
-  }, [enabled]);
-
-  if (!enabled) return <>{children}</>;
+  }, [raiz]);
 
   const id = (nombre: string) => `${uid}-${nombre}`;
   const url = (nombre: string) => `url(#${id(nombre)})`;
   const vista = `0 0 ${ESCENA.ancho} ${ESCENA.alto}`;
-  return <div ref={root} className={styles.root} data-hero-piedra="">
-    {children}
+  return (
     <div className={styles.scene}>
       <svg ref={svg} aria-hidden="true" className={styles.art} viewBox={vista} preserveAspectRatio="xMidYMid slice">
         <DefinicionesPiedra uid={uid} />
@@ -66,7 +85,7 @@ export function HeroPiedra({ children, enabled }: { children: ReactNode; enabled
           </radialGradient>
         </defs>
         <rect width={ESCENA.ancho} height={ESCENA.alto} fill={COLORES.noche} />
-        <circle ref={ambiente} cx={LUZ_INICIAL.x} cy={LUZ_INICIAL.y} r={RADIO_AMBIENTE} fill={url("ambiente")} />
+        <circle ref={ambiente} cx={LUZ_INICIAL.x} cy={LUZ_INICIAL.y} r={RADIO_AMBIENTE} fill={url("ambiente")} opacity={sinBruma ? 0 : undefined} />
         <JuntasPiedra uid={uid} />
         <g mask={url("linterna")}>
           <g mask={url("sinLA")}>
@@ -75,17 +94,17 @@ export function HeroPiedra({ children, enabled }: { children: ReactNode; enabled
           </g>
           <path d={PIEDRA.bordes} stroke={COLORES.filamento} strokeWidth="6" fill="none" />
         </g>
-        <CapaLA uid={uid} />
+        <CapaLA uid={uid} conHalo={!sinBruma} />
       </svg>
       {/* El LA es lo único interactivo y accesible de la escena. */}
       <svg className={styles.hit} viewBox={vista} preserveAspectRatio="xMidYMid slice">
         <path ref={la} className={styles.laHit} d={PIEDRA.poligonoLA} tabIndex={0} role="button" aria-label="Encender el LA" />
       </svg>
-      <div className={styles.pista} aria-hidden="true">
+      {conPista ? <div className={styles.pista} aria-hidden="true">
         <i />
         <span className={styles.pistaMouse}>Mueva el cursor sobre la piedra y toque el LA</span>
         <span className={styles.pistaToque}>Toque el LA para encenderlo</span>
-      </div>
+      </div> : null}
     </div>
-  </div>;
+  );
 }

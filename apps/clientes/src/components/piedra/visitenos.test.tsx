@@ -74,10 +74,10 @@ describe("la sección visitenos en el contrato de la home", () => {
     expect(c.visitenos.direccion).toBe(LOCAL.direccion);
   });
 
-  it("el botón de WhatsApp nace con etiqueta y texto en usted, sin número", () => {
+  it("el botón de WhatsApp nace sólo con la etiqueta, sin texto encima ni número", () => {
     const w = DEFAULTS_HOME.visitenos.whatsapp;
     expect(w?.label).toBe("Consultar por WhatsApp");
-    expect(w?.texto).toMatch(/^¿Necesita asesoramiento\? Escríbanos/);
+    expect(w?.texto).toBeUndefined();
     expect(w).not.toHaveProperty("href");
   });
 
@@ -186,10 +186,19 @@ describe("la home dibuja Visítenos sólo con la piedra prendida y la sección v
     expect(h).toContain("Cómo llegar");
   });
 
-  it("WhatsApp: oculto con 'nunca', sin etiqueta o ausente", () => {
-    for (const w of [{ label: "Consultar por WhatsApp", visibilidad: "nunca" as const }, { label: "" }, undefined]) {
+  it("WhatsApp: oculto con 'nunca' o sin etiqueta", () => {
+    for (const w of [{ label: "Consultar por WhatsApp", visibilidad: "nunca" as const }, { label: "" }]) {
       expect(home(conVisitenos("siempre", { whatsapp: w }), true)).not.toContain("Consultar por WhatsApp");
     }
+  });
+
+  it("WhatsApp: sin el campo guardado va el botón por defecto, sin texto encima", () => {
+    const h = home(conVisitenos("siempre", { whatsapp: undefined }), true);
+    // Sólo la banda: la sección `whatsapp` de abajo tiene su propio texto.
+    const i = h.indexOf("data-visitenos");
+    const banda = h.slice(i, h.indexOf("</section>", i));
+    expect(banda).toContain("Consultar por WhatsApp");
+    expect(banda).not.toContain("Necesita asesoramiento");
   });
 
   it("la sección whatsapp sigue en el código y se dibuja como siempre", () => {

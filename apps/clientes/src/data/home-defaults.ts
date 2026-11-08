@@ -265,15 +265,17 @@ export const ORDEN_HOME = [
 export type SeccionOrdenable = (typeof ORDEN_HOME)[number];
 export const KEY_ORDEN = "orden";
 
+/** Botón de WhatsApp de Visítenos cuando la fila guardada no lo trae (filas anteriores al botón). */
+export const WHATSAPP_VISITENOS_POR_DEFECTO: NonNullable<VisitenosContent["whatsapp"]> = {
+  label: "Consultar por WhatsApp",
+};
+
 /** Sin dirección ni enlace: son datos de cada sitio (repo público). */
 const DEFAULTS_VISITENOS: VisitenosContent = {
   eyebrow: "Nuestro local",
   titulo: "Visítenos en nuestro *local*",
   bajada: "Venga a conocer los productos y recibir asesoramiento en persona.",
-  whatsapp: {
-    label: "Consultar por WhatsApp",
-    texto: "¿Necesita asesoramiento? Escríbanos por WhatsApp y lo ayudamos a elegir el producto correcto.",
-  },
+  whatsapp: WHATSAPP_VISITENOS_POR_DEFECTO,
 };
 
 const CATALOGO_ILUMINACION = "/catalogo?categoria=ILUMINACION";

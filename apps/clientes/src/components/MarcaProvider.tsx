@@ -13,6 +13,8 @@ export interface MarcaCliente {
   /** Línea bajo el nombre en el header. Vacío = sin línea. */
   lema: string;
   logoUrl?: string;
+  /** Ícono cuadrado de la marca (avatar del chat en un sitio con marca propia). */
+  faviconUrl?: string;
 }
 
 const MarcaContext = createContext<MarcaCliente>({

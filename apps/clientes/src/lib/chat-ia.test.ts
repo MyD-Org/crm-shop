@@ -9,6 +9,8 @@ const textosChat = vi.fn();
 vi.mock("./cuenta-corriente/tenant-cc", () => ({ datosTenant: () => datosTenant() }));
 vi.mock("./chat-ia-textos-tenant", () => ({ textosChatTenant: () => textosChat() }));
 vi.mock("./auth", () => ({ identidadActual: () => identidad() }));
+const marca = vi.fn();
+vi.mock("./marca", () => ({ getMarca: () => marca() }));
 
 import { propsChatIa } from "./chat-ia";
 
@@ -27,6 +29,8 @@ describe("propsChatIa", () => {
     vi.stubEnv("AI_AGENT_ID", "agente-1");
     datosTenant.mockReset();
     datosTenant.mockResolvedValue({ id: "t", nombre: "Tienda Demo", whatsapp: null, mailComprobantes: null });
+    marca.mockReset();
+    marca.mockResolvedValue({ nombre: "Central LED", recursosCentral: true });
     textosChat.mockReset();
     textosChat.mockResolvedValue({ emptyState: "Consultas de la tienda", suggestions: ["Ver ofertas"] });
   });
@@ -82,6 +86,33 @@ describe("propsChatIa", () => {
     datosTenant.mockRejectedValue(new Error("db caída"));
     expect(await propsChatIa()).toMatchObject({ agentId: "agente-1", titulo: "Asistente" });
     log.mockRestore();
+  });
+});
+
+describe("título del chat por sitio", () => {
+  beforeEach(() => {
+    vi.stubEnv("AI_API_URL", "https://ai.plataforma.example");
+    vi.stubEnv("AI_API_KEY", "clave-secreta");
+    vi.stubEnv("AI_AGENT_ID", "agente-1");
+    datosTenant.mockResolvedValue({ id: "t", nombre: "Tienda Demo", whatsapp: null, mailComprobantes: null });
+    textosChat.mockResolvedValue({ emptyState: "Consultas", suggestions: [] });
+    setFlag("chat-ia", true);
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("un sitio con marca propia usa el nombre de su marca", async () => {
+    marca.mockResolvedValue({ nombre: "Tienda B", recursosCentral: false });
+    expect(await propsChatIa()).toMatchObject({ titulo: "Tienda B" });
+  });
+
+  it("el sitio principal sigue con el nombre de la empresa", async () => {
+    marca.mockResolvedValue({ nombre: "Otra cosa", recursosCentral: true });
+    expect(await propsChatIa()).toMatchObject({ titulo: "Tienda Demo" });
+  });
+
+  it("si la marca no se puede leer, usa el nombre de la empresa", async () => {
+    marca.mockRejectedValue(new Error("db caída"));
+    expect(await propsChatIa()).toMatchObject({ titulo: "Tienda Demo" });
   });
 });
 

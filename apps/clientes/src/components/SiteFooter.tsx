@@ -5,7 +5,7 @@ import { linkFooter } from "@/components/footer/link-footer";
 import { BotonEditarFooterSiAdmin } from "@/components/footer/BotonEditarFooterSiAdmin";
 import { RedesSociales } from "@/components/footer/RedesSociales";
 import { textoBarra } from "@/data/footer";
-import { TexturaPie, claseDelPie } from "@/components/piedra/TexturaPie";
+import { TexturaPie, clasePiedraDelPie } from "@/components/piedra/TexturaPie";
 import { getDatosFooter, getDatosLegales, getDecoracion } from "@/lib/home-datos";
 import { getPaginasPublicadas } from "@/lib/institucional/datos";
 import { getMarca } from "@/lib/marca";
@@ -53,11 +53,7 @@ export async function SiteFooter() {
     getDecoracion(),
   ]);
   const { principal, acento } = partesNombre(marca);
-  return (
-    <div className={claseDelPie(piedra)}>
-      <Suspense fallback={null}>
-        <BotonEditarFooterSiAdmin inicial={footer} />
-      </Suspense>
+  const pie = (
       <SiteFooterDS
         className="site-footer"
         renderLink={linkFooter}
@@ -82,8 +78,22 @@ export async function SiteFooter() {
           ) : undefined
         }
       />
-      {/* Con la piedra prendida en el sitio, sus juntas muy tenues sobre el pie (sin JS). */}
-      <TexturaPie piedra={piedra} />
+  );
+  return (
+    <div className="footer-global">
+      <Suspense fallback={null}>
+        <BotonEditarFooterSiAdmin inicial={footer} />
+      </Suspense>
+      {/* Con la piedra prendida, sus juntas muy tenues sobre el pie (sin JS). La capa va en su propia
+          caja junto al pie, así el botón del admin que está arriba no corre el recorte. */}
+      {piedra ? (
+        <div className={clasePiedraDelPie}>
+          {pie}
+          <TexturaPie piedra />
+        </div>
+      ) : (
+        pie
+      )}
     </div>
   );
 }

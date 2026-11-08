@@ -45,7 +45,7 @@ import IngresarPage from "@/app/ingresar/[[...rest]]/page";
 import RegistroPage from "@/app/registro/[[...rest]]/page";
 import { BloquePiedra } from "./BloquePiedra";
 import { FondoPiedra } from "./FondoPiedra";
-import { OPACIDAD_PIE, TexturaPie, claseDelPie } from "./TexturaPie";
+import { OPACIDAD_PIE, TexturaPie } from "./TexturaPie";
 import { PiedraDecorativa } from "./PiedraDecorativa";
 
 const html = (el: ReactElement) => renderToStaticMarkup(el);
@@ -62,7 +62,6 @@ describe("sin el interruptor: la salida es la de siempre", () => {
   it("el fondo y el pie, apagados, no agregan nada", () => {
     expect(html(createElement(FondoPiedra, { piedra: false } as never, createElement("p", null, "x")))).toBe("<p>x</p>");
     expect(html(createElement(TexturaPie, { piedra: false }))).toBe("");
-    expect(claseDelPie(false)).toBe("footer-global");
   });
 
   it("404: idéntica al EmptyState de antes", async () => {
@@ -135,15 +134,18 @@ describe("con el interruptor prendido", () => {
   it("pie: juntas tenues encima, sin eventos y sin texto", async () => {
     prendida();
     const h = html(await SiteFooter());
-    expect(h.startsWith('<div class="footer-global relative isolate">')).toBe(true);
+    // La textura va en su propia caja junto al pie (el botón del admin queda afuera).
+    expect(h.startsWith('<div class="footer-global"><div class="relative isolate"><footer')).toBe(true);
     expect(h).toContain('focusable="false"');
     // El resto del pie es el de siempre.
     apagada();
     const base = html(await SiteFooter());
     // Dos capas: las juntas tenues y su brillo que respira.
     expect(h.match(/<svg aria-hidden="true" focusable="false"/g)).toHaveLength(2);
-    const sinCapa = h.replace(/<svg aria-hidden="true" focusable="false"[\s\S]*?<\/svg>/g, "").replace("footer-global relative isolate", "footer-global");
-    expect(sinCapa).toBe(base);
+    const sinCapa = h.replace(/<svg aria-hidden="true" focusable="false"[\s\S]*?<\/svg>/g, "").replace('<div class="relative isolate">', "").replace(/<\/footer><\/div><\/div>$/, "</footer></div>");
+    // Los ids que genera React cambian con la profundidad del árbol: no son parte del pie.
+    const sinIds = (x: string) => x.replace(/_R_[a-z0-9]+_/g, "_R_");
+    expect(sinIds(sinCapa)).toBe(sinIds(base));
   });
 
   it("la textura del pie no pasa de 0,25 de opacidad ni dibuja el LA", () => {

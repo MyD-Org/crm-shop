@@ -140,16 +140,17 @@ describe("con el interruptor prendido", () => {
     expect(sinIds(h)).toBe(sinIds(base));
   });
 
-  it("404: bloque de piedra con el LA apagado y el texto de siempre", async () => {
+  it("404: bloque claro con las juntas de la piedra, sin el LA, y el texto de siempre", async () => {
     prendida();
     const h = html(await NotFound());
     expect(h).toContain("data-bloque-piedra");
     expect(h).toContain("No encontramos la página que busca");
     expect(h).toContain("Es posible que el enlace esté mal escrito");
     expect(h).toContain("Ver el catálogo");
-    expect(h).toContain('aria-label="Encender el LA"');
-    expect(h).toContain('tabindex="0"');
-    expect(h).not.toContain("data-encendido");
+    expect(h).toContain('aria-hidden="true"');
+    expect(h).not.toContain("Encender el LA");
+    expect(h).not.toContain('stroke="#2C4560"');
+    expect(h).not.toContain('fill="#0F1E2E"');
   });
 
   it("carrito vacío: bloque de piedra con el texto y el botón de siempre", () => {
@@ -157,14 +158,14 @@ describe("con el interruptor prendido", () => {
     expect(h).toContain("data-bloque-piedra");
     expect(h).toContain("El carrito está vacío");
     expect(h).toContain("Ver catálogo");
-    expect(h).toContain('aria-label="Encender el LA"');
+    expect(h).not.toContain("Encender el LA");
   });
 
-  it("el bloque no usa más de un LA tocable y no repite ids entre instancias", () => {
+  it("el bloque es sólo dibujo detrás del texto: nada que tocar ni ids que se repitan", () => {
     const dos = html(createElement("div", null, createElement(BloquePiedra, { titulo: "A" }), createElement(BloquePiedra, { titulo: "B" })));
-    const ids = [...dos.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
-    expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.length).toBeGreaterThan(0);
+    expect(dos).not.toMatch(/ id="/);
+    expect(dos).not.toContain("tabindex");
+    expect(dos).not.toContain('role="button"');
   });
 
   it("la capa decorativa es sólo dibujo: oculta a los lectores de pantalla y sin foco", () => {
@@ -191,7 +192,8 @@ describe("rendimiento y registro", () => {
     expect(css).not.toContain("@keyframes arranque");
     const comun = readFileSync(join(dir, "escena-comun.tsx"), "utf8");
     expect(comun).toContain("HeroPiedra.module.css");
-    expect(readFileSync(join(dir, "BloquePiedra.tsx"), "utf8")).toContain("enlazarEncendido");
+    // El bloque de las páginas vacías no lleva el LA: nada que encender.
+    expect(readFileSync(join(dir, "BloquePiedra.tsx"), "utf8")).not.toContain("enlazarEncendido");
     // Visítenos usa la escena viva del hero entera (luz que sigue al cursor + LA).
     expect(readFileSync(join(dir, "VisitenosPiedra.tsx"), "utf8")).toContain("EscenaPiedraViva");
   });

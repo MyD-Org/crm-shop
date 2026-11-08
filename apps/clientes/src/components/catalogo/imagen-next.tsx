@@ -26,7 +26,8 @@ const HOSTS = (process.env.HOSTS_IMAGENES ?? "").split(",").filter(Boolean);
  *   clase del DS (`h-7 w-auto max-w-[150px]`). Carga inmediata, no lazy: la
  *   cinta los hace entrar desde el borde y con lazy cada logo recién se pedía
  *   al asomar, así que se veían los separadores sin logo hasta que llegaba.
- *   Son pocas URLs repetidas: se bajan una vez.
+ *   Son pocas URLs repetidas: se bajan una vez. Con `fetchPriority="low"`: React precarga desde
+ *   el `<head>` toda imagen no lazy del shell, y los 8 logos competían con la foto del hero (LCP).
  * - Si la URL no es optimizable (host fuera de SHOP_MEDIA_HOSTS, data:, etc.),
  *   `<img>` común: con `next/image` quedaría rota (400).
  *
@@ -48,7 +49,7 @@ export const imagenNext: RenderImage = ({ src, alt, className, sizes, fit, prior
     );
   }
   if (fit === "logo") {
-    return <Image src={src} alt={alt} className={className} width={300} height={56} sizes={sizes} loading="eager" draggable={false} {...data} />;
+    return <Image src={src} alt={alt} className={className} width={300} height={56} sizes={sizes} loading="eager" fetchPriority="low" draggable={false} {...data} />;
   }
   return (
     <Image

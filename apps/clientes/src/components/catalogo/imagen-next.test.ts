@@ -57,6 +57,8 @@ describe("imagenNext", () => {
     expect(out).toContain('draggable="false"');
     // La cinta los hace entrar desde el borde: con lazy se veían los separadores solos.
     expect(out).not.toContain('loading="lazy"');
+    // Prioridad baja: React no la precarga desde el <head> y no compite con el hero.
+    expect(out).toContain('fetchPriority="low"');
   });
 
   it("logo fuera de la lista de hosts: también carga inmediata", () => {

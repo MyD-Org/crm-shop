@@ -29,7 +29,19 @@ describe("feedGoogleXml", () => {
     expect(xml).toContain("<g:availability>in_stock</g:availability>");
     expect(xml).toContain("<g:condition>new</g:condition>");
     expect(xml).toContain("<g:brand>Marca</g:brand>");
-    expect(xml).toContain("<g:mpn>LED-10</g:mpn>");
+    expect(xml).toContain("<g:mpn>LED</g:mpn>");
+  });
+
+  it("el MPN es el código del fabricante, sin el sufijo de la marca", () => {
+    const xml = feedGoogleXml([{ ...base, sku: "4022/ACC-180" }, { ...base, id: "43", sku: "NXB-125-CHINT" }], SITIO);
+    expect(xml).toContain("<g:mpn>4022/ACC</g:mpn>");
+    expect(xml).toContain("<g:mpn>NXB-125</g:mpn>");
+  });
+
+  it("un código sin sufijo no queda vacío: va sin MPN", () => {
+    const xml = feedGoogleXml([{ ...base, sku: "-GEN" }], SITIO);
+    expect(xml).not.toContain("<g:mpn>");
+    expect(xml).toContain("<g:identifier_exists>no</g:identifier_exists>");
   });
 
   it("sin foto o sin precio no entra (Google los rechaza)", () => {

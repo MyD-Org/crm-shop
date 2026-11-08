@@ -142,13 +142,18 @@ function HeaderVista({
   // nombre en texto.
   const marca = useMarca();
   const { principal, acento } = partesNombre(marca);
-  const logoMarca = (className: string, prioridad: boolean) =>
-    fuenteLogo(marca) === "propio" && marca.logoUrl ? (
+  // Sin `priority`: la <img> ya viene en el HTML y es chica, así que no necesita precarga.
+  // Con `priority` Next mandaba un `Link: rel=preload` que Chrome marcaba como "no usado".
+  // La de arriba carga de inmediato (`eager`); la de la barra compacta, cuando hace falta.
+  const logoMarca = (className: string, inmediata: boolean) => {
+    const carga = inmediata ? "eager" : "lazy";
+    return fuenteLogo(marca) === "propio" && marca.logoUrl ? (
       // `unoptimized`: un SVG remoto no pasa por el optimizador y el logo ya viene dimensionado.
-      <Image src={marca.logoUrl} alt={altLogo(marca)} width={160} height={32} unoptimized priority={prioridad} className={className} />
+      <Image src={marca.logoUrl} alt={altLogo(marca)} width={160} height={32} unoptimized loading={carga} className={className} />
     ) : fuenteLogo(marca) === "central" ? (
-      <Image src={logo} alt={altLogo(marca)} priority={prioridad} className={className} />
+      <Image src={logo} alt={altLogo(marca)} loading={carga} className={className} />
     ) : undefined;
+  };
 
   // La barra de categorías va SÓLO en la home. En /catalogo el panel de
   // filtros hace ese trabajo y mejor —es exhaustivo y dice cuántos productos

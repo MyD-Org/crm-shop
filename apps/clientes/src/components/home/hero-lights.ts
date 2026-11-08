@@ -8,15 +8,11 @@ export const HERO_LIGHTS = [
 
 /**
  * Guiño de marca: el monograma LA (la firma "Línea" del kit luz-atlantica-v2) que la luz del spot
- * revela en la pared. Centro y alto en px de la foto, así acompaña a sceneRect en escritorio
- * (contain) y en celular (cover). En escritorio cae dentro del charco del haz (glow del spot en
- * 930, 512). En celular (COVER_QUERY) ese charco queda debajo de la bajada y el botón, así que el LA
- * va a la pared libre entre "necesita" y el colgante, al costado del haz.
+ * revela en la pared, dentro del charco del haz (glow del spot en 930, 512). Centro y alto en px de
+ * la foto, así acompaña a sceneRect. Sólo en escritorio: en celular (COVER_QUERY) el charco queda
+ * debajo de la bajada y el botón, y el CSS lo oculta.
  */
-export const SPOT_LA = {
-  desktop: { x: 930, y: 508, height: 70 },
-  mobile: { x: 1180, y: 368, height: 60 },
-} as const;
+export const SPOT_LA = { x: 930, y: 508, height: 70 } as const;
 /**
  * Trazos del monograma en su caja de 118.88 × 100, con el origen arriba al centro: la A de patas
  * abiertas (se cortan en y = 100) y la L, cuya barra es también la barra de la A.

@@ -1,14 +1,14 @@
 /**
- * Copia de apps/admin/…/redimensionar.ts con una sola variante (1600). Corre
- * en el navegador.
+ * Copia de apps/admin/…/redimensionar.ts con dos variantes (800 y 1600, sin
+ * la de 320). Corre en el navegador.
  *
  * Se hace acá y no en el servidor por dos motivos: el archivo va directo del
  * navegador a R2 con una URL firmada, así que nunca pasa por Vercel; y una
  * foto de celular de varios MB se convierte en un webp de menos de 400 KB.
  */
 
-/** Único ancho que se genera. Tiene que coincidir con ANCHO_IMAGEN_HOME del servidor. */
-export const ANCHOS = [1600] as const;
+/** Anchos que se generan. Tienen que coincidir con ANCHOS_IMAGEN_HOME del servidor. */
+export const ANCHOS = [800, 1600] as const;
 
 export interface VarianteLista {
   ancho: number;

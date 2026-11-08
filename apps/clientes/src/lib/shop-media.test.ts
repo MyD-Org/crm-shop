@@ -63,13 +63,19 @@ describe("shopMediaConfig", () => {
 
 describe("homeImagenKey", () => {
   it("arma la key con tenant, uuid y ancho", () => {
-    expect(homeImagenKey("central-led", UUID, 1600)).toBe(`home/central-led/${UUID}-1600.webp`);
+    expect(homeImagenKey("central-led", UUID, 1600)).toBe(`home/central-led/v/${UUID}-1600.webp`);
+    expect(homeImagenKey("central-led", UUID, 800)).toBe(`home/central-led/v/${UUID}-800.webp`);
+  });
+
+  it("sin ancho usa 1600", () => {
+    expect(homeImagenKey("central-led", UUID)).toBe(`home/central-led/v/${UUID}-1600.webp`);
   });
 
   it("lanza con tenantId, id o ancho inválidos", () => {
     expect(() => homeImagenKey("../x", UUID, 1600)).toThrow();
     expect(() => homeImagenKey("central-led", "no-uuid", 1600)).toThrow();
-    expect(() => homeImagenKey("central-led", UUID, 800)).toThrow();
+    expect(() => homeImagenKey("central-led", UUID, 320)).toThrow();
+    expect(() => homeImagenKey("central-led", UUID, 1200)).toThrow();
   });
 });
 

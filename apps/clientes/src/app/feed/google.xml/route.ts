@@ -1,5 +1,5 @@
 import { connection } from "next/server";
-import { getCatalogo } from "@/lib/catalog";
+import { productosParaFeed } from "@/lib/catalogo-publico";
 import { feedGoogleXml } from "@/lib/feed-google";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { esSitioSecundarioDelEntorno, urlCanonicaDelSitio } from "@/lib/sitio-url";
@@ -16,7 +16,7 @@ export async function GET() {
   if (esSitioSecundarioDelEntorno() || !sitio) return new Response("No encontrado", { status: 404 });
   try {
     const { soloVisibles, variantes } = await flagsPublicos();
-    const productos = await getCatalogo({ soloVisibles, ...(variantes ? { agrupar: true } : {}) });
+    const productos = await productosParaFeed(soloVisibles, variantes);
     return new Response(feedGoogleXml(productos, sitio), {
       headers: {
         "Content-Type": "application/xml; charset=utf-8",

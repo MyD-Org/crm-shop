@@ -27,7 +27,8 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@/lib/shop-media", () => ({
   getShopMediaR2: r2Mock,
-  homeImagenKey: vi.fn(() => "home/central-led/fake-1600.webp"),
+  ANCHOS_IMAGEN_HOME: [800, 1600],
+  homeImagenKey: vi.fn((_t: string, _id: string, ancho: number) => `home/central-led/v/fake-${ancho}.webp`),
   urlPublicaHome: vi.fn((k: string) => `https://media.plataforma.example/${k}`),
 }));
 
@@ -105,7 +106,7 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
   it("No-admin intenta firmar una subida: no consulta R2", async () => {
     esAdminMock.mockResolvedValue(false);
 
-    const r = await firmarSubidaImagenHome({ bytes: 1000 });
+    const r = await firmarSubidaImagenHome({ variantes: [{ ancho: 1600, bytes: 1000 }] });
 
     expect(r.ok).toBe(false);
     expect(r2Mock).not.toHaveBeenCalled();
@@ -187,7 +188,7 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
   it("firma sin R2 configurado", async () => {
     r2Mock.mockReturnValue(null);
 
-    const r = await firmarSubidaImagenHome({ bytes: 100 });
+    const r = await firmarSubidaImagenHome({ variantes: [{ ancho: 1600, bytes: 100 }] });
 
     expect(r).toEqual({
       ok: false,
@@ -196,31 +197,60 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
   });
 
   describe("firmarSubidaImagenHome", () => {
-    it("firma exitosa: key correcta, presignPut con los parámetros esperados y urlPublica", async () => {
-      const presignMock = vi.fn().mockResolvedValue({ url: "https://r2.example/x?sig", headers: { "content-type": "image/webp" } });
+    it("firma exitosa: una firma por variante (mismo id), presignPut con los parámetros esperados y urlPublica de la mayor", async () => {
+      const presignMock = vi
+        .fn()
+        .mockImplementation(async (key: string) => ({ url: `https://r2.example/${key}?sig`, headers: { "content-type": "image/webp" } }));
       r2Mock.mockReturnValue({ presignPut: presignMock });
 
-      const r = await firmarSubidaImagenHome({ bytes: 100000 });
+      const r = await firmarSubidaImagenHome({
+        variantes: [
+          { ancho: 800, bytes: 40000 },
+          { ancho: 1600, bytes: 100000 },
+        ],
+      });
 
-      expect(presignMock).toHaveBeenCalledWith("home/central-led/fake-1600.webp", {
+      expect(presignMock).toHaveBeenNthCalledWith(1, "home/central-led/v/fake-800.webp", {
+        contentType: "image/webp",
+        contentLength: 40000,
+        ttlSeconds: 600,
+      });
+      expect(presignMock).toHaveBeenNthCalledWith(2, "home/central-led/v/fake-1600.webp", {
         contentType: "image/webp",
         contentLength: 100000,
         ttlSeconds: 600,
       });
       expect(r).toEqual({
         ok: true,
-        key: "home/central-led/fake-1600.webp",
-        url: "https://r2.example/x?sig",
-        headers: { "content-type": "image/webp" },
-        urlPublica: "https://media.plataforma.example/home/central-led/fake-1600.webp",
+        subidas: [
+          { ancho: 800, key: "home/central-led/v/fake-800.webp", url: "https://r2.example/home/central-led/v/fake-800.webp?sig", headers: { "content-type": "image/webp" } },
+          { ancho: 1600, key: "home/central-led/v/fake-1600.webp", url: "https://r2.example/home/central-led/v/fake-1600.webp?sig", headers: { "content-type": "image/webp" } },
+        ],
+        urlPublica: "https://media.plataforma.example/home/central-led/v/fake-1600.webp",
       });
     });
 
-    it.each([0, -1, 1.5, "abc", 5 * 1024 * 1024 + 1])("tamaño inválido (%s) ⇒ error y no firma", async (bytes) => {
+    it("imagen chica: sólo la de 800 ⇒ urlPublica es la de 800", async () => {
+      r2Mock.mockReturnValue({ presignPut: vi.fn().mockResolvedValue({ url: "https://r2.example/x", headers: { "content-type": "image/webp" } }) });
+
+      const r = await firmarSubidaImagenHome({ variantes: [{ ancho: 800, bytes: 5000 }] });
+
+      expect(r).toMatchObject({ ok: true, urlPublica: "https://media.plataforma.example/home/central-led/v/fake-800.webp" });
+    });
+
+    it.each([
+      ["sin variantes", []],
+      ["ancho no permitido", [{ ancho: 320, bytes: 10 }]],
+      ["ancho repetido", [{ ancho: 800, bytes: 10 }, { ancho: 800, bytes: 10 }]],
+      ["bytes 0", [{ ancho: 800, bytes: 0 }]],
+      ["bytes decimales", [{ ancho: 800, bytes: 1.5 }]],
+      ["bytes de más", [{ ancho: 1600, bytes: 5 * 1024 * 1024 + 1 }]],
+      ["más de dos", [{ ancho: 800, bytes: 1 }, { ancho: 1600, bytes: 1 }, { ancho: 800, bytes: 1 }]],
+    ])("variantes inválidas (%s) ⇒ error y no firma", async (_n, variantes) => {
       const presignMock = vi.fn();
       r2Mock.mockReturnValue({ presignPut: presignMock });
 
-      const r = await firmarSubidaImagenHome({ bytes: bytes as unknown as number });
+      const r = await firmarSubidaImagenHome({ variantes });
 
       expect(r).toEqual({ ok: false, errores: ["La imagen supera el tamaño permitido (5 MB)."] });
       expect(presignMock).not.toHaveBeenCalled();
@@ -236,7 +266,7 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
       const { firmarSubidaImagenHome: firmarSinTenant } = await import("./home-acciones");
       r2Mock.mockReturnValue({ presignPut: vi.fn() });
 
-      const r = await firmarSinTenant({ bytes: 100 });
+      const r = await firmarSinTenant({ variantes: [{ ancho: 1600, bytes: 100 }] });
 
       expect(r).toEqual({
         ok: false,
@@ -249,7 +279,7 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
     it("presignPut rechaza ⇒ error de firma genérico", async () => {
       r2Mock.mockReturnValue({ presignPut: vi.fn().mockRejectedValue(new Error("boom")) });
 
-      const r = await firmarSubidaImagenHome({ bytes: 100 });
+      const r = await firmarSubidaImagenHome({ variantes: [{ ancho: 1600, bytes: 100 }] });
 
       expect(r).toEqual({ ok: false, errores: ["No se pudo preparar la subida. Inténtelo de nuevo."] });
     });

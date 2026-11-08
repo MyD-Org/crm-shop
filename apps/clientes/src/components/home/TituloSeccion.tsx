@@ -8,23 +8,23 @@ export function TituloSeccion({ textos, linkTodos }: { textos: TextosSeccion; li
   const hayTitulo = !!(titulo || tituloMobile);
   if (!hayTitulo && !bajada && !bajadaMobile && !linkTodos) return null;
   return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-6 max-md:flex-col max-md:items-start">
-      <div>
-        {hayTitulo ? (
-          <h2 className={`font-display text-[clamp(28px,3.2vw,42px)] font-bold leading-[1.12] tracking-[-0.02em] text-text ${clasesVisibilidad(visibilidadTextos?.titulo)}`}>
-            <AccentText text={titulo ?? ""} mobileText={tituloMobile} accentClassName="not-italic text-accent" />
-          </h2>
-        ) : null}
-        {bajada || bajadaMobile ? (
-          <p className={`mt-3 max-w-[52ch] text-[15px] leading-[1.6] text-muted ${clasesVisibilidad(visibilidadTextos?.bajada)}`}>
-            <AccentText text={bajada ?? ""} mobileText={bajadaMobile} />
-          </p>
-        ) : null}
-      </div>
+    // Grilla: título y "Ver todos" comparten la primera fila (el link no
+    // ocupa un renglón propio, tampoco en mobile); la bajada va debajo.
+    <div className="mb-8 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
+      {hayTitulo ? (
+        <h2 className={`col-start-1 row-start-1 font-display text-[clamp(28px,3.2vw,42px)] font-bold leading-[1.12] tracking-[-0.02em] text-text ${clasesVisibilidad(visibilidadTextos?.titulo)}`}>
+          <AccentText text={titulo ?? ""} mobileText={tituloMobile} accentClassName="not-italic text-accent" />
+        </h2>
+      ) : null}
+      {bajada || bajadaMobile ? (
+        <p className={`col-span-2 mt-3 max-w-[52ch] text-[15px] leading-[1.6] text-muted ${clasesVisibilidad(visibilidadTextos?.bajada)}`}>
+          <AccentText text={bajada ?? ""} mobileText={bajadaMobile} />
+        </p>
+      ) : null}
       {linkTodos ? (
         <Link
           href={linkTodos}
-          className="border-b-[1.5px] border-text pb-[3px] text-[13px] font-extrabold text-text transition-colors hover:border-accent hover:text-accent"
+          className="col-start-2 row-start-1 justify-self-end whitespace-nowrap border-b-[1.5px] border-text pb-[3px] text-[13px] font-extrabold text-text transition-colors hover:border-accent hover:text-accent"
         >
           Ver todos →
         </Link>

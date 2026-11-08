@@ -235,7 +235,7 @@ export function ProductoClient({
   const selector = (
     // El mismo contador que las cards y el carrito, en su tamaño grande. Sin
     // tacho: acá se elige la cantidad antes de agregar (mínimo 1).
-    <QuantityStepper value={qty} onValueChange={setQty} min={1} max={maxCantidad(producto)} tone="soft" size="lg" />
+    <QuantityStepper name="cantidad" aria-label="Cantidad" value={qty} onValueChange={setQty} min={1} max={maxCantidad(producto)} tone="soft" size="lg" />
   );
   // El mismo botón en la fila de desktop y en la barra de mobile: una sola
   // cantidad y un solo "Agregado" para los dos.

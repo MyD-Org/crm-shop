@@ -230,7 +230,7 @@ export function CartPreview({
                     >
                       <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-lg)-1rem)] border border-border bg-surface text-muted/40">
                         {item.image ? (
-                          <Image src={item.image} alt="" fill sizes="40px" className="object-contain p-0.5" />
+                          <Image src={item.image} alt="" width={40} height={40} sizes="40px" className="h-full w-full object-contain p-0.5" />
                         ) : (
                           <LightbulbIcon />
                         )}

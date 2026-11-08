@@ -253,7 +253,7 @@ function HeaderVista({
         brandSub={marca.lema}
         // Logo en SVG (letras en trazos, no depende de ninguna fuente): el
         // mismo archivo en las tres barras. La compacta sólo se ve desde lg.
-        brandLogo={logoMarca("h-6 w-auto lg:h-8", true)}
+        brandLogo={logoMarca("h-5 w-auto min-[400px]:h-6 lg:h-8", true)}
         compactBrandLogo={logoMarca("h-[26px] w-auto", false)}
         // En mobile (la búsqueda ocupa su propia fila) el "Enviar a" va en una línea debajo.
         // La barra compacta lleva sólo el buscador.

@@ -13,7 +13,5 @@ export function TexturaPie({ piedra }: { piedra: boolean }) {
   return <PiedraDecorativa fondo={false} brillo opacidadJuntas={OPACIDAD_PIE} className={estilos.pie} />;
 }
 
-/** Clases del contenedor del pie: con la piedra apagada, las de siempre. */
-export function claseDelPie(piedra: boolean): string {
-  return piedra ? "footer-global relative isolate" : "footer-global";
-}
+/** Caja que envuelve sólo al pie y a su textura (el recorte se mide contra ella). */
+export const clasePiedraDelPie = "relative isolate";

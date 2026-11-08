@@ -15,7 +15,6 @@ export function BarraSuperior({
   visibilidad,
   redes,
   whatsapp: numeroWhatsapp,
-  seguinos = true,
 }: {
   /** Texto del anuncio ya filtrado por visibilidad "nunca" (undefined = sin anuncio). */
   anuncio: string | undefined;
@@ -23,8 +22,6 @@ export function BarraSuperior({
   redes: RedFooter[];
   /** Número en dígitos; vacío = sin link. */
   whatsapp: string;
-  /** "Seguinos" adelante del Instagram: sólo la marca de Central. */
-  seguinos?: boolean;
 }) {
   const whatsapp = numeroWhatsapp ? hrefWhatsapp(numeroWhatsapp) : null;
   if (!anuncio && redes.length === 0 && !whatsapp) return null;
@@ -40,7 +37,7 @@ export function BarraSuperior({
           <span aria-hidden className="max-md:hidden" />
         )}
         <div className="flex items-center justify-center gap-x-4 md:gap-x-5 md:justify-end">
-          <RedesSociales redes={redes} className="flex-nowrap justify-center md:justify-end" claseSeguinos="max-md:hidden" seguinos={seguinos} />
+          <RedesSociales redes={redes} className="flex-nowrap justify-center md:justify-end" />
           {whatsapp ? (
             <a
               href={whatsapp}

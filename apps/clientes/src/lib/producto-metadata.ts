@@ -3,7 +3,7 @@ import type { Product } from "@/data/products";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import { fmtPrecio } from "@/lib/format";
-import { IMAGEN_SITIO, openGraphDelSitio } from "@/lib/metadata-marca";
+import { IMAGEN_SITIO_ALTO, IMAGEN_SITIO_ANCHO, openGraphDelSitio, urlImagenDelSitio } from "@/lib/metadata-marca";
 
 /**
  * Metadata de la ficha: lo que muestran WhatsApp, Google y compañía al pegar el
@@ -13,9 +13,9 @@ import { IMAGEN_SITIO, openGraphDelSitio } from "@/lib/metadata-marca";
  * Canonical y `og:url` solo con `NEXT_PUBLIC_SITE_URL` (el `metadataBase` del
  * layout): relativos sin base rompen el build (mismo criterio que /catalogo).
  *
- * Sin foto, la imagen general del sitio (src/app/opengraph-image.tsx): el
+ * Sin foto, la imagen general del sitio (src/app/imagen-para-compartir/route.tsx): el
  * `openGraph` de la ficha reemplaza entero al del layout, así que si no se la
- * nombra acá el link se comparte sin imagen. También pide la base. Por lo mismo
+ * nombra acá el link se comparte sin imagen. También pide la base (y el origen propio). Por lo mismo
  * repite `og:site_name` y `og:locale` del sitio (`openGraphDelSitio`).
  *
  * La descripción empieza por el precio: es lo primero que quiere ver quien recibe
@@ -33,6 +33,8 @@ export function metadataProducto(producto: Product, conBase: boolean, nombreTien
   const partes = [precio, producto.brand, producto.sku && `Código ${producto.sku}`].filter(Boolean);
   const description = partes.length > 0 ? partes.join(" · ") : undefined;
   const portada = producto.images?.[0];
+  // Absoluta y con el origen propio (no el canónico): ver `urlImagenDelSitio`.
+  const imagenSitio = conBase ? urlImagenDelSitio(process.env.NEXT_PUBLIC_SITE_URL) : undefined;
   // Sólo para mostrar: `producto.name` (el dato real) no se toca.
   const { nombre } = nombreConMarca(
     producto.name,
@@ -50,8 +52,8 @@ export function metadataProducto(producto: Product, conBase: boolean, nombreTien
       ...(conBase ? { url: ruta } : {}),
       ...(portada
         ? { images: [{ url: portada.url, width: portada.w, alt: portada.alt || nombre }] }
-        : conBase
-          ? { images: [{ url: IMAGEN_SITIO, width: 1200, height: 630, alt: nombre }] }
+        : imagenSitio
+          ? { images: [{ url: imagenSitio, width: IMAGEN_SITIO_ANCHO, height: IMAGEN_SITIO_ALTO, alt: nombre }] }
           : {}),
     },
   };

@@ -37,13 +37,11 @@ describe("BarraSuperior", () => {
   });
 });
 
-describe("Seguinos", () => {
-  const red = [{ nombre: "Instagram", usuario: "cuenta" }];
-  it("la marca de Central lo muestra", () => {
-    expect(renderToStaticMarkup(<BarraSuperior anuncio={undefined} visibilidad="siempre" redes={red} whatsapp="" />)).toContain("Seguinos");
-  });
-  it("un sitio con marca propia muestra el Instagram sin Seguinos", () => {
-    const html = renderToStaticMarkup(<BarraSuperior anuncio={undefined} visibilidad="siempre" redes={red} whatsapp="" seguinos={false} />);
+describe("Instagram", () => {
+  it("nunca muestra «Seguinos» antes de las cuentas", () => {
+    const html = renderToStaticMarkup(
+      <BarraSuperior anuncio={undefined} visibilidad="siempre" redes={[{ nombre: "Instagram", usuario: "cuenta" }]} whatsapp="" />,
+    );
     expect(html).toContain("https://www.instagram.com/cuenta/");
     expect(html).not.toContain("Seguinos");
   });

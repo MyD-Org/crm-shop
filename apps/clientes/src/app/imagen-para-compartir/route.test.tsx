@@ -28,9 +28,9 @@ vi.mock("next/og", () => ({
   },
 }));
 
-import OpengraphImage, { alt } from "./opengraph-image";
+import { GET } from "./route";
 
-describe("imagen Open Graph por marca", () => {
+describe("imagen para compartir por marca", () => {
   beforeEach(() => {
     dibujos.length = 0;
     readFileMock.mockClear();
@@ -39,14 +39,14 @@ describe("imagen Open Graph por marca", () => {
 
   it("la tienda de Central dibuja su foto y su logo", async () => {
     getMarcaMock.mockResolvedValue(MARCA_POR_DEFECTO);
-    await OpengraphImage();
+    await GET();
     expect(readFileMock).toHaveBeenCalled();
     expect(JSON.stringify(dibujos[0])).toContain("data:image/png;base64");
   });
 
   it("un sitio propio sin imagen: nombre sobre la paleta, nunca la foto ni el logo de Central", async () => {
     getMarcaMock.mockResolvedValue(resolverMarcaPropia({ nombre: "Tienda B" }));
-    await OpengraphImage();
+    await GET();
     expect(readFileMock).not.toHaveBeenCalled();
     const json = JSON.stringify(dibujos[0]);
     expect(json).toContain("Tienda B");
@@ -55,11 +55,7 @@ describe("imagen Open Graph por marca", () => {
 
   it("una marca sobre la base de Central pero con otro nombre tampoco usa los recursos de Central", async () => {
     getMarcaMock.mockResolvedValue(resolverMarca({ nombre: "Otra Tienda" }));
-    await OpengraphImage();
+    await GET();
     expect(readFileMock).not.toHaveBeenCalled();
-  });
-
-  it("el alt (que sale en el HTML de todas las marcas) no nombra a ninguna", () => {
-    expect(alt).not.toMatch(/central/i);
   });
 });

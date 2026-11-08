@@ -71,7 +71,7 @@ describe("metadataMarca", () => {
     expect(m.openGraph).toMatchObject({
       siteName: "Central Led",
       locale: "es_AR",
-      images: ["/opengraph-image"],
+      images: ["https://tienda.example/imagen-para-compartir"],
     });
   });
 

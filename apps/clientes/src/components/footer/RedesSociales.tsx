@@ -16,30 +16,17 @@ function InstagramIcon() {
  * Va en la barra superior (layout) y en la barra inferior del footer, las dos
  * sobre `bg-primary`; mismo estilo que los links del footer del DS. Sin
  * cuentas no se pinta nada. Server component.
- *
- * "Seguinos" adelante: sin él, "Mar del Plata · Iguazú" en la barra superior
- * se lee como las ubicaciones de los locales. Va en vos a pedido del dueño de
- * la tienda (excepción al registro de usted de CLAUDE.md): es el mismo tono
- * de las cuentas de Instagram. Solo en la marca de Central: un sitio con marca propia muestra
- * las cuentas sin esa palabra (`seguinos={false}`).
  */
 export function RedesSociales({
   redes,
   className = "",
-  claseSeguinos = "",
-  seguinos = true,
 }: {
   redes: RedFooter[];
   className?: string;
-  /** Clases extra del "Seguinos" (la barra superior lo esconde en el celular para entrar en una línea). */
-  claseSeguinos?: string;
-  /** Muestra "Seguinos" adelante de las cuentas (sólo la marca de Central). */
-  seguinos?: boolean;
 }) {
   if (redes.length === 0) return null;
   return (
     <ul className={`flex flex-wrap items-center gap-x-4 gap-y-1 ${className}`}>
-      {seguinos ? <li className={`text-[12.5px] font-semibold text-on-primary/55 ${claseSeguinos}`}>Seguinos</li> : null}
       {redes.map((r) => (
         <li key={r.usuario}>
           <a

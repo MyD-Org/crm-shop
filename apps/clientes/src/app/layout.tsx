@@ -48,6 +48,8 @@ const sora = Sora({
 export async function generateMetadata(): Promise<Metadata> {
   return metadataDeMarca(await getMarca(), {
     siteUrl: urlCanonicaDelSitio(),
+    // Origen propio, para la imagen de vista previa (el canónico puede ser el de otro proyecto).
+    propioUrl: process.env.NEXT_PUBLIC_SITE_URL,
     facebookToken: process.env.FACEBOOK_DOMAIN_VERIFICATION,
     googleToken: process.env.GOOGLE_SITE_VERIFICATION,
   });
@@ -145,7 +147,7 @@ export default async function RootLayout({
                 siempre: en mobile, centradas debajo del anuncio. Sin anuncio visible
                 ni redes, no hay barra. Grilla: con un anuncio largo, el texto se achica
                 y parte línea; las redes conservan su ancho a la derecha. */}
-            <BarraSuperior anuncio={hayAnuncio ? anuncio.texto : undefined} visibilidad={vAnuncio} redes={redes} whatsapp={numeroWhatsapp} seguinos={marca.recursosCentral} />
+            <BarraSuperior anuncio={hayAnuncio ? anuncio.texto : undefined} visibilidad={vAnuncio} redes={redes} whatsapp={numeroWhatsapp} />
             <Header />
             {/* Red de seguridad: una página que lea el request arriba de todo
                 (Mi cuenta, checkout, carrito) queda como hueco entero en vez

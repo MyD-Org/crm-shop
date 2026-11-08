@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { COVER_QUERY, HERO_LIGHTS, MIN_TARGET_PX, SHELF_STRIP, STUDIO_IMAGE, STUDIO_IMAGE_MOBILE, proximity, sceneRect, usaCover } from "./hero-lights";
+import { COVER_QUERY, HERO_LIGHTS, LA_MONOGRAM, MIN_TARGET_PX, SHELF_STRIP, SPOT_LA, STUDIO_IMAGE, STUDIO_IMAGE_MOBILE, proximity, sceneRect, usaCover } from "./hero-lights";
 import styles from "./InteractiveHero.module.css";
 
 /** Each lamp of the first-view intro stays on this long; the fade matches `[data-intro]` in the CSS module. */
@@ -157,6 +157,10 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
             <radialGradient id={`${uid}-glow`}><stop className={styles.glowStop} stopColor="#ffe4b0" stopOpacity=".8" /><stop offset="1" stopColor="#ffe4b0" stopOpacity="0" /></radialGradient>
             <linearGradient id={`${uid}-beam`} x1="0" y1="0" x2="0" y2="1"><stop className={styles.beamStop} stopColor="#ffe5b4" stopOpacity=".5"/><stop offset="1" stopColor="#ffe5b4" stopOpacity="0"/></linearGradient>
             <clipPath id={`${uid}-basket`}><path d="M1370 234 Q1360 278 1311 300 Q1263 322 1271 366 Q1278 401 1311 417 Q1385 437 1462 417 Q1496 402 1500 365 Q1507 323 1465 300 Q1416 277 1403 234 Z"/></clipPath>
+            {/* El LA se apaga hacia el borde de su charco de luz: lo revela la luz, no está pegado. */}
+            <radialGradient id={`${uid}-laFade`}><stop stopColor="#fff"/><stop offset=".4" stopColor="#fff"/><stop offset="1" stopColor="#fff" stopOpacity="0"/></radialGradient>
+            <filter id={`${uid}-laGlow`} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7" /></filter>
+            <clipPath id={`${uid}-laBox`}><rect x="-70" y="-10" width="140" height="110"/></clipPath>
             <radialGradient id={`${uid}-interior`}><stop stopColor="#fff4ce" stopOpacity=".95"/><stop offset=".25" stopColor="#ffe0a0" stopOpacity=".65"/><stop offset="1" stopColor="#ffcb7a" stopOpacity="0"/></radialGradient>
           </defs>
           {HERO_LIGHTS.map((light, i) => <g key={light.id} ref={el => { layers.current[i] = el; }} className={styles.light} style={{ opacity: 0 }} data-light={light.id}>
@@ -176,6 +180,9 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <ellipse cx="1120" cy="149" rx="24" ry="18" transform="rotate(38 1120 149)" fill={`url(#${uid}-interior)`}/>
               <ellipse cx="1122" cy="146" rx="18" ry="11" transform="rotate(38 1122 146)" fill="#fff5dc"/>
               <ellipse cx="930" cy="512" rx="120" ry="100" className={styles.glow} fill={`url(#${uid}-glow)`}/>
+              {/* Guiño de marca: el LA que el haz revela en la pared (SPOT_LA); el CSS muestra uno según el ancho. */}
+              <SpotLA uid={uid} place="desktop" className={styles.laDesktop} />
+              <SpotLA uid={uid} place="mobile" className={styles.laMobile} />
             </>}
             {light.id === "pendant" && <>
               {/* Translucent inner glow preserves the photographic bamboo weave. */}
@@ -203,4 +210,24 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       </>}
     </div>
   </div>;
+}
+
+/** El monograma del kit (LA_MONOGRAM) en su lugar de SPOT_LA, apagado hacia el borde de su charco de luz. */
+function SpotLA({ uid, place, className }: { uid: string; place: keyof typeof SPOT_LA; className: string }) {
+  const { x, y, height } = SPOT_LA[place];
+  const scale = height / LA_MONOGRAM.height;
+  const id = `${uid}-la-${place}`;
+  return <g className={className} data-spot-la={place}>
+    <mask id={id} maskUnits="userSpaceOnUse" x={x - height * 2} y={y - height * 2} width={height * 4} height={height * 4}>
+      <ellipse cx={x} cy={y} rx={height * 1.6} ry={height * 1.4} fill={`url(#${uid}-laFade)`}/>
+    </mask>
+    <g mask={`url(#${id})`}>
+      {/* Fuera del charco del haz (celular): un halo propio, como el borde de la luz que se derrama. */}
+      <ellipse className={styles.laSpill} cx={x} cy={y} rx={height * 1.3} ry={height * 1.1} fill={`url(#${uid}-glow)`}/>
+      <g transform={`translate(${x} ${y - height / 2}) scale(${scale})`} clipPath={`url(#${uid}-laBox)`}>
+        <path className={styles.laGlow} d={LA_MONOGRAM.d} stroke="#FFB547" strokeWidth="16" fill="none" filter={`url(#${uid}-laGlow)`}/>
+        <path className={styles.laStroke} d={LA_MONOGRAM.d} stroke="#FFC978" strokeWidth="4.5" fill="none" strokeMiterlimit="10"/>
+      </g>
+    </g>
+  </g>;
 }

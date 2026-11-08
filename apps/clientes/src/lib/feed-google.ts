@@ -34,7 +34,9 @@ function item(p: Product, sitio: string): string | null {
     ["condition", "new"],
   ];
   const marca = plano(p.brand);
-  const codigo = plano(p.sku);
+  // El código de Alegra es "<código del fabricante>-<sufijo de la marca>" (101050-GEN): Google
+  // quiere el del fabricante como MPN. La tienda sigue mostrando el código completo.
+  const codigo = plano(p.sku)?.replace(/-[^-]+$/, "") || undefined;
   if (marca) campos.push(["brand", marca]);
   if (codigo) campos.push(["mpn", codigo]);
   if (!marca || !codigo) campos.push(["identifier_exists", "no"]);

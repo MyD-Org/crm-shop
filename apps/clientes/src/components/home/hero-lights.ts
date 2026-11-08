@@ -6,6 +6,23 @@ export const HERO_LIGHTS = [
   { id: "linear", label: "Tira LED bajo la mesada", x: 1161, y: 890, radius: 210, hit: { x: 786, y: 830, width: 750, height: 150 } },
 ] as const;
 
+/**
+ * Guiño de marca: el monograma LA (la firma "Línea" del kit luz-atlantica-v2) que la luz del spot
+ * revela en la pared. Centro y alto en px de la foto, así acompaña a sceneRect en escritorio
+ * (contain) y en celular (cover). En escritorio cae dentro del charco del haz (glow del spot en
+ * 930, 512). En celular (COVER_QUERY) ese charco queda debajo de la bajada y el botón, así que el LA
+ * va a la pared libre entre "necesita" y el colgante, al costado del haz.
+ */
+export const SPOT_LA = {
+  desktop: { x: 930, y: 508, height: 70 },
+  mobile: { x: 1180, y: 368, height: 60 },
+} as const;
+/**
+ * Trazos del monograma en su caja de 118.88 × 100, con el origen arriba al centro: la A de patas
+ * abiertas (se cortan en y = 100) y la L, cuya barra es también la barra de la A.
+ */
+export const LA_MONOGRAM = { width: 118.88, height: 100, d: "M-59.36 106L0 2.4L59.36 106M-47.96 2.4V66H36.96" } as const;
+
 /** On-screen floor for each tap area, so a small hero never shrinks a lamp below a thumb. */
 export const MIN_TARGET_PX = 64;
 

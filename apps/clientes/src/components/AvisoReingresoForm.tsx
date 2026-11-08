@@ -50,7 +50,6 @@ export function AvisoReingresoForm({ alegraId }: { alegraId: string }) {
     return (
       <Button
         type="button"
-        variant="secondary"
         size="lg"
         className="w-full"
         onClick={() => {

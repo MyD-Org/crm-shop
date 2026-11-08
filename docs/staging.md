@@ -12,7 +12,7 @@ los dos proyectos (admin y Shop). El resto de las ramas no despliega (`git.deplo
 | Mercado Pago, Payway, Clerk | credenciales reales | credenciales de prueba |
 | URL | dominio propio | `*.vercel.app` (Shop con la puerta de usuario y clave; admin con su login) |
 
-Los crons de `apps/admin/vercel.json` corren solo en producción. El `ignoreCommand` nunca saltea `staging`: cada push o Redeploy de staging compila (en `main` sigue salteando la app que no cambió).
+Los crons de `apps/admin/vercel.json` corren solo en producción. El `ignoreCommand` saltea, en `staging` y en `main`, la app cuya carpeta no cambió desde el último deploy (sin contar tests `*.test.ts(x)`, `*.md` ni `docs/`). Un Redeploy del mismo commit (por ejemplo, después de cambiar variables de entorno) siempre compila.
 
 ## Puesta en marcha (una vez)
 

@@ -8,6 +8,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { PostHog } from "posthog-js";
 import type { ConfigTracking } from "@/lib/tracking/config";
 import { RUTA_INGESTA_POSTHOG } from "@/lib/tracking/config";
+import { cuandoOcioso } from "@/lib/tracking/ocioso";
 import { limpiarEventoPosthog } from "@/lib/tracking/posthog-limpieza";
 import { instalarFbq, instalarGtag } from "@/lib/tracking/stubs";
 import { activarTracking, type DestinosTracking } from "@/lib/tracking/track";
@@ -51,35 +52,45 @@ export function TrackingCliente({ config }: { config: ConfigTracking }) {
       return;
     }
     const { key, uiHost } = config.posthog;
-    import("posthog-js")
-      .then(({ default: ph }) => {
-        if (cancelado) return;
-        ph.init(key, {
-          api_host: RUTA_INGESTA_POSTHOG,
-          ui_host: uiHost,
-          defaults: "2026-08-30",
-          // Pageviews a mano (efecto de abajo): con la URL limpia y salteando
-          // las rutas sin tracking.
-          capture_pageview: false,
-          capture_pageleave: true,
-          // Visitantes anónimos sin perfil de persona: más barato y sin datos de más.
-          person_profiles: "identified_only",
-          session_recording: { maskAllInputs: true },
-          disable_session_recording: rutaSinTracking(window.location.pathname),
-          before_send: limpiarEventoPosthog,
+    // PostHog (y su grabador de sesiones) recién con la página cargada y el
+    // navegador libre: no compite con lo primero que ve el visitante. Los
+    // eventos de antes esperan en la cola de track.ts.
+    const cancelarEspera = cuandoOcioso(() => {
+      import("posthog-js")
+        .then(({ default: ph }) => {
+          if (cancelado) return;
+          ph.init(key, {
+            api_host: RUTA_INGESTA_POSTHOG,
+            ui_host: uiHost,
+            defaults: "2026-08-30",
+            // Pageviews a mano (efecto de abajo): con la URL limpia y salteando
+            // las rutas sin tracking.
+            capture_pageview: false,
+            capture_pageleave: true,
+            // Visitantes anónimos sin perfil de persona: más barato y sin datos de más.
+            person_profiles: "identified_only",
+            session_recording: { maskAllInputs: true },
+            disable_session_recording: rutaSinTracking(
+              window.location.pathname,
+            ),
+            before_send: limpiarEventoPosthog,
+          });
+          posthog.current = ph;
+          if (!rutaSinTracking(window.location.pathname)) {
+            ph.capture("$pageview", {
+              $current_url: limpiarUrl(window.location.href),
+            });
+          }
+          activarTracking({ ...destinos(), posthog: ph });
+        })
+        .catch(() => {
+          // Bloqueado o caído: los demás proveedores siguen.
+          if (!cancelado) activarTracking(destinos());
         });
-        posthog.current = ph;
-        if (!rutaSinTracking(window.location.pathname)) {
-          ph.capture("$pageview", { $current_url: limpiarUrl(window.location.href) });
-        }
-        activarTracking({ ...destinos(), posthog: ph });
-      })
-      .catch(() => {
-        // Bloqueado o caído: los demás proveedores siguen.
-        if (!cancelado) activarTracking(destinos());
-      });
+    });
     return () => {
       cancelado = true;
+      cancelarEspera();
     };
   }, [config]);
 
@@ -107,7 +118,8 @@ export function TrackingCliente({ config }: { config: ConfigTracking }) {
         window.gtag("event", "page_view", { page_location: url });
       }
       // La primera la manda el init de PostHog (todavía no cargó acá).
-      if (ph && !primera.current) ph.capture("$pageview", { $current_url: url });
+      if (ph && !primera.current)
+        ph.capture("$pageview", { $current_url: url });
     } catch {
       // Medir nunca rompe la navegación.
     }
@@ -119,12 +131,16 @@ export function TrackingCliente({ config }: { config: ConfigTracking }) {
       <Analytics beforeSend={beforeSendVercel} />
       <SpeedInsights beforeSend={beforeSendVercel} />
       {config.metaPixelId ? (
-        <Script id="meta-pixel" strategy="afterInteractive" src="https://connect.facebook.net/en_US/fbevents.js" />
+        <Script
+          id="meta-pixel"
+          strategy="lazyOnload"
+          src="https://connect.facebook.net/en_US/fbevents.js"
+        />
       ) : null}
       {config.ga4Id ? (
         <Script
           id="ga4"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
           src={`https://www.googletagmanager.com/gtag/js?id=${config.ga4Id}`}
         />
       ) : null}

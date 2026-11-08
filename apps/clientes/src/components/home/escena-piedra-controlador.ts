@@ -21,7 +21,17 @@ export interface EntornoEscena {
   /** Avisa cuando la pestaña se oculta o se muestra. */
   observarPestana(cb: () => void): () => void;
   pestanaVisible(): boolean;
+  /**
+   * Pantalla táctil (sin cursor): el LA se enciende solo un rato después de quedar a la vista.
+   * Sin estos datos (o con `tactil` en false) sólo enciende el cursor o el toque.
+   */
+  tactil?: boolean;
+  programar?(cb: () => void, ms: number): number;
+  cancelarProgramado?(id: number): void;
 }
+
+/** Cuánto espera el LA, ya a la vista en una pantalla táctil, para encenderse solo. */
+export const ESPERA_ENCENDIDO_TACTIL_MS = 1800;
 
 /** Atributo con el que el CSS prende el LA y su halo. */
 export const ATRIBUTO_ENCENDIDO = "data-encendido";
@@ -103,7 +113,18 @@ export function iniciarEscena(env: EntornoEscena): () => void {
   env.hero.addEventListener("pointermove", mover);
   env.hero.addEventListener("pointerleave", salir);
   poner(pos);
-  const sueltaVisible = env.observarVisible(visible => { enPantalla = visible; actualizar(); });
+  // En el celular no hay cursor que lo acerque: se enciende solo tras unos segundos a la vista.
+  let programado: number | null = null;
+  const cancelarEncendido = () => {
+    if (programado !== null) env.cancelarProgramado?.(programado);
+    programado = null;
+  };
+  const programarEncendido = (visible: boolean) => {
+    if (!env.tactil || !env.programar) return;
+    if (!visible) { cancelarEncendido(); return; }
+    if (programado === null) programado = env.programar(() => { programado = null; encender(); }, ESPERA_ENCENDIDO_TACTIL_MS);
+  };
+  const sueltaVisible = env.observarVisible(visible => { enPantalla = visible; actualizar(); programarEncendido(visible); });
   const sueltaPestana = env.observarPestana(actualizar);
 
   return () => {
@@ -111,6 +132,7 @@ export function iniciarEscena(env: EntornoEscena): () => void {
     corriendo = false;
     sueltaVisible();
     sueltaPestana();
+    cancelarEncendido();
     env.hero.removeEventListener("pointermove", mover);
     env.hero.removeEventListener("pointerleave", salir);
     soltar();

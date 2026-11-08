@@ -62,6 +62,9 @@ export function EscenaPiedraViva({
         return () => document.removeEventListener("visibilitychange", cb);
       },
       pestanaVisible: () => document.visibilityState !== "hidden",
+      tactil: matchMedia("(hover: none)").matches,
+      programar: (cb, ms) => window.setTimeout(cb, ms),
+      cancelarProgramado: id => window.clearTimeout(id),
     });
   }, [raiz]);
 

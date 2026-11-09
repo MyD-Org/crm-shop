@@ -6,6 +6,7 @@ import { ArrowLeft, Send, CheckCheck, Bot, User } from "lucide-react"
 import { Button, Badge, Textarea } from "@myd-org/ui"
 import { useRouter } from "next/navigation"
 import { MessageAttachments, bubbleText } from "./MessageAttachments"
+import { EmojiPicker, insertAt } from "./EmojiPicker"
 import type { InboxConversation, InboxMessage } from "@/lib/inbox-api"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
 import { QuoteBlock, ReplyButton, ReplyingToBar } from "./MessageQuote"
@@ -27,6 +28,14 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
   // Respuesta citada: la burbuja elegida con "Responder".
   const [replyingTo, setReplyingTo] = useState<QuotedMessageRef | null>(null)
   const replyRef = useRef<HTMLTextAreaElement>(null)
+
+  // Emoji del selector: entra donde está el cursor y el foco vuelve al cuadro.
+  function pickEmoji(emoji: string) {
+    const el = replyRef.current
+    const { text, cursor } = insertAt(reply, emoji, el ? { start: el.selectionStart, end: el.selectionEnd } : null)
+    setReply(text)
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(cursor, cursor) })
+  }
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState("")
   const [archiving, setArchiving] = useState(false)
@@ -202,6 +211,7 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
               }}
               className="flex-1 resize-none"
             />
+            <EmojiPicker onPick={pickEmoji} />
             <Button
               type="submit"
               size="icon"

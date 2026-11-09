@@ -6,6 +6,7 @@ import { ArrowLeft, Send, CheckCheck, Bot, User } from "lucide-react"
 import { Button, Badge, Textarea } from "@myd-org/ui"
 import { useRouter } from "next/navigation"
 import { MessageAttachments, bubbleText } from "./MessageAttachments"
+import { EmojiPicker, insertAt } from "./EmojiPicker"
 import type { InboxConversation, InboxMessage } from "@/lib/inbox-api"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
 
@@ -21,6 +22,15 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
   const [mode, setMode] = useState<"bot" | "human">(conversation.mode)
   const [withinWindow, setWithinWindow] = useState(conversation.within_window)
   const [reply, setReply] = useState("")
+  const replyRef = useRef<HTMLTextAreaElement>(null)
+
+  // Emoji del selector: entra donde está el cursor y el foco vuelve al cuadro.
+  function pickEmoji(emoji: string) {
+    const el = replyRef.current
+    const { text, cursor } = insertAt(reply, emoji, el ? { start: el.selectionStart, end: el.selectionEnd } : null)
+    setReply(text)
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(cursor, cursor) })
+  }
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState("")
   const [archiving, setArchiving] = useState(false)
@@ -173,6 +183,7 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
         ) : (
           <form onSubmit={handleSend} className="flex gap-2">
             <Textarea
+              ref={replyRef}
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               placeholder="Escriba su respuesta..."
@@ -182,6 +193,7 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
               }}
               className="flex-1 resize-none"
             />
+            <EmojiPicker onPick={pickEmoji} />
             <Button
               type="submit"
               size="icon"

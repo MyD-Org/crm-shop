@@ -30,7 +30,21 @@ export function stripAttachmentMarker(text: string, hasAttachments: boolean): st
  */
 export function bubbleText(text: string, attachments?: ReadonlyArray<object>): string {
   if (attachments?.some((a) => "contacts" in a || "location" in a)) return ""
+  // Una reacción no trae archivo, así que no hay adjunto que delate la marca: se reconoce
+  // por la marca exacta que arma ai-api y se muestra solo el emoji.
+  const reaction = reactionEmoji(text)
+  if (reaction) return reaction
   return stripAttachmentMarker(text, !!attachments?.length)
+}
+
+// Marca exacta de ai-api para una reacción (del cliente o del equipo desde la app). Que sea
+// exacta evita tocar un texto que el cliente haya escrito entre corchetes.
+const REACTION_MARKER = /^El (cliente|equipo) envió una reacción$/
+
+/** El emoji de una reacción, o null si el texto no es una reacción. */
+export function reactionEmoji(text: string): string | null {
+  const { marker, rest } = splitMarker(text)
+  return marker && REACTION_MARKER.test(marker) && rest ? rest : null
 }
 
 const PREVIEW_ICONS: Array<[RegExp, string, string]> = [
@@ -54,6 +68,8 @@ const PREVIEW_ICONS: Array<[RegExp, string, string]> = [
 export function previewText(text: string): string {
   const { marker, rest } = splitMarker(text)
   if (!marker) return text
+  const reaction = reactionEmoji(text)
+  if (reaction) return reaction
   const hit = PREVIEW_ICONS.find(([re]) => re.test(marker))
   if (!hit) return rest || marker
   const [, icon, label] = hit

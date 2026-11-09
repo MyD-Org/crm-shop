@@ -9,6 +9,7 @@ import { channelLabel, type InboxContact, type ContactMessage, type ContactMessa
 import { AiAssistPanel } from "./AiAssistPanel"
 import { subscribeAssistOpen, getAssistOpen, setAssistOpen } from "@/lib/assist-open"
 import { MessageAttachments, bubbleText } from "./MessageAttachments"
+import { EmojiPicker, insertAt } from "./EmojiPicker"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
 
 const PAGE_SIZE = 30
@@ -126,6 +127,14 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
   const bottomRef = useRef<HTMLDivElement>(null)
   // Compose textarea: el copiloto prefila acá el texto de una budget card ("Enviar al canal").
   const replyRef = useRef<HTMLTextAreaElement>(null)
+
+  // Emoji del selector: entra donde está el cursor y el foco vuelve al cuadro.
+  function pickEmoji(emoji: string) {
+    const el = replyRef.current
+    const { text, cursor } = insertAt(reply, emoji, el ? { start: el.selectionStart, end: el.selectionEnd } : null)
+    setReply(text)
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(cursor, cursor) })
+  }
   // Altura previa al prepend de histórico, para restaurar la posición de scroll.
   const prependHeight = useRef<number | null>(null)
   // ¿El usuario está pegado al fondo? Si sí, autoscrolleamos al llegar mensajes nuevos.
@@ -606,6 +615,7 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
                 className="flex-1 resize-none"
                 style={{ height: composeHeight }}
               />
+              <EmojiPicker onPick={pickEmoji} />
               <Button type="submit" size="icon" disabled={!reply.trim()} className="self-end">
                 <Send size={16} strokeWidth={1.6} />
               </Button>

@@ -78,3 +78,20 @@ describe("bubbleText", () => {
     expect(bubbleText("[hola]", undefined)).toBe("[hola]")
   })
 })
+
+// Una reacción no trae archivo: sin este caso el operador veía la marca del bot entera
+// ("[El cliente envió una reacción] ❤️") en vez del emoji.
+describe("reacciones", () => {
+  it("la burbuja muestra solo el emoji, del cliente o del equipo", () => {
+    expect(bubbleText("[El cliente envió una reacción]\n❤️", undefined)).toBe("❤️")
+    expect(bubbleText("[El equipo envió una reacción]\n👍", [])).toBe("👍")
+  })
+
+  it("el preview de la lista también muestra solo el emoji", () => {
+    expect(previewText("[El cliente envió una reacción]\n❤️")).toBe("❤️")
+  })
+
+  it("un texto parecido escrito por el cliente queda intacto", () => {
+    expect(bubbleText("[me encantó la reacción]\n❤️", undefined)).toBe("[me encantó la reacción]\n❤️")
+  })
+})

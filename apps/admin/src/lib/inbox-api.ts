@@ -86,6 +86,13 @@ export interface LocationMessageAttachment {
 
 export type MessageAttachment = FileMessageAttachment | ContactsMessageAttachment | LocationMessageAttachment
 
+// Mensaje al que responde otro (respuesta citada). `text` ya viene recortado por ai-api.
+export interface QuotedMessageRef {
+  id: string
+  text: string
+  source: string | null
+}
+
 export interface InboxMessage {
   id: string
   role: string
@@ -94,6 +101,8 @@ export interface InboxMessage {
   created_at: string
   /** Ausente en la enorme mayoría de los mensajes: solo los que traen un archivo. */
   attachments?: MessageAttachment[]
+  /** Cita: el mensaje al que responde. null/ausente = no cita (o ai-api anterior). */
+  reply_to?: QuotedMessageRef | null
 }
 
 // Una entrada por CONTACTO (persona), no por sesión. La sesión actual aporta mode/asignación.
@@ -448,12 +457,14 @@ export async function sendReply(
   aiTenantId: string,
   conversationId: string,
   text: string,
+  // Responder citando una burbuja del hilo (nuestro id). ai-api la traduce al id de Meta.
+  replyToMessageId?: string,
 ): Promise<SendReplyResult> {
   const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/conversations/${encodeURIComponent(conversationId)}/reply`, {
     method: "POST",
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, ...(replyToMessageId ? { reply_to_message_id: replyToMessageId } : {}) }),
   })
-  if (res.status === 409) {
+  if (res.status === 409 || res.status === 400) {
     const body = await res.json().catch(() => ({}))
     return { ok: false, error: body.error ?? "conflict" }
   }

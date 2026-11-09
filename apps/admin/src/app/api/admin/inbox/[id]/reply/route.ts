@@ -18,14 +18,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "inbox no configurado" }, { status: 503 })
   }
 
-  const result = await sendReply(tenant.aiApiUrl, tenant.aiTenantId, id, body.text.trim())
+  // Respuesta citada (opcional): id de la burbuja del hilo a la que se responde.
+  const replyTo = typeof body.reply_to_message_id === "string" && body.reply_to_message_id
+    ? body.reply_to_message_id
+    : undefined
+
+  const result = await sendReply(tenant.aiApiUrl, tenant.aiTenantId, id, body.text.trim(), replyTo)
   if (result.ok) return NextResponse.json({ id: result.id, ok: true })
 
   // Falla determinista: la ai-api NO persistió el mensaje (window_closed / no_recipient /
   // channel_not_configured). Devolvemos 409 sin id para que el cliente sepa que no hay
   // burbuja server-side y muestre el toast correspondiente.
   if (!("id" in result)) {
-    const status = result.error === "window_closed" ? 409 : 502
+    const status = result.error === "window_closed" ? 409 : result.error === "invalid_reply_to" ? 400 : 502
     return NextResponse.json({ error: result.error }, { status })
   }
 

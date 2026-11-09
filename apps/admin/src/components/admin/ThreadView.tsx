@@ -8,6 +8,9 @@ import { useRouter } from "next/navigation"
 import { MessageAttachments, bubbleText } from "./MessageAttachments"
 import type { InboxConversation, InboxMessage } from "@/lib/inbox-api"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
+import { QuoteBlock, ReplyButton, ReplyingToBar } from "./MessageQuote"
+import { bubbleDomId, quoteFromMessage } from "@/lib/message-quote"
+import type { QuotedMessageRef } from "@/lib/inbox-api"
 
 interface Props {
   conversation: InboxConversation
@@ -21,6 +24,9 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
   const [mode, setMode] = useState<"bot" | "human">(conversation.mode)
   const [withinWindow, setWithinWindow] = useState(conversation.within_window)
   const [reply, setReply] = useState("")
+  // Respuesta citada: la burbuja elegida con "Responder".
+  const [replyingTo, setReplyingTo] = useState<QuotedMessageRef | null>(null)
+  const replyRef = useRef<HTMLTextAreaElement>(null)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState("")
   const [archiving, setArchiving] = useState(false)
@@ -76,10 +82,11 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
       const res = await fetch(`/api/admin/inbox/${conversation.id}/reply`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: reply.trim() }),
+        body: JSON.stringify({ text: reply.trim(), ...(replyingTo ? { reply_to_message_id: replyingTo.id } : {}) }),
       })
       if (res.ok) {
         setReply("")
+        setReplyingTo(null)
         const msgRes = await fetch(`/api/admin/inbox/${conversation.id}/messages`)
         if (msgRes.ok) setMessages(await msgRes.json())
       } else {
@@ -87,6 +94,8 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
         if (body.error === "window_closed") {
           setSendError("La ventana de 24h de WhatsApp está cerrada. El cliente debe enviarte un mensaje primero.")
           setWithinWindow(false)
+        } else if (body.error === "invalid_reply_to") {
+          setSendError("El mensaje citado ya no está disponible. Envíe la respuesta sin cita.")
         } else {
           setSendError("No se pudo enviar el mensaje. Intente nuevamente.")
         }
@@ -150,7 +159,14 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
       {/* Mensajes */}
       <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            onReply={mode === "human" && withinWindow ? () => {
+              setReplyingTo(quoteFromMessage(msg))
+              requestAnimationFrame(() => replyRef.current?.focus())
+            } : undefined}
+          />
         ))}
         <div ref={bottomRef} />
       </div>
@@ -171,14 +187,18 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
             Ventana de 24h cerrada — el cliente debe enviarte un mensaje para reabrir la ventana.
           </p>
         ) : (
-          <form onSubmit={handleSend} className="flex gap-2">
+          <form onSubmit={handleSend} className="flex flex-col">
+            {replyingTo && <ReplyingToBar quote={replyingTo} onCancel={() => setReplyingTo(null)} />}
+            <div className="flex gap-2">
             <Textarea
+              ref={replyRef}
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               placeholder="Escriba su respuesta..."
               rows={2}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e as unknown as React.FormEvent) }
+                if (e.key === "Escape" && replyingTo) { e.preventDefault(); setReplyingTo(null) }
               }}
               className="flex-1 resize-none"
             />
@@ -190,6 +210,7 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
             >
               <Send size={16} strokeWidth={1.6} />
             </Button>
+            </div>
           </form>
         )}
         {sendError && (
@@ -200,19 +221,27 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
   )
 }
 
-function MessageBubble({ message }: { message: InboxMessage }) {
+function MessageBubble({ message, onReply }: { message: InboxMessage; onReply?: () => void }) {
   const isOutbound = message.role === "assistant"
   const isHuman = message.source === "human"
   const isBot = message.source === "bot"
   const bodyText = bubbleText(message.text, message.attachments)
 
   return (
-    <div className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
+    <div id={bubbleDomId(message.id)} className={`group flex items-start gap-1 ${isOutbound ? "justify-end" : "justify-start"}`}>
+      {isOutbound && onReply && <ReplyButton onClick={onReply} />}
       <div className="max-w-[70%]">
         {isOutbound && (
           <p className="text-[10px] mb-1 text-right" style={{ color: "var(--ink-faint)" }}>
             {isHuman ? "Operador" : isBot ? "Bot" : "Asistente"}
           </p>
+        )}
+        {message.reply_to && (
+          <QuoteBlock
+            quote={message.reply_to}
+            outbound={isOutbound}
+            onOpen={(id) => document.getElementById(bubbleDomId(id))?.scrollIntoView({ behavior: "smooth", block: "center" })}
+          />
         )}
         <MessageAttachments attachments={message.attachments} />
         {bodyText && (
@@ -231,6 +260,7 @@ function MessageBubble({ message }: { message: InboxMessage }) {
           {formatTime(message.created_at)}
         </p>
       </div>
+      {!isOutbound && onReply && <ReplyButton onClick={onReply} />}
     </div>
   )
 }

@@ -363,6 +363,27 @@ export function esLimiteDisfrazado(status: number, body: string): boolean {
   }
 }
 
+/**
+ * Reintentos de un error TRANSITORIO (5xx de Alegra o de su gateway, corte de red, timeout).
+ * Sólo los usa el paginado del CATÁLOGO (ítems y categorías, GET idempotente) que lee la sync:
+ * la cuenta grande son ~750 páginas seguidas y un 503 en cualquiera tiraba la cuenta entera (no
+ * se sincronizó del 2 al 10/11/2026). Los demás listados (facturas, pagos) los mira alguien en
+ * pantalla y no esperan. Las escrituras NUNCA se reintentan acá: un 5xx puede haber creado el
+ * documento igual.
+ */
+const TRANSITORIO_RETRIES = 4
+/** Una página que no contesta en este tiempo se corta y se reintenta (sin esto, se cuelga). */
+const PAGINA_TIMEOUT_MS = 60_000
+
+/** ¿Vale la pena reintentar? 5xx, corte de red (`fetch failed`) o timeout. Nunca un 4xx. */
+export function esErrorTransitorio(r: { status?: number; error?: unknown }): boolean {
+  if (r.status !== undefined) return r.status >= 500 && r.status <= 599
+  const e = r.error
+  if (e instanceof TypeError) return true // undici: "fetch failed" (ECONNRESET, socket cerrado, DNS)
+  const name = (e as { name?: unknown } | null)?.name
+  return name === "TimeoutError" || name === "AbortError"
+}
+
 async function alegraFetch(
   config: TenantConfig,
   path: string,
@@ -377,25 +398,46 @@ async function alegraFetch(
     // gastar en reintentos las pocas requests por minuto que /contacts les deja al portal y
     // al bot.
     reintentos429?: number
+    // Cuántas veces reintentar un error transitorio (ver esErrorTransitorio). Default 0: sólo
+    // el paginado de listados lo pide, con timeout por request.
+    reintentosTransitorios?: number
   } = {},
 ) {
   const { onRequest } = extra
   const reintentos429 = extra.reintentos429 ?? RATE_LIMIT_RETRIES
+  const reintentosTransitorios = extra.reintentosTransitorios ?? 0
+  let transitorios = 0
   const url = new URL(`${ALEGRA_BASE}${path}`)
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
 
   for (let attempt = 0; ; attempt++) {
     onRequest?.()
-    const res = await fetch(url.toString(), {
-      method: init?.method ?? "GET",
-      headers: {
-        Authorization: authHeader(config),
-        Accept: "application/json",
-        ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
-      },
-      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
-      cache: "no-store",
-    })
+    let res: Response
+    try {
+      res = await fetch(url.toString(), {
+        method: init?.method ?? "GET",
+        headers: {
+          Authorization: authHeader(config),
+          Accept: "application/json",
+          ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
+        },
+        body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+        cache: "no-store",
+        ...(reintentosTransitorios > 0 ? { signal: AbortSignal.timeout(PAGINA_TIMEOUT_MS) } : {}),
+      })
+    } catch (error) {
+      if (transitorios < reintentosTransitorios && esErrorTransitorio({ error })) {
+        await sleep(esperaDeReintento(++transitorios, null))
+        continue
+      }
+      throw error
+    }
+
+    if (transitorios < reintentosTransitorios && esErrorTransitorio({ status: res.status })) {
+      await res.text().catch(() => "")
+      await sleep(esperaDeReintento(++transitorios, null))
+      continue
+    }
 
     // El 400 se lee acá para poder distinguir el límite disfrazado (ver esLimiteDisfrazado).
     const detail400 = res.status === 400 ? await res.text().catch(() => "") : null
@@ -443,10 +485,15 @@ async function fetchGrupo<T>(
   map: (raw: Record<string, unknown>) => T,
   extraParams: Record<string, string>,
   start: number,
+  reintentosTransitorios = 0,
 ): Promise<{ rows: T[]; siguiente: number; fin: boolean }> {
   const starts = Array.from({ length: PAGE_CONCURRENCY }, (_, i) => start + i * PAGE_SIZE)
   const pages = (await Promise.all(
-    starts.map((s) => alegraFetch(config, path, { ...extraParams, start: String(s), limit: String(PAGE_SIZE) })),
+    starts.map((s) =>
+      alegraFetch(config, path, { ...extraParams, start: String(s), limit: String(PAGE_SIZE) }, undefined, {
+        reintentosTransitorios,
+      }),
+    ),
   )) as Record<string, unknown>[][]
 
   const rows: T[] = []
@@ -470,11 +517,12 @@ async function fetchAllPages<T>(
   path: string,
   map: (raw: Record<string, unknown>) => T,
   extraParams: Record<string, string> = {},
+  reintentosTransitorios = 0,
 ): Promise<T[]> {
   const out: T[] = []
   let start = 0
   for (;;) {
-    const g = await fetchGrupo(config, path, map, extraParams, start)
+    const g = await fetchGrupo(config, path, map, extraParams, start, reintentosTransitorios)
     out.push(...g.rows)
     if (g.fin) return out
     start = g.siguiente
@@ -863,7 +911,7 @@ function mapRawBankAccount(raw: Record<string, unknown>): AlegraBankAccount {
 /** Todas las categorías de ítems del tenant. Para la sync. */
 export async function listAllCategories(config: TenantConfig): Promise<AlegraCategory[]> {
   if (config.alegraMock) return mockCategories
-  return fetchAllPages(config, "/item-categories", mapRawCategory)
+  return fetchAllPages(config, "/item-categories", mapRawCategory, {}, TRANSITORIO_RETRIES)
 }
 
 /**
@@ -877,7 +925,7 @@ export const PARAMS_ITEMS = { order_field: "id", order_direction: "ASC", fields:
 /** Todos los productos del tenant (modo advanced: trae categoría, inventario, precios). Para la sync. */
 export async function listAllItems(config: TenantConfig): Promise<AlegraProduct[]> {
   if (config.alegraMock) return mockItems
-  return fetchAllPages(config, "/items", mapRawItem, PARAMS_ITEMS)
+  return fetchAllPages(config, "/items", mapRawItem, PARAMS_ITEMS, TRANSITORIO_RETRIES)
 }
 
 export interface LoteItems {
@@ -897,7 +945,7 @@ export async function listItemsLote(config: TenantConfig, start: number): Promis
   if (config.alegraMock) {
     return start === 0 ? { items: mockItems, siguiente: mockItems.length, fin: true } : { items: [], siguiente: start, fin: true }
   }
-  const g = await fetchGrupo(config, "/items", mapRawItem, PARAMS_ITEMS, start)
+  const g = await fetchGrupo(config, "/items", mapRawItem, PARAMS_ITEMS, start, TRANSITORIO_RETRIES)
   return { items: g.rows, siguiente: g.siguiente, fin: g.fin }
 }
 

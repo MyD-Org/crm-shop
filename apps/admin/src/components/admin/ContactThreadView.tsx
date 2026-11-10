@@ -11,6 +11,9 @@ import { subscribeAssistOpen, getAssistOpen, setAssistOpen } from "@/lib/assist-
 import { MessageAttachments, bubbleText } from "./MessageAttachments"
 import { EmojiPicker, insertAt } from "./EmojiPicker"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
+import { QuoteBlock, ReplyButton, ReplyingToBar } from "./MessageQuote"
+import { bubbleDomId, canQuote, quoteFromMessage } from "@/lib/message-quote"
+import type { QuotedMessageRef } from "@/lib/inbox-api"
 
 const PAGE_SIZE = 30
 
@@ -41,6 +44,10 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
   // quede claro (en la lista y en el chip) que ahora la seguís vos.
   const [assignedOperatorId, setAssignedOperatorId] = useState<string | null>(contact.assigned_operator_id)
   const [reply, setReply] = useState("")
+  // Respuesta citada: la burbuja elegida con "Responder". Se manda con el próximo envío.
+  const [replyingTo, setReplyingTo] = useState<QuotedMessageRef | null>(null)
+  // Burbuja resaltada un momento al llegar a ella desde una cita.
+  const [highlightId, setHighlightId] = useState<string | null>(null)
   const [sendError, setSendError] = useState("")
   // Presupuesto pendiente de confirmar cuando "Enviar al canal" pisaría un borrador en curso.
   const [pendingBudget, setPendingBudget] = useState<string | null>(null)
@@ -304,11 +311,11 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
   //
   // Los 4xx con `error` (window_closed / no_recipient / channel_not_configured) son
   // deterministas y NO persistieron el mensaje: no hay id → sacamos la burbuja temp y avisamos.
-  async function postReply(text: string, tempId: string, suggestion: string | null): Promise<void> {
+  async function postReply(text: string, tempId: string, suggestion: string | null, replyTo: QuotedMessageRef | null): Promise<void> {
     try {
       const res = await fetch(`/api/admin/inbox/${convId}/reply`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, ...(replyTo ? { reply_to_message_id: replyTo.id } : {}) }),
       })
       const body = await res.json().catch(() => ({} as {
         id?: string
@@ -342,6 +349,8 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
       setMessages((prev) => prev.filter((m) => m.id !== tempId))
       if (body.error === "window_closed") {
         toast({ title: "Ventana cerrada", description: "La ventana de 24h de WhatsApp está cerrada. El cliente debe escribirte primero.", tone: "danger" })
+      } else if (body.error === "invalid_reply_to") {
+        toast({ title: "No se pudo enviar", description: "El mensaje citado ya no está disponible. Envíe la respuesta sin cita.", tone: "danger" })
       } else {
         toast({ title: "No se pudo enviar", description: "Vuelva a escribirlo e inténtelo nuevamente.", tone: "danger" })
       }
@@ -366,18 +375,42 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
     const tempMessage: ContactMessage = {
       id: tempId, conversation_id: convId, role: "assistant", source: "human",
       text, created_at: new Date().toISOString(), delivery_status: null, pending: true,
-      client_key: tempId,
+      client_key: tempId, reply_to: replyingTo,
     }
     setMessages((prev) => [...prev, tempMessage])
     stickBottom.current = true
 
     const suggestion = draftFromCopilot.current
     draftFromCopilot.current = null
+    const replyTo = replyingTo
     setReply("")
+    setReplyingTo(null)
     setSendError("")
 
-    void postReply(text, tempId, suggestion)
+    void postReply(text, tempId, suggestion, replyTo)
   }
+
+  // "Responder" sobre una burbuja: queda citada en el cuadro de respuesta y el foco va ahí.
+  function startReplyTo(message: ContactMessage) {
+    setReplyingTo(quoteFromMessage(message))
+    requestAnimationFrame(() => replyRef.current?.focus())
+  }
+
+  // Tocar una cita lleva al mensaje citado y lo resalta un momento. Si es anterior a lo
+  // cargado, se avisa: el historial viejo entra al subir en el hilo.
+  function openQuoted(messageId: string) {
+    const el = document.getElementById(bubbleDomId(messageId))
+    if (!el) {
+      toast({ title: "Mensaje anterior", description: "Desplácese hacia arriba para cargar mensajes anteriores.", tone: "neutral" })
+      return
+    }
+    el.scrollIntoView({ behavior: "smooth", block: "center" })
+    setHighlightId(messageId)
+    window.setTimeout(() => setHighlightId((id) => (id === messageId ? null : id)), 1600)
+  }
+
+  // Sólo se puede citar cuando el operador puede escribir (modo humano, ventana abierta).
+  const canReply = mode === "human" && contact.within_window
 
   async function handleRetry(message: ContactMessage): Promise<boolean> {
     const res = await fetch(`/api/admin/inbox/${message.conversation_id}/messages/${message.id}/retry`, {
@@ -555,7 +588,15 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
           return (
             <div key={msg.client_key ?? msg.id} className="flex flex-col gap-3">
               {newSession && <SessionDivider date={msg.created_at} />}
-              <MessageBubble message={msg} channelAccountId={contact.channel_account_id} onRetry={handleRetry} onDismiss={handleDismiss} />
+              <MessageBubble
+                message={msg}
+                channelAccountId={contact.channel_account_id}
+                onRetry={handleRetry}
+                onDismiss={handleDismiss}
+                onReply={canReply && canQuote(msg) ? () => startReplyTo(msg) : undefined}
+                onOpenQuote={openQuoted}
+                highlighted={highlightId === msg.id}
+              />
             </div>
           )
         })}
@@ -587,6 +628,7 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
           </p>
         ) : (
           <form onSubmit={handleSend} className="flex flex-col -mt-2">
+            {replyingTo && <ReplyingToBar quote={replyingTo} onCancel={() => setReplyingTo(null)} />}
             {/* Barra arrastrable: redimensiona el alto del área de escritura (arrastrar ↕). */}
             <div
               onMouseDown={startResizeCompose}
@@ -611,6 +653,8 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
                 placeholder="Escriba su respuesta..."
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e as unknown as React.FormEvent) }
+                  // Escape cancela la cita sin borrar lo escrito.
+                  if (e.key === "Escape" && replyingTo) { e.preventDefault(); setReplyingTo(null) }
                 }}
                 className="flex-1 resize-none"
                 style={{ height: composeHeight }}
@@ -714,11 +758,15 @@ function SessionDivider({ date }: { date: string }) {
   )
 }
 
-function MessageBubble({ message, channelAccountId, onRetry, onDismiss }: {
+function MessageBubble({ message, channelAccountId, onRetry, onDismiss, onReply, onOpenQuote, highlighted }: {
   message: ContactMessage
   channelAccountId?: string | null
   onRetry: (m: ContactMessage) => Promise<boolean>
   onDismiss: (m: ContactMessage) => Promise<boolean>
+  /** Ausente = no se puede citar ahora (modo bot, ventana cerrada o burbuja en vuelo). */
+  onReply?: () => void
+  onOpenQuote: (messageId: string) => void
+  highlighted: boolean
 }) {
   const isOutbound = message.role === "assistant"
   const isHuman = message.source === "human"
@@ -745,13 +793,22 @@ function MessageBubble({ message, channelAccountId, onRetry, onDismiss }: {
   }
 
   return (
-    <div className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
-      <div className="max-w-[85%] md:max-w-[70%]">
+    <div
+      id={canQuote(message) ? bubbleDomId(message.id) : undefined}
+      className={`group flex items-start gap-1 ${isOutbound ? "justify-end" : "justify-start"}`}
+    >
+      {/* El botón va del lado de afuera de la burbuja: a la izquierda en las salientes. */}
+      {isOutbound && onReply && <ReplyButton onClick={onReply} />}
+      <div
+        className="max-w-[85%] md:max-w-[70%] rounded-[var(--radius)] transition-shadow"
+        style={highlighted ? { boxShadow: "0 0 0 2px var(--blue)" } : undefined}
+      >
         {isOutbound && (
           <p className="text-[10px] mb-1 text-right" style={{ color: "var(--ink-faint)" }}>
             {isHuman ? "Operador" : isBot ? "Bot" : "Asistente"}
           </p>
         )}
+        {message.reply_to && <QuoteBlock quote={message.reply_to} outbound={isOutbound} onOpen={onOpenQuote} />}
         <MessageAttachments attachments={message.attachments} channelAccountId={channelAccountId} />
         {/* Sin caption, el adjunto se explica solo: una burbuja vacía debajo del
             reproductor o de la foto sería ruido. */}
@@ -813,6 +870,7 @@ function MessageBubble({ message, channelAccountId, onRetry, onDismiss }: {
           </p>
         ) : null}
       </div>
+      {!isOutbound && onReply && <ReplyButton onClick={onReply} />}
     </div>
   )
 }

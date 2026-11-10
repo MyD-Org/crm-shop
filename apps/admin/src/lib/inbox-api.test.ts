@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest"
-import { channelLabel, contactRowKey, contactThreadHref } from "./inbox-api"
+import { describe, it, expect, vi } from "vitest"
+import { channelLabel, contactRowKey, contactThreadHref, sendReply } from "./inbox-api"
 
 describe("channelLabel", () => {
   it("mapea los canales conocidos a su nombre legible", () => {
@@ -35,5 +35,21 @@ describe("hilo de un contacto por número", () => {
   it("el mismo contacto en dos números da dos keys distintas", () => {
     expect(contactRowKey({ end_user_id: "u1", channel_account_id: cuenta }))
       .not.toBe(contactRowKey({ end_user_id: "u1", channel_account_id: "otra" }))
+  })
+})
+
+describe("sendReply con cita", () => {
+  it("manda reply_to_message_id y devuelve invalid_reply_to si ai-api lo rechaza", async () => {
+    vi.stubEnv("STAFF_TOKEN_SECRET", "x".repeat(40))
+    const bodies: unknown[] = []
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(init.body as string))
+      return new Response(JSON.stringify({ error: "invalid_reply_to" }), { status: 400 })
+    }))
+    const r = await sendReply("http://ai.test", "ai-a", "conv-1", "hola", "citado-1")
+    expect(bodies[0]).toEqual({ text: "hola", reply_to_message_id: "citado-1" })
+    expect(r).toEqual({ ok: false, error: "invalid_reply_to" })
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 })

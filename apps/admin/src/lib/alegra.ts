@@ -365,10 +365,11 @@ export function esLimiteDisfrazado(status: number, body: string): boolean {
 
 /**
  * Reintentos de un error TRANSITORIO (5xx de Alegra o de su gateway, corte de red, timeout).
- * Sólo los usa el paginado de listados (GET, idempotente): la sync del catálogo grande lee ~750
- * páginas seguidas y un solo 502 en cualquiera tiraba la cuenta entera, que dejó de
- * sincronizarse del 2 al 10/11/2026. Las escrituras NUNCA se reintentan acá: un 5xx puede haber
- * creado el documento igual.
+ * Sólo los usa el paginado del CATÁLOGO (ítems y categorías, GET idempotente) que lee la sync:
+ * la cuenta grande son ~750 páginas seguidas y un 503 en cualquiera tiraba la cuenta entera (no
+ * se sincronizó del 2 al 10/11/2026). Los demás listados (facturas, pagos) los mira alguien en
+ * pantalla y no esperan. Las escrituras NUNCA se reintentan acá: un 5xx puede haber creado el
+ * documento igual.
  */
 const TRANSITORIO_RETRIES = 4
 /** Una página que no contesta en este tiempo se corta y se reintenta (sin esto, se cuelga). */
@@ -484,12 +485,13 @@ async function fetchGrupo<T>(
   map: (raw: Record<string, unknown>) => T,
   extraParams: Record<string, string>,
   start: number,
+  reintentosTransitorios = 0,
 ): Promise<{ rows: T[]; siguiente: number; fin: boolean }> {
   const starts = Array.from({ length: PAGE_CONCURRENCY }, (_, i) => start + i * PAGE_SIZE)
   const pages = (await Promise.all(
     starts.map((s) =>
       alegraFetch(config, path, { ...extraParams, start: String(s), limit: String(PAGE_SIZE) }, undefined, {
-        reintentosTransitorios: TRANSITORIO_RETRIES,
+        reintentosTransitorios,
       }),
     ),
   )) as Record<string, unknown>[][]
@@ -515,11 +517,12 @@ async function fetchAllPages<T>(
   path: string,
   map: (raw: Record<string, unknown>) => T,
   extraParams: Record<string, string> = {},
+  reintentosTransitorios = 0,
 ): Promise<T[]> {
   const out: T[] = []
   let start = 0
   for (;;) {
-    const g = await fetchGrupo(config, path, map, extraParams, start)
+    const g = await fetchGrupo(config, path, map, extraParams, start, reintentosTransitorios)
     out.push(...g.rows)
     if (g.fin) return out
     start = g.siguiente
@@ -908,7 +911,7 @@ function mapRawBankAccount(raw: Record<string, unknown>): AlegraBankAccount {
 /** Todas las categorías de ítems del tenant. Para la sync. */
 export async function listAllCategories(config: TenantConfig): Promise<AlegraCategory[]> {
   if (config.alegraMock) return mockCategories
-  return fetchAllPages(config, "/item-categories", mapRawCategory)
+  return fetchAllPages(config, "/item-categories", mapRawCategory, {}, TRANSITORIO_RETRIES)
 }
 
 /**
@@ -922,7 +925,7 @@ export const PARAMS_ITEMS = { order_field: "id", order_direction: "ASC", fields:
 /** Todos los productos del tenant (modo advanced: trae categoría, inventario, precios). Para la sync. */
 export async function listAllItems(config: TenantConfig): Promise<AlegraProduct[]> {
   if (config.alegraMock) return mockItems
-  return fetchAllPages(config, "/items", mapRawItem, PARAMS_ITEMS)
+  return fetchAllPages(config, "/items", mapRawItem, PARAMS_ITEMS, TRANSITORIO_RETRIES)
 }
 
 export interface LoteItems {
@@ -942,7 +945,7 @@ export async function listItemsLote(config: TenantConfig, start: number): Promis
   if (config.alegraMock) {
     return start === 0 ? { items: mockItems, siguiente: mockItems.length, fin: true } : { items: [], siguiente: start, fin: true }
   }
-  const g = await fetchGrupo(config, "/items", mapRawItem, PARAMS_ITEMS, start)
+  const g = await fetchGrupo(config, "/items", mapRawItem, PARAMS_ITEMS, start, TRANSITORIO_RETRIES)
   return { items: g.rows, siguiente: g.siguiente, fin: g.fin }
 }
 

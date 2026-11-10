@@ -363,6 +363,26 @@ export function esLimiteDisfrazado(status: number, body: string): boolean {
   }
 }
 
+/**
+ * Reintentos de un error TRANSITORIO (5xx de Alegra o de su gateway, corte de red, timeout).
+ * Sólo los usa el paginado de listados (GET, idempotente): la sync del catálogo grande lee ~750
+ * páginas seguidas y un solo 502 en cualquiera tiraba la cuenta entera, que dejó de
+ * sincronizarse del 2 al 10/11/2026. Las escrituras NUNCA se reintentan acá: un 5xx puede haber
+ * creado el documento igual.
+ */
+const TRANSITORIO_RETRIES = 4
+/** Una página que no contesta en este tiempo se corta y se reintenta (sin esto, se cuelga). */
+const PAGINA_TIMEOUT_MS = 60_000
+
+/** ¿Vale la pena reintentar? 5xx, corte de red (`fetch failed`) o timeout. Nunca un 4xx. */
+export function esErrorTransitorio(r: { status?: number; error?: unknown }): boolean {
+  if (r.status !== undefined) return r.status >= 500 && r.status <= 599
+  const e = r.error
+  if (e instanceof TypeError) return true // undici: "fetch failed" (ECONNRESET, socket cerrado, DNS)
+  const name = (e as { name?: unknown } | null)?.name
+  return name === "TimeoutError" || name === "AbortError"
+}
+
 async function alegraFetch(
   config: TenantConfig,
   path: string,
@@ -377,25 +397,46 @@ async function alegraFetch(
     // gastar en reintentos las pocas requests por minuto que /contacts les deja al portal y
     // al bot.
     reintentos429?: number
+    // Cuántas veces reintentar un error transitorio (ver esErrorTransitorio). Default 0: sólo
+    // el paginado de listados lo pide, con timeout por request.
+    reintentosTransitorios?: number
   } = {},
 ) {
   const { onRequest } = extra
   const reintentos429 = extra.reintentos429 ?? RATE_LIMIT_RETRIES
+  const reintentosTransitorios = extra.reintentosTransitorios ?? 0
+  let transitorios = 0
   const url = new URL(`${ALEGRA_BASE}${path}`)
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
 
   for (let attempt = 0; ; attempt++) {
     onRequest?.()
-    const res = await fetch(url.toString(), {
-      method: init?.method ?? "GET",
-      headers: {
-        Authorization: authHeader(config),
-        Accept: "application/json",
-        ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
-      },
-      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
-      cache: "no-store",
-    })
+    let res: Response
+    try {
+      res = await fetch(url.toString(), {
+        method: init?.method ?? "GET",
+        headers: {
+          Authorization: authHeader(config),
+          Accept: "application/json",
+          ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
+        },
+        body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+        cache: "no-store",
+        ...(reintentosTransitorios > 0 ? { signal: AbortSignal.timeout(PAGINA_TIMEOUT_MS) } : {}),
+      })
+    } catch (error) {
+      if (transitorios < reintentosTransitorios && esErrorTransitorio({ error })) {
+        await sleep(esperaDeReintento(++transitorios, null))
+        continue
+      }
+      throw error
+    }
+
+    if (transitorios < reintentosTransitorios && esErrorTransitorio({ status: res.status })) {
+      await res.text().catch(() => "")
+      await sleep(esperaDeReintento(++transitorios, null))
+      continue
+    }
 
     // El 400 se lee acá para poder distinguir el límite disfrazado (ver esLimiteDisfrazado).
     const detail400 = res.status === 400 ? await res.text().catch(() => "") : null
@@ -446,7 +487,11 @@ async function fetchGrupo<T>(
 ): Promise<{ rows: T[]; siguiente: number; fin: boolean }> {
   const starts = Array.from({ length: PAGE_CONCURRENCY }, (_, i) => start + i * PAGE_SIZE)
   const pages = (await Promise.all(
-    starts.map((s) => alegraFetch(config, path, { ...extraParams, start: String(s), limit: String(PAGE_SIZE) })),
+    starts.map((s) =>
+      alegraFetch(config, path, { ...extraParams, start: String(s), limit: String(PAGE_SIZE) }, undefined, {
+        reintentosTransitorios: TRANSITORIO_RETRIES,
+      }),
+    ),
   )) as Record<string, unknown>[][]
 
   const rows: T[] = []

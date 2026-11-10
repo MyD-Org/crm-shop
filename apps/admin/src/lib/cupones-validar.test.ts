@@ -36,11 +36,12 @@ describe("validarPromocion", () => {
     expect(errores({ ...base, nombre: " " })).toContain("Ingrese un nombre para la promoción.")
   })
 
-  it("genérica exige código de 4 a 24 caracteres alfanuméricos", () => {
+  it("genérica exige código de 3 a 24 caracteres alfanuméricos", () => {
     expect(validarPromocion({ ...base, tipo: "generica", codigo: "" }).ok).toBe(false)
     expect(errores({ ...base, tipo: "generica", codigo: "AB" })).toContain(
-      "Ingrese un código de 4 a 24 letras o números.",
+      "Ingrese un código de 3 a 24 letras o números.",
     )
+    expect(validarPromocion({ ...base, tipo: "generica", codigo: "luz", prefijo: undefined }).ok).toBe(true)
     const r = validarPromocion({ ...base, tipo: "generica", codigo: "apertura10", prefijo: undefined })
     expect(r.ok).toBe(true)
     if (r.ok) {

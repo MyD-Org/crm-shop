@@ -372,6 +372,7 @@ describe("cupón en el carrito", () => {
     expect(limpiarCupon("APERTURA 10")).toBe("APERTURA 10");
     expect(limpiarCupon("<script>")).toBeNull();
     expect(limpiarCupon("ab")).toBeNull();
+    expect(limpiarCupon("LUZ")).toBe("LUZ");
     expect(limpiarCupon("x".repeat(40))).toBeNull();
     expect(limpiarCupon(42)).toBeNull();
     expect(limpiarCupon(null)).toBeNull();

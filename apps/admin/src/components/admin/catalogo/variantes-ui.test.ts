@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import type { ProductoDto, VarianteDto } from "./tipos"
 import {
+  stockSucursalesDelModelo,
+  textoStockPorSucursal,
   AVISO_MODELOS,
   candidatosDeModelo,
   candidatosParaSumar,
@@ -171,5 +173,28 @@ describe("interruptorTienda", () => {
   })
   it("textos en usted", () => {
     expect(TEXTO_MOSTRAR_EN_TIENDA).toBe("Mostrar en la tienda")
+  })
+})
+
+describe("stock por sucursal de las variantes", () => {
+  const sucursales = [
+    { slug: "igz", nombre: "Puerto Iguazú" },
+    { slug: "mdp", nombre: "Mar del Plata" },
+  ]
+  const fila = (sucursal: string, stock: string) => ({ sucursal, stock, leidoAt: null })
+
+  it("muestra cada sucursal por separado y «—» sin dato", () => {
+    expect(textoStockPorSucursal([fila("igz", "0"), fila("mdp", "3")], sucursales)).toBe("Puerto Iguazú 0 · Mar del Plata 3")
+    expect(textoStockPorSucursal([fila("mdp", "11")], sucursales)).toBe("Puerto Iguazú — · Mar del Plata 11")
+  })
+
+  it("el modelo suma por sucursal sólo las variantes activas", () => {
+    const v = (stocks: ReturnType<typeof fila>[], status = "active") => ({ stockSucursales: stocks, status, alegraStatus: "active" })
+    const filas = stockSucursalesDelModelo([
+      v([fila("igz", "0"), fila("mdp", "11")]),
+      v([fila("igz", "0"), fila("mdp", "5")]),
+      v([fila("mdp", "100")], "inactive"),
+    ])
+    expect(textoStockPorSucursal(filas, sucursales)).toBe("Puerto Iguazú 0 · Mar del Plata 16")
   })
 })

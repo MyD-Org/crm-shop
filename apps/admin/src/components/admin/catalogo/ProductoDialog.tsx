@@ -366,7 +366,7 @@ export function ProductoDialog({ producto, categorias, tags, modalidades, sucurs
               modelo. Cada una conserva su propio precio y stock, y puede tener su foto propia. Para ocultar una variante,
               désela de baja en Alegra.
             </p>
-            <ListaVariantes variantes={producto.variantes} extra={(v) => <FotoPropiaVariante variante={v} />} />
+            <ListaVariantes variantes={producto.variantes} sucursales={sucursales.filter((s) => s.activa)} extra={(v) => <FotoPropiaVariante variante={v} />} />
           </section>
         )}
 

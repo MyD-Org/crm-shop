@@ -63,6 +63,43 @@ export function stockTotal(variantes: Pick<VarianteDto, "stock" | "status" | "al
   return total
 }
 
+type StockSucursales = Pick<VarianteDto, "stockSucursales">["stockSucursales"]
+
+/**
+ * Stock de cada sucursal, separado: "Puerto Iguazú 0 · Mar del Plata 3". «—» = la sucursal no tiene
+ * fila (sin dato). Con una sola sucursal no hace falta: el stock de la fila ya es el de esa sucursal.
+ */
+export function textoStockPorSucursal(
+  stockSucursales: StockSucursales,
+  sucursales: { slug: string; nombre: string }[],
+): string {
+  return sucursales
+    .map((s) => {
+      const fila = stockSucursales.find((f) => f.sucursal === s.slug)
+      const n = fila ? Number(fila.stock) : NaN
+      return `${s.nombre} ${Number.isFinite(n) ? n.toLocaleString("es-AR", { maximumFractionDigits: 2 }) : "—"}`
+    })
+    .join(" · ")
+}
+
+/**
+ * Stock del modelo por sucursal: suma, en cada sucursal, el de las variantes activas que tienen dato
+ * ahí. Devuelve filas con el mismo formato que `stockSucursales` (sin fila = ninguna variante tiene dato).
+ */
+export function stockSucursalesDelModelo(
+  variantes: Pick<VarianteDto, "stockSucursales" | "status" | "alegraStatus">[],
+): StockSucursales {
+  const suma = new Map<string, number>()
+  for (const v of variantes) {
+    if (!estaActiva(v)) continue
+    for (const f of v.stockSucursales) {
+      const n = Number(f.stock)
+      if (Number.isFinite(n)) suma.set(f.sucursal, (suma.get(f.sucursal) ?? 0) + n)
+    }
+  }
+  return [...suma].map(([sucursal, n]) => ({ sucursal, stock: String(n), leidoAt: null }))
+}
+
 /** Cuántas variantes están dadas de baja en Alegra. */
 export const cantidadInactivas = (variantes: Pick<VarianteDto, "status" | "alegraStatus">[]): number =>
   variantes.filter((v) => !estaActiva(v)).length

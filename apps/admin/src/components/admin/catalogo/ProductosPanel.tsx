@@ -23,7 +23,7 @@ import { ORDEN_DESTACADO_SIN_POSICION, reordenarDisponible } from "./destacado"
 import { SincronizarAlegra } from "./SincronizarAlegra"
 import { GrupoCelda } from "./GrupoFila"
 import { SumarAlGrupoDialog } from "./SumarAlGrupoDialog"
-import { AVISO_MODELOS, TEXTO_NO_SE_VENDE, esModelo, esSuelto, resumenPrecio, stockTotal } from "./variantes-ui"
+import { AVISO_MODELOS, TEXTO_NO_SE_VENDE, esModelo, esSuelto, resumenPrecio, stockSucursalesDelModelo, stockTotal, textoStockPorSucursal } from "./variantes-ui"
 import { AyudaTooltip } from "../AyudaTooltip"
 import {
   AYUDA_CUENTA_ORIGEN,
@@ -383,6 +383,7 @@ export function ProductosPanel({ categorias, tags, modalidades, cuentas, sucursa
               onCambio()
             }}
             onError={setError}
+            sucursales={sucursalesActivas}
           />
         ) : (
           cabecera
@@ -438,11 +439,24 @@ export function ProductosPanel({ categorias, tags, modalidades, cuentas, sucursa
       className: "tabular-nums text-xs",
       render: (p) => {
         if (p.tipo === "padre") {
-          const total = stockTotal(p.variantes)
+          // Con varias sucursales, el total suma todas (el `stock` de la variante es sólo el de la principal).
+          const porSucursal = stockSucursalesDelModelo(p.variantes)
+          const total = hayVariasSucursales
+            ? porSucursal.length
+              ? porSucursal.reduce((a, f) => a + Number(f.stock), 0)
+              : null
+            : stockTotal(p.variantes)
           return (
-            <div style={{ color: total ? "var(--ink-soft)" : "var(--ink-faint)" }}>
-              {total === null ? "Sin dato" : `${total.toLocaleString("es-AR", { maximumFractionDigits: 2 })} en total`}
-            </div>
+            <>
+              <div style={{ color: total ? "var(--ink-soft)" : "var(--ink-faint)" }}>
+                {total === null ? "Sin dato" : `${total.toLocaleString("es-AR", { maximumFractionDigits: 2 })} en total`}
+              </div>
+              {hayVariasSucursales && (
+                <div className="whitespace-nowrap" style={{ color: "var(--ink-faint)" }}>
+                  {textoStockPorSucursal(porSucursal, sucursalesActivas)}
+                </div>
+              )}
+            </>
           )
         }
         const s = stockDe(p.stock)

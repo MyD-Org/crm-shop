@@ -43,9 +43,10 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    # Sin tope por función: la principal de Central Led sola tarda ~5 min y el total, unos
-    # minutos más. Esto acota cuánto retiene el grupo compartido si algo se cuelga.
-    timeout-minutes: 45
+    # Sin tope por función. La principal de Central Led (~22.000 ítems) tarda ~25 min con Alegra
+    # normal y más de 45 cuando Alegra anda lento (10/11/2026 se cortó a los 15.000). Esto acota
+    # cuánto retiene el grupo compartido si algo se cuelga.
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: apps/admin

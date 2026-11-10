@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight } from "lucide-react"
 import { Badge, Button, Dialog, Switch, Tooltip } from "@myd-org/ui"
-import { api, ErrorApi, precioDeLista, stockDe, type ProductoDto, type VarianteDto } from "./tipos"
+import { api, ErrorApi, precioDeLista, stockDe, type ProductoDto, type SucursalOpcionDto, type VarianteDto } from "./tipos"
 import {
   AYUDA_NO_SE_VENDE,
   TEXTO_NO_SE_VENDE,
@@ -14,6 +14,7 @@ import {
   nombreDeVariante,
   textoCantidadVariantes,
   textoQuitar,
+  textoStockPorSucursal,
 } from "./variantes-ui"
 
 /**
@@ -30,9 +31,11 @@ interface CeldaProps {
   onCambio: () => void
   /** Error para mostrar en el panel (no se pierde si el diálogo se cierra). */
   onError: (mensaje: string) => void
+  /** Sucursales activas: con más de una, el stock de cada variante se muestra por sucursal. */
+  sucursales?: SucursalOpcionDto[]
 }
 
-export function GrupoCelda({ producto, cabecera, onCambio, onError }: CeldaProps) {
+export function GrupoCelda({ producto, cabecera, onCambio, onError, sucursales }: CeldaProps) {
   const [abierto, setAbierto] = useState(false)
   const [quitando, setQuitando] = useState<VarianteDto | null>(null)
   const [enCurso, setEnCurso] = useState(false)
@@ -82,7 +85,7 @@ export function GrupoCelda({ producto, cabecera, onCambio, onError }: CeldaProps
       </div>
       {abierto && (
         <div onClick={(e) => e.stopPropagation()} className="mt-2">
-          <ListaVariantes variantes={producto.variantes} onQuitar={(v) => setQuitando(v)} onCambioTienda={onCambio} />
+          <ListaVariantes variantes={producto.variantes} sucursales={sucursales} onQuitar={(v) => setQuitando(v)} onCambioTienda={onCambio} />
         </div>
       )}
 
@@ -122,16 +125,20 @@ interface ListaProps {
   onCambioTienda?: () => void
   /** Algo más por variante (en el diálogo: el editor de la foto propia). */
   extra?: (variante: VarianteDto) => ReactNode
+  /** Sucursales activas: con más de una, el stock se muestra separado por sucursal. */
+  sucursales?: SucursalOpcionDto[]
 }
 
 /** La lista de opciones de un modelo. Sólo lectura: lo de Alegra no se edita desde acá. */
-export function ListaVariantes({ variantes, onQuitar, onCambioTienda, extra }: ListaProps) {
+export function ListaVariantes({ variantes, onQuitar, onCambioTienda, extra, sucursales = [] }: ListaProps) {
+  const porSucursal = sucursales.length > 1
   if (variantes.length === 0) return null
   return (
     <ul className="flex flex-col gap-1.5" aria-label="Variantes del modelo">
       {variantes.map((v) => {
         const precio = precioDeLista(v.prices)
         const stock = stockDe(v.stock)
+        const hayStock = porSucursal ? v.stockSucursales.some((f) => Number(f.stock) > 0) : !!stock?.hay
         const activa = estaActiva(v)
         return (
           <li
@@ -149,8 +156,8 @@ export function ListaVariantes({ variantes, onQuitar, onCambioTienda, extra }: L
               <span className="text-xs tabular-nums" style={{ color: "var(--ink-soft)" }}>
                 {precio ?? "Sin precio"}
               </span>
-              <span className="text-xs tabular-nums" style={{ color: stock?.hay ? "var(--ink-soft)" : "var(--ink-faint)" }}>
-                Stock: {stock ? stock.texto : "sin dato"}
+              <span className="text-xs tabular-nums" style={{ color: hayStock ? "var(--ink-soft)" : "var(--ink-faint)" }}>
+                Stock: {porSucursal ? textoStockPorSucursal(v.stockSucursales, sucursales) : stock ? stock.texto : "sin dato"}
               </span>
               {!activa && <Badge tone="warning">De baja en Alegra</Badge>}
               {v.manual && !v.esAncla && <Badge tone="info">Sumado a mano</Badge>}

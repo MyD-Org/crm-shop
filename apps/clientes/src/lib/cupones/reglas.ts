@@ -14,11 +14,11 @@ import type { ContextoCupon, CuponAplicado, CuponPedido, MotivoCupon, OpcionCupo
 const AVISO_CAMPANIA = "El descuento no se suma a productos con precio promocional.";
 const AVISO_INVITADO = "Se aplicará al confirmar si corresponde.";
 
-/** Mayúsculas y sólo [A-Z0-9], de 4 a 24 caracteres (la misma clave que `codigo_norm` del CRM). */
+/** Mayúsculas y sólo [A-Z0-9], de 3 a 24 caracteres (la misma clave que `codigo_norm` del CRM). */
 export function normalizarCodigo(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const n = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return n.length >= 4 && n.length <= 24 ? n : null;
+  return n.length >= 3 && n.length <= 24 ? n : null;
 }
 
 /** Pausada se muestra como vencida al comprador; fin y `venceEn` son exclusivos. */

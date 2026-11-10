@@ -147,7 +147,7 @@ export const TEXTOS_CUPONES = {
   tipoGenerica: "Genérica (un código para todos)",
   tipoUnicos: "Códigos únicos (uno por persona)",
   codigo: "Código",
-  codigoAyuda: "De 4 a 24 letras o números. Mayúsculas y guiones dan igual.",
+  codigoAyuda: "De 3 a 24 letras o números. Mayúsculas y guiones dan igual.",
   prefijo: "Prefijo",
   prefijoAyuda: "De 2 a 8 letras. Los códigos quedan como LUZ-7KQ2M.",
   venceDias: "Vence a los N días de emitido (opcional)",

@@ -45,7 +45,7 @@ export const NOMBRE_MAX = 80
 export const CONDICIONES_MAX = 2000
 export const PCT_MAX = 50
 export const DIAS_MAX = 365
-const CODIGO_RE = /^[A-Z0-9]{4,24}$/
+const CODIGO_RE = /^[A-Z0-9]{3,24}$/
 const PREFIJO_RE = /^[A-Z]{2,8}$/
 
 function fecha(v: unknown): Date | null {
@@ -86,7 +86,7 @@ export function validarPromocion(e: unknown): { ok: true; valor: PromocionEntrad
   let prefijo: string | undefined
   if (tipo === "generica") {
     codigo = normalizarCodigo(texto(o.codigo))
-    if (!CODIGO_RE.test(codigo)) agregar("Ingrese un código de 4 a 24 letras o números.")
+    if (!CODIGO_RE.test(codigo)) agregar("Ingrese un código de 3 a 24 letras o números.")
   }
   if (tipo === "unicos") {
     prefijo = texto(o.prefijo).toUpperCase()

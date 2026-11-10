@@ -138,7 +138,7 @@ describe("rutas del inbox", () => {
 
     it("responder pasa el tenant de la sesión y el texto recortado", async () => {
       await replyRoute(jsonReq({ text: "  hola  " }), convParams)
-      expect(api.sendReply).toHaveBeenCalledWith(AI_URL, AI_TENANT, CONV, "hola")
+      expect(api.sendReply).toHaveBeenCalledWith(AI_URL, AI_TENANT, CONV, "hola", undefined)
     })
 
     it("si el tenant no está configurado corta con 503 y no llama a la ai-api", async () => {

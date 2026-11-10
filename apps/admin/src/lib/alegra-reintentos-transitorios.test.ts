@@ -104,3 +104,13 @@ describe("fuera del paginado no cambia", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })
+
+describe("los listados que no son del catálogo no reintentan", () => {
+  it("un 500 al listar facturas falla de una", async () => {
+    const { listInvoicesByContact } = await import("./alegra")
+    const fetchMock = vi.fn().mockImplementation(async () => respuesta(500, "boom"))
+    vi.stubGlobal("fetch", fetchMock)
+    await expect(listInvoicesByContact(CONFIG, "1")).rejects.toBeInstanceOf(AlegraHttpError)
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(4)
+  })
+})

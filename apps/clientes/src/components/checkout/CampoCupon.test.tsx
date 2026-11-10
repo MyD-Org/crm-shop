@@ -40,9 +40,9 @@ describe("CampoCupon", () => {
     expect(h).toContain('aria-label="Quitar el cupón LUZ-7KQ2M"');
   });
 
-  it("el formato válido es el del carrito: menos de 4 letras o números no llega al servidor", async () => {
+  it("el formato válido es el del carrito: menos de 3 letras o números no llega al servidor", async () => {
     const { limpiarCupon } = await import("@/lib/carrito-cliente");
-    expect(limpiarCupon("jbj")).toBeNull();
-    expect(limpiarCupon("jbjx")).toBe("jbjx");
+    expect(limpiarCupon("jb")).toBeNull();
+    expect(limpiarCupon("jbj")).toBe("jbj");
   });
 });

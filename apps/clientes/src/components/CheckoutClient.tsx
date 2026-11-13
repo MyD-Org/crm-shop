@@ -995,7 +995,9 @@ export function CheckoutClient({
     cotizacion.lineas.length > 0 &&
     // Al cambiarle el medio a un pedido que ya existe, el servidor usa sus datos y su entrega: sólo
     // cuentan el medio y las cuotas (ver `lib/cambiar-medio-pago.ts`).
-    (pedidoACambiar !== null || (datosCompletos && facturacionCompleta && (!aDomicilio || envioDisponible) && !sinUbicarPendiente)) &&
+    (pedidoACambiar !== null || (datosCompletos && facturacionCompleta && (!aDomicilio || envioDisponible))) &&
+    // Envío por zona: con la dirección sin ubicar hay que elegir una de la lista o seguir a coordinar.
+    (pedidoACambiar !== null || !sinUbicarPendiente) &&
     pasoActual === pasoFinal &&
     !enviando;
 

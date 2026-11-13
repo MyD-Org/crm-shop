@@ -19,6 +19,7 @@ const DIAS = [
   { n: 3, nombre: "Miércoles" },
   { n: 4, nombre: "Jueves" },
   { n: 5, nombre: "Viernes" },
+  { n: 6, nombre: "Sábado" },
 ]
 const SIN_ORIGEN = "__sin_origen__"
 const TITULO = "text-xs font-semibold uppercase tracking-wider"

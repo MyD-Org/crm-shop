@@ -123,6 +123,16 @@ describe("envío rápido: nombre del método y horario de entrega", () => {
     expect(llegadaEstimada(horario, viernes, true, "antes de las 21 hs").texto).toBe("Llega el lunes 16/11 antes de las 21 hs");
   });
 
+  it("método con sábado: sábado 14/11 a las 8:00 llega hoy; después del corte, el lunes", () => {
+    const conSabado = { dias: [1, 2, 3, 4, 5, 6], horaCorte: "09:00", margenMin: 0 };
+    const sabado8 = new Date("2026-11-14T11:00:00Z");
+    const sabado10 = new Date("2026-11-14T13:00:00Z");
+    expect(llegadaEstimada(conSabado, sabado8).texto).toBe("Llega hoy");
+    expect(llegadaEstimada(conSabado, sabado10).texto).toBe("Llega el lunes 16/11");
+    // Sin sábado (como antes) el sábado de 8:00 tampoco entrega el mismo día.
+    expect(llegadaEstimada(horario, sabado8).texto).toBe("Llega el lunes 16/11");
+  });
+
   it("sin horario (o vacío): «Llega el lunes 16/11 por $ …»", () => {
     const viernes = new Date("2026-11-13T15:00:00Z");
     for (const h of [undefined, "", "  "]) {

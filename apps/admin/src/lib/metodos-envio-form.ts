@@ -152,15 +152,17 @@ export function formACuerpo(f: FormMetodo) {
   }
 }
 
-const NOMBRES_DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes"]
+const NOMBRES_DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado"]
 const pesos = (n: number) => `$${n.toLocaleString("es-AR", { maximumFractionDigits: 2 })}`
 
 /** Cómo funciona el método, en lenguaje simple, para la lista. */
 export function resumenMetodo(m: MetodoEnvioDto): string[] {
   const dias =
-    m.diasOperativos.length === 5
+    m.diasOperativos.length === 5 && m.diasOperativos[4] === 5
       ? "de lunes a viernes"
-      : m.diasOperativos.map((d) => NOMBRES_DIAS[d - 1]).join(", ")
+      : m.diasOperativos.length === 6
+        ? "de lunes a sábado"
+        : m.diasOperativos.map((d) => NOMBRES_DIAS[d - 1]).join(", ")
   const lineas = [
     `En ${m.provincia}, ${dias}. Los pedidos confirmados antes de las ${m.horaCorte}${m.margenMin > 0 ? ` (menos ${m.margenMin} minutos de margen)` : ""} se entregan el mismo día; después, el siguiente día hábil.`,
   ]

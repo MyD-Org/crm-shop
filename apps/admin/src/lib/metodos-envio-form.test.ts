@@ -92,6 +92,13 @@ describe("resumenMetodo", () => {
     expect(lineas.join(" ")).toMatch(/lunes a viernes/i)
     expect(lineas.join(" ")).toMatch(/09:00/)
   })
+  it("con sábado dice «de lunes a sábado» y la validación lo acepta", () => {
+    const conSabado = { ...dto, diasOperativos: [1, 2, 3, 4, 5, 6] }
+    expect(resumenMetodo(conSabado).join(" ")).toMatch(/lunes a sábado/i)
+    expect(resumenMetodo({ ...dto, diasOperativos: [2, 6] }).join(" ")).toMatch(/martes, sábado/)
+    const r = validarMetodoEnvio(formACuerpo(dtoAForm(conSabado)))
+    expect(r.ok && r.metodo.diasOperativos).toEqual([1, 2, 3, 4, 5, 6])
+  })
   it("marca las zonas inactivas y las que no tienen dibujo", () => {
     expect(resumenMetodo(dto).join(" ")).toMatch(/Costa.*sin dibujo|sin dibujo.*Costa/i)
   })

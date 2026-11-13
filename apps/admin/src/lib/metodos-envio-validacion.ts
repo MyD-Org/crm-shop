@@ -165,8 +165,8 @@ export function validarMetodoEnvio(body: unknown): ResultadoValidacionMetodo {
   }
 
   const diasCrudos = Array.isArray(body.diasOperativos) ? body.diasOperativos : null
-  if (!diasCrudos || diasCrudos.length === 0 || !diasCrudos.every((d) => Number.isInteger(d) && d >= 1 && d <= 5)) {
-    return falla("diasOperativos", "Seleccione al menos un día de lunes a viernes.")
+  if (!diasCrudos || diasCrudos.length === 0 || !diasCrudos.every((d) => Number.isInteger(d) && d >= 1 && d <= 6)) {
+    return falla("diasOperativos", "Seleccione al menos un día de lunes a sábado.")
   }
   const diasOperativos = [...new Set(diasCrudos as number[])].sort((a, b) => a - b)
 

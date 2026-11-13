@@ -128,9 +128,10 @@ describe("validarMetodoEnvio: rechazos", () => {
   })
   it("entrada con formato inválido", () => {
     const b = base()
-    b.zonas[1] = { ...b.zonas[1], entradas: [{ tipo: "cp", valor: "76" }] } as never
+    const zona = b.zonas[1]
+    b.zonas[1] = { ...zona, entradas: [{ tipo: "cp", valor: "76" }] } as never
     expect(falla(b).campo).toBe("zonas.1.entradas")
-    b.zonas[1] = { ...b.zonas[1], entradas: [{ tipo: "nombre", valor: "Barrio" }] } as never
+    b.zonas[1] = { ...zona, entradas: [{ tipo: "nombre", valor: "Barrio" }] } as never
     expect(falla(b).campo).toBe("zonas.1.entradas")
   })
   it("nombres de zona repetidos", () => {

@@ -10,7 +10,7 @@
  * de `0003`). Por eso cambiarla es siempre "desmarcar la anterior y después
  * marcar la nueva", en una transacción.
  */
-import { and, count, desc, eq, ne } from "drizzle-orm";
+import { and, count, desc, eq, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { direccionesEnvio } from "@/db/schema";
 import { MAX_DIRECCIONES, type DatosDireccion, type DireccionEnvio } from "./direcciones-envio";
@@ -93,6 +93,14 @@ export async function direccionParaEnvio(
   };
 }
 
+/** Coordenadas verificadas por el servidor (`geoToken`) de una dirección. */
+export interface UbicacionGuardada {
+  lat: number;
+  lon: number;
+}
+
+const coordenada = (v: number) => v.toFixed(6);
+
 /** Desmarca la predeterminada actual del usuario (salvo `excepto`). */
 async function desmarcarPredeterminada(tx: Tx | Db, clerkUserId: string, excepto?: string) {
   await tx
@@ -138,6 +146,7 @@ export async function listarDirecciones(clerkUserId: string): Promise<DireccionE
 export async function crearDireccion(
   clerkUserId: string,
   datos: DatosDireccion,
+  ubicacion?: UbicacionGuardada,
 ): Promise<DireccionEnvio> {
   return getDb().transaction(async (tx) => {
     const [estado] = await tx.select({ n: count() }).from(t).where(deEsteUsuario(clerkUserId));
@@ -153,6 +162,7 @@ export async function crearDireccion(
         tenantId: shopTenantId(),
         clerkUserId,
         ...camposEditables(datos),
+        ...(ubicacion ? { lat: coordenada(ubicacion.lat), lon: coordenada(ubicacion.lon) } : {}),
         predeterminada,
       })
       .returning(COLUMNAS);
@@ -169,11 +179,20 @@ export async function actualizarDireccion(
   clerkUserId: string,
   id: string,
   datos: DatosDireccion,
+  ubicacion?: UbicacionGuardada,
 ): Promise<DireccionEnvio | null> {
+  // Con un token nuevo y válido se guarda su ubicación. Sin token, las coordenadas viejas se conservan sólo
+  // si la calle no cambió: una calle distinta con la ubicación anterior daría la zona (y el precio) de otra.
+  const coordenadas = ubicacion
+    ? { lat: coordenada(ubicacion.lat), lon: coordenada(ubicacion.lon) }
+    : {
+        lat: sql`CASE WHEN ${t.calle} IS DISTINCT FROM ${datos.calle} THEN NULL ELSE ${t.lat} END`,
+        lon: sql`CASE WHEN ${t.calle} IS DISTINCT FROM ${datos.calle} THEN NULL ELSE ${t.lon} END`,
+      };
   return getDb().transaction(async (tx) => {
     const [fila] = await tx
       .update(t)
-      .set({ ...camposEditables(datos), updatedAt: new Date() })
+      .set({ ...camposEditables(datos), ...coordenadas, updatedAt: new Date() })
       .where(laSuya(clerkUserId, id))
       .returning(COLUMNAS);
     if (!fila) return null;

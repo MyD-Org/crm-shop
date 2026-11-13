@@ -56,7 +56,7 @@ import { esPagoEnLinea, slugsPagoEnLinea } from "./medios-pago";
 import { shopTenantId } from "./tenant";
 import { sitioOrigenDeEntorno } from "./sitio-origen";
 import type { Asignacion, EntradaAsignacion } from "./sucursales";
-import { EnvioCambioError, armarEnvioPedido, horarioDeDetalle, origenCompatible, type EnvioDetalle } from "./envio-snapshot";
+import { EnvioCambioError, armarEnvioPedido, horarioDeDetalle, origenCompatible, vistaEnvioDePedido, type EnvioDetalle } from "./envio-snapshot";
 import { fechaEntrega } from "./entrega-fecha";
 import type { ResultadoMetodo } from "./envio-zona";
 import { leerReglasVenta, leerSucursalesYZonas, type ReglasVentaTenant } from "./sucursales-repo";
@@ -780,6 +780,7 @@ export function armarOrder(
     )
       ? { aConfirmar: true }
       : {}),
+    ...(vistaEnvioDePedido(fila) ? { envio: vistaEnvioDePedido(fila)! } : {}),
     cupon: cuponDeOrder(fila, items),
     items: items.map((i): OrderItem => {
       const producto = productos.get(i.alegraItemId);

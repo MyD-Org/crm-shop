@@ -8,6 +8,7 @@
 
 import type { ProductImage } from "./products";
 import type { CuentaPagoSnapshot } from "../lib/cuentas-bancarias";
+import type { EnvioPedidoVista } from "../lib/envio-snapshot";
 
 export type OrderEstado =
   | "pendiente"
@@ -122,6 +123,8 @@ export interface Order {
    * contacto. undefined = no (incluye cuenta corriente, que sigue con su medio).
    */
   aConfirmar?: boolean;
+  /** Envío por zona (flag `envio-por-zona`): zona y fechas de entrega. undefined = sin método de envío por zona. */
+  envio?: EnvioPedidoVista;
 }
 
 export interface OrderSummary {

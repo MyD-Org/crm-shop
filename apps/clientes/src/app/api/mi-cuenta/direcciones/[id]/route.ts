@@ -20,7 +20,7 @@ export async function PUT(req: Request, ctx: ContextoId) {
   if (!esIdDireccion(id)) return noEncontrada();
   const d = await datosDelCuerpo(req);
   if ("error" in d) return d.error;
-  const direccion = await actualizarDireccion(s.userId, id, d.datos);
+  const direccion = await actualizarDireccion(s.userId, id, d.datos, ...(d.ubicacion ? [d.ubicacion] as const : []));
   if (!direccion) return noEncontrada();
   return json({ direccion, direcciones: await listarDirecciones(s.userId) });
 }

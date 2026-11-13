@@ -108,6 +108,17 @@ export interface ConfigEnvio {
  */
 export const CONFIG_ENVIO_DEFAULT: ConfigEnvio = { domicilioActivo: true, gratis: null };
 
+/**
+ * La config que puede viajar al navegador: sin los métodos por zona. Traen los polígonos de las zonas, que
+ * nunca salen del servidor (el servidor devuelve la zona y el precio ya resueltos).
+ */
+export function configEnvioPublica(config: ConfigEnvio): ConfigEnvio {
+  if (!config.metodos) return config;
+  const { metodos: _metodos, ...resto } = config;
+  void _metodos;
+  return resto;
+}
+
 export type MotivoEnvio =
   | "inactivo"
   | "gratis_apagado"

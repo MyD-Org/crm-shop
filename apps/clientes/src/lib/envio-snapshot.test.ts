@@ -119,3 +119,17 @@ describe("horarioDeDetalle (lectura del snapshot que escribió el Shop o el CRM)
     }
   });
 });
+
+describe("vistaEnvioDePedido", () => {
+  const fila = { envioMetodo: "envio-en-el-dia", envioZona: "Centro", envioEntregaEstimada: "2026-11-16", envioEntregaConfirmada: null, envioDetalle: { avisoFeriados: " Sin entregas en feriados. ", medioOnline: true } };
+
+  it("resume zona, fechas, aviso y medio", async () => {
+    const { vistaEnvioDePedido } = await import("./envio-snapshot");
+    expect(vistaEnvioDePedido(fila)).toEqual({ zona: "Centro", entregaEstimada: "2026-11-16", entregaConfirmada: null, avisoFeriados: "Sin entregas en feriados.", medioOnline: true });
+  });
+  it("sin método (retiro, a coordinar o pedido viejo): null", async () => {
+    const { vistaEnvioDePedido } = await import("./envio-snapshot");
+    expect(vistaEnvioDePedido({ ...fila, envioMetodo: null, envioZona: null })).toBeNull();
+    expect(vistaEnvioDePedido({ ...fila, envioDetalle: null })).toMatchObject({ avisoFeriados: "", medioOnline: false });
+  });
+});

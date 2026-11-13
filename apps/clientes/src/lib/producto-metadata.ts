@@ -3,6 +3,7 @@ import type { Product } from "@/data/products";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import { fmtPrecio } from "@/lib/format";
+import { textoConMedio } from "@/lib/precio-medio-texto";
 import { IMAGEN_SITIO_ALTO, IMAGEN_SITIO_ANCHO, openGraphDelSitio, urlImagenDelSitio } from "@/lib/metadata-marca";
 
 /**
@@ -21,7 +22,9 @@ import { IMAGEN_SITIO_ALTO, IMAGEN_SITIO_ANCHO, openGraphDelSitio, urlImagenDelS
  * La descripción empieza por el precio: es lo primero que quiere ver quien recibe
  * el link, y WhatsApp muestra sólo el comienzo de la descripción. Es el mismo precio
  * que la card y el JSON-LD (`precioFinal ?? price`, con IVA si se conoce); sin
- * precio publicado ("Consulte el precio") no se pone ninguno. Ojo: el que comparte
+ * precio publicado ("Consulte el precio") no se pone ninguno. Después van los precios por
+ * medio de la ficha ("$X con Transferencia", "$X con crédito"…), los mismos y en el mismo orden
+ * que muestra la ficha (`preciosMedios`, configurados en el admin). Ojo: el que comparte
  * y Meta guardan la vista previa un tiempo, así que un link viejo puede mostrar un
  * precio anterior.
  */
@@ -30,7 +33,8 @@ export function metadataProducto(producto: Product, conBase: boolean, nombreTien
   // opciones comparten ficha; ver `variantes-selector`).
   const ruta = `/producto/${encodeURIComponent(producto.grupo?.representanteId ?? producto.id)}`;
   const precio = producto.price > 0 ? fmtPrecio(producto.precioFinal ?? producto.price) : undefined;
-  const partes = [precio, producto.brand, producto.sku && `Código ${producto.sku}`].filter(Boolean);
+  const medios = precio ? (producto.preciosMedios ?? []).map(textoConMedio) : [];
+  const partes = [precio, ...medios, producto.brand, producto.sku && `Código ${producto.sku}`].filter(Boolean);
   const description = partes.length > 0 ? partes.join(" · ") : undefined;
   const portada = producto.images?.[0];
   // Absoluta y con el origen propio (no el canónico): ver `urlImagenDelSitio`.

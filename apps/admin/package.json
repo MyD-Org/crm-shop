@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@flags-sdk/vercel": "^1.5.0",
+    "@geoman-io/leaflet-geoman-free": "^2.18.3",
     "@myd-org/ai-widget": "file:vendor/myd-org-ai-widget-0.1.12.tgz",
     "@myd-org/ui": "^0.44.0",
     "@sentry/nextjs": "^10.65.0",
@@ -39,6 +40,7 @@
     "heic-decode": "^2.1.0",
     "iron-session": "^8.0.4",
     "jose": "^6.2.3",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.17.0",
     "next": "16.2.9",
     "postgres": "^3.4.9",
@@ -54,6 +56,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

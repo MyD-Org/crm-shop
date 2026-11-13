@@ -13,6 +13,7 @@
 import type { OpcionesCuotasPedido } from "@/app/api/pedidos/[id]/cuotas/route";
 import { hayQueRecongelar } from "./cuotas-formulario";
 import { leerFormaCobro, type OpcionCobro } from "./pagos/opciones-cobro";
+import { fetchConToken } from "./invitado-token-cliente";
 
 export type { OpcionesCuotasPedido };
 
@@ -31,7 +32,7 @@ export async function consultarOpcionesCuotas(
   pedidoId: string,
   consulta: ConsultaCuotas,
   signal: AbortSignal,
-  fetcher: Fetcher = fetch,
+  fetcher: Fetcher = fetchConToken,
 ): Promise<OpcionesCuotasPedido | null> {
   const res = await fetcher(`/api/pedidos/${encodeURIComponent(pedidoId)}/cuotas`, {
     method: "POST",
@@ -70,7 +71,7 @@ export async function asegurarCuotasDelPedido(a: {
   const forma = a.actual.formaCobro != null ? a.forma : undefined;
   if (!hayQueRecongelar(a.cuotas, a.actual.cuotas, forma, a.actual.formaCobro)) return { ok: true, cambio: false, ...a.actual };
   try {
-    const res = await (a.fetcher ?? fetch)(`/api/pedidos/${encodeURIComponent(a.pedidoId)}/medio`, {
+    const res = await (a.fetcher ?? fetchConToken)(`/api/pedidos/${encodeURIComponent(a.pedidoId)}/medio`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

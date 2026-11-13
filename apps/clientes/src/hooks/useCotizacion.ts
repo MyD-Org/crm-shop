@@ -114,6 +114,7 @@ interface Resultado {
   conCuotas: boolean;
   conProgresoCuotas: boolean;
   cupon: string;
+  invitadoEmail: string;
   pedidoId: string;
   destino: string;
   data: CotizacionResponse | null;
@@ -161,6 +162,11 @@ export function useCotizacion(opts: {
   conTotalesOpciones?: boolean;
   /** Código de cupón guardado en el carrito: lo valida y aplica el servidor. Cambiarlo recotiza. */
   cupon?: string | null;
+  /**
+   * Compra de invitado: su email (ya normalizado y válido), para que el servidor aplique al cupón las
+   * reglas por persona. Sin él el cupón sale sin verificar y recién se valida al confirmar.
+   */
+  invitadoEmail?: string;
   /** Cambio de medio de un pedido ya creado: rige el cupón congelado del pedido (se ignora `cupon`). */
   pedidoId?: string;
   /** Envío por zona: a dónde va el envío (ver `DestinoCotizacion`). Cambiarlo recotiza. */
@@ -185,6 +191,8 @@ export function useCotizacion(opts: {
   const conProgresoCuotas = opts.conProgresoCuotas ?? false;
   const conTotalesOpciones = opts.conTotalesOpciones ?? false;
   const cupon = opts.cupon ?? "";
+  // Sólo importa con cupón: sin él, tipear el email no recotiza.
+  const invitadoEmail = cupon ? (opts.invitadoEmail ?? "") : "";
   const pedidoId = opts.pedidoId ?? "";
   // Sin destino la clave es "" y el body no cambia: con el flag apagado (o sin dato) todo es como siempre.
   const destino = opts.destino && Object.values(opts.destino).some(Boolean) ? JSON.stringify(opts.destino) : "";
@@ -216,7 +224,7 @@ export function useCotizacion(opts: {
 
     const lineas = JSON.parse(clave) as [string, number][];
     const ctrl = new AbortController();
-    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, cupon, pedidoId, destino };
+    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, cupon, invitadoEmail, pedidoId, destino };
     let reintento: ReturnType<typeof setTimeout> | undefined;
 
     const timer = setTimeout(async () => {
@@ -240,6 +248,7 @@ export function useCotizacion(opts: {
             progresoCuotas: conProgresoCuotas || undefined,
             totalesOpciones: conTotalesOpciones || undefined,
             cupon: cupon || undefined,
+            invitadoEmail: invitadoEmail || undefined,
             pedidoId: pedidoId || undefined,
             destino: destino ? JSON.parse(destino) : undefined,
           }),
@@ -295,7 +304,7 @@ export function useCotizacion(opts: {
       clearTimeout(reintento);
       ctrl.abort();
     };
-  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, conTotalesOpciones, cupon, pedidoId, destino, nonce]);
+  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, conTotalesOpciones, cupon, invitadoEmail, pedidoId, destino, nonce]);
 
   // Estado DERIVADO de los inputs actuales vs. los del último resultado. Nada
   // de esto vive en useState: setear estado desde un efecto para algo que ya se
@@ -316,6 +325,7 @@ export function useCotizacion(opts: {
     res.conCuotas === conCuotas &&
     res.conProgresoCuotas === conProgresoCuotas &&
     res.cupon === cupon &&
+    res.invitadoEmail === invitadoEmail &&
     res.pedidoId === pedidoId &&
     res.destino === destino;
 

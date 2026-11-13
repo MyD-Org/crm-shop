@@ -22,6 +22,7 @@ import {
   eliminarUsuarioClerk,
   registrarUsuarioClerk,
   type UsuarioClerkJSON,
+  emailVerificadoDeUsuarioClerk,
 } from "./clientes-espejo";
 
 const CREADO = Date.UTC(2026, 8, 1, 10);
@@ -117,5 +118,21 @@ describe("registrarUsuarioClerk / eliminarUsuarioClerk", () => {
       throw new Error("conexión caída");
     });
     await expect(registrarUsuarioClerk("tenant-x", datosDeUsuarioClerk(usuario()))).rejects.toThrow();
+  });
+});
+
+describe("emailVerificadoDeUsuarioClerk", () => {
+  const usuario = (verification: unknown, primario: string | null = "idn_1") =>
+    ({
+      id: "user_1",
+      primary_email_address_id: primario,
+      email_addresses: [{ id: "idn_1", email_address: " ana@cliente.example ", verification }],
+    }) as unknown as Parameters<typeof emailVerificadoDeUsuarioClerk>[0];
+
+  it("sólo con verification.status === 'verified'", () => {
+    expect(emailVerificadoDeUsuarioClerk(usuario({ status: "verified", strategy: "email_code" }))).toBe("ana@cliente.example");
+    expect(emailVerificadoDeUsuarioClerk(usuario({ status: "unverified", strategy: "email_code" }))).toBeNull();
+    expect(emailVerificadoDeUsuarioClerk(usuario(null))).toBeNull();
+    expect(emailVerificadoDeUsuarioClerk(usuario({ status: "verified" }, null))).toBeNull();
   });
 });

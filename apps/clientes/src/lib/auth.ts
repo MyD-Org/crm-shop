@@ -23,6 +23,7 @@ import { intentarVinculacionPorEmail } from "./vinculacion";
 import { comercialEspejo } from "./contactos-espejo";
 import { nombrePila } from "./nombre-pila";
 import { esRolAdmin } from "./rol-admin";
+import { programarReclamoInvitado } from "./reclamo-invitado";
 import { sessionOptions, type SessionData } from "./session";
 
 /** Datos comerciales de un cliente ya resuelto. */
@@ -179,6 +180,10 @@ export const identidadActual = cache(async function identidadActual(): Promise<I
    */
   const emailVerificado =
     emailPrimario?.verification?.status === "verified" ? email : undefined;
+
+  // Compra como invitado: con el email verificado se reclaman, después de responder, los pedidos que
+  // esa persona hizo sin cuenta (idempotente, a lo sumo una vez cada 10 min por usuario).
+  if (emailVerificado) programarReclamoInvitado(userId, emailVerificado);
 
   const link = await resolverVinculacion(userId, emailVerificado);
   if (link) {

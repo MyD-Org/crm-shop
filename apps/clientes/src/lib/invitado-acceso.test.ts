@@ -80,11 +80,13 @@ describe("principalDelPedido: invitado", () => {
 describe("principalDelPedido: sin credencial válida", () => {
   const sinCredencial = { ok: false, motivo: "sin_credencial" };
 
-  it("flag apagado => sin credencial, aunque el token sea válido (S1-6)", async () => {
+  it("flag apagado => el token de compra de un pedido existente SIGUE valiendo (S3, Q6: el flag gobierna crear, no pagar)", async () => {
     setFlag("compra-invitado", false);
     const { token } = acuñarTokenCompra(PA);
-    expect(await principalDelPedido(req(token), PA)).toEqual(sinCredencial);
-    expect(permitirAsync).not.toHaveBeenCalled();
+    const r = await principalDelPedido(req(token), PA);
+    expect(r.ok).toBe(true);
+    // ...y sin token no hay nada, esté el flag como esté.
+    expect(await principalDelPedido(req(null), PA)).toEqual(sinCredencial);
   });
 
   it("flag encendido sin header => sin credencial", async () => {
@@ -147,10 +149,10 @@ describe("principalDelPedido: token vencido", () => {
     expect(await principalDelPedido(req(vencido), PA)).toEqual({ ok: false, motivo: "token_vencido" });
   });
 
-  it("vencido con el flag apagado => sin credencial (el flag apagado no cambia ninguna respuesta)", async () => {
+  it("vencido con el flag apagado => token_vencido igual (no depende del flag)", async () => {
     setFlag("compra-invitado", false);
     const vencido = firmarToken({ proposito: "compra", orderId: PA, venceEn: Date.now() - 1 });
-    expect(await principalDelPedido(req(vencido), PA)).toEqual({ ok: false, motivo: "sin_credencial" });
+    expect(await principalDelPedido(req(vencido), PA)).toEqual({ ok: false, motivo: "token_vencido" });
   });
 });
 

@@ -64,6 +64,8 @@ de las vistas del CRM (`public.catalog_products_shop` y
 | `TURNSTILE_SECRET_KEY` | Secreto de Cloudflare Turnstile (server-only). Valida el desafío anti-bot de la compra como invitado (`src/lib/turnstile.ts`, `siteverify`). Sin ella la compra sin cuenta no se ofrece (falla cerrada: `POST /api/pedidos` anónimo responde 503). En development/preview usar las claves de prueba de Cloudflare. |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Clave pública del mismo widget de Turnstile (la usa el formulario del invitado, rebanada S2b). Se carga junto con la anterior. |
 
+> Post-compra del invitado (S3): no suma variables nuevas. El reclamo de pedidos corre en el webhook de Clerk (`CLERK_WEBHOOK_SIGNING_SECRET`, eventos `user.created` y `user.updated`) y de forma perezosa en `identidadActual`; el aviso «pendiente de pago» sale del cron `pagos-reconciliar` (`CRON_SECRET`, cada 15 min).
+
 ### Flags (Vercel Flags, sin redeploy)
 
 Los interruptores del Shop viven en Vercel Flags (`src/flags.ts`), no en variables

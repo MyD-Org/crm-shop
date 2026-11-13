@@ -44,6 +44,20 @@ function emailPrimario(u: UsuarioClerkJSON): string | null {
   return email;
 }
 
+/**
+ * Email primario SÓLO si Clerk lo verificó (`verification.status === "verified"`). Es la condición para
+ * reclamar los pedidos de invitado de ese correo (`reclamo-invitado.ts`): un email sin verificar no
+ * prueba que la persona controle la casilla.
+ */
+export function emailVerificadoDeUsuarioClerk(u: UsuarioClerkJSON): string | null {
+  const id = u.primary_email_address_id;
+  if (!id || !Array.isArray(u.email_addresses)) return null;
+  const fila = u.email_addresses.find((e) => e.id === id);
+  if (fila?.verification?.status !== "verified") return null;
+  const email = fila.email_address?.trim();
+  return email && email.length <= MAX_EMAIL ? email : null;
+}
+
 function nombreCompleto(u: UsuarioClerkJSON): string | null {
   const nombre = [u.first_name, u.last_name]
     .map((p) => (typeof p === "string" ? p.trim() : ""))

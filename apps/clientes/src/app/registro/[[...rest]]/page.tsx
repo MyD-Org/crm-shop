@@ -6,7 +6,14 @@ import { getDecoracion } from "@/lib/home-datos";
 import { getMarca } from "@/lib/marca";
 
 /** Alta de cuenta. Ver la nota sobre el catch-all en /ingresar. */
-export default async function RegistroPage() {
+export default async function RegistroPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string | string[] }>;
+}) {
+  // `?email=` (mail y confirmación del invitado): precarga el correo. Sólo si parece un email.
+  const { email } = await searchParams;
+  const emailInicial = typeof email === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) && email.length <= 254 ? email : undefined;
   const [{ nombre }, { piedra }] = await Promise.all([getMarca(), getDecoracion()]);
   return (
     <FondoPiedra piedra={piedra}>
@@ -23,7 +30,11 @@ export default async function RegistroPage() {
           <FormularioClerkCargando />
         </ClerkLoading>
         <ClerkLoaded>
-          <SignUp fallbackRedirectUrl="/" signInFallbackRedirectUrl="/" />
+          <SignUp
+            fallbackRedirectUrl="/"
+            signInFallbackRedirectUrl="/"
+            {...(emailInicial ? { initialValues: { emailAddress: emailInicial } } : {})}
+          />
         </ClerkLoaded>
       </main>
     </FondoPiedra>

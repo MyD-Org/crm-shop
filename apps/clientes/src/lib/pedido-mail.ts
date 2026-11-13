@@ -23,7 +23,7 @@ export interface MailPedido {
   text: string;
 }
 
-export type AvisoPedidoShop = "recibido" | "pago_recibido" | "pago_rechazado";
+export type AvisoPedidoShop = "recibido" | "pago_recibido" | "pago_rechazado" | "pago_pendiente";
 
 export interface LineaMail {
   nombre: string;
@@ -57,7 +57,14 @@ export interface DatosMailPedido {
   checkoutUrl?: string | null;
   /** `urlSitioMail()`: si está, el pie lleva un link al sitio. */
   sitioUrl?: string | null;
-  /** "recibido" y "pago_recibido": resumen del pedido. */
+  /**
+   * Compra como invitado: link firmado «Pagar su pedido» (`/pagar/<token>`). Sólo si el pedido sigue
+   * pendiente de pago en línea. En "pago_rechazado" es el destino de «Reintentar el pago».
+   */
+  pagarUrl?: string | null;
+  /** Compra como invitado: link «Cree su cuenta» (`/registro?email=`). Reemplaza a «Ver mis pedidos». */
+  cuentaUrl?: string | null;
+  /** "recibido", "pago_recibido" y "pago_pendiente": resumen del pedido. */
   lineas?: LineaMail[];
   total?: number;
   /** Envío por zona: lo que se cobró de envío (con IVA). Sólo si es mayor que 0; ausente = no se muestra. */
@@ -185,7 +192,21 @@ const COPY: Record<AvisoPedidoShop, { asunto: string; titulo: string; bajada: (d
     bajada: () =>
       "El pago de su pedido no se pudo completar y no se le cobró. Puede reintentar el pago o elegir otro medio de pago; su pedido sigue registrado.",
   },
+  pago_pendiente: {
+    asunto: "pendiente de pago",
+    titulo: "Su pedido está pendiente de pago",
+    bajada: () =>
+      "Todavía no recibimos el pago de su pedido. Puede completarlo cuando quiera con el botón «Pagar su pedido»; mientras la reserva esté vigente, su pedido sigue registrado.",
+  },
 };
+
+const ESTILO_BOTON =
+  "display:inline-block;background:#1e5aa8;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px";
+const ESTILO_ENLACE = "display:inline-block;color:#1e5aa8;text-decoration:underline;font-size:14px;font-weight:600;padding:10px 12px";
+
+/** Texto que acompaña a «Cree su cuenta» en el mail del invitado. */
+export const TEXTO_CREE_SU_CUENTA =
+  "Cree su cuenta con este mismo correo electrónico y encontrará sus pedidos en Mi cuenta.";
 
 /**
  * El medio con lo que cobró el procesador: "Mercado Pago, 12 cuotas de $6.980,64" y, si pagó más que el
@@ -256,6 +277,9 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
   // igual que la pantalla del checkout.
   const contacto = d.aviso !== "pago_rechazado" && !transferencia ? d.contacto : undefined;
   const reintento = d.aviso === "pago_rechazado" ? d.checkoutUrl : undefined;
+  // Invitado: «Pagar su pedido» (en "pago_rechazado" lo cubre «Reintentar el pago») y «Cree su cuenta».
+  const pagar = d.aviso !== "pago_rechazado" ? d.pagarUrl : undefined;
+  const cuenta = d.cuentaUrl || undefined;
 
   const cuerpoHtml = `
       <tr><td style="padding:20px 32px 0;font-family:${FUENTE_MAIL};color:#1c2733">
@@ -279,6 +303,11 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
               }`
             : d.pedidosUrl
             ? `<a href="${e(d.pedidosUrl)}" style="display:inline-block;background:#1e5aa8;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px">Ver mis pedidos</a>`
+            : ""
+        }${pagar ? `<a href="${e(pagar)}" style="${ESTILO_BOTON}">Pagar su pedido</a>` : ""}${
+          cuenta
+            ? `${pagar || reintento ? " " : ""}<a href="${e(cuenta)}" style="${ESTILO_ENLACE}">Cree su cuenta</a>
+        <p style="margin:8px 0 0;font-size:13px;line-height:1.55;color:#77808a">${e(TEXTO_CREE_SU_CUENTA)}</p>`
             : ""
         }
       </td></tr>`;
@@ -313,7 +342,9 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
     ...lineasTexto,
     ...(transferencia ? bloqueTransferenciaTexto(transferencia, d.total) : []),
     ...(reintento ? ["", `Reintentar el pago: ${reintento}`] : []),
+    ...(pagar ? ["", `Pagar su pedido: ${pagar}`] : []),
     ...(d.pedidosUrl ? ["", `Ver mis pedidos: ${d.pedidosUrl}`] : []),
+    ...(cuenta ? ["", `Cree su cuenta: ${cuenta}`, TEXTO_CREE_SU_CUENTA] : []),
     "",
     ...pieTexto(d.comercio, d.sitioUrl),
   ].join("\n");

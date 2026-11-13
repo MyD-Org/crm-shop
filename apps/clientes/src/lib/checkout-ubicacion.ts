@@ -23,6 +23,8 @@ export interface EleccionInicialCheckout {
   sucursal?: string;
   /** Provincia (clave) de la elección de envío. */
   provincia?: string;
+  /** «Usar mi ubicación» con el envío por zona: dirección ya verificada (token vigente) para precargar. */
+  exacta?: { calle: string; localidad: string; cp?: string; geoToken: string; precision: "altura" | "calle" };
 }
 
 export interface EntradaEstadoInicial {

@@ -17,7 +17,7 @@ import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { AvisoEnvioZona, FilaEnvioResumen } from "@/components/checkout/EnvioZona";
 import { TEXTOS_ENVIO_ZONA } from "@/lib/envio-zona-textos";
-import { camposPedidoEnvioZona, destinoParaCotizar, type UbicacionElegida } from "@/lib/envio-zona-checkout";
+import { camposPedidoEnvioZona, destinoParaCotizar, precargaDeUbicacion, type UbicacionElegida } from "@/lib/envio-zona-checkout";
 import { formaInicialDelMedio, pagoParaCotizar } from "@/lib/lista-medio";
 import { ahorroFrente, bajadaOpcion, opcionElegida, opcionesDePago, PIE_CUENTA_MP, textoConfirmar, tituloEnFrase, tituloOpcion, type OpcionPago } from "@/lib/opciones-pago";
 import { leerFormaCobro, type OpcionCobro } from "@/lib/pagos/opciones-cobro";
@@ -510,11 +510,15 @@ export function CheckoutClient({
   // Provincia de "otra dirección": la de la zona vigente si la hay. Con una dirección guardada o el
   // domicilio fiscal, la provincia sale de ellos (ver `provinciaEntrega` más abajo).
   const [provinciaManual, setProvinciaManual] = useState(inicial.provinciaManual);
-  const [ciudad, setCiudad] = useState("");
-  const [direccion, setDireccion] = useState("");
+  // «Usar mi ubicación» con el envío por zona: el formulario arranca con la calle exacta ya verificada.
+  const [precarga] = useState(() =>
+    precargaDeUbicacion({ eleccion: eleccionInicial, envioPorZona, direccionesGuardadas: direccionesGuardadas.length }),
+  );
+  const [ciudad, setCiudad] = useState(precarga?.ciudad ?? "");
+  const [direccion, setDireccion] = useState(precarga?.direccion ?? "");
   // Envío por zona: la sugerencia elegida del autocompletado (trae un token firmado) y si el comprador
   // eligió seguir con el envío a coordinar. La elección de coordinar vale sólo para el destino en que se hizo.
-  const [ubicacionSel, setUbicacionSel] = useState<UbicacionElegida | null>(null);
+  const [ubicacionSel, setUbicacionSel] = useState<UbicacionElegida | null>(precarga?.ubicacion ?? null);
   const [coordinarPara, setCoordinarPara] = useState<string | null>(null);
   // Envío a domicilio arranca con la predeterminada. `ciudad` y `direccion`
   // quedan para "otra dirección para esta compra", que no toca las guardadas.
@@ -572,7 +576,8 @@ export function CheckoutClient({
     !!fiscalCalle &&
     !!fiscalCiudad &&
     !!fiscalProvincia;
-  const [aOtraDireccion, setAOtraDireccion] = useState(false);
+  // Con una ubicación precargada la dirección de envío es esa, no el domicilio fiscal.
+  const [aOtraDireccion, setAOtraDireccion] = useState(precarga !== null);
   const usarFiscal = aDomicilio && ofrecerFiscal && !aOtraDireccion;
   const ciudadEntrega = usarFiscal && fiscalCiudad ? fiscalCiudad : ciudadElegida;
   const direccionEntrega = usarFiscal && fiscalCalle ? fiscalCalle : direccionElegida;

@@ -1,5 +1,5 @@
 import { fmtPrecio } from "@/lib/format";
-import type { EstimadoFicha } from "@/lib/envio-zona-textos";
+import { TEXTOS_ENVIO_ZONA, llegadaEstimada, type EstimadoFicha } from "@/lib/envio-zona-textos";
 
 /**
  * Fila «Envío» del resumen del carrito con el envío por zona (flag `envio-por-zona`).
@@ -14,16 +14,28 @@ export function FilaEnvioZona({
   costo,
   gratis,
   estimado,
+  metodo,
 }: {
   costo: number | undefined;
   gratis: boolean;
   estimado: EstimadoFicha | undefined;
+  /** Método resuelto por el servidor (zona exacta de «Usar mi ubicación»): suma «Envío en el día» y la llegada. */
+  metodo?: { zona: string; horario: { dias: number[]; horaCorte: string; margenMin: number } } | null;
 }) {
   if (costo !== undefined) {
+    const llegada = metodo ? llegadaEstimada(metodo.horario, new Date()) : null;
     return (
-      <div className="flex justify-between gap-3" data-envio-zona="costo">
-        <dt className="text-muted">Envío</dt>
-        <dd className="font-medium tabular-nums text-text">{gratis || costo === 0 ? "Sin cargo" : fmtPrecio(costo)}</dd>
+      <div data-envio-zona="costo">
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted">Envío</dt>
+          <dd className="font-medium tabular-nums text-text">{gratis || costo === 0 ? "Sin cargo" : fmtPrecio(costo)}</dd>
+        </div>
+        {llegada && (
+          <p className="mt-1 text-xs text-muted">
+            {TEXTOS_ENVIO_ZONA.enElDia}. {llegada.texto}
+            {llegada.condicion ? `, ${llegada.condicion}` : ""}.
+          </p>
+        )}
       </div>
     );
   }

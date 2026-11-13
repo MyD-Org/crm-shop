@@ -1,6 +1,8 @@
 import { CarritoClient } from "@/components/CarritoClient";
 import { identidadActual } from "@/lib/auth";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
+import { ubicacionExactaVerificada } from "@/lib/ubicacion-exacta";
+import { claveProvincia } from "@/lib/sucursales";
 import { entregaDelCarrito } from "@/lib/entrega-eleccion";
 import { CONFIG_ENVIO_DEFAULT, configEnvioPublica } from "@/lib/envio";
 import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
@@ -41,9 +43,19 @@ export default async function CarritoPage() {
   const pagoTransferencia = pago?.pagoMetodo ? { listaKey: pago.listaKey, pagoMetodo: pago.pagoMetodo } : null;
   const configEnvio = reglas.envio ?? CONFIG_ENVIO_DEFAULT;
   // Envío por zona: sólo con métodos cargados se manda la localidad para anticipar la tarifa.
+  // Con «Usar mi ubicación» y un punto firmado vigente viaja también el token con su calle: el servidor lo
+  // verifica y cotiza la zona exacta (las coordenadas van sólo dentro del token).
+  const exacta =
+    entregaTipo === "envio" && (configEnvio.metodos?.length ?? 0) > 0 && resuelta
+      ? ubicacionExactaVerificada(resuelta.eleccion, claveProvincia(resuelta.ubicacion?.provincia) || null)
+      : null;
   const destinoEnvio =
     entregaTipo === "envio" && (configEnvio.metodos?.length ?? 0) > 0 && resuelta?.ubicacion
-      ? { localidad: resuelta.ubicacion.localidad, ...(resuelta.ubicacion.id ? { georefId: resuelta.ubicacion.id } : {}) }
+      ? {
+          localidad: resuelta.ubicacion.localidad,
+          ...(resuelta.ubicacion.id ? { georefId: resuelta.ubicacion.id } : {}),
+          ...(exacta ? { geoToken: exacta.geoToken, calle: exacta.calle, ...(exacta.cp ? { cp: exacta.cp } : {}) } : {}),
+        }
       : undefined;
   // Compra sin cuenta (flag `compra-invitado`): se evalúa sólo para quien no tiene sesión.
   const compraInvitado = !(clerkUserId || cliente) && (await compraInvitadoHabilitada());

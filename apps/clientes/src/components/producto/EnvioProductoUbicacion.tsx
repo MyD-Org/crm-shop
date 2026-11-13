@@ -2,7 +2,9 @@ import { connection } from "next/server";
 import { textoEnvioFicha, type ConfigEnvio } from "@/lib/envio";
 import { TEXTOS_UBICACION, envioFichaSegunUbicacion } from "@/lib/ubicacion";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
-import { TEXTOS_ENVIO_ZONA, estimarEnvioPorLocalidad } from "@/lib/envio-zona-textos";
+import { ubicacionExactaVerificada } from "@/lib/ubicacion-exacta";
+import { claveProvincia } from "@/lib/sucursales";
+import { TEXTOS_ENVIO_ZONA, estimarEnvioPorLocalidad, estimarEnvioPorPunto } from "@/lib/envio-zona-textos";
 import { fmtPesosEnteros } from "@/lib/format";
 import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
 import { CLASE_TONO } from "@/components/producto/EntregaProducto";
@@ -41,7 +43,14 @@ export async function EnvioProductoUbicacion({
   // Envío por zona (flag `envio-por-zona`; sin él `configEnvio.metodos` no existe y esto no hace nada): con la
   // localidad del visitante se anticipa la tarifa («desde $X» si la localidad toca más de una zona) y cuándo
   // llega. La geometría no sale del servidor.
-  const zona = estimarEnvioPorLocalidad(configEnvio.metodos, resuelta.ubicacion, new Date());
+  // Con «Usar mi ubicación» (punto firmado y vigente) la tarifa es la EXACTA de su zona; si el punto no cae en
+  // ninguna, queda lo de siempre (sin «desde»: la ubicación ya es exacta). Sin punto vigente, por localidad.
+  const exacta = configEnvio.metodos?.length
+    ? ubicacionExactaVerificada(resuelta.eleccion, claveProvincia(resuelta.ubicacion?.provincia) || null)
+    : null;
+  const zona = exacta
+    ? estimarEnvioPorPunto(configEnvio.metodos, exacta.destino, new Date())
+    : estimarEnvioPorLocalidad(configEnvio.metodos, resuelta.ubicacion, new Date());
   if (zona) {
     return (
       <>

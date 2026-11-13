@@ -129,6 +129,9 @@ export const ubicacionDelVisitante = cache(async (): Promise<UbicacionResuelta> 
       localidad: resto.localidad,
       provincia: resto.provincia,
       ...(resto.cp ? { cp: resto.cp } : {}),
+      ...(resto.calle && resto.geoToken
+        ? { exacta: { calle: resto.calle, ...(resto.zona ? { zona: resto.zona } : {}), geoToken: resto.geoToken } }
+        : {}),
     },
     nombrePila,
   };

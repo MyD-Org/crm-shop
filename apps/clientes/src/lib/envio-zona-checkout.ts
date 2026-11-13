@@ -7,6 +7,7 @@
  * `geoToken` firmado de la sugerencia elegida (con la calle firmada). El servidor las verifica.
  */
 import type { DestinoCotizacion } from "@/hooks/useCotizacion";
+import type { EleccionInicialCheckout } from "./checkout-ubicacion";
 
 /** Sugerencia del autocompletado que trajo un token (sólo con el flag prendido y el secreto configurado). */
 export interface UbicacionElegida {
@@ -64,5 +65,25 @@ export function camposPedidoEnvioZona(a: {
     ...resto,
     ...(a.envioACoordinar ? { envioACoordinar: true } : {}),
     ...(a.costoEnvioVisto !== undefined ? { costoEnvioVisto: a.costoEnvioVisto } : {}),
+  };
+}
+
+/**
+ * Dirección con la que arranca el formulario de «otra dirección» cuando el visitante usó «Usar mi ubicación»
+ * (calle exacta, localidad, CP y su `geoToken`). Sólo si hay envío por zona, la entrega es a domicilio y el
+ * comprador no tiene direcciones guardadas: con una guardada no se pisa nada. Si edita la calle, el token deja
+ * de valer (`ubicacionVigente`), igual que con una sugerencia del autocompletado.
+ */
+export function precargaDeUbicacion(a: {
+  eleccion: EleccionInicialCheckout | null | undefined;
+  envioPorZona: boolean;
+  direccionesGuardadas: number;
+}): { direccion: string; ciudad: string; ubicacion: UbicacionElegida } | null {
+  const x = a.eleccion?.tipo === "envio" ? a.eleccion.exacta : undefined;
+  if (!a.envioPorZona || a.direccionesGuardadas > 0 || !x || a.eleccion?.direccionId) return null;
+  return {
+    direccion: x.calle,
+    ciudad: x.localidad,
+    ubicacion: { geoToken: x.geoToken, calle: x.calle, cp: x.cp ?? "", precision: x.precision },
   };
 }

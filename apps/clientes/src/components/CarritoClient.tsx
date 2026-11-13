@@ -606,7 +606,7 @@ export function CarritoClient({
               </div>
               {confirmado && cotizacion.cupon && <LineaCupon cupon={cotizacion.cupon} onQuitar={() => setCupon(null)} />}
               {confirmado && entregaTipo === "envio" && (
-                <FilaEnvioZona costo={cotizacion.envio.costo} gratis={cotizacion.envio.gratis} estimado={cotizacion.envioEstimado} />
+                <FilaEnvioZona costo={cotizacion.envio.costo} gratis={cotizacion.envio.gratis} estimado={cotizacion.envioEstimado} metodo={cotizacion.envio.metodo} />
               )}
             </dl>
             <CampoCupon

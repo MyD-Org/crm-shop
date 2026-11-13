@@ -6,7 +6,7 @@
 import { fmtPesosEnteros } from "./format";
 import { TZ_ENVIO, fechaEntrega, type FechaEntrega, type HorarioEnvio } from "./entrega-fecha";
 import { estimarEntrega } from "./envio-snapshot";
-import { estimarPorLocalidad, type MetodoEnvio } from "./envio-zona";
+import { cotizarMetodo, estimarPorLocalidad, type DestinoEnvio, type MetodoEnvio } from "./envio-zona";
 import { claveProvincia } from "./sucursales";
 import { claveTexto } from "./texto-clave";
 
@@ -164,6 +164,33 @@ export function estimarEnvioPorLocalidad(
       precio: e.precio,
       texto: textoPrecioEstimado(TEXTOS_ENVIO_ZONA.enElDia, e.tipo, e.precio),
       ...(e.tipo === "desde" ? { zonas: tarifasDeZonas(m) } : {}),
+      llegada: llegadaEstimada({ dias: m.diasOperativos, horaCorte: m.horaCorte, margenMin: m.margenMin }, ahora),
+      avisoFeriados: m.avisoFeriados.trim(),
+      metodo: m.nombre,
+    };
+  }
+  return null;
+}
+
+/**
+ * Tarifa EXACTA de un punto ya verificado por el servidor (ficha y carrito con «Usar mi ubicación»): la zona
+ * que lo contiene, por el primer método activo (por `orden`) que lo resuelve con las mismas reglas que el
+ * pedido. null = ninguna zona lo alcanza: costo a coordinar. La geometría nunca llega al navegador.
+ */
+export function estimarEnvioPorPunto(
+  metodos: MetodoEnvio[] | undefined,
+  destino: DestinoEnvio,
+  ahora: Date,
+): EstimadoFicha | null {
+  if (!destino.punto || !metodos?.length) return null;
+  const ordenados = [...metodos].filter((m) => m.activo).sort((a, b) => a.orden - b.orden);
+  for (const m of ordenados) {
+    const r = cotizarMetodo(m, destino, { origen: null, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false });
+    if (!r) continue;
+    return {
+      tipo: "exacto",
+      precio: r.precio,
+      texto: textoPrecioEstimado(TEXTOS_ENVIO_ZONA.enElDia, "exacto", r.precio),
       llegada: llegadaEstimada({ dias: m.diasOperativos, horaCorte: m.horaCorte, margenMin: m.margenMin }, ahora),
       avisoFeriados: m.avisoFeriados.trim(),
       metodo: m.nombre,

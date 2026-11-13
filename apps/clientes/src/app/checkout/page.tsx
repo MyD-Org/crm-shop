@@ -12,6 +12,8 @@ import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import type { DireccionEnvio } from "@/lib/direcciones-envio";
 import { opcionesCheckoutDelVisitante } from "@/lib/zona-servidor";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
+import { ubicacionExactaVerificada } from "@/lib/ubicacion-exacta";
+import { claveProvincia } from "@/lib/sucursales";
 import type { EleccionInicialCheckout } from "@/lib/checkout-ubicacion";
 import type { EleccionUbicacion } from "@/lib/ubicacion";
 import { mediosOfreciblesComprador } from "@/lib/medios-pago-datos";
@@ -42,10 +44,19 @@ async function direccionesParaCheckout(
 }
 
 /** Solo identificadores: la elección de «Enviar a» ya validada contra el dueño y los locales. */
-function eleccionParaCheckout(e: EleccionUbicacion): EleccionInicialCheckout {
+function eleccionParaCheckout(e: EleccionUbicacion, conZona: boolean): EleccionInicialCheckout {
   if (e.tipo === "retiro") return { tipo: "retiro", sucursal: e.sucursal?.slug };
   if (e.tipo === "envio") {
-    return { tipo: "envio", direccionId: e.direccion?.id, provincia: e.provincia ?? undefined };
+    // «Usar mi ubicación» con el envío por zona: calle, localidad, CP y token ya verificados (si vencieron, nada).
+    const x = conZona ? ubicacionExactaVerificada(e, claveProvincia(e.provincia) || null) : null;
+    return {
+      tipo: "envio",
+      direccionId: e.direccion?.id,
+      provincia: e.provincia ?? undefined,
+      ...(x
+        ? { exacta: { calle: x.calle, localidad: e.localidad, ...(x.cp ? { cp: x.cp } : {}), geoToken: x.geoToken, precision: x.precision } }
+        : {}),
+    };
   }
   return { tipo: "ninguna" };
 }
@@ -125,7 +136,7 @@ export default async function CheckoutPage({
   );
   // Sin la elección el checkout arranca como siempre: una falla al leerla no frena la compra.
   const eleccion = await ubicacionDelVisitante()
-    .then((u) => eleccionParaCheckout(u.eleccion))
+    .then((u) => eleccionParaCheckout(u.eleccion, (reglas.envio?.metodos?.length ?? 0) > 0))
     .catch((err: unknown) => {
       console.error("[checkout] no se pudo leer la ubicación elegida:", err);
       return null;

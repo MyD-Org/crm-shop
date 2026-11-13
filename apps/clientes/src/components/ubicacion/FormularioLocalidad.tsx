@@ -121,10 +121,11 @@ export function FormularioLocalidad({
           setUbicando(false);
         }
       },
-      // Permiso denegado o sin señal: sin error técnico, se ofrece escribir la localidad.
-      () => {
+      // Permiso denegado (el navegador no vuelve a preguntar: hay que explicar cómo habilitarlo) o sin
+      // señal / ubicación apagada en el dispositivo. En los dos casos se ofrece escribir la localidad.
+      (err) => {
         setUbicando(false);
-        setError(T.sinPermiso);
+        setError(err.code === err.PERMISSION_DENIED ? T.ubicacionBloqueada : T.ubicacionNoDisponible);
       },
       { timeout: 10_000, maximumAge: 5 * 60_000 },
     );

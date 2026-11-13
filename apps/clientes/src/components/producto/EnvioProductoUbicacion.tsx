@@ -2,7 +2,8 @@ import { connection } from "next/server";
 import { textoEnvioFicha, type ConfigEnvio } from "@/lib/envio";
 import { TEXTOS_UBICACION, envioFichaSegunUbicacion } from "@/lib/ubicacion";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
-import { estimarEnvioPorLocalidad } from "@/lib/envio-zona-textos";
+import { TEXTOS_ENVIO_ZONA, estimarEnvioPorLocalidad } from "@/lib/envio-zona-textos";
+import { fmtPesosEnteros } from "@/lib/format";
 import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
 import { CLASE_TONO } from "@/components/producto/EntregaProducto";
 import type { LineaDisponibilidad } from "@/lib/disponibilidad-textos";
@@ -44,9 +45,20 @@ export async function EnvioProductoUbicacion({
   if (zona) {
     return (
       <>
-        <span className="font-semibold text-text">{zona.texto}</span>
+        {zona.zonas && zona.zonas.length > 1 ? (
+          <>
+            <span className="font-semibold text-text">{TEXTOS_ENVIO_ZONA.enElDia}</span>
+            {zona.zonas.map((z) => (
+              <span key={z.nombre} className="block text-text">
+                {z.nombre}: {fmtPesosEnteros(z.precio)}
+              </span>
+            ))}
+          </>
+        ) : (
+          <span className="font-semibold text-text">{zona.texto}</span>
+        )}
         <span className="block">
-          {zona.llegada.texto}
+          {zona.llegada.mismoDia ? zona.llegada.texto : `Si confirma ahora, ${zona.llegada.texto.charAt(0).toLowerCase()}${zona.llegada.texto.slice(1)}`}
           {zona.llegada.condicion ? `, ${zona.llegada.condicion}` : ""}.
         </span>
         {zona.avisoFeriados && <span className="block text-xs">{zona.avisoFeriados}</span>}

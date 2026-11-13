@@ -11,15 +11,19 @@ import { leerDestinoBody, origenDeEnvio, planEnvio, resolverDestinoEnvio } from 
 import { EnvioCambioError } from "@/lib/envio-snapshot";
 import { direccionParaEnvio } from "@/lib/direcciones-envio-db";
 import { provinciaCanonica } from "@/lib/provincias";
-import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
+import { crearPedido, getPedidoInvitadoPorClave, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { marcarModalidadesCambiadas, marcarStockCambiado } from "@/lib/cache-invalidar";
 import { ProductoNoDisponibleError, StockInsuficienteError } from "@/lib/stock-disponible";
 import { UnidadesCampaniaError } from "@/lib/campanias/unidades";
-import { admiteEnvio } from "@/lib/facturacion";
-import { guardarTelefonoSiFalta } from "@/lib/facturacion-db";
+import { admiteEnvio, telefonoValido } from "@/lib/facturacion";
+import { contactoExistenteEnAlegra, guardarTelefonoSiFalta } from "@/lib/facturacion-db";
 import { congelarFacturacion, telefonoParaAlegra, validarComplemento } from "@/lib/contacto-alegra";
 import { sincronizarContactoConPerfil } from "@/lib/contacto-write-through";
 import { datosDelContacto, type DatosLeidos } from "@/lib/datos-del-contacto";
+import { datosDelContactoInvitado, resolverFacturacionInvitado, type ResultadoFacturacionInvitado } from "@/lib/facturacion-invitado";
+import { guardarCompraInvitado } from "@/lib/invitado-guarda";
+import { MENSAJES_INVITADO } from "@/lib/invitado-mensajes";
+import { acuñarTokenCompra } from "@/lib/pedido-token";
 import { cotizarConMedio } from "@/lib/pedido-medio";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
@@ -131,6 +135,14 @@ interface BodyPedido {
   envioACoordinar?: unknown;
   /** Costo de envío que el comprador vio: si cambia, el 409 es `envio_cambio` y no `precio_cambio`. */
   costoEnvioVisto?: unknown;
+  /**
+   * Sólo compra de invitado (sin sesión, flag `compra-invitado`): ver `lib/invitado-guarda.ts`.
+   * Además de este campo llegan `email` / `emailConfirmacion` (el mismo, escrito dos veces), `turnstile`
+   * (token del desafío), `iniciado` (epoch ms en que se pintó el formulario) y el campo trampa
+   * `sitio_web`. `facturacionInvitado`: consumidor final o factura A (ver `lib/facturacion-invitado.ts`).
+   * Con sesión se ignoran.
+   */
+  facturacionInvitado?: unknown;
 }
 
 /**
@@ -161,6 +173,18 @@ const medioNoDisponible = () =>
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
 
+/** Token de la sesión de compra del invitado (en memoria de la página; 6 h). */
+const tokenDeCompra = (pedidoId: string) => {
+  const { token, venceEn } = acuñarTokenCompra(pedidoId);
+  return { invitadoToken: token, invitadoTokenVenceEn: venceEn };
+};
+
+/** Reintento idempotente de un pedido de invitado: el mismo pedido (200) y un token nuevo para quien lo repite con los mismos datos. */
+async function repeticionDeInvitado(clave: string, email: string): Promise<NextResponse | null> {
+  const ya = await getPedidoInvitadoPorClave(clave, email);
+  return ya ? NextResponse.json({ ...ya, repetido: true, ...tokenDeCompra(ya.id) }, { status: 200 }) : null;
+}
+
 /**
  * POST /api/pedidos — confirma el pedido.
  *
@@ -171,26 +195,43 @@ const texto = (v: unknown, max = 200) =>
 export async function POST(req: Request) {
   // Alcanza con estar logueado: quien no vinculó cuenta corriente compra igual,
   // a lista general. La vinculación da precios propios, no permiso de comprar.
+  // Sin sesión sólo compra el invitado, con el flag `compra-invitado` encendido (ver abajo): con el
+  // flag apagado el anónimo recibe el 401 de siempre. Con sesión la rama de invitado se ignora.
   const { clerkUserId, cliente, email } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-
-  // Cuenta también los reintentos con la misma clave: son baratos, pero un
-  // loop que repite la clave tampoco es una persona.
-  const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
-  if (!await permitirAsync(`pedidos:${quien}`, MAX_PEDIDOS_POR_MINUTO, 60_000)) {
-    return NextResponse.json(
-      { error: "Hizo demasiados intentos de confirmar el pedido. Espere un minuto e inténtelo de nuevo." },
-      { status: 429, headers: { "Retry-After": "60" } },
-    );
-  }
+  const esInvitado = !clerkUserId && !cliente;
 
   let body: BodyPedido;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+  let emailInvitado = "";
+  let ipInvitado: string | null = null;
+  if (esInvitado) {
+    // Guardas anti-abuso, antes de tocar nada: flag, configuración, origen, honeypot, tope por IP, email,
+    // Turnstile y tope de pendientes (el reintento idempotente corta antes de Turnstile).
+    const guarda = await guardarCompraInvitado(req, {
+      atajo: ({ body: cuerpo, email: correo }) => {
+        const clave = texto(cuerpo.idempotencyKey, 40);
+        return clave && CLAVE_VALIDA.test(clave) ? repeticionDeInvitado(clave, correo) : Promise.resolve(null);
+      },
+    });
+    if (!guarda.ok) return guarda.respuesta;
+    body = guarda.body as BodyPedido;
+    emailInvitado = guarda.email;
+    ipInvitado = guarda.ip;
+  } else {
+    // Cuenta también los reintentos con la misma clave: son baratos, pero un
+    // loop que repite la clave tampoco es una persona.
+    const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
+    if (!await permitirAsync(`pedidos:${quien}`, MAX_PEDIDOS_POR_MINUTO, 60_000)) {
+      return NextResponse.json(
+        { error: "Hizo demasiados intentos de confirmar el pedido. Espere un minuto e inténtelo de nuevo." },
+        { status: 429, headers: { "Retry-After": "60" } },
+      );
+    }
+
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+    }
   }
 
   // --- Validación de los datos del formulario ---
@@ -220,6 +261,7 @@ export async function POST(req: Request) {
    */
   const pedidoYaCreado = async () => {
     if (!idempotencyKey) return null;
+    if (esInvitado) return repeticionDeInvitado(idempotencyKey, emailInvitado);
     const yaCreado = await getPedidoPorClave(idempotencyKey, {
       clerkUserId,
       clienteCodigo: cliente?.codigocliente,
@@ -241,6 +283,10 @@ export async function POST(req: Request) {
       { error: "Faltan el nombre y el teléfono de contacto." },
       { status: 400 },
     );
+  }
+  // El invitado no tiene teléfono en Alegra al que recurrir: el que escribe tiene que ser uno de verdad.
+  if (esInvitado && !telefonoValido(contactoTelefono)) {
+    return NextResponse.json({ error: MENSAJES_INVITADO.telefonoInvalido, campo: "contactoTelefono" }, { status: 400 });
   }
   // Desde `envio-gratis-configurable` el envío siempre es a domicilio (ciudad y dirección): el
   // "Envío a coordinar" aparte se fusionó con él (si no es gratis, el costo se coordina).
@@ -332,7 +378,24 @@ export async function POST(req: Request) {
   // el pedido: es preferible frenarlo acá que registrar una venta que después
   // nadie puede facturar. La MISMA lectura que el checkout y Mis datos
   // (`datosDelContacto`): vinculado ⇒ espejo de Alegra; no vinculado ⇒ perfil.
-  const dc = await datosDelContacto({ clerkUserId, cliente });
+  //
+  // Invitado: no hay perfil ni contacto de Alegra; carga su facturación en el propio pedido (consumidor
+  // final o factura A), validada con la misma regla y congelada en el pedido. Si su documento es el de
+  // un contacto de Alegra NO se lo vincula: el pedido va a lista general, sin cuenta corriente, y queda
+  // para revisión de un operador (la respuesta es la misma exista o no el contacto).
+  let facturaInvitado: Extract<ResultadoFacturacionInvitado, { ok: true }> | null = null;
+  if (esInvitado) {
+    const f = resolverFacturacionInvitado(
+      body.facturacionInvitado,
+      { tipo: entregaTipo, calle: entregaDireccion, ciudad: entregaCiudad, provincia: entregaProvincia },
+      contactoNombre,
+    );
+    if (!f.ok) {
+      return NextResponse.json({ error: f.error, motivo: f.motivo, campos: f.campos }, { status: 400 });
+    }
+    facturaInvitado = f;
+  }
+  const dc = facturaInvitado ? datosDelContactoInvitado(facturaInvitado.datos) : await datosDelContacto({ clerkUserId, cliente });
   let datosFactura: DatosLeidos = dc.datos;
   let complementoUsado = false;
   if (!dc.completo) {
@@ -502,13 +565,20 @@ export async function POST(req: Request) {
     // Cupón: se vuelve a validar acá con la cuenta (la validación del carrito no vale de nada) y se
     // aplica con las mismas reglas y el mismo contexto que `/api/carrito/cotizar`. Uno que no aplica
     // no bloquea: el pedido se cotiza sin él y `totalVisto` decide.
-    const quienCupon: QuienCupon = {
-      clerkUserId: clerkUserId ?? null,
-      email: (cliente?.email ?? email) || null,
-      listaPrivada: Boolean(idListaPrivada),
-    };
-    // Mismo límite de consultas que el carrito (por cuenta), contado antes de leer la base.
-    const cuponResuelto = await consultarCupon(body.cupon, quienCupon, clerkUserId ?? cliente!.codigocliente!);
+    // Invitado: las reglas por cuenta se aplican por email normalizado, y el tope de consultas es por IP.
+    const quienCupon: QuienCupon = esInvitado
+      ? { clerkUserId: null, email: emailInvitado, listaPrivada: false, invitado: true }
+      : {
+          clerkUserId: clerkUserId ?? null,
+          email: (cliente?.email ?? email) || null,
+          listaPrivada: Boolean(idListaPrivada),
+        };
+    // Mismo límite de consultas que el carrito (por cuenta o por IP), contado antes de leer la base.
+    const cuponResuelto = await consultarCupon(
+      body.cupon,
+      quienCupon,
+      esInvitado ? `ip:${ipInvitado ?? "desconocida"}` : (clerkUserId ?? cliente!.codigocliente!),
+    );
     const cuponParaCotizar = cuponResuelto?.ok ? cuponResuelto : undefined;
     const resuelto = await cotizarConMedio({
       lineas,
@@ -662,12 +732,14 @@ export async function POST(req: Request) {
     // Para revisión de un operador antes de facturar, con el motivo más
     // importante (ver motivo-revision.ts). El precio ya no depende de la lista del contacto de
     // Alegra (la lista privada se resuelve aparte), así que "otra lista de precios" no es motivo.
+    const documentoEnAlegra = facturaInvitado ? (await contactoExistenteEnAlegra(facturaInvitado.nroDoc)) !== null : false;
     const motivoRevision = motivoRevisionPedido({
       motivoContacto: dc.motivoRevision,
       complementoUsado,
       vinculado: Boolean(cliente),
       listaContacto: null,
       idListaGeneral: null,
+      invitadoDocumentoEnAlegra: documentoEnAlegra,
     });
 
     let pedido: Awaited<ReturnType<typeof crearPedido>>;
@@ -687,7 +759,8 @@ export async function POST(req: Request) {
            * después rompe el cobro: Mercado Pago exige `payer.email` y responde
            * "Params Error" sin decir cuál falta.
            */
-          email: cliente?.email ?? email,
+          email: esInvitado ? emailInvitado : (cliente?.email ?? email),
+          compraInvitado: esInvitado,
           // La lista efectivamente usada para cotizar, congelada con el pedido: la privada del comprador
           // (uuid de la lista online) o, sin ella, la del medio.
           idPriceList: idListaPrivada ?? idListaMedio,
@@ -794,6 +867,12 @@ export async function POST(req: Request) {
       return productosCambiaron(await cotizar(lineas, opcionesCotizar));
     }
 
+    // Invitado: un "repetido" que devuelve crearPedido sólo se acepta si la clave ya era de ESTE invitado
+    // (mismo email, sin dueño); si no, no se entrega número ni token de un pedido que no es suyo.
+    if (esInvitado && pedido.repetido && !(await repeticionDeInvitado(idempotencyKey, emailInvitado))) {
+      return NextResponse.json({ error: "Clave de pedido inválida." }, { status: 409 });
+    }
+
     // El pedido reservó stock: el listado cacheado se renueva en la próxima
     // vista (stale-while-revalidate). Nunca tira.
     if (!pedido.repetido) marcarStockCambiado("crear un pedido");
@@ -855,7 +934,14 @@ export async function POST(req: Request) {
     const contacto = await contactoDelPedido(pedido.id, pedido.numero);
 
     return NextResponse.json(
-      { ...pedido, cotizacion, ...(contacto ? { contacto } : {}), ...(await configMpPara(pedido.id, pagoMetodo)) },
+      {
+        ...pedido,
+        cotizacion,
+        ...(contacto ? { contacto } : {}),
+        ...(await configMpPara(pedido.id, pagoMetodo)),
+        // El token de la sesión de compra del invitado: sólo vive en la memoria de su página.
+        ...(esInvitado ? tokenDeCompra(pedido.id) : {}),
+      },
       { status: pedido.repetido ? 200 : 201 },
     );
   } catch (err) {

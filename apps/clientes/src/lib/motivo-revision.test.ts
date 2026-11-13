@@ -73,6 +73,7 @@ describe("motivoRevisionPedido", () => {
       "documento_incompatible",
       "condicion_iva_desconocida",
       "facturacion_en_pedido",
+      "invitado_documento_en_alegra",
       "otra_lista_precios",
     ]);
     expect(
@@ -94,5 +95,19 @@ describe("motivoRevisionPedido", () => {
         complementoUsado: true,
       }),
     ).toBe("documento_incompatible");
+  });
+
+  it("compra de invitado con el documento de un contacto de Alegra ⇒ invitado_documento_en_alegra", () => {
+    expect(motivoRevisionPedido({ ...base, invitadoDocumentoEnAlegra: true })).toBe("invitado_documento_en_alegra");
+    expect(motivoRevisionPedido({ ...base, invitadoDocumentoEnAlegra: false })).toBeNull();
+  });
+
+  it("el motivo del invitado cede ante los que impiden facturar y gana a la otra lista", () => {
+    expect(
+      motivoRevisionPedido({ ...base, invitadoDocumentoEnAlegra: true, complementoUsado: true }),
+    ).toBe("facturacion_en_pedido");
+    expect(
+      motivoRevisionPedido({ ...base, invitadoDocumentoEnAlegra: true, listaContacto: { id: "7" } }),
+    ).toBe("invitado_documento_en_alegra");
   });
 });

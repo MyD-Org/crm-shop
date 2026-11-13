@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { identidadActual } from "@/lib/auth";
+import { resolverPrincipal } from "@/lib/invitado-respuesta";
 import { procesadorDeMedio } from "@/lib/medios-pago";
 import { getPedidoParaPago } from "@/lib/pedidos";
 import { cuentaParaCobrar } from "@/lib/pagos/cuentas-sucursales";
@@ -14,19 +14,18 @@ const SIN_CACHE = { "Cache-Control": "no-store" };
  *
  * Sale del servidor en cada request en vez de una variable `NEXT_PUBLIC_*`: no exige otra variable ni
  * un rebuild al rotarla. Pide sesión y que el pedido sea de quien consulta (un pedido ajeno es 404, sin
- * revelar nada). Nunca devuelve la key privada.
+ * revelar nada). Nunca devuelve la key privada. El invitado la pide con el token de ESE pedido
+ * (`X-Pedido-Token`).
  */
 export async function GET(req: Request) {
-  const { clerkUserId, cliente } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401, headers: SIN_CACHE });
-  }
   const id = new URL(req.url).searchParams.get("pedido")?.trim().slice(0, 60) ?? "";
+  const r = await resolverPrincipal(req, id || null, SIN_CACHE);
+  if ("respuesta" in r) return r.respuesta;
   const noEncontrado = () =>
     NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404, headers: SIN_CACHE });
   if (!id) return noEncontrado();
 
-  const pedido = await getPedidoParaPago(id, { clerkUserId, clienteCodigo: cliente?.codigocliente });
+  const pedido = await getPedidoParaPago(id, r.principal.dueno);
   if (!pedido || procesadorDeMedio(pedido.pagoMetodo) !== "payway") return noEncontrado();
 
   const elegida = await cuentaParaCobrar("payway", pedido);

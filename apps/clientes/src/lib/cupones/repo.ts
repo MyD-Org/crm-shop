@@ -25,6 +25,12 @@ export interface QuienCupon {
   clerkUserId: string | null;
   email: string | null;
   listaPrivada: boolean;
+  /**
+   * Compra de invitado (change `compra-como-invitado`): sin cuenta de la tienda, pero con email.
+   * Las reglas de la cuenta se aplican por email normalizado; nunca se compara `clerk_user_id = NULL`.
+   * Sin esta marca, quien no tiene `clerkUserId` sigue viendo `sin_sesion`, como siempre.
+   */
+  invitado?: boolean;
 }
 
 export type CuponResuelto =
@@ -74,6 +80,8 @@ export async function leerPromocionCupon(codigoNorm: string): Promise<PromocionC
 /** El canje es de esta persona: misma cuenta de la tienda o mismo email (sin mayúsculas). */
 function deLaPersona(k: string, q: QuienCupon) {
   const email = q.email?.trim().toLowerCase() || null;
+  // Invitado (sin cuenta): sólo por email. Jamás `clerk_user_id = NULL` (no compara, siempre da NULL).
+  if (!q.clerkUserId) return sql`lower(${sql.raw(k)}.email) = ${email}`;
   return email
     ? sql`(${sql.raw(k)}.clerk_user_id = ${q.clerkUserId} or lower(${sql.raw(k)}.email) = ${email})`
     : sql`${sql.raw(k)}.clerk_user_id = ${q.clerkUserId}`;
@@ -99,15 +107,18 @@ export async function motivoCuentaCupon(
   q: QuienCupon,
   excluirPedidoId?: string,
 ): Promise<MotivoCupon | null> {
-  if (!q.clerkUserId) return "sin_sesion";
+  const email = q.email?.trim().toLowerCase() || null;
+  // Sin cuenta sólo entra el invitado con email (cupón por email + IP); el resto sigue sin sesión.
+  if (!q.clerkUserId && !(q.invitado && email)) return "sin_sesion";
   if (q.listaPrivada) return "lista_privada";
   const tenant = shopTenantId();
-  const email = q.email?.trim().toLowerCase() || null;
 
   if (p.soloPrimeraCompra) {
-    const persona = email
-      ? sql`(o.clerk_user_id = ${q.clerkUserId} or lower(o.cliente_email) = ${email})`
-      : sql`o.clerk_user_id = ${q.clerkUserId}`;
+    const persona = !q.clerkUserId
+      ? sql`lower(o.cliente_email) = ${email}`
+      : email
+        ? sql`(o.clerk_user_id = ${q.clerkUserId} or lower(o.cliente_email) = ${email})`
+        : sql`o.clerk_user_id = ${q.clerkUserId}`;
     const compro = await existe(
       ej,
       sql`select 1 from shop.orders o where o.tenant_id = ${tenant} and ${persona} and ${pedidoCompradoSql("o")} ${excluir(excluirPedidoId)}`,
@@ -174,6 +185,8 @@ export async function reservarCanjeEnTx(tx: Tx, p: PromocionCupon, q: QuienCupon
     `shop-cupon-codigo:${tenant}:${p.codigoId}`,
     `shop-cupon-promo:${tenant}:${p.promocionId}`,
     ...(q.clerkUserId ? [`shop-cupon-usuario:${tenant}:${q.clerkUserId}`] : []),
+    // Invitado: sin cuenta que bloquear, se serializa por email (dos checkouts del mismo email).
+    ...(!q.clerkUserId && q.email ? [`shop-cupon-email:${tenant}:${q.email.trim().toLowerCase()}`] : []),
   ];
   await tx.execute(
     sql`select pg_advisory_xact_lock(k) from (select distinct hashtextextended(c, 0) as k

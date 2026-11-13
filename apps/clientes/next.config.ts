@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import { hostsDeMedios } from "./src/lib/catalogo-medios";
 import { REDIRECTS_MI_CUENTA } from "./src/lib/mi-cuenta-redirects";
 import { normalizarUrlAiApi } from "./src/lib/ai-api-config";
-import { headersDeSeguridad } from "./src/lib/headers-seguridad";
+import { headersCheckout, headersDeSeguridad, headersPagar } from "./src/lib/headers-seguridad";
 import { rewritesPosthog } from "./src/lib/tracking/config";
 
 const nextConfig: NextConfig = {
@@ -103,7 +103,9 @@ const nextConfig: NextConfig = {
   // navegador); si dos reglas fijan el mismo header gana la última, por eso va después.
   headers: async () => [
     { source: "/:path*", headers: headersDeSeguridad() },
-    { source: "/checkout", headers: headersDeSeguridad(undefined, { checkout: true }) },
+    { source: "/checkout", headers: headersCheckout() },
+    // Enlace «Pagar su pedido» (compra de invitado): sin referrer, sin caché, sin indexar.
+    { source: "/pagar/:path*", headers: headersPagar() },
   ],
   // Chat con el agente: el widget habla con ai-api por el mismo origen (sin
   // CORS). Sólo existe si AI_API_URL está definida; que el chat se muestre lo

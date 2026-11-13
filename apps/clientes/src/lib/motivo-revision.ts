@@ -26,13 +26,19 @@ export type MotivoRevisionPedido =
    * El documento es de un contacto de Alegra (que el comprador no vinculó) con
    * una lista de precios distinta de la general con la que compró.
    */
-  | "otra_lista_precios";
+  | "otra_lista_precios"
+  /**
+   * Compra de invitado cuyo CUIT/DNI es el de un contacto de Alegra. El pedido va a lista general,
+   * sin cuenta corriente y sin vincular nada; un operador decide si ese comprador es ese cliente.
+   */
+  | "invitado_documento_en_alegra";
 
 /** De más a menos importante: el primero que aplica es el que se guarda. */
 export const PRIORIDAD_MOTIVOS: readonly MotivoRevisionPedido[] = [
   "documento_incompatible",
   "condicion_iva_desconocida",
   "facturacion_en_pedido",
+  "invitado_documento_en_alegra",
   "otra_lista_precios",
 ];
 
@@ -63,6 +69,8 @@ export interface EntradaMotivo {
   listaContacto: { id: string | null | undefined } | null;
   /** Lista general del catálogo, `null` si no se pudo saber. */
   idListaGeneral: string | null;
+  /** Compra de invitado: su documento coincide con un contacto de Alegra. */
+  invitadoDocumentoEnAlegra?: boolean;
 }
 
 /** El motivo más importante que aplica, o `null` = el pedido no necesita revisión. */
@@ -70,6 +78,7 @@ export function motivoRevisionPedido(e: EntradaMotivo): MotivoRevisionPedido | n
   const aplican = new Set<MotivoRevisionPedido>();
   if (e.motivoContacto) aplican.add(e.motivoContacto);
   if (e.complementoUsado) aplican.add("facturacion_en_pedido");
+  if (e.invitadoDocumentoEnAlegra) aplican.add("invitado_documento_en_alegra");
   if (!e.vinculado && e.listaContacto && listaDistintaDeLaGeneral(e.listaContacto.id, e.idListaGeneral)) {
     aplican.add("otra_lista_precios");
   }

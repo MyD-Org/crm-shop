@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { identidadActual } from "@/lib/auth";
+import { HEADER_TOKEN_PEDIDO } from "@/lib/invitado-acceso";
+import { clienteDe, resolverPrincipal } from "@/lib/invitado-respuesta";
 import { VENTANA_PAGO_MS, getPedidoParaPago, motivoNoCobrable, registrarCuentaRechazada } from "@/lib/pedidos";
 import { procesadorDeMedio } from "@/lib/medios-pago";
 import { permitirAsync } from "@/lib/rate-limit";
@@ -25,10 +26,21 @@ const VENTANA_MS = 5 * 60_000;
  * webhook identifica la cuenta por su firma.
  */
 export async function POST(req: Request) {
-  const { clerkUserId, cliente, email } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  // El cuerpo se lee ANTES de autorizar: el invitado se autoriza por el pedido que nombra (su token es
+  // de un solo pedido). Con un cuerpo ilegible, quien tiene sesión recibe el mismo 400 de siempre.
+  let pedidoId = "";
+  let cuerpoValido = true;
+  try {
+    const body = (await req.json()) as { pedidoId?: unknown };
+    pedidoId = typeof body.pedidoId === "string" ? body.pedidoId.trim().slice(0, 60) : "";
+  } catch {
+    cuerpoValido = false;
   }
+
+  const r = await resolverPrincipal(req, pedidoId || null);
+  if ("respuesta" in r) return r.respuesta;
+  const { principal } = r;
+  const cliente = clienteDe(principal);
 
   const sinCuenta = () =>
     NextResponse.json(
@@ -37,23 +49,14 @@ export async function POST(req: Request) {
     );
   if (!procesadorConfigurado("mercadopago")) return sinCuenta();
 
-  if (!await permitirAsync(`pago-pref:${clerkUserId ?? cliente?.codigocliente}`, MAX_PEDIDOS, VENTANA_MS)) {
+  if (!await permitirAsync(`pago-pref:${principal.clave}`, MAX_PEDIDOS, VENTANA_MS)) {
     return NextResponse.json({ error: "Demasiados intentos. Espere unos minutos." }, { status: 429 });
   }
 
-  let pedidoId = "";
-  try {
-    const body = (await req.json()) as { pedidoId?: unknown };
-    pedidoId = typeof body.pedidoId === "string" ? body.pedidoId.trim().slice(0, 60) : "";
-  } catch {
-    return NextResponse.json({ error: "Body inválido" }, { status: 400 });
-  }
+  if (!cuerpoValido) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   if (!pedidoId) return NextResponse.json({ error: "Falta el pedido." }, { status: 400 });
 
-  const pedido = await getPedidoParaPago(pedidoId, {
-    clerkUserId,
-    clienteCodigo: cliente?.codigocliente,
-  });
+  const pedido = await getPedidoParaPago(pedidoId, principal.dueno);
   if (!pedido || procesadorDeMedio(pedido.pagoMetodo) !== "mercadopago") {
     return NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404 });
   }
@@ -96,7 +99,12 @@ export async function POST(req: Request) {
           numero: pedido.numero,
           total: pedido.total,
           origen: new URL(req.url).origin,
-          emailComprador: pedido.clienteEmail ?? cliente?.email ?? email ?? undefined,
+          // El del pedido (siempre está en el de un invitado); el de la sesión sólo como respaldo de los viejos.
+          emailComprador:
+            pedido.clienteEmail ?? (principal.tipo === "cuenta" ? (cliente?.email ?? principal.email) : undefined) ?? undefined,
+          // El invitado vuelve de Mercado Pago, quizá a otro navegador: su token de compra (del header,
+          // nunca del cuerpo) viaja en la URL de retorno. Quien tiene cuenta no lo necesita.
+          ...(principal.tipo === "invitado" ? { tokenRetorno: req.headers.get(HEADER_TOKEN_PEDIDO) ?? undefined } : {}),
           marca,
           venceEn: new Date(pedido.creadoEn.getTime() + VENTANA_PAGO_MS),
         }),

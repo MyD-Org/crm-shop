@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { identidadActual } from "@/lib/auth";
+import { rechazoInvitadoNoCancela, resolverPrincipal } from "@/lib/invitado-respuesta";
 import { cancelarPedidoPendiente, intentoAbiertoDelPedido, lineasDelPedidoParaCarrito } from "@/lib/pedidos";
 import { proveedorDeIntento } from "@/lib/pagos/cuentas-sucursales";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
@@ -17,22 +17,23 @@ import { marcarStockCambiado } from "@/lib/cache-invalidar";
  * Tampoco se cancela con un pago en curso: si después se aprobara, quedaría un
  * pedido cancelado y cobrado. Primero se intenta cerrar ese pago en el
  * proveedor (igual que antes de un reintento de cobro); si no se puede, 409.
+ *
+ * El invitado NO cancela (403 aun con su token): contacta al local. Sin credencial, el 401 de siempre.
  */
 export async function POST(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const { clerkUserId, cliente } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-
   const { id } = await ctx.params;
+  const r = await resolverPrincipal(req, id || null);
+  if ("respuesta" in r) return r.respuesta;
+  if (r.principal.tipo === "invitado") return rechazoInvitadoNoCancela();
+
   if (!id) {
     return NextResponse.json({ error: "Falta el pedido" }, { status: 400 });
   }
 
-  const dueno = { clerkUserId, clienteCodigo: cliente?.codigocliente };
+  const dueno = r.principal.dueno;
 
   const abierto = await intentoAbiertoDelPedido(id, dueno);
   if (abierto) {

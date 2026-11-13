@@ -26,6 +26,12 @@ export interface DatosPreferencia {
   venceEn?: Date;
   /** Cuenta de Mercado Pago (slug de la sucursal) con la que se crea: pista en la URL del aviso. */
   cuenta?: string;
+  /**
+   * Compra de invitado: el token de su sesión de compra, que va en la URL de retorno (`t`) para que
+   * retome el pedido aunque vuelva en otro navegador. Sin cuenta ni cookie no hay otra forma de saber
+   * quién es. Lo toma el servidor del header `X-Pedido-Token` (nunca del cuerpo).
+   */
+  tokenRetorno?: string;
 }
 
 export interface Preferencia {
@@ -61,13 +67,19 @@ export interface Preferencia {
 export const TIPOS_EXCLUIDOS = ["credit_card", "debit_card", "prepaid_card", "ticket", "atm", "bank_transfer"] as const;
 
 /** A dónde vuelve el comprador. Mercado Pago rechaza back_urls que no sean https de dominio público. */
-export function urlRetorno(origen: string | null | undefined, pedidoId: string): string | undefined {
+export function urlRetorno(
+  origen: string | null | undefined,
+  pedidoId: string,
+  /** Token de compra del invitado (`t`); ausente para quien tiene cuenta. */
+  token?: string,
+): string | undefined {
   if (!urlNotificacion(origen)) return undefined; // misma regla: https y dominio público
-  return `${new URL(origen as string).origin}/checkout?pedido=${encodeURIComponent(pedidoId)}&pago=mp`;
+  const base = `${new URL(origen as string).origin}/checkout?pedido=${encodeURIComponent(pedidoId)}&pago=mp`;
+  return token ? `${base}&t=${encodeURIComponent(token)}` : base;
 }
 
 export function armarPreferencia(d: DatosPreferencia): Preferencia {
-  const retorno = urlRetorno(d.origen, d.pedidoId);
+  const retorno = urlRetorno(d.origen, d.pedidoId, d.tokenRetorno);
   // La cuenta va como pista en la URL del aviso (sólo logs; la identifica el secreto que firma).
   const webhook = urlNotificacion(d.origen, d.cuenta);
   return {

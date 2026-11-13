@@ -46,7 +46,7 @@ export async function getPerfilFacturacion(
  * Falla en silencio a null: que el espejo no responda no puede impedir que
  * alguien guarde sus datos de facturación.
  */
-async function contactoExistenteEnAlegra(nroDoc: string): Promise<string | null> {
+export async function contactoExistenteEnAlegra(nroDoc: string): Promise<string | null> {
   try {
     const contacto = await contactoPorDocumento(nroDoc);
     return contacto?.id ?? null;

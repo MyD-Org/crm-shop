@@ -2,7 +2,7 @@ import { UnidadesCampaniaError } from "@/lib/campanias/unidades";
 import { cuponTrasRecotizar, promoDesdePedido } from "@/lib/cupones/reglas";
 import { campaniasActivasEn } from "@/lib/campanias/vigentes";
 import { NextResponse, after } from "next/server";
-import { identidadActual } from "@/lib/auth";
+import { clienteDe, quienDe, resolverPrincipal } from "@/lib/invitado-respuesta";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { variantesSelector } from "@/lib/variantes-flag";
 import { marcarStockCambiado } from "@/lib/cache-invalidar";
@@ -52,11 +52,11 @@ const conflicto = (error: string, motivo: string, extra: Record<string, unknown>
  * cuando el cobro ya lo vació), su entrega y su contacto (para precargar el checkout y volver directo
  * al paso Pago con un pedido retomado).
  */
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { clerkUserId, cliente } = await identidadActual();
-  if (!clerkUserId && !cliente) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const pedido = id ? await pedidoParaCambiarMedio(id, { clerkUserId, clienteCodigo: cliente?.codigocliente }) : null;
+  const r = await resolverPrincipal(req, id || null);
+  if ("respuesta" in r) return r.respuesta;
+  const pedido = id ? await pedidoParaCambiarMedio(id, r.principal.dueno) : null;
   if (!pedido) return NextResponse.json({ error: "No se pudo cambiar el medio de pago" }, { status: 404 });
   return NextResponse.json({
     items: await lineasDelPedidoParaCarrito(id),
@@ -66,19 +66,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { clerkUserId, cliente } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-  const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
-  if (!await permitirAsync(`pedido-medio:${quien}`, MAX_CAMBIOS_POR_MINUTO, 60_000)) {
+  const { id } = await ctx.params;
+  const resolucion = await resolverPrincipal(req, id || null);
+  if ("respuesta" in resolucion) return resolucion.respuesta;
+  const { principal } = resolucion;
+  // El invitado nunca tiene cuenta corriente ni lista privada: `cliente` es null.
+  const cliente = clienteDe(principal);
+  if (!await permitirAsync(`pedido-medio:${quienDe(principal)}`, MAX_CAMBIOS_POR_MINUTO, 60_000)) {
     return NextResponse.json(
       { error: "Hizo demasiados intentos. Espere un minuto e inténtelo de nuevo." },
       { status: 429, headers: { "Retry-After": "60" } },
     );
   }
 
-  const { id } = await ctx.params;
   if (!id) return NextResponse.json({ error: "Falta el pedido" }, { status: 400 });
 
   let body: { pagoMetodo?: unknown; cuotas?: unknown; forma?: unknown; totalVisto?: unknown };
@@ -90,7 +90,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const pagoMetodo = typeof body.pagoMetodo === "string" ? body.pagoMetodo.trim().slice(0, 40) : "";
   if (!pagoMetodo) return NextResponse.json({ error: "Indique el medio de pago." }, { status: 400 });
 
-  const dueno = { clerkUserId, clienteCodigo: cliente?.codigocliente };
+  const dueno = principal.dueno;
 
   try {
     const pedido = await pedidoParaCambiarMedio(id, dueno);

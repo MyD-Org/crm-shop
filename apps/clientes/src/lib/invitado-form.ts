@@ -46,6 +46,15 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const emailNormalizado = (v: string) => v.trim().toLowerCase();
 
+/**
+ * El email con el que se valida el cupón del invitado al cotizar: sólo uno válido y confirmado, así no
+ * se recotiza en cada tecla ni se consulta el cupón con un email a medio escribir. "" = todavía no.
+ */
+export function emailParaCupon(d: Pick<DatosInvitado, "email" | "emailConfirmacion">): string {
+  const e = emailNormalizado(d.email);
+  return EMAIL.test(e) && e === emailNormalizado(d.emailConfirmacion) ? e : "";
+}
+
 export interface EntregaInvitado {
   tipo: "envio" | "retiro";
   calle?: string;

@@ -112,6 +112,7 @@ import {
   camposDeInvitadoParaPedido,
   DATOS_INVITADO_VACIOS,
   emailNormalizado,
+  emailParaCupon,
   erroresFacturacionInvitado,
   invitadoCompleto,
   validarContactoInvitado,
@@ -948,6 +949,8 @@ export function CheckoutClient({
     conTotalesOpciones: opcionesPago.length > 1,
     // Cupón: el del carrito; en el cambio de medio rige el congelado del pedido (`pedidoId:`).
     ...(pedidoACambiar ? { pedidoId: pedidoACambiar.id } : { cupon }),
+    // Invitado: con su email el cupón se valida con las reglas por persona antes de confirmar.
+    ...(invitadoActivo && emailParaCupon(datosInv) ? { invitadoEmail: emailParaCupon(datosInv) } : {}),
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });

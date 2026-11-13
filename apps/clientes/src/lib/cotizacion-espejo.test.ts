@@ -273,3 +273,46 @@ describe("cotizar", () => {
     });
   });
 });
+
+describe("cotizar: costo de envío por zona (costoEnvioPara)", () => {
+  it("sin costoEnvioPara el envío es 0 y el total no cambia (flag apagado)", async () => {
+    filas = [["10", "COD-10", null, null, precios, "5", "21", "active", null]];
+    const c = await cotizar([{ id: "10", qty: 2 }]);
+    expect(c.costoEnvio).toBe(0);
+    expect(c.total).toBe(2420);
+  });
+
+  it("el costo se calcula sobre el subtotal sin IVA y se suma al total", async () => {
+    filas = [["10", "COD-10", null, null, precios, "5", "21", "active", null]];
+    const vistos: number[] = [];
+    const c = await cotizar([{ id: "10", qty: 2 }], {
+      costoEnvioPara: (sub) => {
+        vistos.push(sub);
+        return 3000;
+      },
+    });
+    expect(vistos).toEqual([2000]);
+    expect(c).toMatchObject({ subtotal: 2000, iva: 420, costoEnvio: 3000, total: 5420 });
+  });
+
+  it("cada lista cotiza el envío con SU subtotal", async () => {
+    const conMedio = [...precios, { idPriceList: "9", name: "Medio", price: 700, main: false }];
+    filas = [["10", "COD-10", null, null, conMedio, "5", "21", "active", null]];
+    const costo = (sub: number) => (sub >= 1000 ? 0 : 3000);
+    const general = await cotizar([{ id: "10", qty: 1 }], { costoEnvioPara: costo });
+    const medio = await cotizar([{ id: "10", qty: 1 }], { idListaMedio: "9", costoEnvioPara: costo });
+    expect(general.costoEnvio).toBe(0);
+    expect(medio.costoEnvio).toBe(3000);
+    expect(medio.total).toBe(Math.round((700 * 1.21 + 3000) * 100) / 100);
+  });
+
+  it("una línea con problema no suma al subtotal que mira el costo", async () => {
+    filas = [
+      ["10", "COD-10", null, null, precios, "5", "21", "active", null],
+      ["20", "COD-20", null, null, precios, "5", "21", "inactive", null],
+    ];
+    const vistos: number[] = [];
+    await cotizar([{ id: "10", qty: 1 }, { id: "20", qty: 1 }], { costoEnvioPara: (s) => (vistos.push(s), 100) });
+    expect(vistos).toEqual([1000]);
+  });
+});

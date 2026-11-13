@@ -16,8 +16,10 @@ export function aplicadorDeCupon(a: {
   cupon: CuponParaCotizar;
   entrega: ContextoCupon["entrega"];
   nombresMedios?: Record<string, string>;
-  /** Total con IVA de todo el carrito a la lista general (sin lista de medio). */
+  /** Total con IVA de todo el carrito a la lista general (sin lista de medio) y SIN el costo de envío. */
   totalListaGeneral: () => Promise<number>;
+  /** Ver `ContextoCupon.envioGratisAplica`; ausente = true. */
+  envioGratisAplica?: boolean;
   ahora?: Date;
 }): AplicadorCupon {
   const ahora = a.ahora ?? new Date();
@@ -33,6 +35,7 @@ export function aplicadorDeCupon(a: {
       motivoCuenta: a.cupon.motivoCuenta,
       verificado: a.cupon.verificado,
       congelado,
+      ...(a.envioGratisAplica === false ? { envioGratisAplica: false } : {}),
       ...(a.nombresMedios ? { nombresMedios: a.nombresMedios } : {}),
     });
 }

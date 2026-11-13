@@ -58,7 +58,7 @@ export async function EnvioProductoUbicacion({
           <span className="font-semibold text-text">{zona.texto}</span>
         )}
         <span className="block">
-          {zona.llegada.mismoDia ? zona.llegada.texto : `Si confirma ahora, ${zona.llegada.texto.charAt(0).toLowerCase()}${zona.llegada.texto.slice(1)}`}
+          {zona.llegada.texto}
           {zona.llegada.condicion ? `, ${zona.llegada.condicion}` : ""}.
         </span>
         {zona.avisoFeriados && <span className="block text-xs">{zona.avisoFeriados}</span>}

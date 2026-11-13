@@ -7,6 +7,8 @@ import { permitirAsync } from "@/lib/rate-limit";
 import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
 import { urlEstructurada, urlLibre, urlLibreAcotada } from "@/lib/geocode-envio";
 import { firmarGeo, geoFirmaConfigurada } from "@/lib/geo-token";
+import { compraInvitadoHabilitada } from "@/lib/compra-invitado-flag";
+import { ipDelRequest } from "@/lib/ip-cliente";
 
 /**
  * Autocompletado de direcciones contra Nominatim (OpenStreetMap), acotado al
@@ -25,9 +27,11 @@ import { firmarGeo, geoFirmaConfigurada } from "@/lib/geo-token";
  * El volumen se controla en dos capas, y la distinción importa:
  *
  * En el SERVIDOR, que es lo único que de verdad frena a alguien:
- *   1. Sesión obligatoria. Sin esto la ruta es un proxy abierto y cualquiera
- *      con un `for` deja el autocompletado caído para todos los clientes.
- *   2. Rate limit por usuario.
+ *   1. Sesión, o compra como invitado (flag `compra-invitado`). Sin cuenta la
+ *      ruta sería un proxy abierto: al invitado se le exige un request del mismo
+ *      sitio, un techo por IP más bajo que el de las cuentas y un techo global
+ *      para todos los invitados juntos, que es lo que protege la IP del servidor.
+ *   2. Rate limit por usuario (o por IP para el invitado).
  *   3. La cache de acá, que absorbe las búsquedas repetidas.
  *
  * En el CLIENTE, que solo mejora el caso honesto y no defiende de nada:
@@ -73,6 +77,17 @@ const MIN_CARACTERES = 4;
  */
 const MAX_POR_MINUTO = 40;
 
+/** Invitado, por IP: una dirección cómoda por minuto y un tope diario que corta a un script. */
+const INVITADO_POR_MINUTO = 20;
+const INVITADO_POR_DIA = 300;
+/** Todos los invitados juntos: con la cache, mantiene el volumen hacia Nominatim lejos de su límite. */
+const INVITADOS_POR_MINUTO_GLOBAL = 120;
+
+/** Sólo un fetch del propio sitio (los navegadores mandan `Sec-Fetch-Site`; un script suelto, no). */
+function mismoSitio(req: Request): boolean {
+  return req.headers.get("sec-fetch-site") === "same-origin";
+}
+
 /**
  * Saca los prefijos administrativos de OSM: devuelve "Municipio de Puerto
  * Iguazú" y "Provincia de Misiones", que en una factura quedan mal. También
@@ -88,18 +103,25 @@ function limpiarNombre(v: string | undefined): string {
 }
 
 export async function GET(req: Request) {
-  // El autocompletado solo se usa en checkout y datos de facturación, las dos
-  // detrás de sesión: exigirla acá no le saca nada a nadie.
+  // El autocompletado se usa en checkout y datos de facturación: con cuenta, o sin cuenta cuando la
+  // compra como invitado está habilitada (con límites más estrictos, ver arriba).
+  const demasiadas = () =>
+    NextResponse.json({ error: "Demasiadas búsquedas. Espere un momento." }, { status: 429 });
   const clave = await claveSolicitante();
-  if (!clave) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-
-  if (!await permitirAsync(`geocode:${clave}`, MAX_POR_MINUTO, 60_000)) {
-    return NextResponse.json(
-      { error: "Demasiadas búsquedas. Espere un momento." },
-      { status: 429 },
-    );
+  if (clave) {
+    if (!await permitirAsync(`geocode:${clave}`, MAX_POR_MINUTO, 60_000)) return demasiadas();
+  } else {
+    const ip = ipDelRequest(req);
+    if (!ip || !mismoSitio(req) || !(await compraInvitadoHabilitada())) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+    if (
+      !(await permitirAsync(`geocode:inv:ip:${ip}`, INVITADO_POR_MINUTO, 60_000)) ||
+      !(await permitirAsync(`geocode:inv:dia:${ip}`, INVITADO_POR_DIA, 86_400_000)) ||
+      !(await permitirAsync("geocode:inv:global", INVITADOS_POR_MINUTO_GLOBAL, 60_000))
+    ) {
+      return demasiadas();
+    }
   }
 
   const { searchParams } = new URL(req.url);

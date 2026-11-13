@@ -100,8 +100,8 @@ describe("lo que el servidor le niega al invitado", () => {
     expect(checkout).toContain("const buscaPendienteAlMontar = !invitadoActivo || Boolean(invitado?.tokenRetorno);");
   });
 
-  it("no usa las sugerencias de direcciones (/api/geocode) ni escribe la ubicación (cookie)", () => {
-    expect(checkout).toContain("suspendido={invitadoActivo}");
+  it("usa las sugerencias de direcciones (/api/geocode lo limita por IP) pero no escribe la ubicación (cookie)", () => {
+    expect(checkout).not.toContain("suspendido={invitadoActivo}");
     expect(checkout).toContain("const claveSync = cuerpoSync && !invitadoActivo ? JSON.stringify(cuerpoSync) : null;");
   });
 

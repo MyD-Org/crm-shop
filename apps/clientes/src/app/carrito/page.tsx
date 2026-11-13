@@ -12,6 +12,7 @@ import { esCompradorCuentaCorriente } from "@/lib/medios-pago";
 import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
 import { pagoParaCotizar } from "@/lib/lista-medio";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
+import { compraInvitadoHabilitada } from "@/lib/compra-invitado-flag";
 
 export default async function CarritoPage() {
   const [{ clerkUserId, cliente }, reglas, { piedra }] = await Promise.all([
@@ -44,10 +45,13 @@ export default async function CarritoPage() {
     entregaTipo === "envio" && (configEnvio.metodos?.length ?? 0) > 0 && resuelta?.ubicacion
       ? { localidad: resuelta.ubicacion.localidad, ...(resuelta.ubicacion.id ? { georefId: resuelta.ubicacion.id } : {}) }
       : undefined;
+  // Compra sin cuenta (flag `compra-invitado`): se evalúa sólo para quien no tiene sesión.
+  const compraInvitado = !(clerkUserId || cliente) && (await compraInvitadoHabilitada());
   return (
     <CarritoClient
       pagoTransferencia={pagoTransferencia}
       conSesion={!!(clerkUserId || cliente)}
+      compraInvitado={compraInvitado}
       configEnvio={configEnvioPublica(configEnvio)}
       destinoEnvio={destinoEnvio}
       entregaTipo={entregaTipo}

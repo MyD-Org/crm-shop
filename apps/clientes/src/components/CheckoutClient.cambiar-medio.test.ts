@@ -43,7 +43,7 @@ describe("CheckoutClient: cambiar medio de pago", () => {
   it("no crea otro pedido al cambiar: la rama del cambio sale antes de POST /api/pedidos", () => {
     const cuerpo = fuente.slice(fuente.indexOf("async function confirmar()"));
     expect(cuerpo.indexOf("confirmarCambioDeMedio(pedidoACambiar)")).toBeGreaterThan(0);
-    expect(cuerpo.indexOf("confirmarCambioDeMedio(pedidoACambiar)")).toBeLessThan(cuerpo.indexOf('fetch("/api/pedidos"'));
+    expect(cuerpo.indexOf("confirmarCambioDeMedio(pedidoACambiar)")).toBeLessThan(cuerpo.indexOf('fetchConToken("/api/pedidos"'));
   });
 
   it('"Volver al carrito" queda como acción secundaria chica', () => {

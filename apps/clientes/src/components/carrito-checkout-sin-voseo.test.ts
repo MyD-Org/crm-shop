@@ -52,6 +52,10 @@ const ARCHIVOS = [
   "components/carrito/MetasCarrito.tsx",
   "components/carrito/TextoConEnfasis.tsx",
   "lib/envio.ts",
+  "lib/invitado-textos.ts",
+  "lib/invitado-form.ts",
+  "components/FormularioInvitado.tsx",
+  "components/TurnstileWidget.tsx",
 ];
 
 const REGISTRO =

@@ -18,6 +18,9 @@ import { mediosOfreciblesComprador } from "@/lib/medios-pago-datos";
 import { esCompradorCuentaCorriente, mediosVisiblesPara } from "@/lib/medios-pago";
 import { idPagoDeRetorno } from "@/lib/pagos/mercadopago-preferencia";
 import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
+import { compraInvitadoHabilitada } from "@/lib/compra-invitado-flag";
+import { resolverRetornoInvitado, type InvitadoCheckout } from "@/lib/checkout-invitado";
+import { datosDelContactoInvitado } from "@/lib/facturacion-invitado";
 
 /**
  * Direcciones guardadas para precargar el envío. Si la consulta falla (por
@@ -60,9 +63,10 @@ export default async function CheckoutPage({
     pago?: string | string[];
     payment_id?: string | string[];
     collection_id?: string | string[];
+    t?: string | string[];
   }>;
 }) {
-  const { pedido, pago, payment_id, collection_id } = await searchParams;
+  const { pedido, pago, payment_id, collection_id, t } = await searchParams;
   // Reintento del pago de un pedido existente (`/checkout?pedido=<id>`): el servidor lo valida.
   const pedidoReintento = typeof pedido === "string" && pedido ? pedido : null;
   // `pago=mp`: el comprador vuelve de Mercado Pago (back_urls de la preferencia). Sólo hay un pago que
@@ -80,8 +84,16 @@ export default async function CheckoutPage({
   const tarjetasPromise = getTarjetasMercadoPago();
 
   const { clerkUserId, cliente, nombre, email } = await identidadActual();
+  // Compra como invitado (flag `compra-invitado`, apagado por defecto = login obligatorio como siempre).
+  // El flag se evalúa SÓLO para quien no tiene sesión: quien la tiene nunca ve el formulario de invitado.
+  let invitado: InvitadoCheckout | null = null;
   if (!clerkUserId && !cliente) {
-    redirect(rutaIngreso("/checkout"));
+    if (!(await compraInvitadoHabilitada())) redirect(rutaIngreso("/checkout"));
+    invitado = {
+      activo: true,
+      turnstileSiteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "",
+      ...resolverRetornoInvitado(pedidoReintento, typeof t === "string" && t ? t : null),
+    };
   }
 
   // Sin datos fiscales no se puede facturar la compra. Se resuelve acá y se
@@ -115,8 +127,9 @@ export default async function CheckoutPage({
       console.error("[checkout] no se pudo leer la ubicación elegida:", err);
       return null;
     });
+  // El invitado no tiene contacto de Alegra, perfil ni direcciones guardadas: nada de eso se consulta.
   const [dc, direcciones] = await Promise.all([
-    datosDelContacto({ clerkUserId, cliente }),
+    invitado ? datosDelContactoInvitado({ pais: "AR" }) : datosDelContacto({ clerkUserId, cliente }),
     // Sólo con Clerk: la cookie del CRM sin Clerk no guarda direcciones.
     clerkUserId ? direccionesParaCheckout(clerkUserId) : [],
   ]);
@@ -125,7 +138,7 @@ export default async function CheckoutPage({
   // Su documento ya es de un cliente de Alegra y no vinculó: se le ofrece
   // vincular siempre, tenga o no cuenta corriente (el vínculo ata la compra al
   // contacto y trae sus datos de Alegra).
-  const sugerirVincular = !cliente && !!perfil?.coincideConAlegra;
+  const sugerirVincular = !invitado && !cliente && !!perfil?.coincideConAlegra;
   // Para el formulario del no vinculado: sólo las columnas que muestra.
   const perfilUI = perfil
     ? {
@@ -173,6 +186,7 @@ export default async function CheckoutPage({
         pedidoReintento={pedidoReintento}
         retornoMercadoPago={retornoMercadoPago}
         pagoMercadoPagoId={pagoMercadoPagoId ?? undefined}
+        invitado={invitado}
       />
     </>
   );

@@ -1,0 +1,8 @@
+{
+  "secreto": "secreto-de-prueba-pedido-link-0123456789",
+  "tenant": "tenant-vector.example",
+  "proposito": "compra",
+  "orderId": "33333333-3333-4333-8333-333333333333",
+  "venceEn": 1800000000000,
+  "esperado": "v1.33333333-3333-4333-8333-333333333333.mywpiww0.1pK9115GV_pAUNjqfNCM-T3YBx39qM2riIWnUbkpico"
+}

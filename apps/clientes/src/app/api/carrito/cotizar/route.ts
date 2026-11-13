@@ -33,6 +33,8 @@ import { sinProcesadoresNoConfigurados } from "@/lib/medios-pago-datos";
 import { listaAConfirmar } from "@/lib/medios-precio";
 import { cuponDelPedido } from "@/lib/cupones/repo";
 import { consultarCupon } from "@/lib/cupones/consulta";
+import { compraInvitadoHabilitada } from "@/lib/compra-invitado-flag";
+import { normalizarEmail } from "@/lib/email-normalizado";
 import { aplicadorDeCupon, nombresDeMedios, opcionCupon, type AplicadorCupon } from "@/lib/cupones/aplicar";
 import { promoDesdePedido } from "@/lib/cupones/reglas";
 import type { CuponError } from "@/lib/cupones/tipos";
@@ -130,6 +132,8 @@ export async function POST(req: Request) {
     totalesOpciones?: unknown;
     cupon?: unknown;
     pedidoId?: unknown;
+    /** Compra de invitado: su email, para aplicar las reglas por cuenta del cupón. Sólo sin sesión y con el flag. */
+    invitadoEmail?: unknown;
   };
   try {
     body = await req.json();
@@ -284,11 +288,23 @@ export async function POST(req: Request) {
     const pedidoId = typeof body.pedidoId === "string" ? body.pedidoId.trim().slice(0, 40) : "";
     const cuponPedido = pedidoId && clerkUserId ? await cuponDelPedido(pedidoId, clerkUserId) : null;
     // Con límite propio de consultas (frena probar códigos al azar), compartido con POST /api/pedidos.
+    // Invitado (change `compra-como-invitado`): sin sesión y con el flag encendido, su email permite las
+    // reglas por cuenta del cupón (una vez por cliente, primera compra). El tope de consultas sigue
+    // siendo por IP. Sin email, o con el flag apagado, vale lo de siempre (cupón sin reglas de cuenta).
+    let invitadoEmail: string | null = null;
+    if (!clerkUserId && !cliente && !pedidoId && body.cupon && body.invitadoEmail !== undefined) {
+      const e = normalizarEmail(body.invitadoEmail);
+      if (e && (await compraInvitadoHabilitada())) invitadoEmail = e;
+    }
     const resuelto = pedidoId
       ? null
       : await consultarCupon(
           body.cupon,
-          clerkUserId || cliente ? { clerkUserId: clerkUserId ?? null, email: email ?? null, listaPrivada: Boolean(idListaPrivada) } : null,
+          clerkUserId || cliente
+            ? { clerkUserId: clerkUserId ?? null, email: email ?? null, listaPrivada: Boolean(idListaPrivada) }
+            : invitadoEmail
+              ? { clerkUserId: null, email: invitadoEmail, listaPrivada: false, invitado: true }
+              : null,
           quien ?? `ip:${ipDe(req) ?? "desconocida"}`,
         );
     const cuponParaCotizar = cuponPedido

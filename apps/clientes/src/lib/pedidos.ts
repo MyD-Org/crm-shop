@@ -12,7 +12,7 @@ import { cuponParaResumen } from "./cupones/ui";
 import type { CuponPedido, PromocionCupon } from "./cupones/tipos";
 import { validarUnidadesEnTx } from "./campanias/unidades";
 import { cache } from "react";
-import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { cuponCanjes, orderItems, orders, pagoIntentos } from "@/db/schema";
 import {
@@ -78,6 +78,7 @@ import { leerCuentasBancariasEnTx } from "./cuentas-bancarias-repo";
 import { medioAdmiteCambio } from "./cambiar-medio-pago";
 import type { PedidoParaComprobante } from "./comprobantes/pedido";
 import { pedidosConComprobanteInformado } from "./comprobantes/repo";
+import { medirPedidoConfirmadoInvitado, type MedicionPedidoInvitado } from "./tracking/servidor";
 
 /** Formato visible del número correlativo. */
 export function formatearNumero(numero: number): string {
@@ -103,6 +104,12 @@ export interface DatosCliente {
   cuit?: string;
   email?: string;
   idPriceList?: string;
+  /**
+   * Compra de invitado (change `compra-como-invitado`): sin cuenta de la tienda ni cliente vinculado.
+   * El pedido nace con `compra_invitado = true`, `clerk_user_id` y `cliente_codigo` nulos y el email
+   * normalizado en `email`.
+   */
+  compraInvitado?: boolean;
 }
 
 export interface DatosPedido {
@@ -361,6 +368,7 @@ export async function crearPedido(
         clienteRazonSocial: cliente.razonSocial ?? null,
         clienteCuit: cliente.cuit ?? null,
         clienteEmail: cliente.email ?? null,
+        compraInvitado: cliente.compraInvitado === true,
         idPriceList: cliente.idPriceList ?? null,
         contactoNombre: datos.contactoNombre,
         contactoTelefono: datos.contactoTelefono,
@@ -610,6 +618,71 @@ export async function getPedidoPorClave(
         cuentaPago: fila.pagoCuenta ?? null,
       }
     : null;
+}
+
+/**
+ * Reintento idempotente de un pedido de INVITADO: la clave la elige el navegador, así que se exige
+ * además que el email coincida (normalizado) y que el pedido sea de invitado y todavía sin dueño.
+ * Sin esto, conocer una clave alcanzaría para leer el número de pedido (y recibir un token) de otro.
+ */
+export async function getPedidoInvitadoPorClave(
+  idempotencyKey: string,
+  emailNormalizado: string,
+): Promise<{
+  id: string;
+  numero: string;
+  cuotas: number | null;
+  cuentaPago: CuentaPagoSnapshot | null;
+} | null> {
+  const [fila] = await getDb()
+    .select({
+      id: orders.id,
+      numero: orders.numero,
+      cuotas: orders.cuotas,
+      pagoCuenta: orders.pagoCuenta,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.idempotencyKey, idempotencyKey),
+        esDeEsteTenant(),
+        eq(orders.compraInvitado, true),
+        isNull(orders.clerkUserId),
+        isNull(orders.clienteCodigo),
+        sql`lower(${orders.clienteEmail}) = ${emailNormalizado}`,
+      ),
+    )
+    .limit(1);
+  return fila
+    ? { id: fila.id, numero: formatearNumero(fila.numero), cuotas: fila.cuotas, cuentaPago: fila.pagoCuenta ?? null }
+    : null;
+}
+
+/**
+ * Pedidos de invitado de este email que siguen sin pagar y sin cancelar, creados en la ventana (por
+ * defecto 24 h): el tope de pendientes por email. Usa el índice parcial `orders_invitado_email_idx`
+ * (mismo predicado: invitado, sin cuenta y sin cliente).
+ */
+export async function contarPendientesInvitado(
+  emailNormalizado: string,
+  desde: Date = new Date(Date.now() - 24 * 60 * 60_000),
+): Promise<number> {
+  const [r] = await getDb()
+    .select({ n: sql<number>`count(*)::int` })
+    .from(orders)
+    .where(
+      and(
+        esDeEsteTenant(),
+        eq(orders.compraInvitado, true),
+        isNull(orders.clerkUserId),
+        isNull(orders.clienteCodigo),
+        eq(orders.estado, "pendiente"),
+        eq(orders.pagoEstado, "pendiente"),
+        sql`lower(${orders.clienteEmail}) = ${emailNormalizado}`,
+        gt(orders.createdAt, desde),
+      ),
+    );
+  return Number(r?.n ?? 0);
 }
 
 /** Fila cruda de `orders` + sus líneas, armada como `Order` de UI. */
@@ -1373,6 +1446,10 @@ export async function registrarCobro(
   opciones: { intentoId?: string; avisar?: boolean } = {},
 ): Promise<boolean> {
   const resultado = await registrarCobroTx(pedidoId, cobro, opciones.intentoId);
+  // Compra de invitado recién pagada: `pedido_confirmado` se mide ACÁ, en el servidor (el invitado
+  // vuelve de Mercado Pago con el token en la URL y esa carga no tiene tracking). Sin PII y nunca
+  // hace fallar el cobro.
+  if (resultado.medicion) await medirPedidoConfirmadoInvitado(resultado.medicion);
   if (resultado.cambioPedido && opciones.avisar !== false) {
     // Después del commit: el mail nunca ve un estado que después se deshizo.
     await avisarCobro(pedidoId, {
@@ -1389,7 +1466,11 @@ async function registrarCobroTx(
   pedidoId: string,
   cobro: ResultadoCobro,
   intentoId: string | undefined,
-): Promise<{ cambio: boolean; cambioPedido: { antes: PagoEstado; despues: PagoEstado } | null }> {
+): Promise<{
+  cambio: boolean;
+  cambioPedido: { antes: PagoEstado; despues: PagoEstado } | null;
+  medicion: MedicionPedidoInvitado | null;
+}> {
   return getDb().transaction(async (tx) => {
     /**
      * `for update` no es decorativo: sin el lock, dos notificaciones que llegan
@@ -1410,13 +1491,15 @@ async function registrarCobroTx(
         clerkUserId: orders.clerkUserId,
         // Último: los dobles de prueba responden filas posicionales.
         formaCobro: orders.formaCobro,
+        compraInvitado: orders.compraInvitado,
+        pagoMetodo: orders.pagoMetodo,
       })
       .from(orders)
       .where(and(eq(orders.id, pedidoId), esDeEsteTenant()))
       .limit(1)
       .for("update");
 
-    if (!fila) return { cambio: false, cambioPedido: null };
+    if (!fila) return { cambio: false, cambioPedido: null, medicion: null };
 
     const intento = await intentoDelCobro(tx, pedidoId, cobro, intentoId);
     // Las reglas de transición (eventos desordenados, reversiones) se aplican
@@ -1600,6 +1683,12 @@ async function registrarCobroTx(
     return {
       cambio: intento.nuevo || cambiaIntento || nuevo !== actual,
       cambioPedido: nuevo !== actual ? { antes: actual, despues: nuevo } : null,
+      // Una sola vez por pedido: la transición a `pagado` ocurre una vez (un segundo aviso del mismo
+      // cobro ve `pagado` y no cambia nada); además el evento lleva un `uuid` fijo por pedido.
+      medicion:
+        fila.compraInvitado && nuevo === "pagado" && actual !== "pagado"
+          ? { pedidoId, total: Number(fila.total), medio: fila.pagoMetodo }
+          : null,
     };
   });
 }

@@ -61,6 +61,8 @@ de las vistas del CRM (`public.catalog_products_shop` y
 | `GA4_MEASUREMENT_ID` | Opcional. ID de medición de Google Analytics 4 (`G-…`). Igual que el anterior: eventos de ecommerce de GA4 y hosts en la CSP; se lee en el build. |
 | `POSTHOG_KEY` / `POSTHOG_REGION` | Opcional. Project API key de PostHog (`phc_…`) y región (`us`, default, o `eu`). Alimenta el rewrite `/ingest/*` hacia PostHog Cloud (se lee en el build: un cambio requiere redesplegar). Grabación de sesiones con todos los inputs enmascarados. |
 | `PEDIDO_LINK_SECRET` | Secreto (mínimo 32 caracteres, server-only) con el que se firman los tokens del pedido de un invitado: el de la sesión de compra (6 h) y el del link «Pagar su pedido» de los mails (`src/lib/pedido-token.ts`). Sin ella, o con menos de 32 caracteres, no se firma ni se acepta ningún token (falla cerrada). Cargarla con `vercel env add` en development, preview y production; el CRM usa el MISMO valor para sus mails de estado. Cambiarla invalida todos los links ya enviados. |
+| `TURNSTILE_SECRET_KEY` | Secreto de Cloudflare Turnstile (server-only). Valida el desafío anti-bot de la compra como invitado (`src/lib/turnstile.ts`, `siteverify`). Sin ella la compra sin cuenta no se ofrece (falla cerrada: `POST /api/pedidos` anónimo responde 503). En development/preview usar las claves de prueba de Cloudflare. |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Clave pública del mismo widget de Turnstile (la usa el formulario del invitado, rebanada S2b). Se carga junto con la anterior. |
 
 ### Flags (Vercel Flags, sin redeploy)
 

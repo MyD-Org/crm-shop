@@ -40,7 +40,7 @@ const MAX_COLA = 20;
 
 const estado: Estado = { destinos: null, cola: [] };
 
-function ubicacion(): { pathname: string; href: string } | null {
+function ubicacion(): { pathname: string; search?: string; href: string } | null {
   return typeof window === "undefined" ? null : window.location;
 }
 
@@ -84,7 +84,7 @@ export function track(e: EventoShop): void {
   const loc = ubicacion();
   if (!loc) return;
   // Login y registro: nada, salvo los eventos del embudo (sólo PostHog, URL sin query).
-  if (rutaSinTracking(loc.pathname) && !permitidoSinTracking(e)) return;
+  if (rutaSinTracking(loc.pathname, loc.search) && !permitidoSinTracking(e)) return;
   if (!estado.destinos) {
     if (estado.cola.length < MAX_COLA) estado.cola.push(e);
     return;

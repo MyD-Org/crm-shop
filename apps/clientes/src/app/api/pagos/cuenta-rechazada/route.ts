@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { identidadActual } from "@/lib/auth";
+import { resolverPrincipal } from "@/lib/invitado-respuesta";
 import { getPedidoParaPago, motivoNoCobrable, registrarCuentaRechazada } from "@/lib/pedidos";
 import { procesadorDeMedio } from "@/lib/medios-pago";
 import { permitirAsync } from "@/lib/rate-limit";
@@ -26,24 +26,29 @@ const texto = (v: unknown, max: number) => (typeof v === "string" ? v.trim().sli
  * registrado como informado por el cliente (`credenciales_rechazadas:<cuenta>:cliente`).
  */
 export async function POST(req: Request) {
-  const { clerkUserId, cliente } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401, headers: SIN_CACHE });
+  // El cuerpo se lee ANTES de autorizar: el invitado se autoriza por el pedido que nombra (su token es
+  // de un solo pedido). Con un cuerpo ilegible, quien tiene sesión recibe el mismo 400 de siempre.
+  let body: { pedidoId?: unknown; proveedor?: unknown; cuenta?: unknown } | null = null;
+  try {
+    body = await req.json();
+  } catch {
+    body = null;
   }
-  if (!await permitirAsync(`cuenta-rechazada:${clerkUserId ?? cliente?.codigocliente}`, MAX_REPORTES, VENTANA_MS)) {
+  const pedidoId = texto(body?.pedidoId, 60);
+
+  const r = await resolverPrincipal(req, pedidoId || null, SIN_CACHE);
+  if ("respuesta" in r) return r.respuesta;
+  const { principal } = r;
+  if (!await permitirAsync(`cuenta-rechazada:${principal.clave}`, MAX_REPORTES, VENTANA_MS)) {
     return NextResponse.json(
       { error: "Demasiados intentos. Espere unos minutos." },
       { status: 429, headers: SIN_CACHE },
     );
   }
 
-  let body: { pedidoId?: unknown; proveedor?: unknown; cuenta?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  if (!body) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400, headers: SIN_CACHE });
   }
-  const pedidoId = texto(body.pedidoId, 60);
   const proveedor = texto(body.proveedor, 40);
   const cuenta = texto(body.cuenta, 60);
   if (!pedidoId || !proveedor || !cuenta) {
@@ -52,7 +57,7 @@ export async function POST(req: Request) {
 
   const noEncontrado = () =>
     NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404, headers: SIN_CACHE });
-  const pedido = await getPedidoParaPago(pedidoId, { clerkUserId, clienteCodigo: cliente?.codigocliente });
+  const pedido = await getPedidoParaPago(pedidoId, principal.dueno);
   if (!pedido || procesadorDeMedio(pedido.pagoMetodo) !== proveedor) return noEncontrado();
   if (pedido.pagoEstado === "pagado" || motivoNoCobrable(pedido)) {
     return NextResponse.json(

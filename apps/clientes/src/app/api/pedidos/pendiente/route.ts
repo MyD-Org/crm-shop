@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { procesadorConfigurado } from "@/lib/pagos";
 import { configMpPara } from "@/lib/pagos/mp-public-key";
 import { procesadorDeMedio, slugsPagoEnLinea } from "@/lib/medios-pago";
-import { identidadActual } from "@/lib/auth";
+import { resolverPrincipal } from "@/lib/invitado-respuesta";
 import { pedidoParaReintentarPago, pedidoPendienteMasReciente } from "@/lib/pedidos";
 
 /**
@@ -13,18 +13,19 @@ import { pedidoParaReintentarPago, pedidoPendienteMasReciente } from "@/lib/pedi
  *
  * Devuelve `{ pedido: null }` cuando no hay: distinto de un 404 para que el
  * cliente no confunda "no hay pendiente" con "el endpoint no existe".
+ *
+ * El invitado SOLO puede usarlo con `?pedido=<id>` y el token de ESE pedido (`X-Pedido-Token`): sin
+ * `?pedido` no hay "su pedido pendiente más reciente" que buscar, y responde 401.
  */
 export async function GET(request?: Request) {
-  const { clerkUserId, cliente } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-
   // `?pedido=<id>`: reintento del cobro de ESE pedido (link "Reintentar el pago"), también con el
   // pago rechazado. Nunca crea un pedido: devuelve el mismo, con su total y cuotas congelados.
   const idReintento = request ? new URL(request.url).searchParams.get("pedido") : null;
+  const resolucion = await resolverPrincipal(request ?? new Request("http://localhost/api/pedidos/pendiente"), idReintento);
+  if ("respuesta" in resolucion) return resolucion.respuesta;
+  const { dueno } = resolucion.principal;
   if (idReintento) {
-    const r = await pedidoParaReintentarPago({ clerkUserId, clienteCodigo: cliente?.codigocliente }, idReintento);
+    const r = await pedidoParaReintentarPago(dueno, idReintento);
     if (r.ok) return NextResponse.json({ pedido: { ...r.pedido, ...(await configMpPara(r.pedido.id, r.pedido.pagoMetodo)) } });
     if (r.motivo === "no_existe") {
       return NextResponse.json({ error: "No encontramos el pedido." }, { status: 404 });
@@ -52,10 +53,7 @@ export async function GET(request?: Request) {
     return NextResponse.json({ pedido: null });
   }
 
-  const pedido = await pedidoPendienteMasReciente(
-    { clerkUserId, clienteCodigo: cliente?.codigocliente },
-    slugs,
-  );
+  const pedido = await pedidoPendienteMasReciente(dueno, slugs);
 
   // `cuotas` es lo congelado al crear el pedido (null = sin cuotas elegidas): el formulario de pago se
   // limita a esa cantidad, igual con el flag apagado después.

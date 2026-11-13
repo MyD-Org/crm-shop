@@ -40,7 +40,10 @@ describe("compra-invitado encendido en S1 no cambia nada", () => {
     );
   });
 
-  it("POST /api/pedidos anónimo responde 401 como hoy", async () => {
+  // Desde S2a el flag ENCENDIDO habilita la rama de invitado de POST /api/pedidos (ver
+  // `app/api/pedidos/route.invitado.test.ts`); lo que sigue valiendo es que APAGADO responde el 401 de hoy.
+  it("POST /api/pedidos anónimo con el flag APAGADO responde 401 como hoy", async () => {
+    setFlag("compra-invitado", false);
     const { POST } = await import("@/app/api/pedidos/route");
     const res = await POST(
       new Request("https://shop.example/api/pedidos", {

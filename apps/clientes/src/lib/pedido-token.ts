@@ -54,6 +54,11 @@ function secreto(): string | null {
   return v && v.length >= LARGO_MINIMO_SECRETO ? v : null;
 }
 
+/** ¿Se pueden firmar tokens? Las rutas lo consultan ANTES de crear un pedido: no se crea uno que no se puede autorizar. */
+export function pedidoTokenConfigurado(): boolean {
+  return secreto() !== null;
+}
+
 function subclave(clave: string, proposito: PropositoToken): Buffer {
   return createHmac("sha256", clave).update(proposito).digest();
 }

@@ -1,6 +1,6 @@
 import { campaniasActivasEn } from "@/lib/campanias/vigentes";
 import { NextResponse } from "next/server";
-import { identidadActual } from "@/lib/auth";
+import { clienteDe, quienDe, resolverPrincipal } from "@/lib/invitado-respuesta";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { variantesSelector } from "@/lib/variantes-flag";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
@@ -58,17 +58,19 @@ const IDS_MARCAS: readonly string[] = MARCAS_TARJETA.map((m) => m.id);
  * quedan 1 pago y las sin interés. Payway: sin cuotas con interés; la marca la manda el navegador.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { clerkUserId, cliente } = await identidadActual();
-  if (!clerkUserId && !cliente) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
-  if (!await permitirAsync(`pedido-cuotas:${quien}`, MAX_POR_MINUTO, 60_000)) {
+  const { id } = await ctx.params;
+  const resolucion = await resolverPrincipal(req, id || null);
+  if ("respuesta" in resolucion) return resolucion.respuesta;
+  const { principal } = resolucion;
+  // El invitado nunca tiene cuenta corriente ni lista privada: `cliente` es null.
+  const cliente = clienteDe(principal);
+  if (!await permitirAsync(`pedido-cuotas:${quienDe(principal)}`, MAX_POR_MINUTO, 60_000)) {
     return NextResponse.json(
       { error: "Hizo demasiados intentos. Espere un minuto e inténtelo de nuevo." },
       { status: 429, headers: { "Retry-After": "60" } },
     );
   }
 
-  const { id } = await ctx.params;
   let body: { bin?: unknown; marca?: unknown };
   try {
     body = await req.json();
@@ -85,9 +87,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const marcaElegida = body.marca as string | undefined;
 
   try {
-    const pedido = id
-      ? await pedidoParaCambiarMedio(id, { clerkUserId, clienteCodigo: cliente?.codigocliente })
-      : null;
+    const pedido = id ? await pedidoParaCambiarMedio(id, principal.dueno) : null;
     // No existe, es de otro o ya no está pendiente: el mismo 404 genérico.
     if (!pedido) return NextResponse.json(NO_ENCONTRADO, { status: 404 });
 

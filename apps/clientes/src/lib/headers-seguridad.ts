@@ -267,3 +267,26 @@ export function headersDeSeguridad(env: EnvCsp = process.env as EnvCsp, opciones
     },
   ];
 }
+
+/**
+ * Páginas con una credencial del invitado en la URL (change `compra-como-invitado`):
+ *  - `/pagar/:token` (enlace «Pagar su pedido» del mail) lleva la política del checkout (monta el
+ *    formulario de pago) y además NO manda referrer a nadie, no se cachea y no se indexa.
+ *  - `/checkout` con el token de compra (`?...&t=<token>`, la vuelta de Mercado Pago) tampoco se cachea.
+ *
+ * `Referrer-Policy` se pisa a propósito: si dos reglas fijan el mismo header gana la última, y acá se
+ * saca el global (`strict-origin-when-cross-origin`) para poner `no-referrer`.
+ */
+export function headersPagar(env: EnvCsp = process.env as EnvCsp, opciones: OpcionesCsp = {}) {
+  return [
+    ...headersDeSeguridad(env, { ...opciones, checkout: true }).filter((h) => h.key !== "Referrer-Policy"),
+    { key: "Referrer-Policy", value: "no-referrer" },
+    { key: "Cache-Control", value: "no-store" },
+    { key: "X-Robots-Tag", value: "noindex, nofollow" },
+  ];
+}
+
+/** El checkout: su política (con Payway) y sin caché (puede traer el token del invitado). */
+export function headersCheckout(env: EnvCsp = process.env as EnvCsp, opciones: OpcionesCsp = {}) {
+  return [...headersDeSeguridad(env, { ...opciones, checkout: true }), { key: "Cache-Control", value: "no-store" }];
+}

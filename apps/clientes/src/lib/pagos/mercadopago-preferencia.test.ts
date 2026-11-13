@@ -16,11 +16,36 @@ describe("urlRetorno", () => {
       "https://tienda.example/checkout?pedido=ped%201&pago=mp",
     );
   });
+  it("compra de invitado: la URL de retorno lleva el token de compra en `t` (se codifica)", () => {
+    expect(urlRetorno("https://tienda.example", "p1", "v1.a b")).toBe(
+      "https://tienda.example/checkout?pedido=p1&pago=mp&t=v1.a%20b",
+    );
+  });
+  it("sin token (quien tiene cuenta) la URL es la de siempre", () => {
+    expect(urlRetorno("https://tienda.example", "p1", undefined)).toBe("https://tienda.example/checkout?pedido=p1&pago=mp");
+    expect(urlRetorno("https://tienda.example", "p1", "")).toBe("https://tienda.example/checkout?pedido=p1&pago=mp");
+  });
   it("sin https o con dominio local no hay URL (MP la rechaza)", () => {
     expect(urlRetorno("http://tienda.example", "p")).toBeUndefined();
     expect(urlRetorno("http://localhost:3000", "p")).toBeUndefined();
     expect(urlRetorno("https://127.0.0.1", "p")).toBeUndefined();
     expect(urlRetorno(undefined, "p")).toBeUndefined();
+  });
+});
+
+describe("armarPreferencia: token del invitado", () => {
+  it("las tres back_urls llevan el token; el aviso (webhook) NO", () => {
+    const p = armarPreferencia({ ...base, origen: "https://tienda.example", tokenRetorno: "tok-de-prueba" });
+    expect(p.back_urls).toEqual({
+      success: expect.stringContaining("&t=tok-de-prueba"),
+      pending: expect.stringContaining("&t=tok-de-prueba"),
+      failure: expect.stringContaining("&t=tok-de-prueba"),
+    });
+    expect(p.notification_url).not.toContain("tok-de-prueba");
+  });
+  it("sin tokenRetorno las back_urls no llevan `t`", () => {
+    const p = armarPreferencia({ ...base, origen: "https://tienda.example" });
+    expect(p.back_urls?.success).not.toContain("t=");
   });
 });
 

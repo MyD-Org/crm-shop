@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest"
 import { MOTIVO_MAX } from "@/lib/pedidos-transiciones"
 import {
   textoCostoEnvio,
+  textoReglaEnvio,
+  enlaceMapaEnvio,
+  fechaCivilATexto,
   FILTRO_TODOS,
   leerAvisoFactura,
   mensajeAvisoFactura,
@@ -410,5 +413,30 @@ describe("textoCostoEnvio", () => {
     expect(textoCostoEnvio(true, true)).toBe("Envío gratis por cupón")
     expect(textoCostoEnvio(false, false)).toBe("A coordinar con el cliente")
     expect(textoCostoEnvio(null, false)).toBe("A coordinar con el cliente")
+  })
+})
+
+describe("envío por zona en el detalle", () => {
+  it("textoCostoEnvio muestra la tarifa pagada cuando hay costo", () => {
+    expect(textoCostoEnvio(false, false, 1210)).toContain("1.210,00")
+    expect(textoCostoEnvio(true, false, 0)).toBe("Gratis")
+  })
+
+  it("fechaCivilATexto formatea la fecha civil y tolera null o basura", () => {
+    expect(fechaCivilATexto("2026-11-12")).toBe("12/11/2026")
+    expect(fechaCivilATexto(null)).toBeNull()
+    expect(fechaCivilATexto("ayer")).toBeNull()
+  })
+
+  it("textoReglaEnvio marca la ubicación aproximada", () => {
+    expect(textoReglaEnvio("poligono", false)).toBe("Zona dibujada en el mapa")
+    expect(textoReglaEnvio("poligono", true)).toContain("aproximada")
+    expect(textoReglaEnvio(null, false)).toBeNull()
+  })
+
+  it("enlaceMapaEnvio sólo arma el enlace con coordenadas válidas", () => {
+    expect(enlaceMapaEnvio({ lat: -38.0, lon: -57.5 })).toContain("mlat=-38")
+    expect(enlaceMapaEnvio(null)).toBeNull()
+    expect(enlaceMapaEnvio({ lat: Number.NaN, lon: 1 })).toBeNull()
   })
 })

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { AlegraNumberTemplate, AlegraTax } from "./alegra"
 import {
   armarLineasFactura,
+  envioParaFactura,
   elegirImpuestoParaLinea,
   elegirNumeracionPorDefecto,
   puedeEmitir,
@@ -382,5 +383,88 @@ describe("validarNumeracionElegida", () => {
 
   it("id inexistente → false", () => {
     expect(validarNumeracionElegida("999", numeraciones)).toBe(false)
+  })
+})
+
+// ───────────────────────── Línea «Envío» (change envio-por-zona-con-tarifa, rebanada D) ─────────────────────────
+
+describe("envío por zona en la factura", () => {
+  const TAX_21 = { alegraId: "1", name: "IVA 21%", percentage: 21, status: "active" } as AlegraTax
+  const detalle = (over: Record<string, unknown> = {}) => ({
+    v: 1,
+    zona: "Zona 1",
+    precio: 1210,
+    regla: "poligono",
+    alegra: { itemId: "env-1", ivaPct: 21 },
+    ...over,
+  })
+  const conEnvio = (costo: string, det: Record<string, unknown> | null = detalle()) =>
+    pedido({
+      subtotal: "1000.00",
+      iva: "210.00",
+      costoEnvio: costo,
+      envioMetodo: det ? "envio-en-el-dia" : null,
+      envioZona: det ? "Zona 1" : null,
+      envioDetalle: det,
+    })
+  const deps = (over: Partial<ResolverPreviewEmisionDeps> = {}): ResolverPreviewEmisionDeps => ({
+    listNumberTemplates: vi.fn(async () => [numeracion({ alegraId: "2", subDocumentType: "INVOICE_B" })]),
+    findContactByIdentifier: vi.fn(async () => null),
+    listTaxes: vi.fn(async () => [TAX_21]),
+    ...over,
+  })
+
+  it("costo > 0: suma la línea con el neto y el IVA del ítem de envío", () => {
+    const envio = envioParaFactura(conEnvio("1210.00"))
+    const { lineas, avisos } = armarLineasFactura([item()], envio)
+    expect(avisos).toEqual([])
+    expect(lineas[1]).toEqual({
+      alegraItemId: "env-1",
+      nombre: "Envío — Zona 1",
+      cantidad: 1,
+      precioUnitario: 1000,
+      ivaPorcentaje: 21,
+    })
+  })
+
+  it("costo 0 (envío gratis), sin método o pedido anterior: sin línea de envío", () => {
+    expect(envioParaFactura(conEnvio("0.00"))).toBeNull()
+    expect(envioParaFactura(conEnvio("1500.00", null))).toBeNull()
+    expect(armarLineasFactura([item()], null).lineas).toHaveLength(1)
+  })
+
+  it("sin ítem de Alegra: aviso bloqueante envio_sin_item_alegra en usted", () => {
+    const envio = envioParaFactura(conEnvio("1210.00", detalle({ alegra: { itemId: null, ivaPct: 21 } })))
+    const { lineas, avisos } = armarLineasFactura([item()], envio)
+    expect(lineas).toHaveLength(1)
+    expect(avisos).toHaveLength(1)
+    expect(avisos[0].motivo).toBe("envio_sin_item_alegra")
+    expect(avisos[0].detalle).toContain("Configure")
+  })
+
+  it("el preview cuadra con subtotal + iva + costo de envío", async () => {
+    const p = await resolverPreviewEmision(conEnvio("1210.00"), [item()], deps())
+    expect(p.total).toBe(2420)
+    expect(p.totalPedido).toBe(2420)
+    expect(p.avisos).toEqual([])
+  })
+
+  it("pedido sin envío por zona: el total sigue siendo sin envío aunque tenga costo_envio", async () => {
+    const p = await resolverPreviewEmision(conEnvio("1500.00", null), [item()], deps())
+    expect(p.total).toBe(1210)
+    expect(p.totalPedido).toBe(1210)
+    expect(p.avisos).toEqual([])
+  })
+
+  it("ítem de envío inexistente en la cuenta que factura: envio_item_invalido", async () => {
+    const existeItemEnCuenta = vi.fn(async () => false)
+    const p = await resolverPreviewEmision(conEnvio("1210.00"), [item()], deps({ existeItemEnCuenta }))
+    expect(existeItemEnCuenta).toHaveBeenCalledWith("env-1")
+    expect(p.avisos.some((a) => a.motivo === "envio_item_invalido")).toBe(true)
+  })
+
+  it("descuadre mayor a $1 con el envío bloquea", async () => {
+    const p = await resolverPreviewEmision(conEnvio("1210.00"), [item({ qty: "1.000" })], deps())
+    expect(p.avisos.some((a) => a.motivo === "diferencia_total")).toBe(true)
   })
 })

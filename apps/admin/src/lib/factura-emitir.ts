@@ -1,4 +1,5 @@
 import type { AlegraInvoiceLineInput, AlegraNumberTemplate, AlegraTax } from "./alegra"
+import { envioDePedido } from "./envio-snapshot"
 import type { PedidoItemRow, PedidoRow } from "./pedidos-repo"
 
 // "Emitir factura" (detalle de pedido del admin, rebanada B): lógica pura para armar el preview
@@ -60,14 +61,43 @@ export interface ResultadoLineasFactura {
 
 const num = (v: string | null | undefined): number => (v == null ? 0 : Number(v))
 
+/** Envío por zona de un pedido, tal como se factura (línea «Envío»). */
+export interface EnvioParaFactura {
+  /** Lo que pagó el comprador por el envío, con IVA incluido (`orders.costo_envio`, congelado). */
+  costo: number
+  zona: string
+  /** Ítem de servicio «Envío» de Alegra congelado en el snapshot; null = el método no lo tenía. */
+  itemId: string | null
+  ivaPct: number
+}
+
 /**
- * Arma las líneas de factura desde los `order_items` del pedido. NUNCA agrega una línea por el
- * costo de envío (decisión de la usuaria: el envío queda excluido siempre, sin excepción
- * configurable). Un ítem sin `alegra_item_id` (la columna es NOT NULL hoy, pero se defiende
- * igual ante datos corruptos o de un pedido muy viejo) no se puede facturar: en vez de una línea
- * rota, produce un aviso bloqueante nombrando el ítem, sin lanzar excepción.
+ * El envío a facturar de un pedido, o null si no corresponde línea: sin método de envío por zona
+ * (retiro, a coordinar, pedido anterior o flag apagado) o con costo 0 (envío gratis). Un pedido
+ * anterior al cambio sigue SIN línea de envío aunque tenga `costo_envio`.
  */
-export function armarLineasFactura(items: PedidoItemRow[]): ResultadoLineasFactura {
+export function envioParaFactura(
+  pedido: Pick<PedidoRow, "costoEnvio" | "envioMetodo" | "envioZona" | "envioDetalle">,
+): EnvioParaFactura | null {
+  const costo = num(pedido.costoEnvio)
+  if (!(costo > 0)) return null
+  const e = envioDePedido(pedido)
+  if (!e) return null
+  return { costo, zona: e.zona, itemId: e.alegra.itemId, ivaPct: e.alegra.ivaPct }
+}
+
+/**
+ * Arma las líneas de factura desde los `order_items` y, si se pasa `envio`, suma la línea «Envío»
+ * (ítem de servicio de Alegra del método, precio final con IVA incluido: el neto se obtiene
+ * dividiendo por `1 + iva/100`). Sin `envio` NO se agrega ninguna línea de envío (retiro, envío a
+ * coordinar, pedidos anteriores, remito). Un ítem sin `alegra_item_id` (la columna es NOT NULL hoy,
+ * pero se defiende igual ante datos corruptos o de un pedido muy viejo) no se puede facturar: en vez
+ * de una línea rota, produce un aviso bloqueante nombrando el ítem, sin lanzar excepción. Un envío
+ * sin ítem de Alegra produce `envio_sin_item_alegra`.
+ *
+ * Reversión (decisión anterior de excluir siempre el envío): llamar sin `envio`.
+ */
+export function armarLineasFactura(items: PedidoItemRow[], envio?: EnvioParaFactura | null): ResultadoLineasFactura {
   const lineas: LineaFacturaPreview[] = []
   const avisos: AvisoBloqueante[] = []
   for (const item of items) {
@@ -86,6 +116,24 @@ export function armarLineasFactura(items: PedidoItemRow[]): ResultadoLineasFactu
       precioUnitario: num(item.precioUnitario),
       ivaPorcentaje: num(item.ivaPorcentaje),
     })
+  }
+  if (envio) {
+    if (!envio.itemId) {
+      avisos.push({
+        motivo: "envio_sin_item_alegra",
+        detalle:
+          `El método de envío de la zona "${envio.zona}" no tiene un ítem de Alegra asociado. ` +
+          'Configure el ítem de servicio "Envío" en Configuración > Envíos antes de emitir la factura.',
+      })
+    } else {
+      lineas.push({
+        alegraItemId: envio.itemId,
+        nombre: `Envío — ${envio.zona}`,
+        cantidad: 1,
+        precioUnitario: round2(envio.costo / (1 + envio.ivaPct / 100)),
+        ivaPorcentaje: envio.ivaPct,
+      })
+    }
   }
   return { lineas, avisos }
 }
@@ -162,7 +210,7 @@ function totalConIvaDeLinea(l: LineaFacturaPreview): number {
 
 /**
  * Diferencia, en valor absoluto, a partir de la cual el preview NO deja confirmar la emisión
- * por descuadre entre lo que facturaría Alegra y el total del pedido (sin envío). En la
+ * por descuadre entre lo que facturaría Alegra y el total del pedido (con el envío, si se factura). En la
  * práctica `precioUnitario`/`ivaPorcentaje` de `order_items` ya son un espejo congelado de lo
  * que el Shop usó para calcular `orders.subtotal`/`orders.iva` (misma fórmula, mismo
  * redondeo), así que esto sólo dispara ante datos inconsistentes (ítem excluido por
@@ -226,9 +274,9 @@ export function puedeEmitir(
 
 export interface PreviewEmisionFactura {
   lineas: LineaFacturaPreview[]
-  /** Suma de las líneas con IVA (lo que facturaría Alegra), SIN el costo de envío. */
+  /** Suma de las líneas con IVA (lo que facturaría Alegra), con la línea de envío si corresponde. */
   total: number
-  /** `pedido.subtotal + pedido.iva` (sin envío), para comparar contra `total`. */
+  /** `pedido.subtotal + pedido.iva` (+ `costo_envio` si se factura el envío), para comparar contra `total`. */
   totalPedido: number
   /** Numeraciones de factura activas de la cuenta (ya filtradas a `INVOICE_*` activas). */
   numeraciones: AlegraNumberTemplate[]
@@ -245,6 +293,11 @@ export interface ResolverPreviewEmisionDeps {
   findContactByIdentifier: (documento: string) => Promise<{ alegraId: string } | null>
   /** Para el aviso de línea sin impuesto mapeable (ver `resolverItemsAlegra`). */
   listTaxes: () => Promise<AlegraTax[]>
+  /**
+   * ¿El ítem de envío existe en la cuenta de Alegra que factura? Opcional: sin esta dependencia
+   * no se chequea (franquicia con dos cuentas: el id del ítem es de una sola).
+   */
+  existeItemEnCuenta?: (alegraItemId: string) => Promise<boolean>
 }
 
 /**
@@ -283,19 +336,28 @@ export async function resolverPreviewEmision(
   }
   const nombreContacto = pedido.facturacionRazonSocial?.trim() || pedido.contactoNombre
 
-  const { lineas, avisos: avisosLineas } = armarLineasFactura(items)
+  const envio = envioParaFactura(pedido)
+  const { lineas, avisos: avisosLineas } = armarLineasFactura(items, envio)
   const total = round2(lineas.reduce((acc, l) => acc + totalConIvaDeLinea(l), 0))
-  const totalPedido = round2(num(pedido.subtotal) + num(pedido.iva))
+  const totalPedido = round2(num(pedido.subtotal) + num(pedido.iva) + (envio?.costo ?? 0))
 
   const taxes = await deps.listTaxes()
   const { avisos: avisosImpuestos } = resolverItemsAlegra(lineas, taxes)
 
   const avisos = [...avisosLineas, ...avisosImpuestos]
+  if (envio?.itemId && deps.existeItemEnCuenta && !(await deps.existeItemEnCuenta(envio.itemId))) {
+    avisos.push({
+      motivo: "envio_item_invalido",
+      detalle:
+        `El ítem de envío configurado para la zona "${envio.zona}" no existe en la cuenta de Alegra con la que se factura. ` +
+        "Revise el ítem de envío del método o elija la cuenta que lo tiene.",
+    })
+  }
   if (Math.abs(total - totalPedido) > DIFERENCIA_TOTAL_MAXIMA) {
     avisos.push({
       motivo: "diferencia_total",
       detalle:
-        `El total a facturar ($${total.toFixed(2)}) difiere del total del pedido sin envío ` +
+        `El total a facturar ($${total.toFixed(2)}) difiere del total del pedido ` +
         `($${totalPedido.toFixed(2)}) en más de $${DIFERENCIA_TOTAL_MAXIMA}. Revise los ítems antes de emitir.`,
     })
   }

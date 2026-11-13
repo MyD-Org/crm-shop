@@ -3,6 +3,7 @@ import {
   AlegraRateLimitError,
   createInvoice,
   findContactByIdentifier,
+  getItemsLive,
   listNumberTemplates,
   listTaxes,
   type AlegraInvoiceCreateInput,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/pedido-factura-cuenta-repo"
 import {
   armarLineasFactura,
+  envioParaFactura,
   puedeEmitir,
   resolverItemsAlegra,
   resolverPreviewEmision,
@@ -175,7 +177,7 @@ export async function GET(req: Request, { params }: IdParams) {
       }
     }
     if (!config || !res.cuenta) {
-      const { lineas } = armarLineasFactura(found.items)
+      const { lineas } = armarLineasFactura(found.items, envioParaFactura(found.pedido))
       const degradada = {
         lineas,
         total: 0,
@@ -200,6 +202,7 @@ export async function GET(req: Request, { params }: IdParams) {
           listNumberTemplates: () => listNumberTemplates(cfg),
           findContactByIdentifier: (documento) => findContactByIdentifier(cfg, documento),
           listTaxes: () => listTaxes(cfg),
+          existeItemEnCuenta: async (itemId) => (await getItemsLive(cfg, [itemId])).length > 0,
         },
         { cuentaPrincipal: res.cuenta.principal },
       )
@@ -332,6 +335,7 @@ export async function POST(req: Request, { params }: IdParams) {
         listNumberTemplates: async () => numeraciones,
         findContactByIdentifier: (documento) => findContactByIdentifier(config, documento),
         listTaxes: async () => taxes,
+        existeItemEnCuenta: async (itemId) => (await getItemsLive(config, [itemId])).length > 0,
       },
       { cuentaPrincipal: cuenta.principal },
     )
@@ -343,7 +347,7 @@ export async function POST(req: Request, { params }: IdParams) {
     return fail(422, primero.motivo, primero.detalle)
   }
 
-  const { lineas } = armarLineasFactura(items)
+  const { lineas } = armarLineasFactura(items, envioParaFactura(pedido))
   const { items: itemsAlegra, avisos: avisosImpuestos } = resolverItemsAlegra(lineas, taxes)
   if (avisosImpuestos.length > 0) {
     return fail(422, avisosImpuestos[0].motivo, avisosImpuestos[0].detalle)

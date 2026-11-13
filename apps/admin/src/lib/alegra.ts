@@ -105,6 +105,10 @@ export interface AlegraContact {
 export interface AlegraContactInput {
   name: string
   identification?: string // CUIT/DNI
+  /** Tipo de `identification` en Alegra ("CUIT", "DNI"…): con él se manda `identificationObject`. */
+  identificationType?: string
+  /** Condición de IVA de Alegra (FINAL_CONSUMER, IVA_RESPONSABLE…). Obligatoria en algunas cuentas AR. */
+  ivaCondition?: string
   email?: string
   phone?: string
 }
@@ -1218,7 +1222,11 @@ function crearEnMock(input: AlegraContactInput): AlegraContact {
 export async function createContactRaw(config: TenantConfig, input: AlegraContactInput): Promise<Record<string, unknown>> {
   if (config.alegraMock) return mockContactARaw(crearEnMock(input))
   const body: Record<string, unknown> = { name: input.name }
-  if (input.identification) body.identification = input.identification
+  if (input.identification) {
+    if (input.identificationType) body.identificationObject = { type: input.identificationType, number: input.identification }
+    else body.identification = input.identification
+  }
+  if (input.ivaCondition) body.ivaCondition = input.ivaCondition
   if (input.email) body.email = input.email
   if (input.phone) body.phone = input.phone
   return (await alegraFetch(config, "/contacts", undefined, { method: "POST", body })) as Record<string, unknown>

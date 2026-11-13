@@ -5,7 +5,8 @@ import { identidadActual } from "@/lib/auth";
 import { admiteEnvio } from "@/lib/facturacion";
 import { datosDelContacto, paraElCliente } from "@/lib/datos-del-contacto";
 import { telefonoDelCheckout } from "@/lib/contacto-alegra";
-import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
+import { CONFIG_ENVIO_DEFAULT, configEnvioPublica } from "@/lib/envio";
+import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import type { DireccionEnvio } from "@/lib/direcciones-envio";
@@ -73,7 +74,8 @@ export default async function CheckoutPage({
   // que se resuelvan en paralelo con esa consulta en vez de después (misma
   // semántica, una espera menos en la cascada). `identidadActual` decide el
   // redirect, así que a ella sí hay que esperarla antes de renderizar.
-  const reglasPromise = reglasVentaCacheadas();
+  // Flag `envio-por-zona`: prendido, la config trae los métodos por zona (nunca viajan al navegador).
+  const reglasPromise = envioPorZonaHabilitado().then((envioZona) => reglasVentaCacheadas(envioZona));
   const mediosPromise = mediosOfreciblesComprador();
   const tarjetasPromise = getTarjetasMercadoPago();
 
@@ -159,7 +161,8 @@ export default async function CheckoutPage({
         facturacion={paraElCliente(dc)}
         perfilFacturacion={perfilUI}
         admiteEnvio={admiteEnvio(dc.datos.pais)}
-        configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
+        configEnvio={configEnvioPublica(reglas.envio ?? CONFIG_ENVIO_DEFAULT)}
+        envioPorZona={(reglas.envio?.metodos?.length ?? 0) > 0}
         direccionesGuardadas={direcciones}
         sugerirVincular={sugerirVincular}
         sucursales={sucursales}

@@ -438,6 +438,19 @@ export const orders = shop.table(
      */
     sitioOrigen: text("sitio_origen"),
     /**
+     * Pedido hecho como invitado, sin cuenta (migración 0045, change `compra-como-invitado`). El
+     * invitado se autoriza con un token firmado (`lib/pedido-token.ts`), no con una sesión. Un pedido
+     * de invitado tiene `clerk_user_id` y `cliente_codigo` NULL; al crear la cuenta con el mismo email
+     * verificado se reclama poniendo `clerk_user_id` (la fila conserva `compra_invitado = true` y sale
+     * del índice parcial `orders_invitado_email_idx`). false = pedido con cuenta o anterior.
+     */
+    compraInvitado: boolean("compra_invitado").notNull().default(false),
+    /**
+     * Cuándo salió el aviso único «Su pedido está pendiente de pago» a un invitado con pago en línea
+     * que no lo completó (cron `pagos-reconciliar`, a los 30 minutos). null = todavía no salió.
+     */
+    avisoPagoPendienteEn: timestamp("aviso_pago_pendiente_en", { withTimezone: true }),
+    /**
      * Cuándo salieron los avisos "Recibimos su pedido" (comprador) y "Nuevo pedido" (local) de un
      * pedido sin cobro en línea. Con transferencia no salen al crearlo: salen al irse de la pantalla
      * de transferencia, al informar el comprobante o, como respaldo, desde el cron a los 15 minutos
@@ -547,6 +560,13 @@ export const orders = shop.table(
     // suyos.
     index("orders_clerk_fecha").on(t.clerkUserId, t.createdAt),
     index("orders_estado").on(t.estado),
+    // Tope de pedidos pendientes por email y reclamo al crear la cuenta (change `compra-como-invitado`):
+    // sólo las filas de invitado sin dueño, que son pocas. Reclamado un pedido, sale del índice.
+    index("orders_invitado_email_idx")
+      .on(t.tenantId, sql`lower(${t.clienteEmail})`, t.createdAt)
+      .where(
+        sql`${t.compraInvitado} and ${t.clerkUserId} is null and ${t.clienteCodigo} is null`,
+      ),
     // El listado de pedidos del CRM: siempre por tenant, del más nuevo al más viejo.
     index("orders_tenant_fecha").on(t.tenantId, t.createdAt),
     // Los pedidos que pueden estar reservando stock (ver `stockReservado`): la

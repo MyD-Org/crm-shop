@@ -1,5 +1,7 @@
 "use client";
 
+import { fetchConToken } from "@/lib/invitado-token-cliente";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Field, Input, PaymentLogos, Select, type RadioOption } from "@myd-org/ui";
 import { fmtPrecio } from "@/lib/format";
@@ -170,7 +172,7 @@ export function PagoPayway({
   // La key pública de la cuenta que cobra ESTE pedido sale del servidor (no hay variable NEXT_PUBLIC_*).
   useEffect(() => {
     let cancelado = false;
-    fetch(`/api/pagos/payway-config?pedido=${encodeURIComponent(pedidoId)}`)
+    fetchConToken(`/api/pagos/payway-config?pedido=${encodeURIComponent(pedidoId)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((c: ConfigPayway) => {
         if (!cancelado) setConfig(c);

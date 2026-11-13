@@ -18,6 +18,9 @@ export const COOKIE_UBICACION = "shop_ubicacion";
 /** Un año, en segundos. */
 export const COOKIE_UBICACION_MAX_AGE = 60 * 60 * 24 * 365;
 const MAX_LOCALIDAD = 80;
+const MAX_CALLE = 160;
+const MAX_TOKEN_COOKIE = 1200;
+const FORMATO_TOKEN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 
 export interface UbicacionVisitante {
   localidad: string;
@@ -33,7 +36,18 @@ export type TipoEntrega = "envio" | "retiro";
 
 /** Lo que se serializa en la cookie (y lo que devuelve su validación estructural). */
 export type EleccionCruda =
-  | { tipo: "envio"; localidad: string; provincia: string; id?: string; cp?: string; direccionId?: string }
+  | {
+      tipo: "envio";
+      localidad: string;
+      provincia: string;
+      id?: string;
+      cp?: string;
+      direccionId?: string;
+      /** «Usar mi ubicación» con el envío por zona: calle mostrable, zona y token firmado (sin lat/lon sueltos). */
+      calle?: string;
+      zona?: string;
+      geoToken?: string;
+    }
   | { tipo: "retiro"; /** Slug del local; ausente = local único (flag `sucursales` apagado). */ sucursal?: string };
 
 export type CookieUbicacion = EleccionCruda;
@@ -46,6 +60,8 @@ export type EleccionUbicacion =
       localidad: string;
       provincia: string | null;
       cp?: string;
+      /** Punto exacto de «Usar mi ubicación» (sin validar el token: lo verifica quien lo usa). */
+      exacta?: { calle: string; zona?: string; geoToken: string };
     }
   | {
       tipo: "retiro";
@@ -74,10 +90,13 @@ export type OrigenUbicacion = "direccion" | "cookie" | "ninguna";
 const CLAVES_VALIDAS = new Set(PROVINCIAS_AR.map((p) => claveProvincia(p)));
 
 /** Texto sin caracteres de control ni exceso de largo (la cookie la puede editar cualquiera). */
-function limpiar(v: unknown): string | null {
-  if (typeof v !== "string") return null;
+function limpiarTexto(v: string, max: number): string | null {
   const t = v.replace(/[\u0000-\u001f\u007f<>]/g, "").replace(/\s+/g, " ").trim();
-  return t && t.length <= MAX_LOCALIDAD ? t : null;
+  return t && t.length <= max ? t : null;
+}
+
+function limpiar(v: unknown): string | null {
+  return typeof v === "string" ? limpiarTexto(v, MAX_LOCALIDAD) : null;
 }
 
 /** Arma la ubicación a guardar; null si la localidad o la provincia no sirven. */
@@ -105,6 +124,9 @@ export function armarEleccion(entrada: {
   cp?: unknown;
   direccionId?: unknown;
   sucursal?: unknown;
+  calle?: unknown;
+  zona?: unknown;
+  geoToken?: unknown;
 }): EleccionCruda | null {
   const tipo = entrada.tipo === undefined ? "envio" : entrada.tipo;
   if (tipo === "retiro") {
@@ -122,6 +144,14 @@ export function armarEleccion(entrada: {
     direccionId = entrada.direccionId;
   }
   const cp = normalizarCp(entrada.cp);
+  // El punto exacto sólo existe sin dirección guardada y con calle y token juntos.
+  const calle = typeof entrada.calle === "string" ? limpiarTexto(entrada.calle, MAX_CALLE) : null;
+  const geoToken =
+    typeof entrada.geoToken === "string" && entrada.geoToken.length <= MAX_TOKEN_COOKIE && FORMATO_TOKEN.test(entrada.geoToken)
+      ? entrada.geoToken
+      : null;
+  const zona = typeof entrada.zona === "string" ? limpiarTexto(entrada.zona, MAX_LOCALIDAD) : null;
+  const exacta = !direccionId && calle && geoToken;
   return {
     tipo: "envio",
     localidad: u.localidad,
@@ -129,6 +159,7 @@ export function armarEleccion(entrada: {
     ...(u.id ? { id: u.id } : {}),
     ...(cp ? { cp } : {}),
     ...(direccionId ? { direccionId } : {}),
+    ...(exacta ? { calle, geoToken, ...(zona ? { zona } : {}) } : {}),
   };
 }
 
@@ -161,6 +192,9 @@ export function serializarCookieUbicacion(c: CookieUbicacion): string {
     ...(c.id ? { id: c.id } : {}),
     ...(c.cp ? { cp: c.cp } : {}),
     ...(c.direccionId ? { direccionId: c.direccionId } : {}),
+    ...(!c.direccionId && c.calle && c.geoToken
+      ? { calle: c.calle, ...(c.zona ? { zona: c.zona } : {}), geoToken: c.geoToken }
+      : {}),
   });
 }
 
@@ -215,6 +249,10 @@ export const TEXTOS_UBICACION = {
   errorBusqueda: "No pudimos buscar localidades en este momento. Inténtelo nuevamente.",
   errorUbicacion: "No pudimos determinar su ubicación. Ingrese su localidad.",
   sinPermiso: "No pudimos acceder a su ubicación. Ingrese su localidad.",
+  ubicacionBloqueada:
+    "Su navegador tiene bloqueada la ubicación para este sitio. Para habilitarla, toque el ícono que está a la izquierda de la dirección de la página (candado o ajustes), permita «Ubicación» y vuelva a intentarlo. También puede escribir su localidad abajo.",
+  ubicacionNoDisponible:
+    "No pudimos obtener su ubicación. Revise que la ubicación esté activada en su dispositivo y vuelva a intentarlo, o escriba su localidad abajo.",
   invalida: "Ubicación inválida.",
   demasiadas: "Demasiadas consultas. Espere un momento e inténtelo nuevamente.",
   quitar: "Quitar ubicación",

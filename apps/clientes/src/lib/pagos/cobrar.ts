@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { identidadActual } from "@/lib/auth";
+import { clienteDe, resolverPrincipal } from "@/lib/invitado-respuesta";
 import {
   cerrarIntentoSinPago,
   detalleCredencialesRechazadas,
@@ -112,10 +112,25 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
   const rasgos = rasgosProcesador(procesadorId);
   if (!rasgos) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
-  const { clerkUserId, cliente, email, registradoEn } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  // El cuerpo se lee ANTES de autorizar: el invitado se autoriza por el pedido que nombra (su token es
+  // de un solo pedido, `X-Pedido-Token`). Con un cuerpo ilegible, quien tiene sesión recibe el mismo 400
+  // de siempre, en el mismo punto del flujo.
+  let body: Body | null = null;
+  try {
+    body = await req.json();
+  } catch {
+    body = null;
   }
+  const pedidoId = texto(body?.pedidoId, 60);
+
+  const resolucion = await resolverPrincipal(req, pedidoId || null);
+  if ("respuesta" in resolucion) return resolucion.respuesta;
+  const { principal } = resolucion;
+  const cliente = clienteDe(principal);
+  // Del comprador con cuenta: lo que el pedido no guarda (el invitado siempre lo tiene en el pedido).
+  const identidad = principal.tipo === "cuenta" ? principal.identidad : null;
+  const email = identidad?.email;
+  const registradoEn = identidad?.registradoEn;
 
   // Sin NINGUNA cuenta del procesador configurada en el Shop no se puede cobrar nada. Se corta acá,
   // antes de leer el pedido o de hablar con el procesador. NO se exige que el medio esté activo en el
@@ -133,7 +148,7 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
     );
   }
 
-  const clave = `pago:${clerkUserId ?? cliente?.codigocliente}`;
+  const clave = `pago:${principal.clave}`;
   if (!await permitirAsync(clave, MAX_INTENTOS, VENTANA_MS)) {
     return NextResponse.json(
       { error: "Demasiados intentos de pago. Espere unos minutos." },
@@ -141,14 +156,10 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
     );
   }
 
-  let body: Body;
-  try {
-    body = await req.json();
-  } catch {
+  if (!body) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
 
-  const pedidoId = texto(body.pedidoId, 60);
   if (!pedidoId) {
     return NextResponse.json({ error: "Falta el pedido." }, { status: 400 });
   }
@@ -172,10 +183,7 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
 
   // Ownership: `getPedidoParaPago` filtra por dueño, así que un pedido ajeno
   // devuelve null y sale por el 404 de abajo.
-  const pedido = await getPedidoParaPago(pedidoId, {
-    clerkUserId,
-    clienteCodigo: cliente?.codigocliente,
-  });
+  const pedido = await getPedidoParaPago(pedidoId, principal.dueno);
 
   if (!pedido) {
     return NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404 });
@@ -335,7 +343,12 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
     try {
       const items = await getItemsParaAntifraude(pedido.id);
       const emailComprador = pedido.clienteEmail ?? cliente?.email ?? email;
-      const identificador = clerkUserId ?? cliente?.codigocliente;
+      // Antifraude: un identificador estable del comprador. El invitado no tiene cuenta: se usa el del
+      // pedido (`inv-<id>`), que no se comparte con otro pedido ni con ninguna cuenta.
+      const identificador =
+        principal.tipo === "invitado"
+          ? `inv-${pedido.id}`
+          : (principal.identidad.clerkUserId ?? cliente?.codigocliente);
       if (!emailComprador || !identificador || items.length === 0) {
         // Sin esto el procesador rechazaría el request (o el control de fraude lo frenaría).
         console.error(`[/api/pagos/${proveedor.id}] faltan datos del comprador o del pedido para el control de fraude.`);
@@ -353,10 +366,13 @@ export async function cobrarPedido(procesadorId: string, req: Request): Promise<
         email: emailComprador,
         nombre: pedido.contactoNombre ?? "",
         telefono: pedido.contactoTelefono ?? "",
+        // El invitado no tiene antigüedad en el sitio: 0 (compra por primera vez, sin cuenta).
         diasEnSitio:
-          typeof registradoEn === "number" && registradoEn > 0
-            ? Math.max(0, Math.floor((Date.now() - registradoEn) / 86_400_000))
-            : undefined,
+          principal.tipo === "invitado"
+            ? 0
+            : typeof registradoEn === "number" && registradoEn > 0
+              ? Math.max(0, Math.floor((Date.now() - registradoEn) / 86_400_000))
+              : undefined,
         facturacionDomicilio: pedido.facturacionDomicilio,
         entrega: {
           tipo: pedido.entregaTipo === "envio" ? "envio" : "retiro",

@@ -10,6 +10,7 @@ import {
   numeric,
   date,
   smallint,
+  time,
   index,
   uniqueIndex,
   unique,
@@ -1886,4 +1887,112 @@ export const preciosOnlineRetenciones = pgTable(
       .where(sql`${t.estado} = 'pendiente'`),
     index("precios_online_retenciones_alegra_idx").on(t.tenantId, t.alegraId, t.estado),
   ],
+)
+
+// ── Envío por zona con tarifa (change `envio-por-zona-con-tarifa`, rebanada A; migración 0101) ──
+//
+// Método "Envío en el día": el operador dibuja polígonos en un mapa (una geometría por zona) y le
+// pone un precio FINAL con IVA incluido a cada zona. Respaldo opcional por localidad Georef o CP.
+// El Shop lee las cuatro tablas con `shop_app` (SELECT; GRANT en la 0101).
+//
+// Drift que vive SOLO en SQL: los CHECK (tipo, margen, días, slug, ítem de Alegra obligatorio para
+// activar, precio > 0, geometría array, formato de georef/cp, georef_id) y el GRANT.
+export const metodosEnvio = pgTable(
+  "metodos_envio",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    slug: text("slug").notNull(),
+    nombre: text("nombre").notNull(),
+    // Por ahora sólo 'tarifa_zona'; el CHECK se amplía con un tipo nuevo (flash, andreani…).
+    tipo: text("tipo").notNull().default("tarifa_zona"),
+    activo: boolean("activo").notNull().default(false),
+    orden: smallint("orden").notNull().default(0),
+    // claveProvincia (ej. 'buenosaires'): el método sólo aplica en esa provincia.
+    provinciaClave: text("provincia_clave").notNull(),
+    // Slug de `sucursales`; NULL = sin condición de origen.
+    sucursalOrigen: text("sucursal_origen"),
+    // Días operativos ISO (1 = lunes … 5 = viernes).
+    diasOperativos: smallint("dias_operativos").array().notNull().default(sql`'{1,2,3,4,5}'::smallint[]`),
+    horaCorte: time("hora_corte").notNull().default("09:00"),
+    margenMin: smallint("margen_min").notNull().default(0),
+    promesa: text("promesa").notNull().default(""),
+    avisoFeriados: text("aviso_feriados").notNull().default(""),
+    // Si el envío gratis de la tienda (o un cupón de envío gratis) anula la tarifa de este método.
+    gratisAplica: boolean("gratis_aplica").notNull().default(false),
+    // Ítem de servicio "Envío" en Alegra y su alícuota; obligatorio para activar (CHECK).
+    itemAlegraId: text("item_alegra_id"),
+    itemAlegraIva: numeric("item_alegra_iva", { precision: 5, scale: 2 }).notNull().default("21"),
+    config: jsonb("config").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("metodos_envio_tenant_slug_uniq").on(t.tenantId, t.slug),
+    index("metodos_envio_tenant_activo_idx").on(t.tenantId, t.activo),
+  ],
+)
+
+export const metodosEnvioZonas = pgTable(
+  "metodos_envio_zonas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    metodoId: uuid("metodo_id").notNull().references(() => metodosEnvio.id, { onDelete: "cascade" }),
+    nombre: text("nombre").notNull(),
+    // Precio FINAL con IVA incluido (CHECK > 0).
+    precio: numeric("precio", { precision: 12, scale: 2 }).notNull(),
+    // Si dos zonas se superponen, gana la de menor orden.
+    orden: smallint("orden").notNull().default(0),
+    activa: boolean("activa").notNull().default(true),
+    // `coordinates` de un GeoJSON MultiPolygon: [ polígono[ anillo[ [lon, lat] ] ] ]. [] = sin dibujo.
+    geometria: jsonb("geometria").$type<number[][][][]>().notNull().default(sql`'[]'::jsonb`),
+  },
+  (t) => [
+    uniqueIndex("metodos_envio_zonas_metodo_nombre_uniq").on(t.metodoId, t.nombre),
+    uniqueIndex("metodos_envio_zonas_id_metodo_uniq").on(t.id, t.metodoId),
+  ],
+)
+
+export const metodosEnvioZonaEntradas = pgTable(
+  "metodos_envio_zona_entradas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    zonaId: uuid("zona_id").notNull(),
+    metodoId: uuid("metodo_id").notNull(),
+    // 'georef' (id de localidad de Georef) | 'cp' (4 dígitos o CPA).
+    tipo: text("tipo").notNull(),
+    valor: text("valor").notNull(),
+    etiqueta: text("etiqueta").notNull(),
+    nombreNorm: text("nombre_norm").notNull(),
+  },
+  (t) => [
+    foreignKey({
+      name: "metodos_envio_zona_entradas_zona_fk",
+      columns: [t.zonaId, t.metodoId],
+      foreignColumns: [metodosEnvioZonas.id, metodosEnvioZonas.metodoId],
+    }).onDelete("cascade"),
+    // Una entrada pertenece a una sola zona por método.
+    uniqueIndex("metodos_envio_zona_entradas_metodo_tipo_valor_uniq").on(t.metodoId, t.tipo, t.valor),
+  ],
+)
+
+// "Localidades que atiende": prioriza y abrevia el autocompletado del Shop ("mdp") y acota el
+// precio estimado antes de tener la dirección (centro y rectángulo de la localidad).
+export const metodosEnvioLocalidades = pgTable(
+  "metodos_envio_localidades",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    metodoId: uuid("metodo_id").notNull().references(() => metodosEnvio.id, { onDelete: "cascade" }),
+    georefId: text("georef_id").notNull(),
+    etiqueta: text("etiqueta").notNull(),
+    nombreNorm: text("nombre_norm").notNull(),
+    abreviaturas: text("abreviaturas").array().notNull().default(sql`'{}'::text[]`),
+    centroLat: numeric("centro_lat", { precision: 9, scale: 6 }),
+    centroLon: numeric("centro_lon", { precision: 9, scale: 6 }),
+    bboxSur: numeric("bbox_sur", { precision: 9, scale: 6 }),
+    bboxOeste: numeric("bbox_oeste", { precision: 9, scale: 6 }),
+    bboxNorte: numeric("bbox_norte", { precision: 9, scale: 6 }),
+    bboxEste: numeric("bbox_este", { precision: 9, scale: 6 }),
+  },
+  (t) => [uniqueIndex("metodos_envio_localidades_metodo_georef_uniq").on(t.metodoId, t.georefId)],
 )

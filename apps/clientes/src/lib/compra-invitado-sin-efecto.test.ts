@@ -33,14 +33,20 @@ beforeEach(() => {
 });
 
 describe("compra-invitado encendido en S1 no cambia nada", () => {
-  it("/checkout anónimo redirige a /ingresar con el retorno", async () => {
+  // Desde S2b el flag ENCENDIDO habilita el checkout de invitado (ver `app/checkout/page.invitado.test.ts`);
+  // lo que sigue valiendo (S1-6) es que APAGADO el anónimo va a /ingresar.
+  it("/checkout anónimo con el flag APAGADO redirige a /ingresar con el retorno", async () => {
+    setFlag("compra-invitado", false);
     const { default: CheckoutPage } = await import("@/app/checkout/page");
     await expect(CheckoutPage({ searchParams: Promise.resolve({}) })).rejects.toThrow(
       "REDIRECT:/ingresar?redirect_url=%2Fcheckout",
     );
   });
 
-  it("POST /api/pedidos anónimo responde 401 como hoy", async () => {
+  // Desde S2a el flag ENCENDIDO habilita la rama de invitado de POST /api/pedidos (ver
+  // `app/api/pedidos/route.invitado.test.ts`); lo que sigue valiendo es que APAGADO responde el 401 de hoy.
+  it("POST /api/pedidos anónimo con el flag APAGADO responde 401 como hoy", async () => {
+    setFlag("compra-invitado", false);
     const { POST } = await import("@/app/api/pedidos/route");
     const res = await POST(
       new Request("https://shop.example/api/pedidos", {

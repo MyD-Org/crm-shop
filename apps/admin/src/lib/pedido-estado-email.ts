@@ -7,7 +7,7 @@
 // (ej. en_camino → preparacion) son errores del operador que se deshacen: mandar
 // "Su pedido está en preparación" después de "Su pedido está en camino" confunde al cliente.
 
-import { emailCardHtml, emailDocumentHtml, oneLine, saludo } from "@/lib/email-layout"
+import { emailCardHtml, emailDocumentHtml, escapeHtml, oneLine, saludo } from "@/lib/email-layout"
 import type { EstadoPedido } from "@/lib/pedidos-transiciones"
 
 /** Orden del camino feliz. `cancelado` queda afuera: se avisa siempre. */
@@ -77,7 +77,17 @@ export interface PedidoEstadoEmailInput {
   entregaTipo: string
   /** Link absoluto a "Mis pedidos" del Shop. Sin link, el mail no lleva botón. */
   pedidosUrl?: string | null
+  /**
+   * Pedido de invitado (compra sin cuenta, sin Mi cuenta a donde ir): reemplaza a «Ver mis pedidos»
+   * por «Pagar su pedido» (sólo si sigue pendiente de pago en línea) y «Cree su cuenta». Con este
+   * campo `pedidosUrl` se ignora. Sin él, el mail es el de siempre.
+   */
+  invitado?: { pagarUrl?: string | null; cuentaUrl?: string | null }
 }
+
+/** Texto que acompaña a «Cree su cuenta» (mismo que el mail del Shop). */
+export const TEXTO_CREE_SU_CUENTA =
+  "Cree su cuenta con este mismo correo electrónico y encontrará sus pedidos en Mi cuenta."
 
 /** "Hola, Ana:" o "Hola:" si el pedido no tiene nombre. Envuelve `saludo` de email-layout.ts. */
 export function saludoPedido(contactoNombre: string): string {
@@ -90,6 +100,27 @@ export function buildPedidoEstadoEmail(input: PedidoEstadoEmailInput): { subject
   const cuerpo = copy.cuerpo(retiro)
   const saludoTexto = saludoPedido(input.contactoNombre)
   const pie = `Pedido ${input.numero}`
+  const pagarUrl = input.invitado?.pagarUrl || null
+  const cuentaUrl = input.invitado?.cuentaUrl || null
+  // Invitado: el botón principal es «Pagar su pedido»; sin él (nada que pagar, o sin secreto para
+  // firmar el link), «Cree su cuenta». Con los dos, el segundo va como enlace debajo del cuerpo.
+  const boton = input.invitado
+    ? pagarUrl
+      ? { url: pagarUrl, texto: "Pagar su pedido" }
+      : cuentaUrl
+        ? { url: cuentaUrl, texto: "Cree su cuenta" }
+        : null
+    : input.pedidosUrl
+      ? { url: input.pedidosUrl, texto: "Ver mis pedidos" }
+      : null
+  const cuentaAparte = Boolean(input.invitado && pagarUrl && cuentaUrl)
+  const contenidoHtml = input.invitado && cuentaUrl
+    ? `<p style="margin:12px 0 0;font-size:14px;color:#77808a">${escapeHtml(TEXTO_CREE_SU_CUENTA)}${
+        cuentaAparte
+          ? ` <a href="${escapeHtml(cuentaUrl)}" style="color:#1e5aa8;font-weight:600">Cree su cuenta</a>`
+          : ""
+      }</p>`
+    : undefined
 
   const subject = `${oneLine(input.tenantName)} — Pedido ${input.numero} ${copy.asunto}`.slice(0, 200)
 
@@ -101,7 +132,8 @@ export function buildPedidoEstadoEmail(input: PedidoEstadoEmailInput): { subject
       titulo: copy.titulo,
       parrafos: [saludoTexto, cuerpo],
       pie,
-      boton: input.pedidosUrl ? { url: input.pedidosUrl, texto: "Ver mis pedidos" } : null,
+      contenidoHtml,
+      boton,
     }),
     copy.titulo,
   )
@@ -113,7 +145,14 @@ export function buildPedidoEstadoEmail(input: PedidoEstadoEmailInput): { subject
     cuerpo,
     "",
     pie,
-    ...(input.pedidosUrl ? ["", `Ver mis pedidos: ${input.pedidosUrl}`] : []),
+    ...(input.invitado
+      ? [
+          ...(pagarUrl ? ["", `Pagar su pedido: ${pagarUrl}`] : []),
+          ...(cuentaUrl ? ["", TEXTO_CREE_SU_CUENTA, `Cree su cuenta: ${cuentaUrl}`] : []),
+        ]
+      : input.pedidosUrl
+        ? ["", `Ver mis pedidos: ${input.pedidosUrl}`]
+        : []),
   ].join("\n")
 
   return { subject, html, text }

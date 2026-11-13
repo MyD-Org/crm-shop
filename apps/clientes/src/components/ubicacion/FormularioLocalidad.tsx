@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Field, Input, Spinner } from "@myd-org/ui";
 import { MIN_CARACTERES_LOCALIDAD } from "@/lib/georef";
+
+/** Mínimo para consultar: con 2 o 3 caracteres sólo responde una abreviatura del comercio. */
+const MIN_CARACTERES_ABREVIATURA = 2;
 import { TEXTOS_UBICACION as T } from "@/lib/ubicacion";
 
 /**
@@ -54,7 +57,9 @@ export function FormularioLocalidad({
     setError(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     abortRef.current?.abort();
-    if (valor.trim().length < MIN_CARACTERES_LOCALIDAD) {
+    // Desde 2 caracteres se consulta igual: una abreviatura del comercio ("mdp") puede responder. Si no
+    // responde nada con menos de 4, no se muestra "sin resultados" (como siempre).
+    if (valor.trim().length < MIN_CARACTERES_ABREVIATURA) {
       setOpciones(null);
       setBuscando(false);
       return;
@@ -72,7 +77,7 @@ export function FormularioLocalidad({
           setOpciones(null);
           setError(data?.error ?? T.errorBusqueda);
         } else {
-          setOpciones(data.localidades);
+          setOpciones(data.localidades.length === 0 && valor.trim().length < MIN_CARACTERES_LOCALIDAD ? null : data.localidades);
         }
       } catch (err) {
         if ((err as Error).name !== "AbortError") setError(T.errorBusqueda);
@@ -116,10 +121,11 @@ export function FormularioLocalidad({
           setUbicando(false);
         }
       },
-      // Permiso denegado o sin señal: sin error técnico, se ofrece escribir la localidad.
-      () => {
+      // Permiso denegado (el navegador no vuelve a preguntar: hay que explicar cómo habilitarlo) o sin
+      // señal / ubicación apagada en el dispositivo. En los dos casos se ofrece escribir la localidad.
+      (err) => {
         setUbicando(false);
-        setError(T.sinPermiso);
+        setError(err.code === err.PERMISSION_DENIED ? T.ubicacionBloqueada : T.ubicacionNoDisponible);
       },
       { timeout: 10_000, maximumAge: 5 * 60_000 },
     );

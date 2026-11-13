@@ -32,11 +32,29 @@ export function limpiarUrl(url: string): string {
  * sesión): login, registro y la cortina. El Pixel de Meta manda la URL cruda del
  * documento con cada evento y no tiene forma de limpiarla, así que la única
  * protección para los parámetros de Clerk es no disparar nada ahí.
+ *
+ * `/pagar` (change `compra-como-invitado`): el enlace «Pagar su pedido» de los mails lleva una
+ * credencial firmada en el path; ahí tampoco corre nada.
  */
-const PREFIJOS_SIN_TRACKING = ["/ingresar", "/registro", "/__gate", "/__clerk"];
+const PREFIJOS_SIN_TRACKING = ["/ingresar", "/registro", "/__gate", "/__clerk", "/pagar"];
 
-export function rutaSinTracking(pathname: string): boolean {
-  return PREFIJOS_SIN_TRACKING.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+/**
+ * ¿Es el checkout con el token de compra del invitado (`/checkout?...&t=<token>`)? Así vuelve de
+ * Mercado Pago o Payway: esa carga no se mide (el Pixel mandaría la URL con el token). La página
+ * quita `t` de la barra apenas carga, y las navegaciones siguientes ya se miden.
+ */
+function esCheckoutConTokenDePedido(pathname: string, search: string | undefined): boolean {
+  if (!search || !(pathname === "/checkout" || pathname.startsWith("/checkout/"))) return false;
+  try {
+    return new URLSearchParams(search).has("t");
+  } catch {
+    return false;
+  }
+}
+
+export function rutaSinTracking(pathname: string, search?: string): boolean {
+  return PREFIJOS_SIN_TRACKING.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
+    esCheckoutConTokenDePedido(pathname, search);
 }
 
 /** Origen + pathname, sin query ni fragmento ni atribución; "" si no se puede leer. */

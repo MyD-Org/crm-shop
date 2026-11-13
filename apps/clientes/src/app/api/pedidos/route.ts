@@ -4,18 +4,26 @@ import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { variantesSelector } from "@/lib/variantes-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS, type Cotizacion } from "@/lib/cotizacion";
-import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
+import type { EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
+import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
+import { leerDestinoBody, origenDeEnvio, planEnvio, resolverDestinoEnvio } from "@/lib/envio-plan";
+import { EnvioCambioError } from "@/lib/envio-snapshot";
+import { direccionParaEnvio } from "@/lib/direcciones-envio-db";
 import { provinciaCanonica } from "@/lib/provincias";
-import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
+import { crearPedido, getPedidoInvitadoPorClave, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { marcarModalidadesCambiadas, marcarStockCambiado } from "@/lib/cache-invalidar";
 import { ProductoNoDisponibleError, StockInsuficienteError } from "@/lib/stock-disponible";
 import { UnidadesCampaniaError } from "@/lib/campanias/unidades";
-import { admiteEnvio } from "@/lib/facturacion";
-import { guardarTelefonoSiFalta } from "@/lib/facturacion-db";
+import { admiteEnvio, telefonoValido } from "@/lib/facturacion";
+import { contactoExistenteEnAlegra, guardarTelefonoSiFalta } from "@/lib/facturacion-db";
 import { congelarFacturacion, telefonoParaAlegra, validarComplemento } from "@/lib/contacto-alegra";
 import { sincronizarContactoConPerfil } from "@/lib/contacto-write-through";
 import { datosDelContacto, type DatosLeidos } from "@/lib/datos-del-contacto";
+import { datosDelContactoInvitado, resolverFacturacionInvitado, type ResultadoFacturacionInvitado } from "@/lib/facturacion-invitado";
+import { guardarCompraInvitado } from "@/lib/invitado-guarda";
+import { MENSAJES_INVITADO } from "@/lib/invitado-mensajes";
+import { acuñarTokenCompra } from "@/lib/pedido-token";
 import { cotizarConMedio } from "@/lib/pedido-medio";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
@@ -111,6 +119,30 @@ interface BodyPedido {
    * siempre, que siguen recibiendo los clientes que no lo mandan).
    */
   flujoVisto?: unknown;
+  /**
+   * Envío por zona (flag `envio-por-zona`): ubicación de la dirección. `direccionId` = dirección guardada
+   * del comprador (sus coordenadas las lee el servidor); `entregaGeoToken` = token firmado de la sugerencia
+   * elegida, válido sólo si `entregaDireccion` es la calle firmada; `destino` = { cp, localidad, georefId }.
+   * Cualquier lat/lon crudo se ignora.
+   */
+  direccionId?: unknown;
+  entregaGeoToken?: unknown;
+  destino?: unknown;
+  /**
+   * El comprador eligió "Continuar con envío a coordinar" porque no se pudo ubicar su dirección: costo 0,
+   * sin método. Sólo se respeta cuando la dirección quedó sin ubicar (`direccion_sin_ubicar`).
+   */
+  envioACoordinar?: unknown;
+  /** Costo de envío que el comprador vio: si cambia, el 409 es `envio_cambio` y no `precio_cambio`. */
+  costoEnvioVisto?: unknown;
+  /**
+   * Sólo compra de invitado (sin sesión, flag `compra-invitado`): ver `lib/invitado-guarda.ts`.
+   * Además de este campo llegan `email` / `emailConfirmacion` (el mismo, escrito dos veces), `turnstile`
+   * (token del desafío), `iniciado` (epoch ms en que se pintó el formulario) y el campo trampa
+   * `sitio_web`. `facturacionInvitado`: consumidor final o factura A (ver `lib/facturacion-invitado.ts`).
+   * Con sesión se ignoran.
+   */
+  facturacionInvitado?: unknown;
 }
 
 /**
@@ -141,6 +173,18 @@ const medioNoDisponible = () =>
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
 
+/** Token de la sesión de compra del invitado (en memoria de la página; 6 h). */
+const tokenDeCompra = (pedidoId: string) => {
+  const { token, venceEn } = acuñarTokenCompra(pedidoId);
+  return { invitadoToken: token, invitadoTokenVenceEn: venceEn };
+};
+
+/** Reintento idempotente de un pedido de invitado: el mismo pedido (200) y un token nuevo para quien lo repite con los mismos datos. */
+async function repeticionDeInvitado(clave: string, email: string): Promise<NextResponse | null> {
+  const ya = await getPedidoInvitadoPorClave(clave, email);
+  return ya ? NextResponse.json({ ...ya, repetido: true, ...tokenDeCompra(ya.id) }, { status: 200 }) : null;
+}
+
 /**
  * POST /api/pedidos — confirma el pedido.
  *
@@ -151,26 +195,43 @@ const texto = (v: unknown, max = 200) =>
 export async function POST(req: Request) {
   // Alcanza con estar logueado: quien no vinculó cuenta corriente compra igual,
   // a lista general. La vinculación da precios propios, no permiso de comprar.
+  // Sin sesión sólo compra el invitado, con el flag `compra-invitado` encendido (ver abajo): con el
+  // flag apagado el anónimo recibe el 401 de siempre. Con sesión la rama de invitado se ignora.
   const { clerkUserId, cliente, email } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-
-  // Cuenta también los reintentos con la misma clave: son baratos, pero un
-  // loop que repite la clave tampoco es una persona.
-  const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
-  if (!await permitirAsync(`pedidos:${quien}`, MAX_PEDIDOS_POR_MINUTO, 60_000)) {
-    return NextResponse.json(
-      { error: "Hizo demasiados intentos de confirmar el pedido. Espere un minuto e inténtelo de nuevo." },
-      { status: 429, headers: { "Retry-After": "60" } },
-    );
-  }
+  const esInvitado = !clerkUserId && !cliente;
 
   let body: BodyPedido;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+  let emailInvitado = "";
+  let ipInvitado: string | null = null;
+  if (esInvitado) {
+    // Guardas anti-abuso, antes de tocar nada: flag, configuración, origen, honeypot, tope por IP, email,
+    // Turnstile y tope de pendientes (el reintento idempotente corta antes de Turnstile).
+    const guarda = await guardarCompraInvitado(req, {
+      atajo: ({ body: cuerpo, email: correo }) => {
+        const clave = texto(cuerpo.idempotencyKey, 40);
+        return clave && CLAVE_VALIDA.test(clave) ? repeticionDeInvitado(clave, correo) : Promise.resolve(null);
+      },
+    });
+    if (!guarda.ok) return guarda.respuesta;
+    body = guarda.body as BodyPedido;
+    emailInvitado = guarda.email;
+    ipInvitado = guarda.ip;
+  } else {
+    // Cuenta también los reintentos con la misma clave: son baratos, pero un
+    // loop que repite la clave tampoco es una persona.
+    const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
+    if (!await permitirAsync(`pedidos:${quien}`, MAX_PEDIDOS_POR_MINUTO, 60_000)) {
+      return NextResponse.json(
+        { error: "Hizo demasiados intentos de confirmar el pedido. Espere un minuto e inténtelo de nuevo." },
+        { status: 429, headers: { "Retry-After": "60" } },
+      );
+    }
+
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+    }
   }
 
   // --- Validación de los datos del formulario ---
@@ -200,6 +261,7 @@ export async function POST(req: Request) {
    */
   const pedidoYaCreado = async () => {
     if (!idempotencyKey) return null;
+    if (esInvitado) return repeticionDeInvitado(idempotencyKey, emailInvitado);
     const yaCreado = await getPedidoPorClave(idempotencyKey, {
       clerkUserId,
       clienteCodigo: cliente?.codigocliente,
@@ -222,13 +284,19 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  // El invitado no tiene teléfono en Alegra al que recurrir: el que escribe tiene que ser uno de verdad.
+  if (esInvitado && !telefonoValido(contactoTelefono)) {
+    return NextResponse.json({ error: MENSAJES_INVITADO.telefonoInvalido, campo: "contactoTelefono" }, { status: 400 });
+  }
   // Desde `envio-gratis-configurable` el envío siempre es a domicilio (ciudad y dirección): el
   // "Envío a coordinar" aparte se fusionó con él (si no es gratis, el costo se coordina).
   const aDomicilio = entregaTipo === "envio";
   // La configuración se relee SIN caché: la UI puede mostrar lo que había hace minutos, el
   // servidor decide con lo de ahora. Un pedido a domicilio NUNCA se rechaza por no ser gratis
   // (se crea sin cobrar envío, el costo se coordina); sólo si el admin apagó el envío.
-  const configEnvio = aDomicilio ? await leerConfigEnvio() : null;
+  // Flag `envio-por-zona`: sólo prendido se leen (y se aplican) los métodos de envío del CRM.
+  const zonaActiva = aDomicilio ? await envioPorZonaHabilitado() : false;
+  const configEnvio = aDomicilio ? await leerConfigEnvio(undefined, { conMetodos: zonaActiva }) : null;
   if (aDomicilio && configEnvio && !configEnvio.domicilioActivo) {
     return NextResponse.json(
       {
@@ -310,7 +378,24 @@ export async function POST(req: Request) {
   // el pedido: es preferible frenarlo acá que registrar una venta que después
   // nadie puede facturar. La MISMA lectura que el checkout y Mis datos
   // (`datosDelContacto`): vinculado ⇒ espejo de Alegra; no vinculado ⇒ perfil.
-  const dc = await datosDelContacto({ clerkUserId, cliente });
+  //
+  // Invitado: no hay perfil ni contacto de Alegra; carga su facturación en el propio pedido (consumidor
+  // final o factura A), validada con la misma regla y congelada en el pedido. Si su documento es el de
+  // un contacto de Alegra NO se lo vincula: el pedido va a lista general, sin cuenta corriente, y queda
+  // para revisión de un operador (la respuesta es la misma exista o no el contacto).
+  let facturaInvitado: Extract<ResultadoFacturacionInvitado, { ok: true }> | null = null;
+  if (esInvitado) {
+    const f = resolverFacturacionInvitado(
+      body.facturacionInvitado,
+      { tipo: entregaTipo, calle: entregaDireccion, ciudad: entregaCiudad, provincia: entregaProvincia },
+      contactoNombre,
+    );
+    if (!f.ok) {
+      return NextResponse.json({ error: f.error, motivo: f.motivo, campos: f.campos }, { status: 400 });
+    }
+    facturaInvitado = f;
+  }
+  const dc = facturaInvitado ? datosDelContactoInvitado(facturaInvitado.datos) : await datosDelContacto({ clerkUserId, cliente });
   let datosFactura: DatosLeidos = dc.datos;
   let complementoUsado = false;
   if (!dc.completo) {
@@ -405,15 +490,19 @@ export async function POST(req: Request) {
     // Sin modalidades activas ninguna línea puede ir a pedido: no se consulta el motor (la cotización
     // lee la misma lista cacheada, así que el resultado es idéntico).
     let aPedido: Set<string> | undefined;
-    if (disp && sucursalEntrada && (await modalidadesActivas()).length > 0) {
+    let disponibilidad: Awaited<ReturnType<typeof disponibilidadParaMostrar>> = null;
+    // Envío por zona con condición de origen: la disponibilidad dice si hay líneas a traer de otra sucursal.
+    const necesitaOrigen = Boolean(configEnvio?.metodos?.some((m) => m.sucursalOrigen));
+    const hayModalidades = disp && sucursalEntrada ? (await modalidadesActivas()).length > 0 : false;
+    if (disp && sucursalEntrada && (hayModalidades || necesitaOrigen)) {
       try {
-        const disponibilidad = await disponibilidadParaMostrar(
+        disponibilidad = await disponibilidadParaMostrar(
           lineas.map((l) => l.id),
           disp,
           Object.fromEntries(lineas.map((l) => [l.id, l.qty])),
           agrupar,
         );
-        if (disponibilidad) {
+        if (disponibilidad && hayModalidades) {
           const local =
             entregaTipo === "retiro"
               ? (sucursalEntrada.sucursalRetiro ?? localDeRetiro(sucursalEntrada, await sucursalesCacheadas()))
@@ -431,16 +520,65 @@ export async function POST(req: Request) {
     // que muestran las cards, como en el carrito.
     // Campañas de precios activas AHORA, leídas sin caché (lo que cobra va siempre en vivo).
     const campanias = await campaniasActivasEn(new Date());
+    // Envío por zona: destino con coordenadas VERIFICADAS (dirección guardada o token firmado cuya calle es
+    // `entregaDireccion`) y plan del costo. Sin métodos (flag apagado) no se lee nada y el plan no cobra.
+    const conMetodos = aDomicilio && (configEnvio?.metodos?.length ?? 0) > 0;
+    const destinoEnvio = conMetodos
+      ? await resolverDestinoEnvio({
+          destino: leerDestinoBody({
+            ...(typeof body.destino === "object" && body.destino !== null && !Array.isArray(body.destino) ? body.destino : {}),
+            direccionId: body.direccionId,
+            geoToken: body.entregaGeoToken,
+            calle: entregaDireccion,
+            localidad: entregaCiudad,
+          }),
+          provincia: entregaProvincia,
+          clerkUserId: clerkUserId ?? null,
+          leerDireccion: direccionParaEnvio,
+        })
+      : { provinciaClave: claveProvincia(entregaProvincia) || null };
+    const origenEnvio = origenDeEnvio(disp, disponibilidad);
+    const planBase = planEnvio({
+      config: configEnvio ?? { domicilioActivo: true, gratis: null },
+      provincia: entregaProvincia,
+      entregaTipo,
+      destino: destinoEnvio,
+      origen: origenEnvio,
+    });
+    // La dirección es de una localidad que el método atiende pero no se pudo ubicar: hay que elegir una
+    // dirección de la lista o, explícitamente, el envío a coordinar (así Nominatim caído no frena ventas).
+    const envioACoordinar = planBase.sinUbicar && body.envioACoordinar === true;
+    if (planBase.sinUbicar && !envioACoordinar) {
+      return NextResponse.json(
+        {
+          error: "Seleccione su dirección de la lista para calcular el envío en el día.",
+          motivo: "direccion_sin_ubicar",
+        },
+        { status: 409 },
+      );
+    }
+    // "Envío a coordinar" explícito: se evalúa como si no hubiera métodos (costo 0, sin método ni snapshot).
+    const configEfectiva = envioACoordinar && configEnvio ? { ...configEnvio, metodos: [] } : configEnvio;
+    const plan = envioACoordinar
+      ? planEnvio({ config: configEfectiva ?? { domicilioActivo: true, gratis: null }, provincia: entregaProvincia, entregaTipo, destino: destinoEnvio, origen: origenEnvio })
+      : planBase;
     // Cupón: se vuelve a validar acá con la cuenta (la validación del carrito no vale de nada) y se
     // aplica con las mismas reglas y el mismo contexto que `/api/carrito/cotizar`. Uno que no aplica
     // no bloquea: el pedido se cotiza sin él y `totalVisto` decide.
-    const quienCupon: QuienCupon = {
-      clerkUserId: clerkUserId ?? null,
-      email: (cliente?.email ?? email) || null,
-      listaPrivada: Boolean(idListaPrivada),
-    };
-    // Mismo límite de consultas que el carrito (por cuenta), contado antes de leer la base.
-    const cuponResuelto = await consultarCupon(body.cupon, quienCupon, clerkUserId ?? cliente!.codigocliente!);
+    // Invitado: las reglas por cuenta se aplican por email normalizado, y el tope de consultas es por IP.
+    const quienCupon: QuienCupon = esInvitado
+      ? { clerkUserId: null, email: emailInvitado, listaPrivada: false, invitado: true }
+      : {
+          clerkUserId: clerkUserId ?? null,
+          email: (cliente?.email ?? email) || null,
+          listaPrivada: Boolean(idListaPrivada),
+        };
+    // Mismo límite de consultas que el carrito (por cuenta o por IP), contado antes de leer la base.
+    const cuponResuelto = await consultarCupon(
+      body.cupon,
+      quienCupon,
+      esInvitado ? `ip:${ipInvitado ?? "desconocida"}` : (clerkUserId ?? cliente!.codigocliente!),
+    );
     const cuponParaCotizar = cuponResuelto?.ok ? cuponResuelto : undefined;
     const resuelto = await cotizarConMedio({
       lineas,
@@ -460,6 +598,8 @@ export async function POST(req: Request) {
         : { idListaAConfirmar: listaAConfirmar(sinProcesadoresNoConfigurados(mediosCrm)) }),
       ...(campanias.length ? { campanias } : {}),
       ...(cuponParaCotizar ? { cupon: cuponParaCotizar, entregaProvincia } : {}),
+      ...(plan.costoEnvioPara ? { costoEnvioPara: plan.costoEnvioPara } : {}),
+      ...(plan.envioGratisAplica ? {} : { envioGratisAplica: false }),
     });
     if (!resuelto.ok) {
       if (resuelto.motivo === "forma_no_disponible") {
@@ -547,6 +687,19 @@ export async function POST(req: Request) {
     // Un reintento idempotente ya volvió arriba, así que no llega acá.
     const totalVisto = typeof body.totalVisto === "number" && Number.isFinite(body.totalVisto) ? body.totalVisto : null;
     if (totalVisto !== null && Math.abs(totalVisto - cotizacion.total) >= 0.005) {
+      // Si lo que cambió es el costo de envío (dirección, zona o origen), el motivo es `envio_cambio`.
+      const costoVisto = typeof body.costoEnvioVisto === "number" && Number.isFinite(body.costoEnvioVisto) ? body.costoEnvioVisto : null;
+      if (costoVisto !== null && Math.abs(costoVisto - cotizacion.costoEnvio) >= 0.005) {
+        return NextResponse.json(
+          {
+            error: "El costo de envío cambió según su dirección. Revise el nuevo total antes de confirmar.",
+            motivo: "envio_cambio",
+            totalNuevo: cotizacion.total,
+            cotizacion,
+          },
+          { status: 409 },
+        );
+      }
       return NextResponse.json(
         {
           error: "El precio de algunos productos cambió. Revise el nuevo total antes de confirmar.",
@@ -561,22 +714,32 @@ export async function POST(req: Request) {
     // `null` = retiro (no aplica); true/false = envío a domicilio gratis o a coordinar. La regla de la
     // tienda se mide sobre el subtotal ANTES del cupón (un % nunca le quita el envío gratis que ya
     // tenía) o lo da el cupón (ya validado para esta entrega y zona).
-    const envioTienda =
-      aDomicilio && configEnvio
-        ? evaluarEnvio(cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal, entregaProvincia, configEnvio).gratis
-        : null;
+    const subtotalAntesDelCupon = cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal;
+    const envioTienda = aDomicilio && configEnvio ? plan.evaluar(subtotalAntesDelCupon, false).gratis : null;
     const envioGratis = envioTienda === null ? null : envioTienda || cotizacion.cupon?.envioGratis === true;
+    // Envío por zona resuelto (con el cupón de envío gratis si lo anula): se congela en el pedido.
+    const envioResuelto = aDomicilio && configEnvio ? plan.evaluar(subtotalAntesDelCupon, cotizacion.cupon?.envioGratis === true) : null;
+    const metodoEnvio = envioResuelto?.metodo;
+    const envioZona = metodoEnvio
+      ? {
+          resultado: metodoEnvio,
+          punto: destinoEnvio.punto ? { lat: destinoEnvio.punto.lat, lon: destinoEnvio.punto.lon } : null,
+          sucursalOrigen: configEnvio?.metodos?.find((m) => m.id === metodoEnvio.metodoId)?.sucursalOrigen ?? null,
+        }
+      : undefined;
 
 
     // Para revisión de un operador antes de facturar, con el motivo más
     // importante (ver motivo-revision.ts). El precio ya no depende de la lista del contacto de
     // Alegra (la lista privada se resuelve aparte), así que "otra lista de precios" no es motivo.
+    const documentoEnAlegra = facturaInvitado ? (await contactoExistenteEnAlegra(facturaInvitado.nroDoc)) !== null : false;
     const motivoRevision = motivoRevisionPedido({
       motivoContacto: dc.motivoRevision,
       complementoUsado,
       vinculado: Boolean(cliente),
       listaContacto: null,
       idListaGeneral: null,
+      invitadoDocumentoEnAlegra: documentoEnAlegra,
     });
 
     let pedido: Awaited<ReturnType<typeof crearPedido>>;
@@ -596,7 +759,8 @@ export async function POST(req: Request) {
            * después rompe el cobro: Mercado Pago exige `payer.email` y responde
            * "Params Error" sin decir cuál falta.
            */
-          email: cliente?.email ?? email,
+          email: esInvitado ? emailInvitado : (cliente?.email ?? email),
+          compraInvitado: esInvitado,
           // La lista efectivamente usada para cotizar, congelada con el pedido: la privada del comprador
           // (uuid de la lista online) o, sin ella, la del medio.
           idPriceList: idListaPrivada ?? idListaMedio,
@@ -618,6 +782,7 @@ export async function POST(req: Request) {
           requiereRevision: motivoRevision !== null,
           motivoRevision,
           idempotencyKey: idempotencyKey || undefined,
+          ...(envioZona ? { envioZona } : {}),
           sucursalEntrada,
           disponibilidadSucursal: disp !== undefined,
           soloVisibles,
@@ -636,6 +801,32 @@ export async function POST(req: Request) {
         const recotizada = await cotizar(lineas, opcionesCotizar);
         return NextResponse.json(
           { error: mensaje, motivo: "cupon", cotizacion: { ...recotizada, cupon: null, cuponError: { motivo: err.motivo, mensaje } } },
+          { status: 409 },
+        );
+      }
+      if (err instanceof EnvioCambioError) {
+        // La sucursal que despacha (o las líneas a traer) cambió entre la cotización y el pedido: el método
+        // ya no aplica con ese origen. Nada se creó; se recotiza con el origen real para mostrar el total nuevo.
+        const planNuevo = planEnvio({
+          config: configEfectiva ?? { domicilioActivo: true, gratis: null },
+          provincia: entregaProvincia,
+          entregaTipo,
+          destino: destinoEnvio,
+          origen: err.origen,
+        });
+        const { costoEnvioPara: _viejo, ...sinCosto } = opcionesCotizar;
+        void _viejo;
+        const recotizada = await cotizar(lineas, {
+          ...sinCosto,
+          ...(planNuevo.costoEnvioPara ? { costoEnvioPara: planNuevo.costoEnvioPara } : {}),
+        });
+        return NextResponse.json(
+          {
+            error: "El costo de envío cambió según su dirección. Revise el nuevo total antes de confirmar.",
+            motivo: "envio_cambio",
+            totalNuevo: recotizada.total,
+            cotizacion: recotizada,
+          },
           { status: 409 },
         );
       }
@@ -674,6 +865,12 @@ export async function POST(req: Request) {
       // reintento cotice con la de ahora y no choque igual hasta el TTL.
       if (err instanceof VentaSinStockCambioError) marcarModalidadesCambiadas();
       return productosCambiaron(await cotizar(lineas, opcionesCotizar));
+    }
+
+    // Invitado: un "repetido" que devuelve crearPedido sólo se acepta si la clave ya era de ESTE invitado
+    // (mismo email, sin dueño); si no, no se entrega número ni token de un pedido que no es suyo.
+    if (esInvitado && pedido.repetido && !(await repeticionDeInvitado(idempotencyKey, emailInvitado))) {
+      return NextResponse.json({ error: "Clave de pedido inválida." }, { status: 409 });
     }
 
     // El pedido reservó stock: el listado cacheado se renueva en la próxima
@@ -737,7 +934,14 @@ export async function POST(req: Request) {
     const contacto = await contactoDelPedido(pedido.id, pedido.numero);
 
     return NextResponse.json(
-      { ...pedido, cotizacion, ...(contacto ? { contacto } : {}), ...(await configMpPara(pedido.id, pagoMetodo)) },
+      {
+        ...pedido,
+        cotizacion,
+        ...(contacto ? { contacto } : {}),
+        ...(await configMpPara(pedido.id, pagoMetodo)),
+        // El token de la sesión de compra del invitado: sólo vive en la memoria de su página.
+        ...(esInvitado ? tokenDeCompra(pedido.id) : {}),
+      },
       { status: pedido.repetido ? 200 : 201 },
     );
   } catch (err) {

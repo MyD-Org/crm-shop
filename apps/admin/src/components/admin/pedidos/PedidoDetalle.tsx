@@ -20,7 +20,7 @@ import { RemitoControl } from "./RemitoControl"
 import { VincularFacturaControl } from "./VincularFacturaControl"
 import { MotivosFrecuentes } from "./MotivosFrecuentes"
 import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
-import { avisoDevolucion, ofreceCancelar, opcionesOtroEstado, pasosPedido, siguientePaso, textoCampaniaLinea, textoCostoEnvio, verboSiguientePaso } from "./logica"
+import { avisoDevolucion, ofreceCancelar, opcionesOtroEstado, pasosPedido, siguientePaso, textoCampaniaLinea, textoCostoEnvio, textoReglaEnvio, enlaceMapaEnvio, fechaCivilATexto, verboSiguientePaso } from "./logica"
 import {
   PAGO_REVISION_INFO,
   condicionIvaLabel,
@@ -405,8 +405,28 @@ export function PedidoDetalle({
                 )}
                 <dl className="flex flex-col gap-3">
                   <Dato label="Tipo">{envioACoordinar ? "Envío a coordinar" : entregaLabel(pedido.entrega.tipo)}</Dato>
-                  {esEnvio && (pedido.envioGratis !== null || envioACoordinar) && (
-                    <Dato label="Costo de envío">{textoCostoEnvio(pedido.envioGratis, pedido.cupon?.envioGratis ?? false)}</Dato>
+                  {esEnvio && (pedido.envioGratis !== null || envioACoordinar || pedido.envioZona) && (
+                    <Dato label="Costo de envío">{textoCostoEnvio(pedido.envioGratis, pedido.cupon?.envioGratis ?? false, pedido.costoEnvio)}</Dato>
+                  )}
+                  {pedido.envioZona && (
+                    <>
+                      <Dato label="Método de envío">{pedido.envioZona.metodo}</Dato>
+                      <Dato label="Zona">{pedido.envioZona.zona}</Dato>
+                      {textoReglaEnvio(pedido.envioZona.regla, pedido.envioZona.ubicacionAproximada) && (
+                        <Dato label="Cómo se asignó la zona">{textoReglaEnvio(pedido.envioZona.regla, pedido.envioZona.ubicacionAproximada)}</Dato>
+                      )}
+                      {pedido.envioZona.promesa && <Dato label="Promesa de entrega">{pedido.envioZona.promesa}</Dato>}
+                      <Dato label="Entrega estimada">{fechaCivilATexto(pedido.envioZona.entregaEstimada) ?? "—"}</Dato>
+                      <Dato label="Entrega confirmada">{fechaCivilATexto(pedido.envioZona.entregaConfirmada) ?? "Pendiente de confirmación"}</Dato>
+                      {pedido.envioZona.avisoFeriados && <Dato label="Aviso de feriados">{pedido.envioZona.avisoFeriados}</Dato>}
+                      {enlaceMapaEnvio(pedido.envioZona.punto) && (
+                        <Dato label="Ubicación">
+                          <a href={enlaceMapaEnvio(pedido.envioZona.punto)!} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "var(--blue)" }}>
+                            Ver en el mapa
+                          </a>
+                        </Dato>
+                      )}
+                    </>
                   )}
                   {((esEnvio && !envioACoordinar) || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
                   {((esEnvio && !envioACoordinar) || pedido.entrega.direccion) && <Dato label="Dirección">{pedido.entrega.direccion}</Dato>}

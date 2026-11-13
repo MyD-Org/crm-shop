@@ -11,7 +11,8 @@ import { AvisoQuitado } from "@/components/AvisoQuitado";
 import { CONFIG_ENVIO_DEFAULT, progresoEnvioGratis, type ConfigEnvio, type EntregaTipo } from "@/lib/envio";
 import { useCart } from "@/context/CartContext";
 import { resumenDisponibilidadCarrito, sinEntregaPosible } from "@/lib/disponibilidad-textos";
-import { useCotizacion } from "@/hooks/useCotizacion";
+import { useCotizacion, type DestinoCotizacion } from "@/hooks/useCotizacion";
+import { FilaEnvioZona } from "@/components/carrito/FilaEnvioZona";
 import { MetasCarrito } from "@/components/carrito/MetasCarrito";
 import { metaCuotas, metaEnvio, ordenarMetas } from "@/lib/metas-carrito";
 import { fmtPrecio } from "@/lib/format";
@@ -24,6 +25,7 @@ import { hrefCompartido, MENSAJE_CARRITO } from "@/lib/carrito-compartido";
 import { topeCantidad } from "@/lib/catalogo-vista";
 import { TEXTO_CARRITO_A_CONFIRMAR } from "@/lib/venta-sin-stock";
 import { BotonIniciarCompra } from "@/components/carrito/BotonIniciarCompra";
+import { TEXTOS_INVITADO } from "@/lib/invitado-textos";
 import { BloquePiedra } from "@/components/piedra/BloquePiedra";
 import { CampoCupon } from "@/components/checkout/CampoCupon";
 import { LineaCupon } from "@/components/checkout/LineaCupon";
@@ -83,15 +85,19 @@ function AlertIcon() {
  */
 export function CarritoClient({
   conSesion,
+  compraInvitado = false,
   configEnvio = CONFIG_ENVIO_DEFAULT,
   provincia = null,
   entregaTipo = "retiro",
   sucursalRetiro = null,
   ubicacionConocida,
+  destinoEnvio,
   piedra = false,
   pagoTransferencia = null,
 }: {
   conSesion: boolean;
+  /** Flag `compra-invitado`: el anónimo puede comprar sin cuenta. Sin flag, el cartel de siempre. */
+  compraInvitado?: boolean;
   /** Medio Transferencia con lista propia: el carrito muestra sus precios. null = precio general. */
   pagoTransferencia?: { listaKey: string; pagoMetodo: string } | null;
   /** Textura de piedra prendida en el sitio (decoración): el carrito vacío va sobre un bloque de piedra. */
@@ -112,6 +118,8 @@ export function CarritoClient({
   sucursalRetiro?: string | null;
   /** Hay elección (retiro o envío con provincia): no se pide la localidad. Por defecto, hay provincia. */
   ubicacionConocida?: boolean;
+  /** Envío por zona (flag `envio-por-zona`): localidad del visitante para anticipar la tarifa. Sin flag, ausente. */
+  destinoEnvio?: DestinoCotizacion;
 }) {
   const { items, updateQty, removeItem: remove, restoreItem, ready, cupon, setCupon } = useCart();
   // Líneas que se están yendo: colapsan SALIDA_MS antes de salir del carrito.
@@ -211,6 +219,7 @@ export function CarritoClient({
     entregaTipo,
     conProgresoCuotas: true,
     cupon,
+    ...(entregaTipo === "envio" && destinoEnvio ? { destino: destinoEnvio } : {}),
     ...(entregaTipo === "envio" && provincia ? { provincia } : {}),
     ...(entregaTipo === "retiro" && sucursalRetiro ? { sucursalRetiro } : {}),
     ...(pagoTransferencia ?? {}),
@@ -220,6 +229,7 @@ export function CarritoClient({
     entregaTipo,
     cupon,
     activo: Boolean(pagoTransferencia),
+    ...(entregaTipo === "envio" && destinoEnvio ? { destino: destinoEnvio } : {}),
     ...(entregaTipo === "envio" && provincia ? { provincia } : {}),
     ...(entregaTipo === "retiro" && sucursalRetiro ? { sucursalRetiro } : {}),
   });
@@ -326,6 +336,7 @@ export function CarritoClient({
   const botonCompra = (etiquetaBloqueado?: string) => (
     <BotonIniciarCompra
       anonimo={!conSesion || estado === "no_auth"}
+      compraInvitado={compraInvitado}
       items={items}
       total={total}
       bloqueado={cotizacion?.hayProblemas}
@@ -358,12 +369,29 @@ export function CarritoClient({
 
         {(!conSesion || estado === "no_auth") && (
           <div className="mb-6 rounded-[20px] border border-border bg-elevated p-4 text-sm">
-            <p className="text-muted">
-              Inicie sesión para completar su compra.{" "}
-              <Link href={rutaIngreso("/carrito")} className="font-semibold text-primary hover:underline">
-                Iniciar sesión
-              </Link>
-            </p>
+            {compraInvitado ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-semibold text-text">{TEXTOS_INVITADO.carritoTitulo}</p>
+                  <p className="text-muted">{TEXTOS_INVITADO.carritoAyuda}</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <Button variant="outline" size="sm" href={rutaIngreso("/carrito")}>
+                    {TEXTOS_INVITADO.botonIngresar}
+                  </Button>
+                  <Button variant="outline" size="sm" href={`/registro?redirect_url=${encodeURIComponent("/carrito")}`}>
+                    {TEXTOS_INVITADO.botonRegistrarse}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-muted">
+                Inicie sesión para completar su compra.{" "}
+                <Link href={rutaIngreso("/carrito")} className="font-semibold text-primary hover:underline">
+                  Iniciar sesión
+                </Link>
+              </p>
+            )}
           </div>
         )}
 
@@ -585,6 +613,9 @@ export function CarritoClient({
                 <dd className="font-medium tabular-nums text-text">{iva === null ? "—" : fmtPrecio(iva)}</dd>
               </div>
               {confirmado && cotizacion.cupon && <LineaCupon cupon={cotizacion.cupon} onQuitar={() => setCupon(null)} />}
+              {confirmado && entregaTipo === "envio" && (
+                <FilaEnvioZona costo={cotizacion.envio.costo} gratis={cotizacion.envio.gratis} estimado={cotizacion.envioEstimado} metodo={cotizacion.envio.metodo} />
+              )}
             </dl>
             <CampoCupon
               cupon={cupon}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { fetchConToken, tokenInvitado } from "@/lib/invitado-token-cliente";
 
 /**
  * Mientras se muestra la pantalla de transferencia de `pedidoId`, al irse de ella (otra página, cerrar
@@ -25,8 +26,10 @@ export function useAvisarAlSalir(pedidoId: string | null): () => void {
       if (enviado || omitido.current) return;
       enviado = true;
       const url = `/api/pedidos/${encodeURIComponent(pedidoId)}/avisos`;
-      const encolado = typeof navigator.sendBeacon === "function" && navigator.sendBeacon(url);
-      if (!encolado) void fetch(url, { method: "POST", keepalive: true }).catch(() => {});
+      // `sendBeacon` no lleva headers: con el token del invitado (header `X-Pedido-Token`) se usa
+      // `fetch` con `keepalive`, que también sobrevive al cierre de la pestaña.
+      const encolado = !tokenInvitado() && typeof navigator.sendBeacon === "function" && navigator.sendBeacon(url);
+      if (!encolado) void fetchConToken(url, { method: "POST", keepalive: true }).catch(() => {});
     };
     const alOcultar = () => {
       if (document.visibilityState === "hidden") enviar();

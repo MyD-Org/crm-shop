@@ -113,8 +113,14 @@ export interface ContextoCupon {
   /** null = todavía no eligió cómo pagar (carrito): se aplica y se avisa la restricción de pago. */
   opcion: OpcionCupon | null;
   entrega: { tipo: EntregaTipo; provincia: string | null };
-  /** Total con IVA de todo el carrito a la lista general (para el mínimo). */
+  /** Total con IVA de todo el carrito a la lista general, SIN el costo de envío (para el mínimo). */
   totalListaGeneral: number;
+  /**
+   * ¿El envío resuelto admite que un cupón de envío gratis anule la tarifa? false = el método por zona
+   * no aplica gratis (`gratis_aplica` apagado): el cupón no anula el envío. Ausente = true (sin método
+   * por zona el envío es siempre a coordinar o gratis, como antes).
+   */
+  envioGratisAplica?: boolean;
   /** Primer motivo de la cuenta que impide el cupón (`motivoCuentaCupon`), o null. */
   motivoCuenta: MotivoCupon | null;
   verificado: boolean;

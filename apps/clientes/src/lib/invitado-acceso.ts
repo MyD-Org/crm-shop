@@ -8,9 +8,13 @@
  *
  * Reglas:
  *  - Sesión Clerk/CRM > token (X4): con sesión el token del invitado se ignora y ni se mira el flag.
- *  - Sin sesión sólo vale con el flag `compra-invitado` encendido, un token de propósito `compra`
- *    firmado para este tenant, vigente y del MISMO pedido que se está pidiendo. El link `pago` del
- *    mail NO se acepta en la API (la página `/pagar/[token]` lo canjea por un token `compra`).
+ *  - Sin sesión vale un token de propósito `compra` firmado para este tenant, vigente y del MISMO
+ *    pedido que se está pidiendo. El link `pago` del mail NO se acepta en la API (la página
+ *    `/pagar/[token]` lo canjea por un token `compra`).
+ *  - El flag `compra-invitado` NO se mira acá (S3, Q6): gobierna CREAR pedidos nuevos de invitado, no
+ *    pagar uno que ya existe. Un token sólo se acuña al crear un pedido (con el flag encendido) o al
+ *    canjear un link firmado de `/pagar`, que funciona con el flag apagado; apagarlo no deja a nadie
+ *    con un pedido sin poder pagarlo, y no abre nada que antes estuviera cerrado.
  *  - Cualquier fallo salvo el vencimiento responde igual (`sin_credencial`): no se distingue un
  *    pedido ajeno, uno inexistente ni un token alterado. El vencimiento sí se informa, para que la
  *    ruta lleve al invitado al link «Pagar su pedido» de su mail.
@@ -19,7 +23,6 @@
  *  - Límite por IP y por pedido, nunca por token ni por cookie: rotar de navegador no lo evade.
  */
 import { identidadActual, type Identidad } from "@/lib/auth";
-import { compraInvitadoHabilitada } from "@/lib/compra-invitado-flag";
 import { ipDelRequest } from "@/lib/ip-cliente";
 import { verificarToken } from "@/lib/pedido-token";
 import type { DuenoPedidos } from "@/lib/pedidos";
@@ -58,7 +61,6 @@ export async function principalDelPedido(req: Request, pedidoId: string | null):
   }
 
   if (!pedidoId) return SIN_CREDENCIAL;
-  if (!(await compraInvitadoHabilitada())) return SIN_CREDENCIAL;
 
   const token = req.headers.get(HEADER_TOKEN_PEDIDO);
   if (!token) return SIN_CREDENCIAL;

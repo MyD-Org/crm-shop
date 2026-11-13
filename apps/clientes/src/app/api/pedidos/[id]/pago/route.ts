@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { identidadActual } from "@/lib/auth";
+import { resolverPrincipal } from "@/lib/invitado-respuesta";
 import { estadoPagoDelPedido } from "@/lib/pagos/estado-pago-pedido";
 import { permitirAsync } from "@/lib/rate-limit";
 
@@ -13,29 +13,29 @@ const VENTANA_MS = 5 * 60_000;
  * Lo sondea el checkout mientras muestra "Estamos confirmando su pago" y lo dispara el detalle del
  * pedido en Mi cuenta cuando el pago sigue pendiente. Si hay un intento abierto, le pregunta al
  * procesador (sólo consulta) y registra el resultado: ver `estadoPagoDelPedido`. Un pedido ajeno
- * responde 404, igual que uno inexistente.
+ * responde 404, igual que uno inexistente. Lo consulta también el invitado de ESE pedido, con su
+ * token de compra en el header `X-Pedido-Token` (ver `lib/invitado-acceso.ts`).
  */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { clerkUserId, cliente } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const { id } = await ctx.params;
+  const r = await resolverPrincipal(req, id || null);
+  if ("respuesta" in r) return r.respuesta;
+  const { principal } = r;
 
-  if (!await permitirAsync(`pago-estado:${clerkUserId ?? cliente?.codigocliente}`, MAX_CONSULTAS, VENTANA_MS)) {
+  if (!await permitirAsync(`pago-estado:${principal.clave}`, MAX_CONSULTAS, VENTANA_MS)) {
     return NextResponse.json(
       { error: "Demasiadas consultas. Espere unos minutos." },
       { status: 429 },
     );
   }
 
-  const { id } = await ctx.params;
   if (!id) return NextResponse.json({ error: "Falta el pedido." }, { status: 400 });
 
   // `?pago_mp=<payment_id>`: vuelve de Mercado Pago con ese pago (ver `estadoPagoDelPedido`).
   const pagoMp = new URL(req.url).searchParams.get("pago_mp");
   const estado = await estadoPagoDelPedido(
     id,
-    { clerkUserId, clienteCodigo: cliente?.codigocliente },
+    principal.dueno,
     pagoMp && /^\d{1,30}$/.test(pagoMp) ? { pagoMercadoPagoId: pagoMp } : {},
   );
   if (!estado) return NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404 });

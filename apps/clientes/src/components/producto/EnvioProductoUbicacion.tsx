@@ -2,6 +2,11 @@ import { connection } from "next/server";
 import { textoEnvioFicha, type ConfigEnvio } from "@/lib/envio";
 import { TEXTOS_UBICACION, envioFichaSegunUbicacion } from "@/lib/ubicacion";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
+import { ubicacionExactaVerificada } from "@/lib/ubicacion-exacta";
+import { claveProvincia } from "@/lib/sucursales";
+import { estimarEnvioPorLocalidad, estimarEnvioPorPunto } from "@/lib/envio-zona-textos";
+import { fmtPesosEnteros } from "@/lib/format";
+import { CartelEnvioRapido } from "@/components/envio/CartelEnvioRapido";
 import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
 import { CLASE_TONO } from "@/components/producto/EntregaProducto";
 import type { LineaDisponibilidad } from "@/lib/disponibilidad-textos";
@@ -36,6 +41,37 @@ export async function EnvioProductoUbicacion({
   // Con retiro elegido la fila de envío sigue la regla general: la ubicación derivada del local no
   // es un destino de envío y el plazo (de la zona del local) tampoco aplica.
   if (resuelta.eleccion.tipo === "retiro") return <>{textoEnvioFicha(configEnvio)}</>;
+  // Envío por zona (flag `envio-por-zona`; sin él `configEnvio.metodos` no existe y esto no hace nada): con la
+  // localidad del visitante se anticipa la tarifa («desde $X» si la localidad toca más de una zona) y cuándo
+  // llega. La geometría no sale del servidor.
+  // Con «Usar mi ubicación» (punto firmado y vigente) la tarifa es la EXACTA de su zona; si el punto no cae en
+  // ninguna, queda lo de siempre (sin «desde»: la ubicación ya es exacta). Sin punto vigente, por localidad.
+  const exacta = configEnvio.metodos?.length
+    ? ubicacionExactaVerificada(resuelta.eleccion, claveProvincia(resuelta.ubicacion?.provincia) || null)
+    : null;
+  const zona = exacta
+    ? estimarEnvioPorPunto(configEnvio.metodos, exacta.destino, new Date())
+    : estimarEnvioPorLocalidad(configEnvio.metodos, resuelta.ubicacion, new Date());
+  if (zona) {
+    return (
+      <>
+        <span className="block">
+          <CartelEnvioRapido nombre={zona.metodo} />
+        </span>
+        <span className="block font-semibold text-text">{zona.texto}</span>
+        {zona.zonas && zona.zonas.length > 1 &&
+          zona.zonas.map((z) => (
+            <span key={z.nombre} className="block text-text">
+              {z.nombre}: {fmtPesosEnteros(z.precio)}
+            </span>
+          ))}
+        {zona.llegada.condicion && <span className="block text-success">{zona.llegada.condicion}</span>}
+        {zona.avisoFeriados && <span className="block text-xs">{zona.avisoFeriados}</span>}
+        {/* Sin el plazo de despacho genérico («Despacho dentro de las 24 h hábiles»): la llegada del método
+            ya dice cuándo llega y las dos líneas juntas se contradicen. */}
+      </>
+    );
+  }
   const envio = envioFichaSegunUbicacion(configEnvio, resuelta.ubicacion);
   if (!envio) return null;
   if (envio.tipo === "texto")

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
-import { iniciarEscena } from "./escena-piedra-controlador";
+import { iniciarEscena, type EntornoEscena } from "./escena-piedra-controlador";
 import { COLORES, ESCENA, LUZ_INICIAL, PIEDRA, RADIO_AMBIENTE, RADIO_LINTERNA } from "./escena-piedra";
 import styles from "./HeroPiedra.module.css";
 import { CapaLA, DefinicionesPiedra, JuntasPiedra } from "@/components/piedra/escena-comun";
@@ -25,9 +25,18 @@ export function EscenaPiedraViva({
   raiz,
   conPista = false,
   sinBruma = false,
+  vista = `0 0 ${ESCENA.ancho} ${ESCENA.alto}`,
+  alineacion = "xMidYMid",
+  sinBorde = false,
 }: {
   raiz: RefObject<HTMLElement | null>;
   conPista?: boolean;
+  /** Recorte del lienzo (viewBox); por defecto, entero. */
+  vista?: string;
+  /** Hacia dónde se alinea el recorte (`slice`): `xMaxYMid` deja el LA contra la derecha. */
+  alineacion?: "xMidYMid" | "xMaxYMid";
+  /** Sin las esquinas redondeadas (la escena cubre una página entera, no una tarjeta). */
+  sinBorde?: boolean;
   /** Sin el halo del LA ni el resplandor que acompaña al cursor: sólo las líneas encendidas. */
   sinBruma?: boolean;
 }) {
@@ -40,40 +49,15 @@ export function EscenaPiedraViva({
   useEffect(() => {
     const hero = raiz.current, lienzo = svg.current, c1 = luz.current, c2 = ambiente.current, boton = la.current;
     if (!hero || !lienzo || !c1 || !c2 || !boton) return;
-    return iniciarEscena({
-      hero, la: boton, luz: c1, ambiente: c2,
-      quieto: matchMedia("(prefers-reduced-motion: reduce)").matches,
-      aEscena: ev => {
-        const m = lienzo.getScreenCTM();
-        if (!m) return null;
-        const p = lienzo.createSVGPoint();
-        p.x = ev.clientX; p.y = ev.clientY;
-        return p.matrixTransform(m.inverse());
-      },
-      raf: cb => requestAnimationFrame(cb),
-      caf: id => cancelAnimationFrame(id),
-      observarVisible: cb => {
-        const obs = new IntersectionObserver(([e]) => cb(e.isIntersecting));
-        obs.observe(hero);
-        return () => obs.disconnect();
-      },
-      observarPestana: cb => {
-        document.addEventListener("visibilitychange", cb);
-        return () => document.removeEventListener("visibilitychange", cb);
-      },
-      pestanaVisible: () => document.visibilityState !== "hidden",
-      tactil: matchMedia("(hover: none)").matches,
-      programar: (cb, ms) => window.setTimeout(cb, ms),
-      cancelarProgramado: id => window.clearTimeout(id),
-    });
+    return iniciarEscena({ ...entornoDelNavegador(hero, lienzo), la: boton, luz: c1, ambiente: c2 });
   }, [raiz]);
 
   const id = (nombre: string) => `${uid}-${nombre}`;
   const url = (nombre: string) => `url(#${id(nombre)})`;
-  const vista = `0 0 ${ESCENA.ancho} ${ESCENA.alto}`;
+  const preserve = `${alineacion} slice`;
   return (
-    <div className={styles.scene}>
-      <svg ref={svg} aria-hidden="true" className={styles.art} viewBox={vista} preserveAspectRatio="xMidYMid slice">
+    <div className={styles.scene} style={sinBorde ? { borderRadius: 0 } : undefined}>
+      <svg ref={svg} aria-hidden="true" className={styles.art} viewBox={vista} preserveAspectRatio={preserve}>
         <DefinicionesPiedra uid={uid} />
         <defs>
           <radialGradient id={id("cono")}>
@@ -100,7 +84,7 @@ export function EscenaPiedraViva({
         <CapaLA uid={uid} conHalo={!sinBruma} />
       </svg>
       {/* El LA es lo único interactivo y accesible de la escena. */}
-      <svg className={styles.hit} viewBox={vista} preserveAspectRatio="xMidYMid slice">
+      <svg className={styles.hit} viewBox={vista} preserveAspectRatio={preserve}>
         <path ref={la} className={styles.laHit} d={PIEDRA.poligonoLA} tabIndex={0} role="button" aria-label="Encender el LA" />
       </svg>
       {conPista ? <div className={styles.pista} aria-hidden="true">
@@ -110,4 +94,40 @@ export function EscenaPiedraViva({
       </div> : null}
     </div>
   );
+}
+
+/**
+ * Lo que la escena toma del navegador: el paso de pantalla al lienzo, los cuadros, y las pausas
+ * fuera de pantalla o con la pestaña oculta. Lo comparten la escena del hero y el bloque claro.
+ */
+export function entornoDelNavegador(
+  hero: HTMLElement,
+  lienzo: SVGSVGElement,
+): Omit<EntornoEscena, "la" | "luz" | "ambiente"> {
+  return {
+    hero,
+    quieto: matchMedia("(prefers-reduced-motion: reduce)").matches,
+    aEscena: ev => {
+      const m = lienzo.getScreenCTM();
+      if (!m) return null;
+      const p = lienzo.createSVGPoint();
+      p.x = ev.clientX; p.y = ev.clientY;
+      return p.matrixTransform(m.inverse());
+    },
+    raf: cb => requestAnimationFrame(cb),
+    caf: id => cancelAnimationFrame(id),
+    observarVisible: cb => {
+      const obs = new IntersectionObserver(([e]) => cb(e.isIntersecting));
+      obs.observe(hero);
+      return () => obs.disconnect();
+    },
+    observarPestana: cb => {
+      document.addEventListener("visibilitychange", cb);
+      return () => document.removeEventListener("visibilitychange", cb);
+    },
+    pestanaVisible: () => document.visibilityState !== "hidden",
+    tactil: matchMedia("(hover: none)").matches,
+    programar: (cb, ms) => window.setTimeout(cb, ms),
+    cancelarProgramado: id => window.clearTimeout(id),
+  };
 }

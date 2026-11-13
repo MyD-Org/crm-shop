@@ -86,7 +86,7 @@ describe("PagoMercadoPago.tsx: cuenta del pedido", () => {
   });
 
   it("el POST de cobro manda la cuenta con la que se tokenizó", () => {
-    const post = fuente.slice(fuente.indexOf('fetch("/api/pagos/mercadopago"'));
+    const post = fuente.slice(fuente.indexOf('fetchConToken("/api/pagos/mercadopago"'));
     expect(post.slice(0, 600)).toMatch(/cuenta/);
   });
 

@@ -5,18 +5,24 @@ import { identidadActual } from "@/lib/auth";
 import { admiteEnvio } from "@/lib/facturacion";
 import { datosDelContacto, paraElCliente } from "@/lib/datos-del-contacto";
 import { telefonoDelCheckout } from "@/lib/contacto-alegra";
-import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
+import { CONFIG_ENVIO_DEFAULT, configEnvioPublica } from "@/lib/envio";
+import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import type { DireccionEnvio } from "@/lib/direcciones-envio";
 import { opcionesCheckoutDelVisitante } from "@/lib/zona-servidor";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
+import { ubicacionExactaVerificada } from "@/lib/ubicacion-exacta";
+import { claveProvincia } from "@/lib/sucursales";
 import type { EleccionInicialCheckout } from "@/lib/checkout-ubicacion";
 import type { EleccionUbicacion } from "@/lib/ubicacion";
 import { mediosOfreciblesComprador } from "@/lib/medios-pago-datos";
 import { esCompradorCuentaCorriente, mediosVisiblesPara } from "@/lib/medios-pago";
 import { idPagoDeRetorno } from "@/lib/pagos/mercadopago-preferencia";
 import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
+import { compraInvitadoHabilitada } from "@/lib/compra-invitado-flag";
+import { resolverRetornoInvitado, type InvitadoCheckout } from "@/lib/checkout-invitado";
+import { datosDelContactoInvitado } from "@/lib/facturacion-invitado";
 
 /**
  * Direcciones guardadas para precargar el envío. Si la consulta falla (por
@@ -38,10 +44,19 @@ async function direccionesParaCheckout(
 }
 
 /** Solo identificadores: la elección de «Enviar a» ya validada contra el dueño y los locales. */
-function eleccionParaCheckout(e: EleccionUbicacion): EleccionInicialCheckout {
+function eleccionParaCheckout(e: EleccionUbicacion, conZona: boolean): EleccionInicialCheckout {
   if (e.tipo === "retiro") return { tipo: "retiro", sucursal: e.sucursal?.slug };
   if (e.tipo === "envio") {
-    return { tipo: "envio", direccionId: e.direccion?.id, provincia: e.provincia ?? undefined };
+    // «Usar mi ubicación» con el envío por zona: calle, localidad, CP y token ya verificados (si vencieron, nada).
+    const x = conZona ? ubicacionExactaVerificada(e, claveProvincia(e.provincia) || null) : null;
+    return {
+      tipo: "envio",
+      direccionId: e.direccion?.id,
+      provincia: e.provincia ?? undefined,
+      ...(x
+        ? { exacta: { calle: x.calle, localidad: e.localidad, ...(x.cp ? { cp: x.cp } : {}), geoToken: x.geoToken, precision: x.precision } }
+        : {}),
+    };
   }
   return { tipo: "ninguna" };
 }
@@ -59,9 +74,10 @@ export default async function CheckoutPage({
     pago?: string | string[];
     payment_id?: string | string[];
     collection_id?: string | string[];
+    t?: string | string[];
   }>;
 }) {
-  const { pedido, pago, payment_id, collection_id } = await searchParams;
+  const { pedido, pago, payment_id, collection_id, t } = await searchParams;
   // Reintento del pago de un pedido existente (`/checkout?pedido=<id>`): el servidor lo valida.
   const pedidoReintento = typeof pedido === "string" && pedido ? pedido : null;
   // `pago=mp`: el comprador vuelve de Mercado Pago (back_urls de la preferencia). Sólo hay un pago que
@@ -73,13 +89,25 @@ export default async function CheckoutPage({
   // que se resuelvan en paralelo con esa consulta en vez de después (misma
   // semántica, una espera menos en la cascada). `identidadActual` decide el
   // redirect, así que a ella sí hay que esperarla antes de renderizar.
-  const reglasPromise = reglasVentaCacheadas();
+  // Flag `envio-por-zona`: prendido, la config trae los métodos por zona (nunca viajan al navegador).
+  const reglasPromise = envioPorZonaHabilitado().then((envioZona) => reglasVentaCacheadas(envioZona));
   const mediosPromise = mediosOfreciblesComprador();
   const tarjetasPromise = getTarjetasMercadoPago();
 
   const { clerkUserId, cliente, nombre, email } = await identidadActual();
+  // Compra como invitado (flag `compra-invitado`, apagado por defecto = login obligatorio como siempre).
+  // El flag se evalúa SÓLO para quien no tiene sesión: quien la tiene nunca ve el formulario de invitado.
+  let invitado: InvitadoCheckout | null = null;
   if (!clerkUserId && !cliente) {
-    redirect(rutaIngreso("/checkout"));
+    const retornoInvitado = resolverRetornoInvitado(pedidoReintento, typeof t === "string" && t ? t : null);
+    // Con un token de compra válido de ESE pedido (lo acuña `/pagar/[token]` o vuelve de un pago) se retoma
+    // el cobro aunque el flag esté apagado: el flag gobierna crear pedidos nuevos, no pagar uno existente.
+    if (!retornoInvitado.tokenRetorno && !(await compraInvitadoHabilitada())) redirect(rutaIngreso("/checkout"));
+    invitado = {
+      activo: true,
+      turnstileSiteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "",
+      ...retornoInvitado,
+    };
   }
 
   // Sin datos fiscales no se puede facturar la compra. Se resuelve acá y se
@@ -108,13 +136,14 @@ export default async function CheckoutPage({
   );
   // Sin la elección el checkout arranca como siempre: una falla al leerla no frena la compra.
   const eleccion = await ubicacionDelVisitante()
-    .then((u) => eleccionParaCheckout(u.eleccion))
+    .then((u) => eleccionParaCheckout(u.eleccion, (reglas.envio?.metodos?.length ?? 0) > 0))
     .catch((err: unknown) => {
       console.error("[checkout] no se pudo leer la ubicación elegida:", err);
       return null;
     });
+  // El invitado no tiene contacto de Alegra, perfil ni direcciones guardadas: nada de eso se consulta.
   const [dc, direcciones] = await Promise.all([
-    datosDelContacto({ clerkUserId, cliente }),
+    invitado ? datosDelContactoInvitado({ pais: "AR" }) : datosDelContacto({ clerkUserId, cliente }),
     // Sólo con Clerk: la cookie del CRM sin Clerk no guarda direcciones.
     clerkUserId ? direccionesParaCheckout(clerkUserId) : [],
   ]);
@@ -123,7 +152,7 @@ export default async function CheckoutPage({
   // Su documento ya es de un cliente de Alegra y no vinculó: se le ofrece
   // vincular siempre, tenga o no cuenta corriente (el vínculo ata la compra al
   // contacto y trae sus datos de Alegra).
-  const sugerirVincular = !cliente && !!perfil?.coincideConAlegra;
+  const sugerirVincular = !invitado && !cliente && !!perfil?.coincideConAlegra;
   // Para el formulario del no vinculado: sólo las columnas que muestra.
   const perfilUI = perfil
     ? {
@@ -159,7 +188,8 @@ export default async function CheckoutPage({
         facturacion={paraElCliente(dc)}
         perfilFacturacion={perfilUI}
         admiteEnvio={admiteEnvio(dc.datos.pais)}
-        configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
+        configEnvio={configEnvioPublica(reglas.envio ?? CONFIG_ENVIO_DEFAULT)}
+        envioPorZona={(reglas.envio?.metodos?.length ?? 0) > 0}
         direccionesGuardadas={direcciones}
         sugerirVincular={sugerirVincular}
         sucursales={sucursales}
@@ -170,6 +200,7 @@ export default async function CheckoutPage({
         pedidoReintento={pedidoReintento}
         retornoMercadoPago={retornoMercadoPago}
         pagoMercadoPagoId={pagoMercadoPagoId ?? undefined}
+        invitado={invitado}
       />
     </>
   );

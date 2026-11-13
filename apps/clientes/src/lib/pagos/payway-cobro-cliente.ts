@@ -7,6 +7,7 @@
  */
 
 import { cambioDeCuenta, type ConfigCuentaCobro } from "./cuenta-rechazada-cliente";
+import { fetchConToken } from "../invitado-token-cliente";
 
 export interface ParamsCobro {
   pedidoId: string;
@@ -47,7 +48,7 @@ interface RespuestaPago {
   error?: string;
 }
 
-export async function enviarCobro(p: ParamsCobro, doFetch: typeof fetch = fetch): Promise<ResultadoCobro> {
+export async function enviarCobro(p: ParamsCobro, doFetch: typeof fetch = fetchConToken): Promise<ResultadoCobro> {
   let res: Response;
   try {
     res = await doFetch("/api/pagos/payway", {

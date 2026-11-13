@@ -1328,6 +1328,20 @@ Spec `docs/superpowers/specs/2026-11-01-cupones-design.md` (migración `0097` de
 - **Pedido**: `Authorization: Bearer <token>`, body `{ "referencia": "<id del contacto en el bot>" }` (1..128). **Respuesta 200**: `{ codigo, link, venceEn, nuevo }`; `link` = URL pública de la tienda del tenant con `?cupon=`. La misma referencia recibe siempre el mismo código (`nuevo: false`), aunque ya esté usado o la promoción esté pausada.
 - **Errores**: 401 token inválido o revocado; 400 sin referencia; 409 `promocion_inactiva` (pausada, vencida o sin empezar) o `limite_alcanzado` (con límite de canjes, se emiten hasta límite × 3 códigos); 429 (60 por minuto por token). Log de una línea sin la referencia.
 
+## Envío en el día (zonas con tarifa)
+
+Change `envio-por-zona-con-tarifa`, rebanada A (migración `0101` del CRM). Admin → **Envíos** → tarjeta **Envío en el día**. Rige para los pedidos NUEVOS; el Shop lo ofrece cuando el método está activo y el flag `envio-por-zona` del Shop está encendido (las rebanadas del Shop llegan después: hoy sólo se configura).
+
+- **Zonas dibujadas en un mapa** (Leaflet + Geoman, mosaicos de OpenStreetMap): cada zona tiene nombre, precio FINAL con IVA, orden y estado, y un `MultiPolygon` GeoJSON `[lon, lat]` guardado como `jsonb` (sin PostGIS). Límites: 20 polígonos y 1000 vértices por zona, dentro de la caja de Argentina, sin autointersección. Si dos zonas se pisan, gana la de menor `orden` y el guardado avisa. Se puede importar/exportar GeoJSON.
+- **Respaldo opcional** por localidad (Georef, por id) o código postal, para zonas que son una localidad entera. Prioridad al resolver: polígono (con coordenadas verificadas) > código postal > localidad. Sin zona = "costo a coordinar".
+- **Datos del método**: provincia, sucursal de origen (sólo aplica si todos los productos salen de ella), días lun–vie, hora de corte y margen (estricto: se entrega el mismo día si la confirmación es anterior a `corte − margen`), promesa, aviso de feriados, "el envío gratis aplica a este método" (por defecto NO: ni la regla de la tienda ni un cupón de envío gratis anulan la tarifa) e ítem de Alegra + IVA del servicio "Envío" (obligatorio para activar: CHECK en la base).
+- **Localidades que atiende**: abreviaturas ("mdp") para el buscador de la tienda; el servidor completa el centro (Georef) y el rectángulo (Nominatim, best-effort) al guardar, para anticipar "desde $X".
+- **Prueba de dirección**: busca una dirección (proxy `GET /api/admin/envios/direcciones`, Nominatim acotado a la localidad), la dibuja en el mapa y muestra zona, regla, precio, promesa y fecha con las MISMAS funciones del Shop (`resolverZona`, `estimarPorLocalidad`, `fechaEntrega`); también modo "solo localidad". `POST /api/admin/envios/probar` prueba el método guardado o el borrador del formulario.
+- **Módulos puros duplicados** en las dos apps (`geo-poligono`, `envio-zona`, `entrega-fecha`, `texto-clave`) con el mismo fixture `src/lib/__fixtures__/envio-zona-casos.json` (idéntico en `apps/clientes`).
+- **Rutas** (`requireSucursalesAccess`, operador o superior; tenant del guard): `GET|POST /api/admin/metodos-envio`, `PUT|DELETE /api/admin/metodos-envio/[id]` (PUT guarda el método COMPLETO en una transacción; DELETE sólo si está inactivo). Cada guardado avisa al Shop (`pingShopRevalidarSucursales`).
+- **Contrato con el Shop**: `shop_app` sólo LEE `metodos_envio`, `metodos_envio_zonas`, `metodos_envio_zona_entradas` y `metodos_envio_localidades` (GRANT en la 0101); el Shop las declara en `apps/clientes/src/db/crm.ts` y `__fixtures__/crm-contrato.json`.
+- **CSP**: `/admin/envios` admite `img-src https://tile.openstreetmap.org` (la CSP sigue en Report-Only).
+
 ## Base de datos
 
 DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):

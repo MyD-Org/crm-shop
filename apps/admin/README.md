@@ -38,3 +38,11 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 > Parte del monorepo `crm-shop`: todos los comandos se corren parados en esta carpeta (`apps/admin`).
 
 Instrucciones para agentes: `AGENTS.md` de esta carpeta y el de la raíz del repo.
+
+## Variables de entorno de los mails de pedidos de invitado
+
+- `PEDIDO_LINK_SECRET`: secreto compartido con el Shop (mismo valor en ambos proyectos de Vercel, mínimo
+  32 caracteres). Firma el link `/pagar/<token>` que llevan los mails de estado de un pedido de invitado
+  (`shop.orders.compra_invitado`) mientras el pago en línea sigue pendiente. El formato lo fija
+  `src/lib/pedido-link.ts` (copia del firmante del Shop, atada por `src/lib/__fixtures__/pedido-token-vector.json`).
+  Si falta, los mails salen igual pero sin el botón «Pagar su pedido». Detalle en `docs/DEPLOY.md`.

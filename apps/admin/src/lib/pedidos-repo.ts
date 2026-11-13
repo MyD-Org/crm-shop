@@ -22,6 +22,8 @@ import { reservaDePendiente, type ReservaPedido } from "@/lib/pedido-reserva"
 import type { ReglaAplicada } from "@/lib/sucursales-zona"
 import { VENTANA_PAGO_MS, motivosNoCancelable, type EntregaTipo, type EstadoPedido, type MotivoNoCancelable } from "@/lib/pedidos-transiciones"
 import { leerVentaSinStock, type VentaSinStockLinea } from "@/lib/pedido-venta-sin-stock"
+import { fechaEntrega } from "@/lib/entrega-fecha"
+import { envioDePedido, horarioDeDetalle, type ReglaEnvio } from "@/lib/envio-snapshot"
 import { cuentaDeCobroDto, parseInfoPago, type FormaElegida, type PagoEnLineaDto } from "@/lib/pago-en-linea"
 
 // Ejecutor de consultas: `getDb()` fuera de una transacción, o el `tx` que da `db.transaction`
@@ -336,6 +338,63 @@ export interface EventoHistorialDto {
 /** Inserta un evento del historial. SIEMPRE dentro de la misma transacción que el UPDATE que lo
  *  motiva (el `ejecutor` es el `tx`, nunca `getDb()` suelto, salvo que quien llama ya esté fuera
  *  de toda transacción a propósito). */
+/**
+ * Confirma el envío por zona de un pedido (change `envio-por-zona-con-tarifa`): fija
+ * `envio_confirmado_en` y `envio_entrega_confirmada` con el horario congelado en `envio_detalle`.
+ * Equivalente a `confirmarEnvioTx` del Shop (`apps/clientes/src/lib/pedidos.ts`): el PRIMER evento
+ * entre pago aprobado, pago manual del operador y paso a `confirmado` gana; los siguientes no
+ * recalculan nada (el UPDATE exige `envio_confirmado_en IS NULL`). Un pedido sin método de envío
+ * (retiro, a coordinar, flag apagado, anterior al cambio) no se toca. Devuelve si confirmó.
+ */
+export async function confirmarEnvioTx(
+  ejecutor: Ejecutor,
+  tenantId: string,
+  pedidoId: string,
+  ahora: Date,
+  detalle: unknown,
+): Promise<boolean> {
+  if (!detalle) return false
+  const horario = horarioDeDetalle(detalle)
+  if (!horario) {
+    console.error(`[envio] pedido=${pedidoId}: horario del envío ilegible, no se calcula la fecha confirmada`)
+    return false
+  }
+  const entrega = fechaEntrega(ahora, horario)
+  const r = await ejecutor
+    .update(shopOrders)
+    .set({ envioConfirmadoEn: ahora, envioEntregaConfirmada: entrega.fecha, updatedAt: ahora })
+    .where(
+      and(
+        eq(shopOrders.id, pedidoId),
+        eq(shopOrders.tenantId, tenantId),
+        isNull(shopOrders.envioConfirmadoEn),
+        isNotNull(shopOrders.envioDetalle),
+      ),
+    )
+    .returning({ id: shopOrders.id })
+  return r.length > 0
+}
+
+/**
+ * Anular el pago que confirmó el envío: limpia la confirmación SÓLO si el pedido sigue `pendiente`.
+ * Si un operador ya lo confirmó o avanzó, esa confirmación vale por sí misma y no se toca.
+ */
+export async function anularConfirmacionEnvioTx(ejecutor: Ejecutor, tenantId: string, pedidoId: string, ahora: Date): Promise<boolean> {
+  const r = await ejecutor
+    .update(shopOrders)
+    .set({ envioConfirmadoEn: null, envioEntregaConfirmada: null, updatedAt: ahora })
+    .where(
+      and(
+        eq(shopOrders.id, pedidoId),
+        eq(shopOrders.tenantId, tenantId),
+        eq(shopOrders.estado, "pendiente"),
+        isNotNull(shopOrders.envioConfirmadoEn),
+      ),
+    )
+    .returning({ id: shopOrders.id })
+  return r.length > 0
+}
+
 async function registrarEvento(
   ejecutor: Ejecutor,
   input: {
@@ -731,6 +790,9 @@ export async function cambiarEstado(
       .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId), eq(shopOrders.estado, input.esperado)))
       .returning()
     if (!fila) return null
+
+    // Paso a `confirmado` (cuenta corriente / a coordinar, sin pago en línea): confirma el envío por zona.
+    if (input.nuevo === "confirmado") await confirmarEnvioTx(tx, tenantId, fila.id, input.now, fila.envioDetalle)
 
     await registrarEvento(tx, {
       tenantId,
@@ -1362,6 +1424,8 @@ export async function registrarPagoManual(
           actor: input.actor,
           now: input.now,
         })
+        // Pago manual del operador: confirma el envío por zona (idempotente; el primer evento gana).
+        await confirmarEnvioTx(tx, tenantId, fila.id, input.now, fila.envioDetalle)
       } else {
         // Baja lógica: las filas quedan para auditoría. El comprobante NO vuelve a pendiente.
         await tx
@@ -1382,6 +1446,8 @@ export async function registrarPagoManual(
           actor: input.actor,
           now: input.now,
         })
+        // Anular el pago limpia la confirmación del envío sólo si el pedido sigue `pendiente`.
+        if (fila.envioDetalle && fila.estado === "pendiente") await anularConfirmacionEnvioTx(tx, tenantId, fila.id, input.now)
       }
       return fila
     })
@@ -1605,6 +1671,48 @@ function toCuentaPagoDto(snapshot: unknown): CuentaPagoDto | null {
   return cuenta.alias || cuenta.cbu ? cuenta : null
 }
 
+/** Envío por zona del pedido (foto congelada al crear; null = retiro, a coordinar o pedido anterior). */
+export interface EnvioZonaDto {
+  metodo: string
+  zona: string
+  /** Tarifa de la zona con IVA, aunque el envío haya salido gratis. */
+  precio: number | null
+  regla: ReglaEnvio | null
+  /** true = la ubicación sólo llegó a la calle (sin altura). */
+  ubicacionAproximada: boolean
+  punto: { lat: number; lon: number } | null
+  promesa: string
+  avisoFeriados: string
+  /** "YYYY-MM-DD" estimada al crear el pedido. */
+  entregaEstimada: string | null
+  /** "YYYY-MM-DD" fijada al confirmar el pedido (pago o confirmación); null = todavía no. */
+  entregaConfirmada: string | null
+  medioOnline: boolean
+}
+
+export function toEnvioZonaDto(
+  row: Pick<
+    PedidoRow,
+    "envioMetodo" | "envioZona" | "envioDetalle" | "envioPromesa" | "envioEntregaEstimada" | "envioEntregaConfirmada"
+  >,
+): EnvioZonaDto | null {
+  const e = envioDePedido(row)
+  if (!e || !row.envioMetodo) return null
+  return {
+    metodo: row.envioMetodo,
+    zona: e.zona,
+    precio: e.precio,
+    regla: e.regla,
+    ubicacionAproximada: e.precision === "calle",
+    punto: e.punto,
+    promesa: row.envioPromesa ?? "",
+    avisoFeriados: e.avisoFeriados,
+    entregaEstimada: row.envioEntregaEstimada ?? null,
+    entregaConfirmada: row.envioEntregaConfirmada ?? null,
+    medioOnline: e.medioOnline,
+  }
+}
+
 export interface PedidoDetalleDto extends PedidoListaDto {
   /** Regla que asignó la sucursal, congelada al crear el pedido (null = anterior a las zonas). */
   sucursalRegla: ReglaAplicada | null
@@ -1623,6 +1731,8 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   costoEnvio: number
   /** Envío a domicilio: true = gratis, false = costo a coordinar; null = retiro o pedido anterior. */
   envioGratis: boolean | null
+  /** Método, zona, promesa y fecha de entrega del envío por zona; null = sin método. */
+  envioZona: EnvioZonaDto | null
   /**
    * Cupón con el que se vendió (foto `orders.cupon` del Shop): la línea "Cupón LUZ-7KQ2M (10 %)",
    * el descuento con IVA (ya dentro de los unitarios) y si el envío gratis lo dio el cupón.
@@ -1774,6 +1884,7 @@ export function toPedidoDetalleDto(
     iva: num(row.iva),
     costoEnvio: num(row.costoEnvio),
     envioGratis: row.envioGratis ?? null,
+    envioZona: toEnvioZonaDto(row),
     cupon: cuponDelPedido(row.cupon ?? null, row.envioGratis ?? null),
     notas: row.notas,
     cancelacionMotivo: row.cancelacionMotivo,

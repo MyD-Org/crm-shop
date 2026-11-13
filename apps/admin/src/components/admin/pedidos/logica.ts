@@ -342,7 +342,34 @@ export function textoCampaniaLinea(i: {
 }
 
 /** "Costo de envío" del detalle: gratis (por la regla de la tienda o por el cupón) o a coordinar. */
-export function textoCostoEnvio(envioGratis: boolean | null, porCupon: boolean): string {
+export function textoCostoEnvio(envioGratis: boolean | null, porCupon: boolean, costo = 0): string {
+  // Envío por zona: el comprador pagó la tarifa de su zona (IVA incluido).
+  if (costo > 0) return "$" + costo.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   if (!envioGratis) return "A coordinar con el cliente"
   return porCupon ? "Envío gratis por cupón" : "Gratis"
+}
+
+const REGLA_TEXTO: Record<string, string> = {
+  poligono: "Zona dibujada en el mapa",
+  cp: "Código postal",
+  georef: "Localidad",
+}
+
+/** "2026-11-12" → "12/11/2026" (fecha civil, sin zona horaria). */
+export function fechaCivilATexto(fecha: string | null): string | null {
+  const m = fecha ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha) : null
+  return m ? m[3] + "/" + m[2] + "/" + m[1] : null
+}
+
+/** Texto de la regla con la que se resolvió la zona del envío. */
+export function textoReglaEnvio(regla: string | null, ubicacionAproximada: boolean): string | null {
+  if (!regla) return null
+  const base = REGLA_TEXTO[regla] ?? regla
+  return ubicacionAproximada ? base + " (ubicación aproximada)" : base
+}
+
+/** Enlace a un mapa con el punto de entrega; sólo coordenadas numéricas válidas. */
+export function enlaceMapaEnvio(punto: { lat: number; lon: number } | null): string | null {
+  if (!punto || !Number.isFinite(punto.lat) || !Number.isFinite(punto.lon)) return null
+  return "https://www.openstreetmap.org/?mlat=" + punto.lat + "&mlon=" + punto.lon + "#map=17/" + punto.lat + "/" + punto.lon
 }

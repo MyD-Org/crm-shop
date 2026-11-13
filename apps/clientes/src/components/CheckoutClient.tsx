@@ -15,6 +15,9 @@ import { useRouter } from "next/navigation";
 import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, Stepper, type PaymentLogo } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
+import { AvisoEnvioZona, FilaEnvioResumen } from "@/components/checkout/EnvioZona";
+import { TEXTOS_ENVIO_ZONA } from "@/lib/envio-zona-textos";
+import { camposPedidoEnvioZona, destinoParaCotizar, precargaDeUbicacion, type UbicacionElegida } from "@/lib/envio-zona-checkout";
 import { formaInicialDelMedio, pagoParaCotizar } from "@/lib/lista-medio";
 import { ahorroFrente, bajadaOpcion, opcionElegida, opcionesDePago, PIE_CUENTA_MP, textoConfirmar, tituloEnFrase, tituloOpcion, type OpcionPago } from "@/lib/opciones-pago";
 import { leerFormaCobro, type OpcionCobro } from "@/lib/pagos/opciones-cobro";
@@ -102,6 +105,21 @@ import { useAvisarAlSalir } from "@/components/checkout/useAvisarAlSalir";
 import { PIE_TRANSFERENCIA } from "@/lib/pie-pago-transferencia";
 import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
 import { precargaDeEntrega, puedeCambiarMedioPago, retomaEnPasoPago, type EntregaDelPedido } from "@/lib/cambiar-medio-pago";
+import { DomicilioInvitado, FormularioInvitado } from "@/components/FormularioInvitado";
+import { TurnstileWidget } from "@/components/TurnstileWidget";
+import type { InvitadoCheckout } from "@/lib/checkout-invitado";
+import {
+  camposDeInvitadoParaPedido,
+  DATOS_INVITADO_VACIOS,
+  emailNormalizado,
+  erroresFacturacionInvitado,
+  invitadoCompleto,
+  validarContactoInvitado,
+  type DatosInvitado,
+} from "@/lib/invitado-form";
+import { ERRORES_INVITADO, TEXTOS_INVITADO } from "@/lib/invitado-textos";
+import { CrearCuentaCta } from "@/components/CrearCuentaCta";
+import { fetchConToken, fijarTokenInvitado, quitarTokenDeLaUrl } from "@/lib/invitado-token-cliente";
 
 /*
  * Entrada de la pantalla de éxito (momento único por compra: acá sí va algo de
@@ -339,6 +357,16 @@ interface Props {
    * entrega, local y dirección. null = como siempre.
    */
   eleccionInicial?: EleccionInicialCheckout | null;
+  /**
+   * Envío por zona (flag `envio-por-zona` prendido y con métodos cargados; lo resuelve el server).
+   * Apagado, el checkout no manda destino ni muestra nada nuevo: es el de siempre.
+   */
+  envioPorZona?: boolean;
+  /**
+   * Compra como invitado (flag `compra-invitado`, resuelto en el server): sin sesión ni cuenta. El
+   * token de la sesión de compra vive sólo en la memoria de la página. null = checkout de siempre.
+   */
+  invitado?: InvitadoCheckout | null;
 }
 
 /** Respuesta de `/api/pedidos/pendiente`. */
@@ -413,11 +441,12 @@ function ResumenTotalPedido({
 export function CheckoutClient({
   nombreSugerido,
   telefonoSugerido = "",
-  emailCliente,
+  emailCliente: emailClienteProp,
   facturacion,
   perfilFacturacion = null,
   admiteEnvio,
   configEnvio,
+  envioPorZona = false,
   direccionesGuardadas = [],
   sugerirVincular = false,
   sucursales = null,
@@ -428,8 +457,25 @@ export function CheckoutClient({
   pedidoReintento = null,
   retornoMercadoPago = false,
   pagoMercadoPagoId,
+  invitado = null,
 }: Props) {
   const { items, vaciarTrasPedido, ready, addItems, cupon, setCupon } = useCart();
+  // Compra como invitado: sus datos (correo, facturación) se cargan acá y viajan en el pedido; nada
+  // se guarda en el navegador.
+  const invitadoActivo = invitado?.activo === true;
+  const [datosInv, setDatosInv] = useState<DatosInvitado>(DATOS_INVITADO_VACIOS);
+  const [trampa, setTrampa] = useState("");
+  const [erroresInv, setErroresInv] = useState<Record<string, string>>({});
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [reinicioTurnstile, setReinicioTurnstile] = useState(0);
+  const iniciadoEn = useRef(0);
+  useEffect(() => {
+    iniciadoEn.current = Date.now();
+  }, []);
+  // El invitado sólo busca un pedido si vuelve de un pago con su token (ver el efecto del pendiente):
+  // sin eso no hay nada que esperar y el spinner no debe quedar.
+  const buscaPendienteAlMontar = !invitadoActivo || Boolean(invitado?.tokenRetorno);
+  const emailCliente = invitadoActivo ? emailNormalizado(datosInv.email) || undefined : emailClienteProp;
   // Payway reutiliza los logos de Mercado Pago para las marcas de su convenio.
   const tarjetasDelConvenioPayway = useMemo(() => tarjetasPayway(tarjetasMercadoPago), [tarjetasMercadoPago]);
 
@@ -464,8 +510,16 @@ export function CheckoutClient({
   // Provincia de "otra dirección": la de la zona vigente si la hay. Con una dirección guardada o el
   // domicilio fiscal, la provincia sale de ellos (ver `provinciaEntrega` más abajo).
   const [provinciaManual, setProvinciaManual] = useState(inicial.provinciaManual);
-  const [ciudad, setCiudad] = useState("");
-  const [direccion, setDireccion] = useState("");
+  // «Usar mi ubicación» con el envío por zona: el formulario arranca con la calle exacta ya verificada.
+  const [precarga] = useState(() =>
+    precargaDeUbicacion({ eleccion: eleccionInicial, envioPorZona, direccionesGuardadas: direccionesGuardadas.length }),
+  );
+  const [ciudad, setCiudad] = useState(precarga?.ciudad ?? "");
+  const [direccion, setDireccion] = useState(precarga?.direccion ?? "");
+  // Envío por zona: la sugerencia elegida del autocompletado (trae un token firmado) y si el comprador
+  // eligió seguir con el envío a coordinar. La elección de coordinar vale sólo para el destino en que se hizo.
+  const [ubicacionSel, setUbicacionSel] = useState<UbicacionElegida | null>(precarga?.ubicacion ?? null);
+  const [coordinarPara, setCoordinarPara] = useState<string | null>(null);
   // Envío a domicilio arranca con la predeterminada. `ciudad` y `direccion`
   // quedan para "otra dirección para esta compra", que no toca las guardadas.
   const [eleccionDireccion, setEleccionDireccion] = useState(inicial.eleccionDireccion);
@@ -499,7 +553,7 @@ export function CheckoutClient({
   // checkout: siempre el mismo formulario, precargado si ya los tiene y vacío
   // si no. Al vinculado se los da Alegra: resumen en lectura (+ modal para los
   // que falten).
-  const seccionFacturacion = !facturacion.vinculado;
+  const seccionFacturacion = !facturacion.vinculado && !invitadoActivo;
   const router = useRouter();
 
   // Envío al domicilio fiscal: con el envío a domicilio activo, sin direcciones guardadas
@@ -522,7 +576,8 @@ export function CheckoutClient({
     !!fiscalCalle &&
     !!fiscalCiudad &&
     !!fiscalProvincia;
-  const [aOtraDireccion, setAOtraDireccion] = useState(false);
+  // Con una ubicación precargada la dirección de envío es esa, no el domicilio fiscal.
+  const [aOtraDireccion, setAOtraDireccion] = useState(precarga !== null);
   const usarFiscal = aDomicilio && ofrecerFiscal && !aOtraDireccion;
   const ciudadEntrega = usarFiscal && fiscalCiudad ? fiscalCiudad : ciudadElegida;
   const direccionEntrega = usarFiscal && fiscalCalle ? fiscalCalle : direccionElegida;
@@ -545,7 +600,8 @@ export function CheckoutClient({
     conSucursales: !!sucursales && sucursales.locales.length > 0,
     usarFiscal,
   });
-  const claveSync = cuerpoSync ? JSON.stringify(cuerpoSync) : null;
+  // El invitado no escribe la elección de «Enviar a» (es una cookie): nada se guarda en su navegador.
+  const claveSync = cuerpoSync && !invitadoActivo ? JSON.stringify(cuerpoSync) : null;
   const ultimaSync = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     // La primera pasada es el estado inicial: ya es la elección vigente, no hay nada que escribir.
@@ -628,7 +684,7 @@ export function CheckoutClient({
    * carrito vacío: sin esta espera vería "carrito vacío" un instante antes de la
    * pantalla de pago.
    */
-  const [buscandoPendiente, setBuscandoPendiente] = useState(true);
+  const [buscandoPendiente, setBuscandoPendiente] = useState(buscaPendienteAlMontar);
   /** Pedido pendiente encontrado al montar, a decidir cuando cargue el carrito. */
   const [rescate, setRescate] = useState<PedidoRescatado | null>(null);
   /**
@@ -650,10 +706,17 @@ export function CheckoutClient({
     // El servidor contesta `{ pedido: null }` sin credenciales de Mercado Pago, y rescata el pedido
     // aunque el medio se haya desactivado en el CRM: el pedido ya existe.
     let cancelado = false;
+    if (invitadoActivo) {
+      // El invitado no tiene "pedido pendiente" que buscar: sólo retoma el de su retorno de pago, con el
+      // token que trajo la URL (se guarda en memoria y se saca de la barra de direcciones).
+      if (!pedidoReintento || !invitado?.tokenRetorno) return;
+      fijarTokenInvitado(invitado.tokenRetorno);
+      quitarTokenDeLaUrl();
+    }
     const url = pedidoReintento
       ? `/api/pedidos/pendiente?pedido=${encodeURIComponent(pedidoReintento)}`
       : "/api/pedidos/pendiente";
-    fetch(url)
+    fetchConToken(url)
       .then(async (r) => {
         if (r.ok) return r.json();
         if (pedidoReintento && (r.status === 404 || r.status === 409)) {
@@ -690,6 +753,8 @@ export function CheckoutClient({
       cancelado = true;
     };
     // `retornoMercadoPago` es fijo (viene de la URL) y `vaciarTrasPedido` es estable: no la vuelven a disparar.
+    // `invitado` también es fijo para esta carga de la página.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedidoReintento, retornoMercadoPago, vaciarTrasPedido]);
 
   /**
@@ -700,6 +765,8 @@ export function CheckoutClient({
    * se retoma.
    */
   const rescateDistinto =
+    // El invitado no cancela pedidos (el servidor se lo niega): lo que encuentra siempre se retoma.
+    !invitadoActivo &&
     rescate !== null &&
     // Un reintento explícito nunca cancela el pedido aunque el carrito sea otro.
     !rescate.explicito &&
@@ -789,7 +856,7 @@ export function CheckoutClient({
     setErrorCancelar(null);
     setErrorEnvio(null);
     setPasoActual("datos");
-    setBuscandoPendiente(true);
+    setBuscandoPendiente(buscaPendienteAlMontar);
     claveIntento.current = null;
   });
 
@@ -842,7 +909,19 @@ export function CheckoutClient({
   const omitirAvisoAlSalir = useAvisarAlSalir(confirmado && !pagado && conCuenta ? confirmado.id : null);
   const localParaCuenta = sucursales && entrega === "retiro" && localRetiro ? localRetiro : undefined;
 
+  // Envío por zona: a dónde va el envío, sin coordenadas (dirección guardada o token firmado).
+  const entradaDestino = {
+    guardadaId: !usarFiscal ? (guardada?.id ?? null) : null,
+    ubicacion: !usarFiscal && !guardada ? ubicacionSel : null,
+    calleActual: direccionEntrega,
+    ciudad: ciudadEntrega,
+  };
+  const destinoZona = envioPorZona && aDomicilio ? destinoParaCotizar(entradaDestino) : undefined;
+  const claveDestino = JSON.stringify(destinoZona ?? {});
+  const envioACoordinar = coordinarPara !== null && coordinarPara === claveDestino;
+
   const { cotizacion, estado, error, recotizar, ultimasCuotasOpciones } = useCotizacion({
+    ...(destinoZona ? { destino: destinoZona } : {}),
     entregaTipo: entrega,
     ciudad: aDomicilio ? ciudadEntrega : undefined,
     // La provincia de entrega define si el envío es gratis y, con el flag de sucursales, la zona:
@@ -930,6 +1009,35 @@ export function CheckoutClient({
     (ciudadEntrega.trim() !== "" && direccionEntrega.trim() !== "" && provinciaEntrega !== "");
   const datosCompletos = contactoCompleto && entregaCompleta;
 
+  /** Lo que el servidor necesita saber de la entrega para facturar al invitado. */
+  const entregaInvitado = {
+    tipo: entrega,
+    calle: aDomicilio ? direccionEntrega : undefined,
+    ciudad: aDomicilio ? ciudadEntrega : undefined,
+    provincia: aDomicilio ? (provinciaEntrega || null) : null,
+  } as const;
+  const camposDomicilio = ["domicilioCalle", "domicilioCiudad", "domicilioProvincia", "domicilioCp"];
+  function cambiarDatosInvitado(parcial: Partial<DatosInvitado>) {
+    setDatosInv((d) => ({ ...d, ...parcial }));
+    // Nombre y teléfono son los del pedido: el resto del checkout los lee de estos estados.
+    if (parcial.nombre !== undefined) setNombre(parcial.nombre);
+    if (parcial.telefono !== undefined) setTelefono(parcial.telefono);
+    setErroresInv({});
+  }
+  /** Paso «Sus datos» del invitado: contacto y documento (el domicilio se pide en la entrega). */
+  function continuarDesdeInvitado() {
+    const errores = validarContactoInvitado(datosInv);
+    const fact = erroresFacturacionInvitado(datosInv, entregaInvitado);
+    if (fact && !camposDomicilio.includes(fact.campo)) errores[fact.campo] = fact.error;
+    setErroresInv(errores);
+    if (Object.keys(errores).length > 0) {
+      setErrorPaso("Revise los datos marcados para continuar.");
+      return;
+    }
+    irAPaso("entrega");
+  }
+  const invitadoListo = !invitadoActivo || invitadoCompleto(datosInv, entregaInvitado);
+
   function continuarDesdeContacto() {
     if (!contactoCompleto) {
       setErrorPaso("Ingrese su nombre y un teléfono para continuar.");
@@ -939,12 +1047,24 @@ export function CheckoutClient({
   }
 
   function validarEntrega(): boolean {
+    if (invitadoActivo) {
+      const fact = erroresFacturacionInvitado(datosInv, entregaInvitado);
+      if (fact) {
+        setErroresInv({ [fact.campo]: fact.error });
+        setErrorPaso(fact.error);
+        return false;
+      }
+    }
     if (!entregaCompleta) {
       setErrorPaso("Indique la provincia, la ciudad y la dirección de entrega.");
       return false;
     }
     if (aDomicilio && cotizacion && !envioDisponible) {
       setErrorPaso("El envío a domicilio no está disponible. Elija retiro en el local.");
+      return false;
+    }
+    if (sinUbicarPendiente) {
+      setErrorPaso(TEXTOS_ENVIO_ZONA.sinUbicar);
       return false;
     }
     setErrorPaso(null);
@@ -955,6 +1075,11 @@ export function CheckoutClient({
     if (validarEntrega()) irAPaso("pago");
   }
 
+  // Envío por zona: la localidad la atiende un método pero falta una dirección ubicada, y todavía no se eligió
+  // seguir con el envío a coordinar.
+  const sinUbicarPendiente = envioPorZona && aDomicilio && cotizacion?.envio.sinUbicar === true && !envioACoordinar;
+
+  const invitadoPendiente = invitadoActivo && pedidoACambiar === null && (!invitadoListo || turnstileToken === null);
   const puedeConfirmar =
     estado === "ok" &&
     !!cotizacion &&
@@ -963,13 +1088,17 @@ export function CheckoutClient({
     // Al cambiarle el medio a un pedido que ya existe, el servidor usa sus datos y su entrega: sólo
     // cuentan el medio y las cuotas (ver `lib/cambiar-medio-pago.ts`).
     (pedidoACambiar !== null || (datosCompletos && facturacionCompleta && (!aDomicilio || envioDisponible))) &&
+    // Envío por zona: con la dirección sin ubicar hay que elegir una de la lista o seguir a coordinar.
+    (pedidoACambiar !== null || !sinUbicarPendiente) &&
+    // Invitado: datos válidos y, sin la verificación (Turnstile), no se confirma (falla cerrada).
+    !invitadoPendiente &&
     pasoActual === pasoFinal &&
     !enviando;
 
   /** El pedido ya existe: se le cambia el medio (y cuotas) y sigue el flujo normal con ese mismo número. */
   async function confirmarCambioDeMedio(previo: NonNullable<typeof confirmado>) {
     try {
-      const res = await fetch(`/api/pedidos/${previo.id}/medio`, {
+      const res = await fetchConToken(`/api/pedidos/${previo.id}/medio`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -980,7 +1109,7 @@ export function CheckoutClient({
         }),
       });
       if (res.status === 401) {
-        setErrorEnvio(TEXTO_SESION_VENCIDA);
+        setErrorEnvio(invitadoActivo ? TEXTOS_INVITADO.tokenVencido : TEXTO_SESION_VENCIDA);
         recotizar();
         return;
       }
@@ -1058,7 +1187,7 @@ export function CheckoutClient({
     }
 
     try {
-      const res = await fetch("/api/pedidos", {
+      const res = await fetchConToken("/api/pedidos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1085,10 +1214,22 @@ export function CheckoutClient({
           // Sólo con el flag `sucursales` (props presentes): local de retiro y provincia de entrega.
           sucursalRetiro: sucursales && entrega === "retiro" && localRetiro ? localRetiro : undefined,
           entregaProvincia: aDomicilio && provinciaEntrega ? provinciaEntrega : undefined,
+          // Envío por zona: sólo con el flag (si no, el cuerpo es el de siempre).
+          ...(envioPorZona && aDomicilio
+            ? camposPedidoEnvioZona({ entrada: entradaDestino, envioACoordinar, costoEnvioVisto: cotizacion?.costoEnvio })
+            : {}),
+          // Sólo el invitado: correo (dos veces), facturación en línea, desafío, tiempo y campo señuelo.
+          ...(invitadoActivo
+            ? camposDeInvitadoParaPedido(datosInv, entregaInvitado, {
+                turnstile: turnstileToken ?? "",
+                iniciado: iniciadoEn.current,
+                trampa,
+              })
+            : {}),
         }),
       });
 
-      if (res.status === 401) {
+      if (res.status === 401 && !invitadoActivo) {
         // Sesión vencida: se recotiza para que el resumen muestre el enlace de ingreso.
         setErrorEnvio(TEXTO_SESION_VENCIDA);
         recotizar();
@@ -1096,6 +1237,13 @@ export function CheckoutClient({
       }
 
       const json = await res.json();
+      // El desafío sirve una sola vez: se pida lo que se pida, para reintentar hace falta otro.
+      if (invitadoActivo) setReinicioTurnstile((n) => n + 1);
+      if (invitadoActivo && res.status === 400 && Array.isArray(json?.campos)) {
+        setErrorEnvio(json.error ?? "Revise sus datos de facturación.");
+        irAPaso("entrega");
+        return;
+      }
 
       if (res.status === 409 && json?.motivo === "facturacion_incompleta") {
         // Faltan datos de facturación (p. ej. cambiaron en Alegra): se abre el
@@ -1105,6 +1253,14 @@ export function CheckoutClient({
         setFaltantes409(Array.isArray(json.faltantes) ? json.faltantes : facturacion.faltantes);
         if (facturacion.vinculado) setModalFacturacion(true);
         else irAPaso("datos");
+        return;
+      }
+      if (res.status === 409 && (json?.motivo === "direccion_sin_ubicar" || json?.motivo === "envio_cambio")) {
+        // La dirección no se pudo ubicar, o el costo del envío cambió según la dirección o el origen: nada se
+        // creó. Se recotiza para ver el costo nuevo y confirmarlo (o elegir una dirección de la lista).
+        setErrorEnvio(json.error ?? TEXTOS_ENVIO_ZONA.precioCambio);
+        irAPaso("entrega");
+        recotizar();
         return;
       }
       if (res.status === 409 && json?.motivo === "cupon") {
@@ -1150,6 +1306,14 @@ export function CheckoutClient({
         setErrorEnvio(json?.error ?? "No pudimos registrar el pedido.");
         return;
       }
+      if (invitadoActivo) {
+        // Sin token no hay forma de seguir el pedido (el servidor lo niega a los bots): no se avanza.
+        if (typeof json?.invitadoToken !== "string") {
+          setErrorEnvio(ERRORES_INVITADO.verificacion);
+          return;
+        }
+        fijarTokenInvitado(json.invitadoToken);
+      }
 
       // El pedido ya existe. Sin pago en línea es una compra: el carrito se
       // vacía (con sesión de Clerk el servidor ya vació el suyo en la misma
@@ -1180,16 +1344,19 @@ export function CheckoutClient({
         // cuenta corriente sigue con su texto.
         aConfirmar: pedidoAConfirmarPorModalidad(pagoParaEnviar, json.cotizacion?.lineas ?? []),
       });
-      // Conversión: al crear el pedido, también con Mercado Pago todavía impago.
-      track({
-        tipo: "pedido_confirmado",
-        pedidoId: String(json.id),
-        numero: json.numero,
-        total,
-        items: items.map((i) => itemDe(i, i.qty)),
-        // El nombre de la promoción, nunca el código (un código único es casi un dato personal).
-        ...(json.cotizacion?.cupon?.nombre ? { cupon: String(json.cotizacion.cupon.nombre) } : {}),
-      });
+      // Conversión: al crear el pedido, también con Mercado Pago todavía impago. La del invitado se
+      // mide en el servidor al registrar el cobro (sin datos personales ni el token en la URL).
+      if (!invitadoActivo) {
+        track({
+          tipo: "pedido_confirmado",
+          pedidoId: String(json.id),
+          numero: json.numero,
+          total,
+          items: items.map((i) => itemDe(i, i.qty)),
+          // El nombre de la promoción, nunca el código (un código único es casi un dato personal).
+          ...(json.cotizacion?.cupon?.nombre ? { cupon: String(json.cotizacion.cupon.nombre) } : {}),
+        });
+      }
       if (!esPagoEnLinea(pagoParaEnviar)) vaciarTrasPedido();
     } catch {
       setErrorEnvio("No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.");
@@ -1274,7 +1441,7 @@ export function CheckoutClient({
     setErrorCancelar(null);
     try {
       if (items.length === 0 || !estadoCargado) {
-        const res = await fetch(`/api/pedidos/${confirmado.id}/medio`);
+        const res = await fetchConToken(`/api/pedidos/${confirmado.id}/medio`);
         if (!res.ok) {
           const json = (await res.json().catch(() => null)) as { error?: string } | null;
           setErrorCancelar(json?.error ?? "No se pudo cambiar el medio de pago. Inténtelo de nuevo en un momento.");
@@ -1416,7 +1583,7 @@ export function CheckoutClient({
                 {cancelando ? "Un momento…" : "Cambiar medio de pago"}
               </Button>
             )}
-            {pagoEnConfirmacion || cobroEnCurso ? (
+            {pagoEnConfirmacion || cobroEnCurso || invitadoActivo ? (
               // Con el cobro en confirmación no se cancela (el pago puede acreditarse) ni se cambia el
               // medio. Si se rechaza, vuelve el formulario y reaparecen las dos opciones.
               <Link href="/" className="self-center py-2 text-sm text-muted underline">
@@ -1462,7 +1629,9 @@ export function CheckoutClient({
             {/* Sin cuenta todavía no hay a dónde transferir: el comprobante se pide recién con los datos. */}
             {cuenta && (
               <PasoNumerado numero={2} titulo="Envíenos el comprobante" hecho={comprobanteInformado}>
-                {comprobanteInformado ? (
+                {invitadoActivo ? (
+                  <p className="text-sm text-muted">{TEXTOS_INVITADO.transferenciaComprobante}</p>
+                ) : comprobanteInformado ? (
                   <Alert tone="success">Recibimos su comprobante. Le avisaremos cuando registremos el pago.</Alert>
                 ) : (
                   <div className="flex flex-col items-stretch gap-3">
@@ -1498,9 +1667,11 @@ export function CheckoutClient({
             </div>
           </dl>
           <div className="flex flex-col items-stretch gap-2 border-t border-border pt-4">
-            <Button variant="outline" href="/mi-cuenta">
-              Ver mis pedidos
-            </Button>
+            {!invitadoActivo && (
+              <Button variant="outline" href="/mi-cuenta">
+                Ver mis pedidos
+              </Button>
+            )}
             {/* Antes de informar el comprobante puede pasar a otro medio (el servidor lo vuelve a validar). */}
             {!comprobanteInformado && (
               <Button
@@ -1569,13 +1740,16 @@ export function CheckoutClient({
             )}
           </p>
           <div className={`mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center ${ENTRADA_EXITO} delay-[300ms]`}>
-            <Link href="/mi-cuenta" className="flex flex-col sm:block">
-              <Button variant="outline">Ver mis pedidos</Button>
-            </Link>
+            {!invitadoActivo && (
+              <Link href="/mi-cuenta" className="flex flex-col sm:block">
+                <Button variant="outline">Ver mis pedidos</Button>
+              </Link>
+            )}
             <Link href="/catalogo" className="flex flex-col sm:block">
               <Button variant="ghost">Seguir comprando</Button>
             </Link>
           </div>
+          {invitadoActivo && <CrearCuentaCta email={emailCliente} className={`mt-6 ${ENTRADA_EXITO} delay-[320ms]`} />}
           {!pagado && confirmado.contacto && (
             <PedidoContacto
               contacto={confirmado.contacto}
@@ -1595,7 +1769,7 @@ export function CheckoutClient({
       <main className="mx-auto flex w-full max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20 text-center">
         <p role="alert" className="text-lg font-semibold text-text">{errorReintento}</p>
         <div className="flex flex-wrap justify-center gap-3">
-          {pedidoReintento && (
+          {pedidoReintento && !invitadoActivo && (
             <Link href={`/mi-cuenta/pedidos/${pedidoReintento}`}>
               <Button>Volver a comprar</Button>
             </Link>
@@ -1604,6 +1778,19 @@ export function CheckoutClient({
             <Button variant="outline">Ver catálogo</Button>
           </Link>
         </div>
+      </main>
+    );
+  }
+
+  // ------------------------- invitado que vuelve sin un token válido: nada del pedido
+  if (invitado?.sinToken && pedidoReintento) {
+    return (
+      <main className="mx-auto flex w-full max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20 text-center">
+        <h1 className="font-display text-2xl font-medium text-text">{TEXTOS_INVITADO.sinTokenTitulo}</h1>
+        <p role="alert" className="max-w-md text-sm text-muted">{TEXTOS_INVITADO.sinToken}</p>
+        <Link href="/catalogo">
+          <Button variant="outline">Ver catálogo</Button>
+        </Link>
       </main>
     );
   }
@@ -1751,7 +1938,14 @@ export function CheckoutClient({
                     <DireccionAutocomplete
                       value={direccion}
                       onChange={setDireccion}
+                      // Acota la búsqueda a la localidad ya elegida (el servidor lo respeta sólo con el flag).
+                      {...(envioPorZona && ciudad.trim()
+                        ? { ciudad, provincia: PROVINCIAS_SELECTOR.find((p) => p.clave === provinciaManual)?.nombre }
+                        : {})}
                       onSeleccionar={(s) => {
+                        setUbicacionSel(
+                          s.geoToken ? { geoToken: s.geoToken, calle: s.calle, cp: s.cp, precision: s.precision } : null,
+                        );
                         setDireccion(s.calle);
                         // Solo se pisa lo que la sugerencia trae resuelto.
                         if (s.ciudad) setCiudad(s.ciudad);
@@ -1787,6 +1981,15 @@ export function CheckoutClient({
                     Esta dirección no tiene una provincia válida. Elija otra dirección o cárguela de nuevo.
                   </p>
                 )}
+                {envioPorZona && cotizacion && (
+                  <AvisoEnvioZona
+                    envio={cotizacion.envio}
+                    pagaEnLinea={pagaEnLinea}
+                    envioACoordinar={envioACoordinar}
+                    onCoordinar={() => setCoordinarPara(claveDestino)}
+                    onUbicar={() => setCoordinarPara(null)}
+                  />
+                )}
                 {cotizacion && !envioDisponible && (
                   <p className="mt-3 flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-xs text-text">
                     <span className="mt-px text-warning"><AlertIcon /></span>
@@ -1794,6 +1997,14 @@ export function CheckoutClient({
                   </p>
                 )}
               </>
+            )}
+            {invitadoActivo && (
+              <DomicilioInvitado
+                datos={datosInv}
+                errores={erroresInv}
+                onCambiar={cambiarDatosInvitado}
+                aDomicilio={aDomicilio}
+              />
             )}
             {/* Aclaraciones de la entrega, en una línea: abajo de la dirección o del local de retiro. */}
             <div className="mt-5">
@@ -1817,8 +2028,10 @@ export function CheckoutClient({
   const textoBotonConfirmar = enviando ? "Confirmando…" : pasoActual === "pago" ? textoConfirmar(opcionSel) : "Confirmar pedido";
   const motivoNoConfirmar =
     !puedeConfirmar && !enviando
-      ? estado === "no_auth"
+      ? estado === "no_auth" && !invitadoActivo
                 ? "Inicie sesión para confirmar el pedido."
+                : invitadoActivo && turnstileToken === null && datosCompletos
+                  ? TEXTOS_INVITADO.verificacionPendiente
                 : !facturacionCompleta
                 ? "Cargue sus datos de facturación para continuar."
                 : pasoActual !== pasoFinal
@@ -1829,6 +2042,8 @@ export function CheckoutClient({
                     ? "Complete todos los campos para continuar."
                     : aDomicilio && !envioDisponible
                       ? "Elija retiro en el local: el envío no está disponible."
+                      : sinUbicarPendiente
+                        ? TEXTOS_ENVIO_ZONA.sinUbicar
                       : "Confirmando precios y stock…"
       : null;
   // A confirmar (venta sin stock): no se cobra, el pie no habla de ningún medio.
@@ -2049,8 +2264,23 @@ export function CheckoutClient({
             </section>
           )}
 
+          {invitadoActivo && pasoActual === "datos" && (
+            <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+              {cabeceraPasos}
+              <h2 className="mb-4 font-display text-2xl font-medium text-text">{TEXTOS_INVITADO.tituloDatos}</h2>
+              <FormularioInvitado
+                datos={datosInv}
+                errores={erroresInv}
+                onCambiar={cambiarDatosInvitado}
+                trampa={trampa}
+                onTrampa={setTrampa}
+              />
+              <NavPaso error={errorPaso} onContinuar={continuarDesdeInvitado} total={cotizacion?.total} />
+            </section>
+          )}
+
           {/* Con la sección de facturación, nombre y teléfono se piden ahí. */}
-          {!seccionFacturacion && pasoActual === "datos" && (
+          {!seccionFacturacion && !invitadoActivo && pasoActual === "datos" && (
           <section className="rounded-[20px] border border-border/50 bg-surface p-5">
             {cabeceraPasos}
             {/* Vinculado: los datos vienen de Alegra y no se editan desde la tienda. */}
@@ -2170,6 +2400,22 @@ export function CheckoutClient({
           </section>
           </>
           )}
+
+          {/* Verificación anti-bots del invitado (Cloudflare Turnstile). Sin ella no se confirma. */}
+          {invitadoActivo && pedidoACambiar === null && (
+            <div data-verificacion-invitado>
+              <TurnstileWidget
+                siteKey={invitado?.turnstileSiteKey ?? ""}
+                onToken={setTurnstileToken}
+                reinicio={reinicioTurnstile}
+              />
+              {!invitado?.turnstileSiteKey && (
+                <p role="alert" className="text-sm text-danger">
+                  {TEXTOS_INVITADO.verificacionFallida}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* --------------------------------------------------------- resumen */}
@@ -2261,7 +2507,9 @@ export function CheckoutClient({
                 onQuitar={() => setCupon(null)}
               />
             )}
-            {entrega === "envio" && (
+            {entrega === "envio" && envioPorZona && cotizacion?.envio.costo !== undefined ? (
+              <FilaEnvioResumen envio={cotizacion.envio} pagaEnLinea={pagaEnLinea} />
+            ) : entrega === "envio" && (
               <div className="flex justify-between">
                 <span className="text-muted">Envío</span>
                 {cotizacion?.envio.gratis ? (

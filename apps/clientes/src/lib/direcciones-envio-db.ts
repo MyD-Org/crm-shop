@@ -10,7 +10,7 @@
  * de `0003`). Por eso cambiarla es siempre "desmarcar la anterior y después
  * marcar la nueva", en una transacción.
  */
-import { and, count, desc, eq, ne } from "drizzle-orm";
+import { and, count, desc, eq, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { direccionesEnvio } from "@/db/schema";
 import { MAX_DIRECCIONES, type DatosDireccion, type DireccionEnvio } from "./direcciones-envio";
@@ -62,6 +62,45 @@ function camposEditables(datos: DatosDireccion) {
   };
 }
 
+/**
+ * Lo que el envío por zona necesita de una dirección guardada del usuario: su ubicación verificada y
+ * los datos con los que se arma el destino. Una ajena o inexistente da `null` (como el resto de este
+ * archivo). Las coordenadas no salen por ninguna otra lectura: sólo las lee el servidor para cotizar.
+ */
+export async function direccionParaEnvio(
+  clerkUserId: string,
+  id: string,
+): Promise<{
+  calle: string;
+  ciudad: string;
+  provincia: string | null;
+  cp: string | null;
+  lat: number | null;
+  lon: number | null;
+} | null> {
+  const [fila] = await getDb()
+    .select({ calle: t.calle, ciudad: t.ciudad, provincia: t.provincia, cp: t.cp, lat: t.lat, lon: t.lon })
+    .from(t)
+    .where(laSuya(clerkUserId, id))
+    .limit(1);
+  if (!fila) return null;
+  const lat = fila.lat === null ? null : Number(fila.lat);
+  const lon = fila.lon === null ? null : Number(fila.lon);
+  return {
+    ...fila,
+    lat: lat !== null && lon !== null && Number.isFinite(lat) && Number.isFinite(lon) ? lat : null,
+    lon: lat !== null && lon !== null && Number.isFinite(lat) && Number.isFinite(lon) ? lon : null,
+  };
+}
+
+/** Coordenadas verificadas por el servidor (`geoToken`) de una dirección. */
+export interface UbicacionGuardada {
+  lat: number;
+  lon: number;
+}
+
+const coordenada = (v: number) => v.toFixed(6);
+
 /** Desmarca la predeterminada actual del usuario (salvo `excepto`). */
 async function desmarcarPredeterminada(tx: Tx | Db, clerkUserId: string, excepto?: string) {
   await tx
@@ -107,6 +146,7 @@ export async function listarDirecciones(clerkUserId: string): Promise<DireccionE
 export async function crearDireccion(
   clerkUserId: string,
   datos: DatosDireccion,
+  ubicacion?: UbicacionGuardada,
 ): Promise<DireccionEnvio> {
   return getDb().transaction(async (tx) => {
     const [estado] = await tx.select({ n: count() }).from(t).where(deEsteUsuario(clerkUserId));
@@ -122,6 +162,7 @@ export async function crearDireccion(
         tenantId: shopTenantId(),
         clerkUserId,
         ...camposEditables(datos),
+        ...(ubicacion ? { lat: coordenada(ubicacion.lat), lon: coordenada(ubicacion.lon) } : {}),
         predeterminada,
       })
       .returning(COLUMNAS);
@@ -138,11 +179,20 @@ export async function actualizarDireccion(
   clerkUserId: string,
   id: string,
   datos: DatosDireccion,
+  ubicacion?: UbicacionGuardada,
 ): Promise<DireccionEnvio | null> {
+  // Con un token nuevo y válido se guarda su ubicación. Sin token, las coordenadas viejas se conservan sólo
+  // si la calle no cambió: una calle distinta con la ubicación anterior daría la zona (y el precio) de otra.
+  const coordenadas = ubicacion
+    ? { lat: coordenada(ubicacion.lat), lon: coordenada(ubicacion.lon) }
+    : {
+        lat: sql`CASE WHEN ${t.calle} IS DISTINCT FROM ${datos.calle} THEN NULL ELSE ${t.lat} END`,
+        lon: sql`CASE WHEN ${t.calle} IS DISTINCT FROM ${datos.calle} THEN NULL ELSE ${t.lon} END`,
+      };
   return getDb().transaction(async (tx) => {
     const [fila] = await tx
       .update(t)
-      .set({ ...camposEditables(datos), updatedAt: new Date() })
+      .set({ ...camposEditables(datos), ...coordenadas, updatedAt: new Date() })
       .where(laSuya(clerkUserId, id))
       .returning(COLUMNAS);
     if (!fila) return null;

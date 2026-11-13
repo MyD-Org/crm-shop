@@ -13,6 +13,7 @@ import { cache } from "react";
 import { catalogoSoloVisibles } from "./catalogo-flag";
 import { cuotasHabilitadas } from "./cuotas-flag";
 import { variantesSelector } from "./variantes-flag";
+import { envioPorZonaHabilitado } from "./envio-zona-flag";
 import { mediosOfrecibles } from "./medios-pago-datos";
 import { SIN_MEDIOS_PRECIO, seleccionarMediosPrecio, type MediosPrecio } from "./medios-precio";
 import { cuotasSinInteresMP } from "./pagos/cuotas-sin-interes-mp";
@@ -27,6 +28,11 @@ export interface FlagsPublicos {
    * overlay del ancla del grupo). Apagado = como antes de las variantes.
    */
   variantes: boolean;
+  /**
+   * `envio-por-zona`: el envío a domicilio se cotiza por zona (métodos de envío del CRM). Va en la
+   * clave de las cachés para que prenderlo o apagarlo se vea en la vista siguiente.
+   */
+  envioZona: boolean;
   /**
    * "$X con <Medio>": el medio destacado de las cards y los de la ficha. Vacío si los
    * medios no se pueden leer (degrada sin romper).
@@ -51,11 +57,12 @@ async function leerMediosPrecio(cuotasEncendido: boolean): Promise<MediosPrecio>
 }
 
 export const flagsPublicos = cache(async (): Promise<FlagsPublicos> => {
-  const [soloVisibles, cuotas, variantes] = await Promise.all([
+  const [soloVisibles, cuotas, variantes, envioZona] = await Promise.all([
     catalogoSoloVisibles(),
     cuotasHabilitadas(),
     variantesSelector(),
+    envioPorZonaHabilitado(),
   ]);
   const mediosPrecio = await leerMediosPrecio(cuotas);
-  return { soloVisibles, cuotas, variantes, mediosPrecio };
+  return { soloVisibles, cuotas, variantes, envioZona, mediosPrecio };
 });

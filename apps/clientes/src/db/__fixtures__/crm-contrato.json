@@ -317,5 +317,59 @@
     "limite_canjes": "integer",
     "condiciones": "text",
     "activa": "boolean"
+  },
+  "public.metodos_envio": {
+    "id": "uuid",
+    "tenant_id": "text",
+    "slug": "text",
+    "nombre": "text",
+    "tipo": "text",
+    "activo": "boolean",
+    "orden": "smallint",
+    "provincia_clave": "text",
+    "sucursal_origen": "text",
+    "dias_operativos": "smallint[]",
+    "hora_corte": "time without time zone",
+    "margen_min": "smallint",
+    "promesa": "text",
+    "aviso_feriados": "text",
+    "gratis_aplica": "boolean",
+    "item_alegra_id": "text",
+    "item_alegra_iva": "numeric(5, 2)",
+    "config": "jsonb",
+    "created_at": "timestamp with time zone",
+    "updated_at": "timestamp with time zone"
+  },
+  "public.metodos_envio_zonas": {
+    "id": "uuid",
+    "metodo_id": "uuid",
+    "nombre": "text",
+    "precio": "numeric(12, 2)",
+    "orden": "smallint",
+    "activa": "boolean",
+    "geometria": "jsonb"
+  },
+  "public.metodos_envio_zona_entradas": {
+    "id": "uuid",
+    "zona_id": "uuid",
+    "metodo_id": "uuid",
+    "tipo": "text",
+    "valor": "text",
+    "etiqueta": "text",
+    "nombre_norm": "text"
+  },
+  "public.metodos_envio_localidades": {
+    "id": "uuid",
+    "metodo_id": "uuid",
+    "georef_id": "text",
+    "etiqueta": "text",
+    "nombre_norm": "text",
+    "abreviaturas": "text[]",
+    "centro_lat": "numeric(9, 6)",
+    "centro_lon": "numeric(9, 6)",
+    "bbox_sur": "numeric(9, 6)",
+    "bbox_oeste": "numeric(9, 6)",
+    "bbox_norte": "numeric(9, 6)",
+    "bbox_este": "numeric(9, 6)"
   }
 }

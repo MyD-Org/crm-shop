@@ -33,6 +33,11 @@ describe("BotonIniciarCompra", () => {
     expect(track).toHaveBeenCalledWith({ tipo: "checkout_requiere_ingreso", items: 2, valor: 250.5 });
   });
 
+  it("anónimo con el flag compra-invitado: /checkout ya no es un muro, no emite", () => {
+    alTocar({ anonimo: true, compraInvitado: true, items, total: 300 });
+    expect(track).not.toHaveBeenCalled();
+  });
+
   it("usuario con sesión: no emite", () => {
     alTocar({ anonimo: false, items, total: 300 });
     expect(track).not.toHaveBeenCalled();

@@ -18,7 +18,7 @@ type ConUrl = { url: string };
 /** URL limpia para Speed Insights de Vercel; null = no se manda. */
 function beforeSendVercel<T extends ConUrl>(evento: T): T | null {
   const u = new URL(evento.url, window.location.origin);
-  if (rutaSinTracking(u.pathname)) return null;
+  if (rutaSinTracking(u.pathname, u.search)) return null;
   return { ...evento, url: limpiarUrl(u.href) };
 }
 
@@ -71,11 +71,12 @@ export function TrackingCliente({ config }: { config: ConfigTracking }) {
             session_recording: { maskAllInputs: true },
             disable_session_recording: rutaSinTracking(
               window.location.pathname,
+              window.location.search,
             ),
             before_send: limpiarEventoPosthog,
           });
           posthog.current = ph;
-          if (!rutaSinTracking(window.location.pathname)) {
+          if (!rutaSinTracking(window.location.pathname, window.location.search)) {
             ph.capture("$pageview", {
               $current_url: limpiarUrl(window.location.href),
             });
@@ -99,7 +100,7 @@ export function TrackingCliente({ config }: { config: ConfigTracking }) {
   useEffect(() => {
     const url = limpiarUrl(window.location.href);
     const ph = posthog.current;
-    if (rutaSinTracking(pathname)) {
+    if (rutaSinTracking(pathname, window.location.search)) {
       if (ph?.sessionRecordingStarted()) {
         ph.stopSessionRecording();
         grabacionPausada.current = true;

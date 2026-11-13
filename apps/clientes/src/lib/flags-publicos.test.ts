@@ -39,6 +39,7 @@ describe("flagsPublicos", () => {
       soloVisibles: false,
       cuotas: false,
       variantes: false,
+      envioZona: false,
       mediosPrecio: { destacado: null, ficha: [] },
     });
   });

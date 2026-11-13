@@ -198,6 +198,13 @@ body {
   font-style: normal;
 }
 
+/* Con la piedra detrás del ingreso: el margen del footer y sus esquinas
+   redondeadas dejaban ver una franja clara del <body> entre la piedra y el
+   footer. El envoltorio del footer toma el color de la piedra (la Noche). */
+body:has([data-fondo-piedra]) .footer-global {
+  background: #0F1E2E;
+}
+
 /* Sin footer en mobile donde hay una barra fija abajo (ficha, carrito,
    checkout): al llegar al final quedaba la barra encima del footer. La
    página se marca con `data-sin-footer-mobile`; 64rem = `lg`, el mismo corte

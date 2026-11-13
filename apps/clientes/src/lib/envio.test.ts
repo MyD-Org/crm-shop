@@ -3,7 +3,6 @@ import { fmtPesosEnteros } from "./format";
 import {
   CONFIG_ENVIO_DEFAULT,
   PAGO_LABEL,
-  costoEnvio,
   esEnvioACoordinar,
   etiquetaEntrega,
   evaluarEnvio,
@@ -194,12 +193,6 @@ describe("textoEnvioFicha", () => {
   it("todo el país no necesita ubicación", () => {
     const cfg: ConfigEnvio = { domicilioActivo: true, gratis: { alcance: "pais", provincias: [], minimo: null } };
     expect(textoEnvioFicha(cfg, null)).toBe("Envío gratis");
-  });
-});
-
-describe("costoEnvio", () => {
-  it("el envío online siempre cuesta 0", () => {
-    expect(costoEnvio()).toBe(0);
   });
 });
 

@@ -50,21 +50,31 @@ async function sucursalesDeCache(): Promise<DatosSucursales> {
  * Reglas de venta para MOSTRAR (demora de traslado, retiro con o sin respaldo, envío con respaldo).
  * Mismo tag y mismo perfil que las sucursales: el ping del CRM las vence al guardar. Falla =
  * defaults con el perfil `degradado`. La decisión que escribe un pedido relee sin caché. Incluye la
- * configuración de envío (`envio`, con el default si esa lectura aparte falla).
+ * configuración de envío (`envio`, con el default si esa lectura aparte falla). Con `envioZona` (flag
+ * `envio-por-zona`) también los métodos de envío por zona (`envio.metodos`).
  */
-export function reglasVentaCacheadas(): Promise<ReglasVentaTenant> {
-  return conRespaldoSinCache("reglas-venta", reglasVentaDeCache, () =>
-    Promise.all([leerReglasVenta(), leerConfigEnvio(), leerConfigDespacho()])
+export function reglasVentaCacheadas(envioZona = false): Promise<ReglasVentaTenant> {
+  return conRespaldoSinCache("reglas-venta", () => reglasVentaDeCache(envioZona), () =>
+    Promise.all([leerReglasVenta(), leerConfigEnvio(undefined, { conMetodos: envioZona }), leerConfigDespacho()])
       .then(([reglas, envio, despacho]) => ({ ...reglas, envio, despacho }))
       .catch(() => REGLAS_VENTA_DEFAULT),
   );
 }
 
-async function reglasVentaDeCache(): Promise<ReglasVentaTenant> {
+/**
+ * `envioZona` = flag `envio-por-zona` (`FlagsPublicos.envioZona`): entra como argumento para que sea
+ * parte de la clave de la caché (prenderlo se ve en la lectura siguiente) y, apagado, ni se leen las
+ * tablas de métodos de envío.
+ */
+async function reglasVentaDeCache(envioZona: boolean): Promise<ReglasVentaTenant> {
   "use cache: remote";
   cacheTag(TAG_SUCURSALES);
   try {
-    const [reglas, envio, despacho] = await Promise.all([leerReglasVenta(), leerConfigEnvio(), leerConfigDespacho()]);
+    const [reglas, envio, despacho] = await Promise.all([
+      leerReglasVenta(),
+      leerConfigEnvio(undefined, { conMetodos: envioZona }),
+      leerConfigDespacho(),
+    ]);
     cacheLife("sucursales");
     return { ...reglas, envio, despacho };
   } catch (err) {

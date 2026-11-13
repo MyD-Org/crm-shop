@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import nextConfig from "../../next.config";
-import { cspAplicada, headersDeSeguridad, hostFrontendClerk, politicaCsp, RUTA_REPORTE_CSP, type EnvCsp } from "./headers-seguridad";
+import { cspAplicada, headersCheckout, headersDeSeguridad, headersPagar, hostFrontendClerk, politicaCsp, RUTA_REPORTE_CSP, type EnvCsp } from "./headers-seguridad";
 
 const clave = (host: string) => `pk_live_${Buffer.from(`${host}$`).toString("base64")}`;
 
@@ -184,5 +184,56 @@ describe("Payway: connect-src sólo en las páginas de checkout", () => {
     } finally {
       process.env = prev;
     }
+  });
+});
+
+describe("compra de invitado: headers de las páginas con una credencial en la URL", () => {
+  const valores = (hs: { key: string; value: string }[], key: string) => hs.filter((h) => h.key === key).map((h) => h.value);
+
+  it("/pagar/:path*: sin referrer, sin caché, sin indexar (y una sola Referrer-Policy)", () => {
+    const hs = headersPagar({});
+    expect(valores(hs, "Referrer-Policy")).toEqual(["no-referrer"]);
+    expect(valores(hs, "Cache-Control")).toEqual(["no-store"]);
+    expect(valores(hs, "X-Robots-Tag")).toEqual(["noindex, nofollow"]);
+    // Sigue llevando el resto de los headers de seguridad y la política del checkout.
+    expect(valores(hs, "X-Frame-Options")).toEqual(["DENY"]);
+    expect(valores(hs, "Strict-Transport-Security")).toHaveLength(1);
+    expect(valores(hs, "Content-Security-Policy-Report-Only")[0]).toContain("default-src 'self'");
+  });
+
+  it("/pagar monta el formulario de pago: lleva el host de Payway como el checkout", () => {
+    const pagar = valores(headersPagar({}, { payway: { origen: "https://payway.example" } }), "Content-Security-Policy-Report-Only")[0];
+    expect(pagar).toContain("https://payway.example");
+  });
+
+  it("/checkout (puede volver de Mercado Pago con el token): sin caché, con su política de siempre", () => {
+    const hs = headersCheckout({}, { payway: { origen: "https://payway.example" } });
+    expect(valores(hs, "Cache-Control")).toEqual(["no-store"]);
+    expect(valores(hs, "Referrer-Policy")).toEqual(["strict-origin-when-cross-origin"]);
+    const csp = valores(hs, "Content-Security-Policy-Report-Only")[0];
+    expect(csp).toBe(politicaCsp({}, { checkout: true, payway: { origen: "https://payway.example" } }));
+  });
+
+  it("el resto del sitio NO queda sin caché ni sin referrer por esto", () => {
+    const hs = headersDeSeguridad({});
+    expect(valores(hs, "Cache-Control")).toEqual([]);
+    expect(valores(hs, "X-Robots-Tag")).toEqual([]);
+    expect(valores(hs, "Referrer-Policy")).toEqual(["strict-origin-when-cross-origin"]);
+  });
+
+  it("next.config: la regla de /pagar va después de la general (la última gana)", async () => {
+    const reglas = await nextConfig.headers!();
+    const iGeneral = reglas.findIndex((r) => r.source === "/:path*");
+    const iPagar = reglas.findIndex((r) => r.source === "/pagar/:path*");
+    expect(iPagar).toBeGreaterThan(iGeneral);
+    expect(valores(reglas[iPagar].headers, "Referrer-Policy")).toEqual(["no-referrer"]);
+    const iCheckout = reglas.findIndex((r) => r.source === "/checkout");
+    expect(valores(reglas[iCheckout].headers, "Cache-Control")).toEqual(["no-store"]);
+  });
+
+  it("Turnstile en /checkout: la CSP deja cargar el script y el iframe de Cloudflare (Q5)", () => {
+    const csp = politicaCsp({}, { checkout: true, payway: null });
+    expect(csp).toMatch(/script-src [^;]*https:\/\/challenges\.cloudflare\.com/);
+    expect(csp).toMatch(/frame-src [^;]*https:\/\/challenges\.cloudflare\.com/);
   });
 });

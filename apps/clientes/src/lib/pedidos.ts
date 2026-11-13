@@ -12,7 +12,7 @@ import { cuponParaResumen } from "./cupones/ui";
 import type { CuponPedido, PromocionCupon } from "./cupones/tipos";
 import { validarUnidadesEnTx } from "./campanias/unidades";
 import { cache } from "react";
-import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { cuponCanjes, orderItems, orders, pagoIntentos } from "@/db/schema";
 import {
@@ -56,6 +56,9 @@ import { esPagoEnLinea, slugsPagoEnLinea } from "./medios-pago";
 import { shopTenantId } from "./tenant";
 import { sitioOrigenDeEntorno } from "./sitio-origen";
 import type { Asignacion, EntradaAsignacion } from "./sucursales";
+import { EnvioCambioError, armarEnvioPedido, horarioDeDetalle, origenCompatible, vistaEnvioDePedido, type EnvioDetalle } from "./envio-snapshot";
+import { fechaEntrega } from "./entrega-fecha";
+import type { ResultadoMetodoTienda } from "./envio-zona-tienda";
 import { leerReglasVenta, leerSucursalesYZonas, type ReglasVentaTenant } from "./sucursales-repo";
 import { decidirSucursalDePedido } from "./sucursales-pedido";
 import { disponibleNeto } from "./sucursales-disponibilidad";
@@ -78,6 +81,7 @@ import { leerCuentasBancariasEnTx } from "./cuentas-bancarias-repo";
 import { medioAdmiteCambio } from "./cambiar-medio-pago";
 import type { PedidoParaComprobante } from "./comprobantes/pedido";
 import { pedidosConComprobanteInformado } from "./comprobantes/repo";
+import { medirPedidoConfirmadoInvitado, type MedicionPedidoInvitado } from "./tracking/servidor";
 
 /** Formato visible del número correlativo. */
 export function formatearNumero(numero: number): string {
@@ -103,6 +107,12 @@ export interface DatosCliente {
   cuit?: string;
   email?: string;
   idPriceList?: string;
+  /**
+   * Compra de invitado (change `compra-como-invitado`): sin cuenta de la tienda ni cliente vinculado.
+   * El pedido nace con `compra_invitado = true`, `clerk_user_id` y `cliente_codigo` nulos y el email
+   * normalizado en `email`.
+   */
+  compraInvitado?: boolean;
 }
 
 export interface DatosPedido {
@@ -173,6 +183,18 @@ export interface DatosPedido {
    * `order_items.a_traer_de` por línea. Ausente/false = la validación de stock de siempre (vista 0012).
    */
   disponibilidadSucursal?: boolean;
+  /**
+   * Envío por zona resuelto al cotizar (flag `envio-por-zona`). Se congela en `orders.envio_*` /
+   * `envio_detalle`; `costo_envio` sale de la cotización. Si hay asignación de sucursal, el origen se
+   * re-verifica dentro de la transacción (`EnvioCambioError`). Ausente = retiro, a coordinar o flag apagado.
+   */
+  envioZona?: {
+    resultado: ResultadoMetodoTienda;
+    /** Coordenadas verificadas con las que se resolvió la zona (dato personal); null si fue por CP/localidad. */
+    punto: { lat: number; lon: number } | null;
+    /** Condición de origen del método (`sucursal_origen`). */
+    sucursalOrigen: string | null;
+  };
 }
 
 /** "Nunca vence": se guarda como `'infinity'::timestamptz` (un NULL significa "24 h desde created_at"). */
@@ -321,6 +343,12 @@ export async function crearPedido(
     } else if (datos.sucursalEntrada) {
       asignacion = decidirSucursalDePedido(datos.sucursalEntrada, await leerSucursalesYZonas(tx));
     }
+    // Envío por zona: el método se cotizó con el origen que veía el carrito; acá se comprueba contra la
+    // asignación REAL (lectura fresca, con locks). Si difiere, nada se crea y la ruta recotiza.
+    if (datos.envioZona && asignacion) {
+      const real = { sucursal: asignacion.sucursal, conTraslado: asignacion.regla.lineasATraer.length > 0 };
+      if (!origenCompatible(datos.envioZona.sucursalOrigen, real)) throw new EnvioCambioError(real);
+    }
     // Una sola regla de reserva, con o sin sucursal y con o sin el flag: todo pedido lleva su
     // vencimiento (nunca NULL: la vista lo leería como 24 h). Sin contexto de disponibilidad se
     // leen igual las reglas, en un savepoint para que un error de lectura no aborte la
@@ -345,6 +373,16 @@ export async function crearPedido(
       cuentaPago = resuelta ? armarSnapshotCuenta(resuelta, entrada) : null;
     }
 
+    // Snapshot del envío por zona (todo NULL sin método): CRM y Shop calculan la fecha confirmada y
+    // facturan desde esto, sin releer el método.
+    const envioSnapshot = datos.envioZona
+      ? armarEnvioPedido(datos.envioZona.resultado, {
+          punto: datos.envioZona.punto,
+          medioOnline: esPagoEnLinea(datos.pagoMetodo),
+          ahora: new Date(),
+        })
+      : null;
+
     const [pedido] = await tx
       .insert(orders)
       .values({
@@ -361,6 +399,7 @@ export async function crearPedido(
         clienteRazonSocial: cliente.razonSocial ?? null,
         clienteCuit: cliente.cuit ?? null,
         clienteEmail: cliente.email ?? null,
+        compraInvitado: cliente.compraInvitado === true,
         idPriceList: cliente.idPriceList ?? null,
         contactoNombre: datos.contactoNombre,
         contactoTelefono: datos.contactoTelefono,
@@ -382,6 +421,7 @@ export async function crearPedido(
         iva: String(cotizacion.iva),
         costoEnvio: String(cotizacion.costoEnvio),
         total: String(cotizacion.total),
+        ...(envioSnapshot ? { ...envioSnapshot.columnas, envioDetalle: envioSnapshot.detalle } : {}),
         // Cuotas sin interés congeladas (1 = un pago; null = flag apagado o medio sin cobro en línea).
         // El plan viejo (`cuotas_max`, `cuotas_plan`) ya no se escribe: los pedidos históricos lo conservan.
         cuotas: datos.cuotas ?? null,
@@ -612,6 +652,71 @@ export async function getPedidoPorClave(
     : null;
 }
 
+/**
+ * Reintento idempotente de un pedido de INVITADO: la clave la elige el navegador, así que se exige
+ * además que el email coincida (normalizado) y que el pedido sea de invitado y todavía sin dueño.
+ * Sin esto, conocer una clave alcanzaría para leer el número de pedido (y recibir un token) de otro.
+ */
+export async function getPedidoInvitadoPorClave(
+  idempotencyKey: string,
+  emailNormalizado: string,
+): Promise<{
+  id: string;
+  numero: string;
+  cuotas: number | null;
+  cuentaPago: CuentaPagoSnapshot | null;
+} | null> {
+  const [fila] = await getDb()
+    .select({
+      id: orders.id,
+      numero: orders.numero,
+      cuotas: orders.cuotas,
+      pagoCuenta: orders.pagoCuenta,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.idempotencyKey, idempotencyKey),
+        esDeEsteTenant(),
+        eq(orders.compraInvitado, true),
+        isNull(orders.clerkUserId),
+        isNull(orders.clienteCodigo),
+        sql`lower(${orders.clienteEmail}) = ${emailNormalizado}`,
+      ),
+    )
+    .limit(1);
+  return fila
+    ? { id: fila.id, numero: formatearNumero(fila.numero), cuotas: fila.cuotas, cuentaPago: fila.pagoCuenta ?? null }
+    : null;
+}
+
+/**
+ * Pedidos de invitado de este email que siguen sin pagar y sin cancelar, creados en la ventana (por
+ * defecto 24 h): el tope de pendientes por email. Usa el índice parcial `orders_invitado_email_idx`
+ * (mismo predicado: invitado, sin cuenta y sin cliente).
+ */
+export async function contarPendientesInvitado(
+  emailNormalizado: string,
+  desde: Date = new Date(Date.now() - 24 * 60 * 60_000),
+): Promise<number> {
+  const [r] = await getDb()
+    .select({ n: sql<number>`count(*)::int` })
+    .from(orders)
+    .where(
+      and(
+        esDeEsteTenant(),
+        eq(orders.compraInvitado, true),
+        isNull(orders.clerkUserId),
+        isNull(orders.clienteCodigo),
+        eq(orders.estado, "pendiente"),
+        eq(orders.pagoEstado, "pendiente"),
+        sql`lower(${orders.clienteEmail}) = ${emailNormalizado}`,
+        gt(orders.createdAt, desde),
+      ),
+    );
+  return Number(r?.n ?? 0);
+}
+
 /** Fila cruda de `orders` + sus líneas, armada como `Order` de UI. */
 export type FilaOrder = typeof orders.$inferSelect;
 export type FilaItem = typeof orderItems.$inferSelect;
@@ -675,6 +780,7 @@ export function armarOrder(
     )
       ? { aConfirmar: true }
       : {}),
+    ...(vistaEnvioDePedido(fila) ? { envio: vistaEnvioDePedido(fila)! } : {}),
     cupon: cuponDeOrder(fila, items),
     items: items.map((i): OrderItem => {
       const producto = productos.get(i.alegraItemId);
@@ -1061,6 +1167,45 @@ export async function getPedidoParaPago(
   };
 }
 
+/** Qué muestra `/pagar/[token]` de un pedido (change `compra-como-invitado`, S3). */
+export type PedidoParaLink = "disponible" | "pagado" | "no_disponible";
+
+/**
+ * Estado de un pedido para el link «Pagar su pedido». SIN dueño: la autorización es la firma del link
+ * (ya verificada por quien llama). Sólo pedidos de INVITADO sin cuenta, de este tenant: uno con cuenta
+ * (o ya reclamado) responde igual que uno inexistente. `disponible` = pendiente, con cobro en línea y
+ * todavía cobrable (`motivoNoCobrable`); `pagado` = ya cobrado (sin detalle); lo demás (cancelado,
+ * vencido, en revisión, en curso, otro medio, inexistente) es `no_disponible`, siempre la misma respuesta.
+ */
+export async function getPedidoParaLink(orderId: string, ahora = Date.now()): Promise<PedidoParaLink> {
+  const [fila] = await getDb()
+    .select({
+      estado: orders.estado,
+      pagoEstado: orders.pagoEstado,
+      pagoMetodo: orders.pagoMetodo,
+      pagoRevision: orders.pagoRevision,
+      createdAt: orders.createdAt,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.id, orderId),
+        esDeEsteTenant(),
+        eq(orders.compraInvitado, true),
+        isNull(orders.clerkUserId),
+        isNull(orders.clienteCodigo),
+      ),
+    )
+    .limit(1);
+  if (!fila) return "no_disponible";
+  if (fila.pagoEstado === "pagado") return "pagado";
+  if (!esPagoEnLinea(fila.pagoMetodo)) return "no_disponible";
+  if (motivoNoCobrable({ estado: fila.estado as OrderEstado, creadoEn: fila.createdAt, pagoRevision: fila.pagoRevision ?? null }, ahora)) {
+    return "no_disponible";
+  }
+  return "disponible";
+}
+
 /**
  * Líneas del pedido para el control de fraude del procesador: código o id de Alegra como SKU, nombre,
  * cantidad y total de la línea (con IVA, en pesos). Sólo se llama con un pedido que ya pasó por
@@ -1373,6 +1518,10 @@ export async function registrarCobro(
   opciones: { intentoId?: string; avisar?: boolean } = {},
 ): Promise<boolean> {
   const resultado = await registrarCobroTx(pedidoId, cobro, opciones.intentoId);
+  // Compra de invitado recién pagada: `pedido_confirmado` se mide ACÁ, en el servidor (el invitado
+  // vuelve de Mercado Pago con el token en la URL y esa carga no tiene tracking). Sin PII y nunca
+  // hace fallar el cobro.
+  if (resultado.medicion) await medirPedidoConfirmadoInvitado(resultado.medicion);
   if (resultado.cambioPedido && opciones.avisar !== false) {
     // Después del commit: el mail nunca ve un estado que después se deshizo.
     await avisarCobro(pedidoId, {
@@ -1385,11 +1534,69 @@ export async function registrarCobro(
   return resultado.cambio;
 }
 
+/**
+ * Confirma el envío por zona de un pedido: el PRIMER evento de confirmación (pago aprobado, pago manual
+ * del operador o paso a `confirmado`) fija el instante y la fecha de entrega real con el horario
+ * CONGELADO del pedido (`envio_detalle.horario`). Idempotente: el UPDATE sólo corre si todavía no hay
+ * confirmación y el pedido tiene snapshot de envío, así un webhook repetido o un segundo evento no
+ * recalculan nada. Un pedido sin método de envío (retiro, a coordinar, flag apagado) no se toca.
+ * `detalle` ya leído por quien llama (evita una consulta); si falta se lee del pedido.
+ */
+export async function confirmarEnvioTx(
+  tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0],
+  pedidoId: string,
+  ahora: Date,
+  detalle?: EnvioDetalle | null,
+): Promise<boolean> {
+  let snapshot = detalle;
+  if (snapshot === undefined) {
+    const [fila] = await tx
+      .select({ detalle: orders.envioDetalle })
+      .from(orders)
+      .where(and(eq(orders.id, pedidoId), esDeEsteTenant()))
+      .limit(1);
+    snapshot = fila?.detalle ?? null;
+  }
+  if (!snapshot) return false;
+  const horario = horarioDeDetalle(snapshot);
+  if (!horario) {
+    console.error(`[envio] pedido=${pedidoId}: horario del envío ilegible, no se calcula la fecha confirmada`);
+    return false;
+  }
+  const entrega = fechaEntrega(ahora, horario);
+  const r = await tx
+    .update(orders)
+    .set({ envioConfirmadoEn: ahora, envioEntregaConfirmada: entrega.fecha, updatedAt: ahora })
+    .where(and(eq(orders.id, pedidoId), esDeEsteTenant(), isNull(orders.envioConfirmadoEn), isNotNull(orders.envioDetalle)))
+    .returning({ id: orders.id });
+  return r.length > 0;
+}
+
+/**
+ * Anular el pago que confirmó el envío: limpia la confirmación SÓLO si el pedido sigue `pendiente`.
+ * Si un operador ya lo confirmó o avanzó, esa confirmación vale por sí misma y no se toca.
+ */
+export async function anularConfirmacionEnvioTx(
+  tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0],
+  pedidoId: string,
+): Promise<boolean> {
+  const r = await tx
+    .update(orders)
+    .set({ envioConfirmadoEn: null, envioEntregaConfirmada: null, updatedAt: new Date() })
+    .where(and(eq(orders.id, pedidoId), esDeEsteTenant(), eq(orders.estado, "pendiente"), isNotNull(orders.envioConfirmadoEn)))
+    .returning({ id: orders.id });
+  return r.length > 0;
+}
+
 async function registrarCobroTx(
   pedidoId: string,
   cobro: ResultadoCobro,
   intentoId: string | undefined,
-): Promise<{ cambio: boolean; cambioPedido: { antes: PagoEstado; despues: PagoEstado } | null }> {
+): Promise<{
+  cambio: boolean;
+  cambioPedido: { antes: PagoEstado; despues: PagoEstado } | null;
+  medicion: MedicionPedidoInvitado | null;
+}> {
   return getDb().transaction(async (tx) => {
     /**
      * `for update` no es decorativo: sin el lock, dos notificaciones que llegan
@@ -1408,15 +1615,18 @@ async function registrarCobroTx(
         cuotas: orders.cuotas,
         total: orders.total,
         clerkUserId: orders.clerkUserId,
-        // Último: los dobles de prueba responden filas posicionales.
+        // Últimos: los dobles de prueba responden filas posicionales.
         formaCobro: orders.formaCobro,
+        envioDetalle: orders.envioDetalle,
+        compraInvitado: orders.compraInvitado,
+        pagoMetodo: orders.pagoMetodo,
       })
       .from(orders)
       .where(and(eq(orders.id, pedidoId), esDeEsteTenant()))
       .limit(1)
       .for("update");
 
-    if (!fila) return { cambio: false, cambioPedido: null };
+    if (!fila) return { cambio: false, cambioPedido: null, medicion: null };
 
     const intento = await intentoDelCobro(tx, pedidoId, cobro, intentoId);
     // Las reglas de transición (eventos desordenados, reversiones) se aplican
@@ -1575,6 +1785,15 @@ async function registrarCobroTx(
       })
       .where(and(eq(orders.id, pedidoId), esDeEsteTenant()));
 
+    // Envío por zona: el pago aprobado es el primer evento de confirmación (si no lo fue otro antes) y fija
+    // la fecha real de entrega con el horario congelado. Un pago que se revierte mientras el pedido sigue
+    // pendiente limpia la confirmación; con el pedido ya avanzado no se toca.
+    if (nuevo === "pagado" && actual !== "pagado" && fila.envioDetalle) {
+      await confirmarEnvioTx(tx, pedidoId, new Date(), fila.envioDetalle);
+    } else if (nuevo !== "pagado" && actual === "pagado" && fila.envioDetalle && fila.pedidoEstado === "pendiente") {
+      await anularConfirmacionEnvioTx(tx, pedidoId);
+    }
+
     // Pago en línea: el carrito se vacía recién acá, al cobrarse (ver `crearPedido`). En la misma
     // transacción: si el cobro no se guarda, el carrito queda como estaba.
     if (nuevo === "pagado" && actual !== "pagado" && fila.clerkUserId) {
@@ -1600,6 +1819,12 @@ async function registrarCobroTx(
     return {
       cambio: intento.nuevo || cambiaIntento || nuevo !== actual,
       cambioPedido: nuevo !== actual ? { antes: actual, despues: nuevo } : null,
+      // Una sola vez por pedido: la transición a `pagado` ocurre una vez (un segundo aviso del mismo
+      // cobro ve `pagado` y no cambia nada); además el evento lleva un `uuid` fijo por pedido.
+      medicion:
+        fila.compraInvitado && nuevo === "pagado" && actual !== "pagado"
+          ? { pedidoId, total: Number(fila.total), medio: fila.pagoMetodo }
+          : null,
     };
   });
 }
@@ -2161,6 +2386,11 @@ export async function pedidoParaCambiarMedio(
   /** Marca de revisión del pago, si tiene. */
   pagoRevision: string | null;
   total: number;
+  /**
+   * Costo de envío congelado (con IVA): cambiar el medio o ver las cuotas recotiza las líneas, pero el
+   * envío es el del pedido (no se recalcula con la zona de hoy).
+   */
+  costoEnvio: number;
   /** Sucursal del pedido y la que factura si la zona lo fuerza: definen la cuenta de cobro. */
   sucursal: string | null;
   facturaSucursal: string | null;
@@ -2184,6 +2414,7 @@ export async function pedidoParaCambiarMedio(
       formaCobro: orders.formaCobro,
       pagoRevision: orders.pagoRevision,
       total: orders.total,
+      costoEnvio: orders.costoEnvio,
       sucursal: orders.sucursal,
       sucursalRegla: orders.sucursalRegla,
       entregaCiudad: orders.entregaCiudad,
@@ -2210,6 +2441,7 @@ export async function pedidoParaCambiarMedio(
     formaCobro: leerForma(p.formaCobro),
     pagoRevision: p.pagoRevision ?? null,
     total: Number(p.total),
+    costoEnvio: Number(p.costoEnvio),
     sucursal: p.sucursal ?? null,
     facturaSucursal: facturaSucursalDe(p.sucursalRegla),
     avisosEnviados: p.avisosEnviadosEn !== null,

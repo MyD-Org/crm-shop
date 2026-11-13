@@ -82,7 +82,7 @@ describe("CheckoutClient: pedido a confirmar por modalidad", () => {
     expect(fuente.indexOf('json?.motivo === "pedido_a_confirmar"')).toBeLessThan(fuente.indexOf("if (res.status === 409) {\n"));
     // El reintento manda el total de la cotización vigente del hook (/api/carrito/cotizar, lista a
     // confirmar), y sólo se puede confirmar con esa cotización ya cargada.
-    const post = fuente.slice(fuente.indexOf('fetch("/api/pedidos", {'));
+    const post = fuente.slice(fuente.indexOf('fetchConToken("/api/pedidos", {'));
     expect(post.slice(0, 400)).toContain("totalVisto: cotizacion?.total,");
     expect(fuente).toContain('estado === "ok" &&\n    !!cotizacion &&');
   });
@@ -97,7 +97,7 @@ describe("CheckoutClient: pedido a confirmar por modalidad", () => {
     // Va antes del 409 genérico (que sólo recotiza y se queda en el paso).
     expect(fuente.indexOf('json?.motivo === "pedido_ya_no_a_confirmar"')).toBeLessThan(fuente.indexOf("if (res.status === 409) {\n"));
     // El POST avisa que se armó a confirmar: sin eso el servidor responde el 400 de siempre.
-    const post = fuente.slice(fuente.indexOf('fetch("/api/pedidos", {'));
+    const post = fuente.slice(fuente.indexOf('fetchConToken("/api/pedidos", {'));
     expect(post.slice(0, 2500)).toContain('...(flujoCheckout === "a_confirmar" ? { flujoVisto: "a_confirmar" } : {}),');
   });
 

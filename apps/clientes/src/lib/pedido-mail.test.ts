@@ -10,6 +10,22 @@ const base = {
   pedidosUrl: "https://tienda.cliente.example/mi-cuenta/pedidos",
 };
 
+describe("armarMailPedido con envío por zona", () => {
+  const datos = { ...base, aviso: "recibido" as const, lineas: [{ nombre: "Lámpara", cantidad: 1 }], total: 16600, entrega: "Envío a domicilio", pago: "Transferencia bancaria" };
+
+  it("con costo de envío muestra la línea Envío antes del total", () => {
+    const m = armarMailPedido({ ...datos, costoEnvio: 4500 });
+    expect(m.html).toContain("Envío");
+    expect(m.text).toMatch(/Envío: .*4\.500[\s\S]*Total:/);
+  });
+
+  it("sin costo (o 0) no hay línea Envío: el mail es el de siempre", () => {
+    const m = armarMailPedido({ ...datos, costoEnvio: 0 });
+    expect(m.text).not.toContain("Envío: ");
+    expect(armarMailPedido(datos).text).toBe(m.text);
+  });
+});
+
 describe("armarMailPedido", () => {
   it("recibido: asunto, saludo escapado, resumen y botón", () => {
     const m = armarMailPedido({

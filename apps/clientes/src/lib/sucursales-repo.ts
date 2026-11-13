@@ -4,9 +4,17 @@
  * pedido (dentro de la transacción): lo cacheado sirve para mostrar, no para
  * decidir. `sucursales-datos.ts` la envuelve con caché para el selector de zona.
  */
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { crmReglasVenta, crmSucursales, crmZonas } from "@/db/crm";
+import {
+  crmMetodosEnvio,
+  crmMetodosEnvioEntradas,
+  crmMetodosEnvioLocalidades,
+  crmMetodosEnvioZonas,
+  crmReglasVenta,
+  crmSucursales,
+  crmZonas,
+} from "@/db/crm";
 import { shopTenantId } from "./tenant";
 import {
   CONFIG_DESPACHO_DEFAULT,
@@ -16,6 +24,9 @@ import {
   type ZonaDato,
 } from "./sucursales";
 import { CONFIG_ENVIO_DEFAULT, type ConfigEnvio } from "./envio";
+import type { EntradaZona, LocalidadAtendida, ZonaEnvio } from "./envio-zona";
+import { feriadosDeConfig, horarioEntregaDeConfig, type MetodoEnvioTienda } from "./envio-zona-tienda";
+import type { Geometria } from "./geo-poligono";
 import {
   normalizarExcepciones,
   normalizarSchedule,
@@ -181,6 +192,122 @@ export function configEnvioDeFila(fila: FilaEnvio): ConfigEnvio {
   };
 }
 
+type FilaMetodo = typeof crmMetodosEnvio.$inferSelect;
+type FilaZona = typeof crmMetodosEnvioZonas.$inferSelect;
+type FilaEntrada = typeof crmMetodosEnvioEntradas.$inferSelect;
+type FilaLocalidad = typeof crmMetodosEnvioLocalidades.$inferSelect;
+
+const numeroONull = (v: string | null): number | null => {
+  if (v === null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/** "09:00:00" (columna `time`) -> "09:00". */
+const horaCorte = (t: string): string => t.slice(0, 5);
+
+/**
+ * Filas del CRM -> métodos de envío para el módulo puro. Defensivo: una zona con geometría que no es
+ * una lista se toma sin dibujo (vive de sus entradas), nunca rompe el cálculo; los números que llegan
+ * como string (`numeric`) se convierten. Los métodos de un tipo desconocido se descartan (el CHECK del
+ * CRM hoy sólo admite `tarifa_zona`; un tipo futuro que este código no entiende no se inventa).
+ */
+export function armarMetodosEnvio(
+  metodos: FilaMetodo[],
+  zonas: FilaZona[],
+  entradas: FilaEntrada[],
+  localidades: FilaLocalidad[],
+): MetodoEnvioTienda[] {
+  return metodos
+    .filter((m) => m.tipo === "tarifa_zona")
+    .map((m): MetodoEnvioTienda => {
+      const zonasDelMetodo = zonas
+        .filter((z) => z.metodoId === m.id)
+        .map((z): ZonaEnvio => ({
+          id: z.id,
+          nombre: z.nombre,
+          precio: Number(z.precio),
+          orden: z.orden,
+          activa: z.activa,
+          geometria: (Array.isArray(z.geometria) ? z.geometria : []) as Geometria,
+          entradas: entradas
+            .filter((e) => e.zonaId === z.id)
+            .map((e): EntradaZona => ({
+              tipo: e.tipo === "cp" ? "cp" : "georef",
+              valor: e.valor,
+              etiqueta: e.etiqueta,
+              nombreNorm: e.nombreNorm,
+            })),
+        }));
+      const locs = localidades
+        .filter((l) => l.metodoId === m.id)
+        .map((l): LocalidadAtendida => {
+          const sur = numeroONull(l.bboxSur);
+          const oeste = numeroONull(l.bboxOeste);
+          const norte = numeroONull(l.bboxNorte);
+          const este = numeroONull(l.bboxEste);
+          const lat = numeroONull(l.centroLat);
+          const lon = numeroONull(l.centroLon);
+          return {
+            georefId: l.georefId,
+            etiqueta: l.etiqueta,
+            nombreNorm: l.nombreNorm,
+            abreviaturas: l.abreviaturas,
+            centro: lat !== null && lon !== null ? { lat, lon } : null,
+            bbox: sur !== null && oeste !== null && norte !== null && este !== null ? { sur, oeste, norte, este } : null,
+          };
+        });
+      return {
+        id: m.id,
+        slug: m.slug,
+        nombre: m.nombre,
+        tipo: "tarifa_zona",
+        activo: m.activo,
+        orden: m.orden,
+        provinciaClave: m.provinciaClave,
+        sucursalOrigen: m.sucursalOrigen,
+        diasOperativos: m.diasOperativos,
+        horaCorte: horaCorte(m.horaCorte),
+        margenMin: m.margenMin,
+        promesa: m.promesa,
+        avisoFeriados: m.avisoFeriados,
+        gratisAplica: m.gratisAplica,
+        itemAlegraId: m.itemAlegraId,
+        itemAlegraIva: Number(m.itemAlegraIva),
+        zonas: zonasDelMetodo,
+        localidades: locs,
+        // `config.horarioEntrega` del CRM (change `envio-rapido`); sin horario no se agrega la clave.
+        ...(horarioEntregaDeConfig(m.config) ? { horarioEntrega: horarioEntregaDeConfig(m.config) } : {}),
+        // `config.feriados`: días sin entrega (el cálculo de la fecha los salta); sin feriados no se agrega la clave.
+        ...(feriadosDeConfig(m.config).length > 0 ? { feriados: feriadosDeConfig(m.config) } : {}),
+      };
+    });
+}
+
+/**
+ * Métodos de envío por zona del tenant (`public.metodos_envio*`, migración 0101 del CRM), SIN caché.
+ * Cuatro SELECT (los métodos y, sólo si hay, sus zonas, entradas y localidades). Solo se llama con el
+ * flag `envio-por-zona` prendido. Si la lectura falla (migración sin aplicar, base caída) devuelve `[]`:
+ * el envío queda a coordinar, nunca un precio inventado.
+ */
+export async function leerMetodosEnvio(db?: Ejecutor): Promise<MetodoEnvioTienda[]> {
+  try {
+    const ejecutor = db ?? getDb();
+    const metodos = await ejecutor.select().from(crmMetodosEnvio).where(eq(crmMetodosEnvio.tenantId, shopTenantId()));
+    if (metodos.length === 0) return [];
+    const ids = metodos.map((m) => m.id);
+    const [zonas, entradas, localidades] = await Promise.all([
+      ejecutor.select().from(crmMetodosEnvioZonas).where(inArray(crmMetodosEnvioZonas.metodoId, ids)),
+      ejecutor.select().from(crmMetodosEnvioEntradas).where(inArray(crmMetodosEnvioEntradas.metodoId, ids)),
+      ejecutor.select().from(crmMetodosEnvioLocalidades).where(inArray(crmMetodosEnvioLocalidades.metodoId, ids)),
+    ]);
+    return armarMetodosEnvio(metodos, zonas, entradas, localidades);
+  } catch (err) {
+    console.error("[sucursales-repo] no se pudieron leer los métodos de envío:", err);
+    return [];
+  }
+}
+
 /**
  * Lectura SIN caché de la configuración de envío del tenant (`reglas_venta.envio_*`). Es la que
  * usan cotizar y crear el pedido: la UI cacheada sólo muestra, el servidor decide.
@@ -191,7 +318,15 @@ export function configEnvioDeFila(fila: FilaEnvio): ConfigEnvio {
  * caída) devuelve el default (domicilio activo, costo a coordinar, sin gratis): nunca promete
  * un envío gratis que no se pudo confirmar.
  */
-export async function leerConfigEnvio(db?: Ejecutor): Promise<ConfigEnvio> {
+export async function leerConfigEnvio(db?: Ejecutor, opts: { conMetodos?: boolean } = {}): Promise<ConfigEnvio> {
+  const config = await leerConfigEnvioTienda(db);
+  // `metodos` sólo viaja con el flag `envio-por-zona` prendido (lo decide quien llama: acá no se
+  // evalúa el flag, porque esta función también corre dentro de scopes cacheados). Apagado = igual que
+  // siempre, sin tocar las tablas nuevas.
+  return opts.conMetodos ? { ...config, metodos: await leerMetodosEnvio(db) } : config;
+}
+
+async function leerConfigEnvioTienda(db?: Ejecutor): Promise<ConfigEnvio> {
   try {
     const [fila] = await (db ?? getDb())
       .select({

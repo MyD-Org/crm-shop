@@ -687,6 +687,20 @@
       "when": 1794060000000,
       "tag": "0100_tenants_shop_destinos_extra_grant",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1794533735254,
+      "tag": "0101_metodos_envio",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1794600000000,
+      "tag": "0102_metodos_envio_sabado",
+      "breakpoints": true
     }
   ]
 }

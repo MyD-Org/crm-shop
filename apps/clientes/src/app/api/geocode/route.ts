@@ -4,6 +4,11 @@ import { NextResponse } from "next/server";
 import { claveSolicitante } from "@/lib/auth";
 import { codigoPaisGeocode, idiomaGeocode } from "@/lib/geocode-pais";
 import { permitirAsync } from "@/lib/rate-limit";
+import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
+import { urlEstructurada, urlLibre, urlLibreAcotada } from "@/lib/geocode-envio";
+import { firmarGeo, geoFirmaConfigurada } from "@/lib/geo-token";
+import { compraInvitadoHabilitada } from "@/lib/compra-invitado-flag";
+import { ipDelRequest } from "@/lib/ip-cliente";
 
 /**
  * Autocompletado de direcciones contra Nominatim (OpenStreetMap), acotado al
@@ -22,9 +27,11 @@ import { permitirAsync } from "@/lib/rate-limit";
  * El volumen se controla en dos capas, y la distinción importa:
  *
  * En el SERVIDOR, que es lo único que de verdad frena a alguien:
- *   1. Sesión obligatoria. Sin esto la ruta es un proxy abierto y cualquiera
- *      con un `for` deja el autocompletado caído para todos los clientes.
- *   2. Rate limit por usuario.
+ *   1. Sesión, o compra como invitado (flag `compra-invitado`). Sin cuenta la
+ *      ruta sería un proxy abierto: al invitado se le exige un request del mismo
+ *      sitio, un techo por IP más bajo que el de las cuentas y un techo global
+ *      para todos los invitados juntos, que es lo que protege la IP del servidor.
+ *   2. Rate limit por usuario (o por IP para el invitado).
  *   3. La cache de acá, que absorbe las búsquedas repetidas.
  *
  * En el CLIENTE, que solo mejora el caso honesto y no defiende de nada:
@@ -38,7 +45,11 @@ import { permitirAsync } from "@/lib/rate-limit";
 
 interface NominatimResult {
   display_name: string;
+  lat?: string;
+  lon?: string;
   address: {
+    suburb?: string;
+    neighbourhood?: string;
     road?: string;
     house_number?: string;
     city?: string;
@@ -66,6 +77,17 @@ const MIN_CARACTERES = 4;
  */
 const MAX_POR_MINUTO = 40;
 
+/** Invitado, por IP: una dirección cómoda por minuto y un tope diario que corta a un script. */
+const INVITADO_POR_MINUTO = 20;
+const INVITADO_POR_DIA = 300;
+/** Todos los invitados juntos: con la cache, mantiene el volumen hacia Nominatim lejos de su límite. */
+const INVITADOS_POR_MINUTO_GLOBAL = 120;
+
+/** Sólo un fetch del propio sitio (los navegadores mandan `Sec-Fetch-Site`; un script suelto, no). */
+function mismoSitio(req: Request): boolean {
+  return req.headers.get("sec-fetch-site") === "same-origin";
+}
+
 /**
  * Saca los prefijos administrativos de OSM: devuelve "Municipio de Puerto
  * Iguazú" y "Provincia de Misiones", que en una factura quedan mal. También
@@ -81,18 +103,25 @@ function limpiarNombre(v: string | undefined): string {
 }
 
 export async function GET(req: Request) {
-  // El autocompletado solo se usa en checkout y datos de facturación, las dos
-  // detrás de sesión: exigirla acá no le saca nada a nadie.
+  // El autocompletado se usa en checkout y datos de facturación: con cuenta, o sin cuenta cuando la
+  // compra como invitado está habilitada (con límites más estrictos, ver arriba).
+  const demasiadas = () =>
+    NextResponse.json({ error: "Demasiadas búsquedas. Espere un momento." }, { status: 429 });
   const clave = await claveSolicitante();
-  if (!clave) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-
-  if (!await permitirAsync(`geocode:${clave}`, MAX_POR_MINUTO, 60_000)) {
-    return NextResponse.json(
-      { error: "Demasiadas búsquedas. Espere un momento." },
-      { status: 429 },
-    );
+  if (clave) {
+    if (!await permitirAsync(`geocode:${clave}`, MAX_POR_MINUTO, 60_000)) return demasiadas();
+  } else {
+    const ip = ipDelRequest(req);
+    if (!ip || !mismoSitio(req) || !(await compraInvitadoHabilitada())) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+    if (
+      !(await permitirAsync(`geocode:inv:ip:${ip}`, INVITADO_POR_MINUTO, 60_000)) ||
+      !(await permitirAsync(`geocode:inv:dia:${ip}`, INVITADO_POR_DIA, 86_400_000)) ||
+      !(await permitirAsync("geocode:inv:global", INVITADOS_POR_MINUTO_GLOBAL, 60_000))
+    ) {
+      return demasiadas();
+    }
   }
 
   const { searchParams } = new URL(req.url);
@@ -100,39 +129,58 @@ export async function GET(req: Request) {
 
   if (!text || text.length < MIN_CARACTERES) return NextResponse.json([]);
 
-  const url = new URL("https://nominatim.openstreetmap.org/search");
-  // Normalizado a minúsculas: la cache es por URL, así "San Martin" y
-  // "san martin" comparten entrada en vez de ocupar dos.
-  url.searchParams.set("q", text.toLowerCase());
   const pais = searchParams.get("pais");
-  url.searchParams.set("countrycodes", codigoPaisGeocode(pais));
-  url.searchParams.set("format", "json");
-  url.searchParams.set("addressdetails", "1");
-  url.searchParams.set("limit", "6");
-  // Nombres en el idioma del país: en una factura brasileña va "Foz do
-  // Iguaçu", no la traducción "Foz de Iguazú".
-  url.searchParams.set("accept-language", idiomaGeocode(pais));
+  const codigoPais = codigoPaisGeocode(pais);
+  const idioma = idiomaGeocode(pais);
+  // Envío por zona: con localidad y provincia elegidas la búsqueda se acota a ellas y cada sugerencia
+  // trae coordenadas y un token firmado. Con el flag apagado nada de esto existe: la respuesta es la de siempre.
+  const porZona = await envioPorZonaHabilitado();
+  const ciudadElegida = porZona ? (searchParams.get("ciudad")?.trim().slice(0, 80) ?? "") : "";
+  const provinciaElegida = porZona ? (searchParams.get("provincia")?.trim().slice(0, 80) ?? "") : "";
+  const acotada = ciudadElegida !== "";
 
-  let res: Response;
-  try {
-    res = await fetch(url.toString(), {
-      // La política de Nominatim exige identificarse con un contacto real: va en
-      // GEOCODE_CONTACT_EMAIL. El respaldo es una dirección de ejemplo, solo para desarrollo.
-      headers: {
-        "User-Agent": `${idTecnico(await getMarca())}-Shop/1.0 (${process.env.GEOCODE_CONTACT_EMAIL ?? "contacto@cliente.example"})`,
-      },
-      signal: AbortSignal.timeout(5000),
-      next: { revalidate: CACHE_SEGUNDOS },
-    });
-  } catch {
-    // Timeout o sin red: lista vacía. El cliente puede escribir a mano — que el
-    // autocompletado falle no puede impedir cargar una dirección.
-    return NextResponse.json([]);
+  const userAgent = `${idTecnico(await getMarca())}-Shop/1.0 (${process.env.GEOCODE_CONTACT_EMAIL ?? "contacto@cliente.example"})`;
+  // Devuelve null si no hubo respuesta usable (timeout, sin red).
+  const consultar = async (url: URL): Promise<Response | null> => {
+    try {
+      return await fetch(url.toString(), {
+        // La política de Nominatim exige identificarse con un contacto real: va en
+        // GEOCODE_CONTACT_EMAIL. El respaldo es una dirección de ejemplo, solo para desarrollo.
+        headers: { "User-Agent": userAgent },
+        signal: AbortSignal.timeout(5000),
+        next: { revalidate: CACHE_SEGUNDOS },
+      });
+    } catch {
+      // Timeout o sin red: lista vacía. El cliente puede escribir a mano — que el
+      // autocompletado falle no puede impedir cargar una dirección.
+      return null;
+    }
+  };
+
+  let res: Response | null;
+  let data: NominatimResult[];
+  if (acotada) {
+    const consulta = { texto: text, ciudad: ciudadElegida, provincia: provinciaElegida, pais: codigoPais, idioma };
+    res = await consultar(urlEstructurada(consulta));
+    if (!res) return NextResponse.json([]);
+    if (!res.ok) return NextResponse.json([], { status: res.status });
+    data = (await res.json()) as NominatimResult[];
+    if (data.length === 0) {
+      // UN reintento en texto libre acotado; sigue vacío ⇒ [] (nunca una búsqueda nacional).
+      res = await consultar(urlLibreAcotada(consulta));
+      if (!res) return NextResponse.json([]);
+      if (!res.ok) return NextResponse.json([], { status: res.status });
+      data = (await res.json()) as NominatimResult[];
+    }
+  } else {
+    // Normalizado a minúsculas: la cache es por URL, así "San Martin" y
+    // "san martin" comparten entrada en vez de ocupar dos.
+    res = await consultar(urlLibre(text, codigoPais, idioma));
+    if (!res) return NextResponse.json([]);
+    if (!res.ok) return NextResponse.json([], { status: res.status });
+    data = (await res.json()) as NominatimResult[];
   }
-
-  if (!res.ok) return NextResponse.json([], { status: res.status });
-
-  const data = (await res.json()) as NominatimResult[];
+  const conToken = porZona && geoFirmaConfigurada();
 
   const suggestions = data.map((r) => {
     const addr = r.address;
@@ -141,7 +189,23 @@ export async function GET(req: Request) {
     const provincia = limpiarNombre(addr.state);
     const cp = addr.postcode ?? "";
     const label = [calle, ciudad, provincia].filter(Boolean).join(", ");
-    return { label, calle, ciudad, provincia, cp };
+    const base = { label, calle, ciudad, provincia, cp };
+    if (!porZona) return base;
+    const lat = Number.parseFloat(r.lat ?? "");
+    const lon = Number.parseFloat(r.lon ?? "");
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return base;
+    // `house_number` ⇒ la coordenada es de la altura; si no, es el centro de la calle (aproximada).
+    const precision = addr.house_number ? ("altura" as const) : ("calle" as const);
+    const barrio = addr.suburb ?? addr.neighbourhood ?? "";
+    let geoToken: string | undefined;
+    if (conToken && calle) {
+      try {
+        geoToken = firmarGeo({ lat, lon, calle, ciudad, provincia, cp, precision });
+      } catch {
+        geoToken = undefined;
+      }
+    }
+    return { ...base, lat, lon, precision, ...(barrio ? { barrio } : {}), ...(geoToken ? { geoToken } : {}) };
   });
 
   return NextResponse.json(suggestions);

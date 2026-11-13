@@ -7,6 +7,7 @@ import type { EntregaTipo, EnvioEvaluado } from "@/lib/envio";
 import type { DisponibilidadVista, LocalDisponibilidad } from "@/lib/disponibilidad-textos";
 import type { CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
 import type { ProgresoCuotas } from "@/lib/cuotas-sin-interes";
+import type { EstimadoFicha } from "@/lib/envio-zona-textos";
 
 /**
  * Cotización del carrito contra el servidor.
@@ -48,6 +49,25 @@ export interface CotizacionResponse extends Cotizacion {
   totalesOpciones?: Record<string, number | null>;
   /** Con cupón y `conTotalesOpciones`: por card, true = el cupón aplica, false = no aplica con esa opción. */
   cuponPorOpcion?: Record<string, boolean>;
+  /**
+   * Sólo con el flag `envio-por-zona`: lo que se anticipa del envío por zona sabiendo apenas la localidad
+   * (sin dirección exacta). «desde $X» no suma al total; el costo exacto lo calcula el checkout.
+   */
+  envioEstimado?: EstimadoFicha;
+}
+
+/**
+ * A dónde va el envío, para el envío por zona. El servidor NUNCA toma coordenadas del navegador: valen una
+ * dirección guardada (`direccionId`) o el `geoToken` firmado de la sugerencia elegida, con la `calle` que se
+ * firmó. `localidad`, `georefId` y `cp` alimentan las reglas de respaldo.
+ */
+export interface DestinoCotizacion {
+  direccionId?: string;
+  geoToken?: string;
+  calle?: string;
+  localidad?: string;
+  georefId?: string;
+  cp?: string;
 }
 
 export type EstadoCotizacion = "vacio" | "cargando" | "ok" | "error" | "no_auth";
@@ -95,6 +115,7 @@ interface Resultado {
   conProgresoCuotas: boolean;
   cupon: string;
   pedidoId: string;
+  destino: string;
   data: CotizacionResponse | null;
   error: string | null;
   noAuth: boolean;
@@ -142,6 +163,8 @@ export function useCotizacion(opts: {
   cupon?: string | null;
   /** Cambio de medio de un pedido ya creado: rige el cupón congelado del pedido (se ignora `cupon`). */
   pedidoId?: string;
+  /** Envío por zona: a dónde va el envío (ver `DestinoCotizacion`). Cambiarlo recotiza. */
+  destino?: DestinoCotizacion;
   /** false para no cotizar todavía (ej. el carrito aún no se hidrató). */
   activo?: boolean;
 }) {
@@ -163,6 +186,8 @@ export function useCotizacion(opts: {
   const conTotalesOpciones = opts.conTotalesOpciones ?? false;
   const cupon = opts.cupon ?? "";
   const pedidoId = opts.pedidoId ?? "";
+  // Sin destino la clave es "" y el body no cambia: con el flag apagado (o sin dato) todo es como siempre.
+  const destino = opts.destino && Object.values(opts.destino).some(Boolean) ? JSON.stringify(opts.destino) : "";
   const { entregaTipo } = opts;
 
   // Solo `id` y `qty` disparan una recotización. Sin esta clave, cualquier
@@ -191,7 +216,7 @@ export function useCotizacion(opts: {
 
     const lineas = JSON.parse(clave) as [string, number][];
     const ctrl = new AbortController();
-    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, cupon, pedidoId };
+    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, cupon, pedidoId, destino };
     let reintento: ReturnType<typeof setTimeout> | undefined;
 
     const timer = setTimeout(async () => {
@@ -216,6 +241,7 @@ export function useCotizacion(opts: {
             totalesOpciones: conTotalesOpciones || undefined,
             cupon: cupon || undefined,
             pedidoId: pedidoId || undefined,
+            destino: destino ? JSON.parse(destino) : undefined,
           }),
         });
 
@@ -269,7 +295,7 @@ export function useCotizacion(opts: {
       clearTimeout(reintento);
       ctrl.abort();
     };
-  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, conTotalesOpciones, cupon, pedidoId, nonce]);
+  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, forma, cuotas, conCuotas, conProgresoCuotas, conTotalesOpciones, cupon, pedidoId, destino, nonce]);
 
   // Estado DERIVADO de los inputs actuales vs. los del último resultado. Nada
   // de esto vive en useState: setear estado desde un efecto para algo que ya se
@@ -290,7 +316,8 @@ export function useCotizacion(opts: {
     res.conCuotas === conCuotas &&
     res.conProgresoCuotas === conProgresoCuotas &&
     res.cupon === cupon &&
-    res.pedidoId === pedidoId;
+    res.pedidoId === pedidoId &&
+    res.destino === destino;
 
   let estado: EstadoCotizacion;
   if (vacio) estado = "vacio";

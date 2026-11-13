@@ -80,7 +80,7 @@ describe("sin el interruptor: la salida es la de siempre", () => {
   });
 
   it("login y registro: sin fondo, sin LA", async () => {
-    for (const pagina of [await IngresarPage(), await RegistroPage()]) {
+    for (const pagina of [await IngresarPage(), await RegistroPage({ searchParams: Promise.resolve({}) })]) {
       const h = html(pagina);
       sinRastros(h);
       expect(h).not.toContain("<svg");
@@ -107,7 +107,7 @@ describe("sin el interruptor: la salida es la de siempre", () => {
     const todo = [
       html(await NotFound()),
       html(await IngresarPage()),
-      html(await RegistroPage()),
+      html(await RegistroPage({ searchParams: Promise.resolve({}) })),
       html(await SiteFooter()),
       html(createElement(CarritoClient, { conSesion: false })),
     ].join("\n");
@@ -118,10 +118,12 @@ describe("sin el interruptor: la salida es la de siempre", () => {
 describe("con el interruptor prendido", () => {
   it("login y registro: piedra oscura detrás, LA encendido, encabezado y tarjeta en su lugar", async () => {
     prendida();
-    for (const [pagina, clerk] of [[await IngresarPage(), "sign-in"], [await RegistroPage(), "sign-up"]] as const) {
+    for (const [pagina, clerk] of [[await IngresarPage(), "sign-in"], [await RegistroPage({ searchParams: Promise.resolve({}) }), "sign-up"]] as const) {
       const h = html(pagina);
       expect(h).toContain("data-fondo-piedra");
       expect(h).toContain("data-encendido");
+      // La escena viva del hero (la luz sigue al cursor), no la piedra quieta.
+      expect(h).toContain("Encender el LA");
       expect(h).toContain('aria-hidden="true"');
       expect(h).toContain(`data-clerk="${clerk}"`);
       // La tarjeta de Clerk queda dentro del mismo <main> de siempre.
@@ -161,9 +163,10 @@ describe("con el interruptor prendido", () => {
     expect(h).not.toContain("Encender el LA");
   });
 
-  it("el bloque es sólo dibujo detrás del texto: nada que tocar ni ids que se repitan", () => {
+  it("el bloque es dibujo detrás del texto: nada que tocar ni ids que se repitan", () => {
     const dos = html(createElement("div", null, createElement(BloquePiedra, { titulo: "A" }), createElement(BloquePiedra, { titulo: "B" })));
-    expect(dos).not.toMatch(/ id="/);
+    const ids = [...dos.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+    expect(new Set(ids).size).toBe(ids.length);
     expect(dos).not.toContain("tabindex");
     expect(dos).not.toContain('role="button"');
   });
@@ -192,8 +195,9 @@ describe("rendimiento y registro", () => {
     expect(css).not.toContain("@keyframes arranque");
     const comun = readFileSync(join(dir, "escena-comun.tsx"), "utf8");
     expect(comun).toContain("HeroPiedra.module.css");
-    // El bloque de las páginas vacías no lleva el LA: nada que encender.
+    // El bloque de las páginas vacías no lleva el LA: nada que encender. La luz es la del hero.
     expect(readFileSync(join(dir, "BloquePiedra.tsx"), "utf8")).not.toContain("enlazarEncendido");
+    expect(readFileSync(join(dir, "BloquePiedra.tsx"), "utf8")).toContain("iniciarEscena");
     // Visítenos usa la escena viva del hero entera (luz que sigue al cursor + LA).
     expect(readFileSync(join(dir, "VisitenosPiedra.tsx"), "utf8")).toContain("EscenaPiedraViva");
   });

@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if ("error" in d) return d.error;
   let direccion;
   try {
-    direccion = await crearDireccion(s.userId, d.datos);
+    direccion = await crearDireccion(s.userId, d.datos, ...(d.ubicacion ? [d.ubicacion] as const : []));
   } catch (err) {
     if (err instanceof DireccionesLlenasError) return direccionesLlenas();
     throw err;

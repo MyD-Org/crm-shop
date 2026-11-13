@@ -1,5 +1,7 @@
 "use client";
 
+import { fetchConToken } from "@/lib/invitado-token-cliente";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CardPayment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
 import { Button, PaymentLogos, Spinner, type RadioOption } from "@myd-org/ui";
@@ -317,7 +319,7 @@ export function PagoMercadoPago({
     }
 
     try {
-      const res = await fetch("/api/pagos/mercadopago", {
+      const res = await fetchConToken("/api/pagos/mercadopago", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

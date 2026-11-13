@@ -105,6 +105,31 @@ describe("cambiarMedioPedido", () => {
     expect(Number(f.total)).toBe(2178);
   });
 
+  it("envío por zona: el costo y el snapshot congelados NO se recalculan al cambiar el medio", async () => {
+    const c = cot(1000);
+    const conEnvio: Cotizacion = { ...c, costoEnvio: 3000, total: c.total + 3000 };
+    const envioZona = {
+      resultado: {
+        metodoId: "m-1", slug: "envio-en-el-dia", nombre: "Envío en el día", zonaId: "z-centro", zona: "Centro",
+        precio: 3000, costo: 3000, gratis: false, regla: "cp" as const, precision: null, promesa: "Entrega en el día",
+        avisoFeriados: "", alegra: { itemId: "9001", ivaPct: 21 },
+        horario: { dias: [1, 2, 3, 4, 5], horaCorte: "09:00", margenMin: 0 },
+      },
+      punto: null,
+      sucursalOrigen: null,
+    };
+    const p = await crearPedido(cliente, datos({ entregaTipo: "envio", entregaCiudad: "Ciudad Ejemplo", entregaDireccion: "Calle Ejemplo 123", envioZona }), conEnvio);
+    const [antes] = (await getDb().execute(sql`select envio_detalle from shop.orders where id = ${p.id}`)) as unknown as { envio_detalle: unknown }[];
+    // La recotización de líneas llega SIN envío en la cotización nueva: el pedido conserva el suyo.
+    const r = await cambiarMedioPedido(p.id, dueno, { pagoMetodo: "transferencia", cuotas: null, idPriceList: "lista-transf", cotizacion: cot(900) });
+    expect(r).toMatchObject({ ok: true, total: 2178 + 3000 });
+    const [o] = (await getDb().execute(sql`select costo_envio, total, envio_metodo, envio_zona, envio_detalle from shop.orders where id = ${p.id}`)) as unknown as Record<string, unknown>[];
+    expect(Number(o.costo_envio)).toBe(3000);
+    expect(Number(o.total)).toBe(5178);
+    expect(o).toMatchObject({ envio_metodo: "envio-en-el-dia", envio_zona: "Centro" });
+    expect(o.envio_detalle).toEqual(antes.envio_detalle);
+  });
+
   it("de tarjeta con cuotas a otra con cuotas: congela las cuotas nuevas", async () => {
     const p = await crear({ cuotas: 3 });
     await cambiarMedioPedido(p.id, dueno, { pagoMetodo: "payway", cuotas: 6, idPriceList: "lista-6", cotizacion: cot(1100) });

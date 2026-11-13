@@ -46,12 +46,12 @@ describe("PagoPayway: datos de tarjeta", () => {
   it("el formulario no envía nada a nuestro servidor por sí mismo (sin action ni fetch con la tarjeta)", () => {
     expect(componente).not.toMatch(/<form[^>]*\baction=/);
     // El único fetch directo del componente es el de la configuración pública.
-    const fetches = componente.match(/\bfetch\(/g) ?? [];
+    const fetches = componente.match(/\bfetch(?:ConToken)?\(/g) ?? [];
     expect(fetches).toHaveLength(1);
   });
 
   it("pide la configuración pública DEL PEDIDO (la cuenta de su sucursal) y manda esa cuenta al cobrar", () => {
-    expect(componente).toContain("fetch(`/api/pagos/payway-config?pedido=${encodeURIComponent(pedidoId)}`)");
+    expect(componente).toContain("fetchConToken(`/api/pagos/payway-config?pedido=${encodeURIComponent(pedidoId)}`)");
     const cobro = componente.slice(componente.indexOf("await enviarCobro("));
     expect(cobro.slice(0, 400)).toMatch(/cuenta: config\.cuenta/);
   });

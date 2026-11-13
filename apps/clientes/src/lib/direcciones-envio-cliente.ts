@@ -16,6 +16,11 @@ export interface FormularioDireccion {
   cp: string;
   referencias: string;
   predeterminada: boolean;
+  /**
+   * Sólo con el envío por zona prendido: token firmado de la sugerencia elegida del autocompletado. El
+   * servidor lo verifica y guarda la ubicación; editar la calle a mano lo descarta.
+   */
+  geoToken?: string;
 }
 
 export const FORMULARIO_VACIO: FormularioDireccion = {
@@ -58,10 +63,13 @@ export function conFacturacion(
 /** Sugerencia elegida en el autocompletado: sólo pisa lo que trae. */
 export function conSugerencia(
   f: FormularioDireccion,
-  s: { calle: string; ciudad: string; provincia: string; cp: string },
+  s: { calle: string; ciudad: string; provincia: string; cp: string; geoToken?: string },
 ): FormularioDireccion {
+  const { geoToken: _anterior, ...sinToken } = f;
+  void _anterior;
   return {
-    ...f,
+    ...sinToken,
+    ...(s.geoToken ? { geoToken: s.geoToken } : {}),
     calle: s.calle || f.calle,
     ciudad: s.ciudad || f.ciudad,
     provincia: provinciaCanonica(s.provincia) ?? f.provincia,

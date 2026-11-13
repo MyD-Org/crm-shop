@@ -24,6 +24,23 @@ export interface Sugerencia {
   ciudad: string;
   provincia: string;
   cp: string;
+  /**
+   * Sólo con el envío por zona prendido: ubicación de la sugerencia y su token firmado por el servidor
+   * (es lo único que el servidor acepta como coordenadas; nunca se mandan lat/lon sueltos).
+   */
+  lat?: number;
+  lon?: number;
+  precision?: "altura" | "calle";
+  geoToken?: string;
+}
+
+/** URL de la búsqueda: con localidad y provincia ya elegidas se las pasa para acotar (el servidor decide si las usa). */
+export function urlGeocode(texto: string, pais: string, ciudad?: string, provincia?: string): string {
+  const base = `/api/geocode?text=${encodeURIComponent(texto)}&pais=${pais}`;
+  const c = ciudad?.trim();
+  if (!c) return base;
+  const p = provincia?.trim();
+  return `${base}&ciudad=${encodeURIComponent(c)}${p ? `&provincia=${encodeURIComponent(p)}` : ""}`;
 }
 
 const DEBOUNCE_MS = 500;
@@ -37,6 +54,8 @@ export function DireccionAutocomplete({
   onCargarAMano,
   suspendido,
   pais = "AR",
+  ciudad,
+  provincia,
   ayuda,
   placeholder = "Escriba la calle y el número…",
   error,
@@ -62,6 +81,9 @@ export function DireccionAutocomplete({
   suspendido?: boolean;
   /** País en el que se buscan las sugerencias (el elegido en el formulario). */
   pais?: Pais;
+  /** Localidad y provincia ya elegidas: acotan la búsqueda de la dirección (envío por zona). */
+  ciudad?: string;
+  provincia?: string;
   /**
    * Línea chica debajo del campo, con el estilo del hint del DS pero admite un
    * link (el hint de Field sólo acepta texto). No se muestra si hay error.
@@ -130,7 +152,7 @@ export function DireccionAutocomplete({
       setBuscando(true);
       try {
         const res = await fetch(
-          `/api/geocode?text=${encodeURIComponent(texto)}&pais=${pais}`,
+          urlGeocode(texto, pais, ciudad, provincia),
           {
             signal: ctrl.signal,
           },

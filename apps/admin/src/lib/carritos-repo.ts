@@ -269,18 +269,24 @@ export async function listarCarritosAbandonados(
         ? sql`WHERE pedido_id IS NOT NULL`
         : sql``
 
-  const [filas, conteo] = await Promise.all([
-    getDb().execute(sql`
+  // Sin JIT: los `jsonb_array_elements` anidados inflan el costo estimado (~800k, por encima de
+  // `jit_above_cost` y de los umbrales de inlining/optimización) aunque los datos sean pocos, y en
+  // un Postgres con LLVM compilar la consulta tardaba ~4 s por llamada. `SET LOCAL` vale sólo para
+  // esta transacción de lectura.
+  const [filas, conteo] = await getDb().transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL jit = off`)
+    const pagina = await tx.execute(sql`
       ${base}
       SELECT * FROM base ${where}
       ORDER BY updated_at DESC, clerk_user_id
       LIMIT ${limit} OFFSET ${start}
-    `),
-    getDb().execute(sql`
+    `)
+    const totales = await tx.execute(sql`
       ${base}
       SELECT count(*)::int AS total, coalesce(sum(monto), 0) AS monto FROM base ${where}
-    `),
-  ])
+    `)
+    return [pagina, totales] as const
+  })
 
   const resumen = (conteo as unknown as { total: number; monto: string | number }[])[0]
   return {

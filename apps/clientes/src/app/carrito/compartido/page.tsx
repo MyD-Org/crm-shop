@@ -40,8 +40,16 @@ function IconoLampara() {
   );
 }
 
-function Linea({ producto, disponible }: { producto: ProductoCompartido; disponible: boolean }) {
-  const { item, precioExhibido } = producto;
+function Linea({
+  producto,
+  disponible,
+  conTransferencia,
+}: {
+  producto: ProductoCompartido;
+  disponible: boolean;
+  conTransferencia: boolean;
+}) {
+  const { item, precioExhibido, precioOtrosMedios } = producto;
   const { nombre } = nombreConMarca(item.name, item.brand ? formatMarca(item.brand) : undefined);
   return (
     <li className="flex items-center gap-4 rounded-[22px] bg-surface p-4 shadow-[var(--shadow-1)]">
@@ -66,7 +74,16 @@ function Linea({ producto, disponible }: { producto: ProductoCompartido; disponi
         </p>
       </div>
       {disponible && (
-        <p className="shrink-0 font-semibold text-text">{fmtPrecio(precioExhibido * item.qty)}</p>
+        <div className="shrink-0 text-right">
+          <p className="font-semibold tabular-nums text-text">{fmtPrecio(precioExhibido * item.qty)}</p>
+          {/* Como en el carrito: el precio es con transferencia y, si con los demás medios es mayor, va debajo. */}
+          {conTransferencia && <p className="text-[12px] leading-tight text-muted">con transferencia</p>}
+          {precioOtrosMedios !== undefined && (
+            <p className="mt-0.5 text-[12px] leading-tight tabular-nums text-muted">
+              {fmtPrecio(precioOtrosMedios * item.qty)} con otros medios
+            </p>
+          )}
+        </div>
       )}
     </li>
   );
@@ -87,7 +104,7 @@ export default async function CarritoCompartidoPage({ searchParams }: Props) {
   const lineas = parsearCompartido(valor((await searchParams).i));
   if (lineas.length === 0) return <SinProductos texto="Este enlace no tiene productos" />;
 
-  const productos = await productosCompartidos(lineas);
+  const { productos, conTransferencia } = await productosCompartidos(lineas);
   const porId = new Map(productos.map((p) => [p.item.id, p]));
   const { disponibles, noDisponibles } = separarDisponibles(productos.map((p) => p.item));
 
@@ -97,6 +114,10 @@ export default async function CarritoCompartidoPage({ searchParams }: Props) {
 
   const total = disponibles.reduce((a, i) => a + (porId.get(i.id)?.precioExhibido ?? 0) * i.qty, 0);
   const unidades = disponibles.reduce((a, i) => a + i.qty, 0);
+  const totalOtrosMedios = disponibles.reduce((a, i) => {
+    const p = porId.get(i.id);
+    return a + (p?.precioOtrosMedios ?? p?.precioExhibido ?? 0) * i.qty;
+  }, 0);
 
   return (
     <main className="mx-auto w-full max-w-contenido flex-1 px-4 pb-16 pt-6 lg:pt-8">
@@ -111,7 +132,7 @@ export default async function CarritoCompartidoPage({ searchParams }: Props) {
         <div className="flex flex-col gap-6">
           <ul className="flex flex-col gap-3">
             {disponibles.map((i) => (
-              <Linea key={i.id} producto={porId.get(i.id)!} disponible />
+              <Linea key={i.id} producto={porId.get(i.id)!} disponible conTransferencia={conTransferencia} />
             ))}
           </ul>
 
@@ -124,7 +145,7 @@ export default async function CarritoCompartidoPage({ searchParams }: Props) {
               </h2>
               <ul className="flex flex-col gap-3 opacity-70">
                 {noDisponibles.map((i) => (
-                  <Linea key={i.id} producto={porId.get(i.id)!} disponible={false} />
+                  <Linea key={i.id} producto={porId.get(i.id)!} disponible={false} conTransferencia={false} />
                 ))}
               </ul>
             </section>
@@ -132,12 +153,18 @@ export default async function CarritoCompartidoPage({ searchParams }: Props) {
         </div>
 
         <aside className="h-fit rounded-[20px] border border-border bg-surface p-5 lg:sticky lg:top-24 lg:p-6">
+          <p className="text-sm text-muted">
+            {unidades} {unidades === 1 ? "unidad" : "unidades"}
+          </p>
           <div className="mb-1 flex items-baseline justify-between gap-4">
-            <span className="text-sm text-muted">
-              {unidades} {unidades === 1 ? "unidad" : "unidades"}
-            </span>
-            <span className="text-xl font-bold text-text">{fmtPrecio(total)}</span>
+            <span className="font-bold text-text">{conTransferencia ? "Total con transferencia" : "Total"}</span>
+            <span className="text-xl font-bold tabular-nums text-text">{fmtPrecio(total)}</span>
           </div>
+          {conTransferencia && totalOtrosMedios > total && (
+            <p className="mb-1 text-right text-[13px] text-muted">
+              Con otros medios de pago: <span className="tabular-nums">{fmtPrecio(totalOtrosMedios)}</span>
+            </p>
+          )}
           <p className="mb-4 text-xs text-muted">Total estimado. El precio y el stock se confirman en el carrito.</p>
           <CargarCompartido items={disponibles} />
         </aside>

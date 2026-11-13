@@ -633,7 +633,8 @@ function EstadoAcciones({
   const idx = pasos.indexOf(pedido.estado)
   const steps: StepItem[] = pasos.map((e, i) => ({
     label: ESTADO_PEDIDO_LABEL[e],
-    state: i < idx ? "done" : i === idx ? "current" : "pending",
+    // El último paso (Entregado) no tiene siguiente: se muestra terminado, no "en curso".
+    state: i < idx || (i === idx && i === pasos.length - 1) ? "done" : i === idx ? "current" : "pending",
   }))
   const siguiente = siguientePaso(pedido.estado, entregaTipo)
   const tieneFactura = pedido.factura !== null

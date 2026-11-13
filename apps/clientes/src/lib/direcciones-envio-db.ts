@@ -62,6 +62,37 @@ function camposEditables(datos: DatosDireccion) {
   };
 }
 
+/**
+ * Lo que el envío por zona necesita de una dirección guardada del usuario: su ubicación verificada y
+ * los datos con los que se arma el destino. Una ajena o inexistente da `null` (como el resto de este
+ * archivo). Las coordenadas no salen por ninguna otra lectura: sólo las lee el servidor para cotizar.
+ */
+export async function direccionParaEnvio(
+  clerkUserId: string,
+  id: string,
+): Promise<{
+  calle: string;
+  ciudad: string;
+  provincia: string | null;
+  cp: string | null;
+  lat: number | null;
+  lon: number | null;
+} | null> {
+  const [fila] = await getDb()
+    .select({ calle: t.calle, ciudad: t.ciudad, provincia: t.provincia, cp: t.cp, lat: t.lat, lon: t.lon })
+    .from(t)
+    .where(laSuya(clerkUserId, id))
+    .limit(1);
+  if (!fila) return null;
+  const lat = fila.lat === null ? null : Number(fila.lat);
+  const lon = fila.lon === null ? null : Number(fila.lon);
+  return {
+    ...fila,
+    lat: lat !== null && lon !== null && Number.isFinite(lat) && Number.isFinite(lon) ? lat : null,
+    lon: lat !== null && lon !== null && Number.isFinite(lat) && Number.isFinite(lon) ? lon : null,
+  };
+}
+
 /** Desmarca la predeterminada actual del usuario (salvo `excepto`). */
 async function desmarcarPredeterminada(tx: Tx | Db, clerkUserId: string, excepto?: string) {
   await tx

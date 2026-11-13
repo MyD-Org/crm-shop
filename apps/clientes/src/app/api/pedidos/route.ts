@@ -4,8 +4,12 @@ import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { variantesSelector } from "@/lib/variantes-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS, type Cotizacion } from "@/lib/cotizacion";
-import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
+import type { EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
+import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
+import { leerDestinoBody, origenDeEnvio, planEnvio, resolverDestinoEnvio } from "@/lib/envio-plan";
+import { EnvioCambioError } from "@/lib/envio-snapshot";
+import { direccionParaEnvio } from "@/lib/direcciones-envio-db";
 import { provinciaCanonica } from "@/lib/provincias";
 import { crearPedido, getPedidoInvitadoPorClave, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { marcarModalidadesCambiadas, marcarStockCambiado } from "@/lib/cache-invalidar";
@@ -115,6 +119,22 @@ interface BodyPedido {
    * siempre, que siguen recibiendo los clientes que no lo mandan).
    */
   flujoVisto?: unknown;
+  /**
+   * Envío por zona (flag `envio-por-zona`): ubicación de la dirección. `direccionId` = dirección guardada
+   * del comprador (sus coordenadas las lee el servidor); `entregaGeoToken` = token firmado de la sugerencia
+   * elegida, válido sólo si `entregaDireccion` es la calle firmada; `destino` = { cp, localidad, georefId }.
+   * Cualquier lat/lon crudo se ignora.
+   */
+  direccionId?: unknown;
+  entregaGeoToken?: unknown;
+  destino?: unknown;
+  /**
+   * El comprador eligió "Continuar con envío a coordinar" porque no se pudo ubicar su dirección: costo 0,
+   * sin método. Sólo se respeta cuando la dirección quedó sin ubicar (`direccion_sin_ubicar`).
+   */
+  envioACoordinar?: unknown;
+  /** Costo de envío que el comprador vio: si cambia, el 409 es `envio_cambio` y no `precio_cambio`. */
+  costoEnvioVisto?: unknown;
   /**
    * Sólo compra de invitado (sin sesión, flag `compra-invitado`): ver `lib/invitado-guarda.ts`.
    * Además de este campo llegan `email` / `emailConfirmacion` (el mismo, escrito dos veces), `turnstile`
@@ -274,7 +294,9 @@ export async function POST(req: Request) {
   // La configuración se relee SIN caché: la UI puede mostrar lo que había hace minutos, el
   // servidor decide con lo de ahora. Un pedido a domicilio NUNCA se rechaza por no ser gratis
   // (se crea sin cobrar envío, el costo se coordina); sólo si el admin apagó el envío.
-  const configEnvio = aDomicilio ? await leerConfigEnvio() : null;
+  // Flag `envio-por-zona`: sólo prendido se leen (y se aplican) los métodos de envío del CRM.
+  const zonaActiva = aDomicilio ? await envioPorZonaHabilitado() : false;
+  const configEnvio = aDomicilio ? await leerConfigEnvio(undefined, { conMetodos: zonaActiva }) : null;
   if (aDomicilio && configEnvio && !configEnvio.domicilioActivo) {
     return NextResponse.json(
       {
@@ -468,15 +490,19 @@ export async function POST(req: Request) {
     // Sin modalidades activas ninguna línea puede ir a pedido: no se consulta el motor (la cotización
     // lee la misma lista cacheada, así que el resultado es idéntico).
     let aPedido: Set<string> | undefined;
-    if (disp && sucursalEntrada && (await modalidadesActivas()).length > 0) {
+    let disponibilidad: Awaited<ReturnType<typeof disponibilidadParaMostrar>> = null;
+    // Envío por zona con condición de origen: la disponibilidad dice si hay líneas a traer de otra sucursal.
+    const necesitaOrigen = Boolean(configEnvio?.metodos?.some((m) => m.sucursalOrigen));
+    const hayModalidades = disp && sucursalEntrada ? (await modalidadesActivas()).length > 0 : false;
+    if (disp && sucursalEntrada && (hayModalidades || necesitaOrigen)) {
       try {
-        const disponibilidad = await disponibilidadParaMostrar(
+        disponibilidad = await disponibilidadParaMostrar(
           lineas.map((l) => l.id),
           disp,
           Object.fromEntries(lineas.map((l) => [l.id, l.qty])),
           agrupar,
         );
-        if (disponibilidad) {
+        if (disponibilidad && hayModalidades) {
           const local =
             entregaTipo === "retiro"
               ? (sucursalEntrada.sucursalRetiro ?? localDeRetiro(sucursalEntrada, await sucursalesCacheadas()))
@@ -494,6 +520,48 @@ export async function POST(req: Request) {
     // que muestran las cards, como en el carrito.
     // Campañas de precios activas AHORA, leídas sin caché (lo que cobra va siempre en vivo).
     const campanias = await campaniasActivasEn(new Date());
+    // Envío por zona: destino con coordenadas VERIFICADAS (dirección guardada o token firmado cuya calle es
+    // `entregaDireccion`) y plan del costo. Sin métodos (flag apagado) no se lee nada y el plan no cobra.
+    const conMetodos = aDomicilio && (configEnvio?.metodos?.length ?? 0) > 0;
+    const destinoEnvio = conMetodos
+      ? await resolverDestinoEnvio({
+          destino: leerDestinoBody({
+            ...(typeof body.destino === "object" && body.destino !== null && !Array.isArray(body.destino) ? body.destino : {}),
+            direccionId: body.direccionId,
+            geoToken: body.entregaGeoToken,
+            calle: entregaDireccion,
+            localidad: entregaCiudad,
+          }),
+          provincia: entregaProvincia,
+          clerkUserId: clerkUserId ?? null,
+          leerDireccion: direccionParaEnvio,
+        })
+      : { provinciaClave: claveProvincia(entregaProvincia) || null };
+    const origenEnvio = origenDeEnvio(disp, disponibilidad);
+    const planBase = planEnvio({
+      config: configEnvio ?? { domicilioActivo: true, gratis: null },
+      provincia: entregaProvincia,
+      entregaTipo,
+      destino: destinoEnvio,
+      origen: origenEnvio,
+    });
+    // La dirección es de una localidad que el método atiende pero no se pudo ubicar: hay que elegir una
+    // dirección de la lista o, explícitamente, el envío a coordinar (así Nominatim caído no frena ventas).
+    const envioACoordinar = planBase.sinUbicar && body.envioACoordinar === true;
+    if (planBase.sinUbicar && !envioACoordinar) {
+      return NextResponse.json(
+        {
+          error: "Seleccione su dirección de la lista para calcular el envío en el día.",
+          motivo: "direccion_sin_ubicar",
+        },
+        { status: 409 },
+      );
+    }
+    // "Envío a coordinar" explícito: se evalúa como si no hubiera métodos (costo 0, sin método ni snapshot).
+    const configEfectiva = envioACoordinar && configEnvio ? { ...configEnvio, metodos: [] } : configEnvio;
+    const plan = envioACoordinar
+      ? planEnvio({ config: configEfectiva ?? { domicilioActivo: true, gratis: null }, provincia: entregaProvincia, entregaTipo, destino: destinoEnvio, origen: origenEnvio })
+      : planBase;
     // Cupón: se vuelve a validar acá con la cuenta (la validación del carrito no vale de nada) y se
     // aplica con las mismas reglas y el mismo contexto que `/api/carrito/cotizar`. Uno que no aplica
     // no bloquea: el pedido se cotiza sin él y `totalVisto` decide.
@@ -530,6 +598,8 @@ export async function POST(req: Request) {
         : { idListaAConfirmar: listaAConfirmar(sinProcesadoresNoConfigurados(mediosCrm)) }),
       ...(campanias.length ? { campanias } : {}),
       ...(cuponParaCotizar ? { cupon: cuponParaCotizar, entregaProvincia } : {}),
+      ...(plan.costoEnvioPara ? { costoEnvioPara: plan.costoEnvioPara } : {}),
+      ...(plan.envioGratisAplica ? {} : { envioGratisAplica: false }),
     });
     if (!resuelto.ok) {
       if (resuelto.motivo === "forma_no_disponible") {
@@ -617,6 +687,19 @@ export async function POST(req: Request) {
     // Un reintento idempotente ya volvió arriba, así que no llega acá.
     const totalVisto = typeof body.totalVisto === "number" && Number.isFinite(body.totalVisto) ? body.totalVisto : null;
     if (totalVisto !== null && Math.abs(totalVisto - cotizacion.total) >= 0.005) {
+      // Si lo que cambió es el costo de envío (dirección, zona o origen), el motivo es `envio_cambio`.
+      const costoVisto = typeof body.costoEnvioVisto === "number" && Number.isFinite(body.costoEnvioVisto) ? body.costoEnvioVisto : null;
+      if (costoVisto !== null && Math.abs(costoVisto - cotizacion.costoEnvio) >= 0.005) {
+        return NextResponse.json(
+          {
+            error: "El costo de envío cambió según su dirección. Revise el nuevo total antes de confirmar.",
+            motivo: "envio_cambio",
+            totalNuevo: cotizacion.total,
+            cotizacion,
+          },
+          { status: 409 },
+        );
+      }
       return NextResponse.json(
         {
           error: "El precio de algunos productos cambió. Revise el nuevo total antes de confirmar.",
@@ -631,11 +714,19 @@ export async function POST(req: Request) {
     // `null` = retiro (no aplica); true/false = envío a domicilio gratis o a coordinar. La regla de la
     // tienda se mide sobre el subtotal ANTES del cupón (un % nunca le quita el envío gratis que ya
     // tenía) o lo da el cupón (ya validado para esta entrega y zona).
-    const envioTienda =
-      aDomicilio && configEnvio
-        ? evaluarEnvio(cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal, entregaProvincia, configEnvio).gratis
-        : null;
+    const subtotalAntesDelCupon = cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal;
+    const envioTienda = aDomicilio && configEnvio ? plan.evaluar(subtotalAntesDelCupon, false).gratis : null;
     const envioGratis = envioTienda === null ? null : envioTienda || cotizacion.cupon?.envioGratis === true;
+    // Envío por zona resuelto (con el cupón de envío gratis si lo anula): se congela en el pedido.
+    const envioResuelto = aDomicilio && configEnvio ? plan.evaluar(subtotalAntesDelCupon, cotizacion.cupon?.envioGratis === true) : null;
+    const metodoEnvio = envioResuelto?.metodo;
+    const envioZona = metodoEnvio
+      ? {
+          resultado: metodoEnvio,
+          punto: destinoEnvio.punto ? { lat: destinoEnvio.punto.lat, lon: destinoEnvio.punto.lon } : null,
+          sucursalOrigen: configEnvio?.metodos?.find((m) => m.id === metodoEnvio.metodoId)?.sucursalOrigen ?? null,
+        }
+      : undefined;
 
 
     // Para revisión de un operador antes de facturar, con el motivo más
@@ -691,6 +782,7 @@ export async function POST(req: Request) {
           requiereRevision: motivoRevision !== null,
           motivoRevision,
           idempotencyKey: idempotencyKey || undefined,
+          ...(envioZona ? { envioZona } : {}),
           sucursalEntrada,
           disponibilidadSucursal: disp !== undefined,
           soloVisibles,
@@ -709,6 +801,32 @@ export async function POST(req: Request) {
         const recotizada = await cotizar(lineas, opcionesCotizar);
         return NextResponse.json(
           { error: mensaje, motivo: "cupon", cotizacion: { ...recotizada, cupon: null, cuponError: { motivo: err.motivo, mensaje } } },
+          { status: 409 },
+        );
+      }
+      if (err instanceof EnvioCambioError) {
+        // La sucursal que despacha (o las líneas a traer) cambió entre la cotización y el pedido: el método
+        // ya no aplica con ese origen. Nada se creó; se recotiza con el origen real para mostrar el total nuevo.
+        const planNuevo = planEnvio({
+          config: configEfectiva ?? { domicilioActivo: true, gratis: null },
+          provincia: entregaProvincia,
+          entregaTipo,
+          destino: destinoEnvio,
+          origen: err.origen,
+        });
+        const { costoEnvioPara: _viejo, ...sinCosto } = opcionesCotizar;
+        void _viejo;
+        const recotizada = await cotizar(lineas, {
+          ...sinCosto,
+          ...(planNuevo.costoEnvioPara ? { costoEnvioPara: planNuevo.costoEnvioPara } : {}),
+        });
+        return NextResponse.json(
+          {
+            error: "El costo de envío cambió según su dirección. Revise el nuevo total antes de confirmar.",
+            motivo: "envio_cambio",
+            totalNuevo: recotizada.total,
+            cotizacion: recotizada,
+          },
           { status: 409 },
         );
       }

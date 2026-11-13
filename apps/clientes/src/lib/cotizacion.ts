@@ -41,7 +41,7 @@ import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { joinOverlay, nombreExhibidoAgrupadoSql, nombreExhibidoSql } from "./nombre-exhibido";
 import { nombreConOpcion } from "./nombre-linea";
-import { costoEnvio, type EntregaTipo } from "./envio";
+import type { EntregaTipo } from "./envio";
 import { preciosPrivados } from "./precios-privados-repo";
 import { MAX_LINEAS, QTY_MAX } from "./carrito-cliente";
 import {
@@ -454,6 +454,13 @@ export async function cotizar(
     campanias?: readonly CampaniaActiva[];
     /** Recotizar un pedido existente: sus propias unidades no cuentan contra el límite de una campaña. */
     excluirPedidoId?: string;
+    /**
+     * Costo del envío por zona (change `envio-por-zona-con-tarifa`, flag `envio-por-zona`): recibe el
+     * subtotal SIN IVA de esta cotización y devuelve lo que se suma al total (con IVA). UN solo punto de
+     * entrada: carrito, totales por opción, cuotas y pedido lo heredan por `opcionesCotizar`. Ausente =
+     * el envío no se cobra online (0), como siempre.
+     */
+    costoEnvioPara?: (subtotalSinIva: number) => number;
   } = {},
 ): Promise<Cotizacion> {
   const items = await leerEspejo(
@@ -496,9 +503,11 @@ export async function cotizar(
   });
   if (quedan?.size) marcarExcesoDeUnidades(lineas, quedan);
 
+  const sinEnvio = totalizar(lineas, 0);
+  const costo = opts.costoEnvioPara ? opts.costoEnvioPara(sinEnvio.subtotal) : 0;
   return {
     lineas,
-    ...totalizar(lineas, costoEnvio()),
+    ...(costo > 0 ? totalizar(lineas, costo) : sinEnvio),
     listaPrivada: Boolean(opts.idListaPrivada),
     flujo: flujoDelPedido(lineas),
   };

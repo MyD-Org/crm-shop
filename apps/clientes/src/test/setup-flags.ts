@@ -14,6 +14,7 @@ vi.mock("@/flags", () => ({
   variantesSelectorFlag: async () => estadoFlags()["variantes-selector"],
   avisoReingresoFlag: async () => estadoFlags()["aviso-reingreso"],
   compraInvitadoFlag: async () => estadoFlags()["compra-invitado"],
+  envioPorZonaFlag: async () => estadoFlags()["envio-por-zona"],
   mercadopagoFlag: Object.assign(async () => estadoFlags().mercadopago, {
     run: async () => estadoFlags().mercadopago,
   }),

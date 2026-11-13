@@ -39,6 +39,11 @@ export interface DisponibilidadParaMostrar {
   productos: Record<string, DisponibilidadVista>;
   /** Locales que aceptan retiro, por `orden`, con el nombre para el texto. */
   locales: LocalDisponibilidad[];
+  /**
+   * Ids de las líneas que, con envío, se traen de otra sucursal. Lo usa el método de envío por zona
+   * (change `envio-por-zona-con-tarifa`) para saber si el origen es una sola sucursal.
+   */
+  lineasATraer: string[];
 }
 
 /**
@@ -79,7 +84,7 @@ export async function disponibilidadParaMostrar(
         excepciones: s.excepciones,
         whatsapp: s.whatsapp,
       }));
-    return { productos: r.productos, locales };
+    return { productos: r.productos, locales, lineasATraer: r.lineasATraer };
   } catch (err) {
     console.error(
       "[disponibilidad] no se pudo leer la disponibilidad por sucursal:",

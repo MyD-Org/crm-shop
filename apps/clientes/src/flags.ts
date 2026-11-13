@@ -20,6 +20,14 @@ export const cuotasCobroFlag = flag<boolean>({
   adapter: vercelAdapter,
 });
 
+export const envioPorZonaFlag = flag<boolean>({
+  key: "envio-por-zona",
+  description:
+    "Envío por zona con tarifa (método 'Envío en el día'): el Shop lee los métodos de envío del CRM, cotiza el envío por la dirección y lo suma al total. Apagado: el envío a domicilio queda a coordinar, como siempre (no prender antes de que el CRM facture la línea Envío)",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});
+
 export const catalogoSoloVisiblesFlag = flag<boolean>({
   key: "catalogo-solo-visibles",
   description:

@@ -20,6 +20,7 @@ import type { ReglaAplicada } from "../lib/sucursales";
 import type { CuentaPagoSnapshot } from "../lib/cuentas-bancarias";
 import type { SnapshotVentaSinStock } from "../lib/venta-sin-stock";
 import type { CuponPedido } from "../lib/cupones/tipos";
+import type { EnvioDetalle } from "../lib/envio-snapshot";
 
 /**
  * Todas las tablas del Shop viven en el esquema `shop` de la base del CRM.
@@ -437,6 +438,23 @@ export const orders = shop.table(
      * nunca del request. Los mails del pedido linkean a este sitio. null = pedido anterior.
      */
     sitioOrigen: text("sitio_origen"),
+    // --- Envío por zona (migración 0046, change `envio-por-zona-con-tarifa`) ---
+    // Snapshot del método "Envío en el día" con el que se cotizó el pedido. Todo NULL = retiro, envío
+    // a coordinar o pedido anterior. Cambiar el método en el CRM después no altera un pedido creado.
+    /** Slug del método de envío (`metodos_envio.slug`). */
+    envioMetodo: text("envio_metodo"),
+    /** Nombre de la zona de tarifa que resolvió la dirección. */
+    envioZona: text("envio_zona"),
+    /** Promesa de entrega mostrada al comprador al pedir (estimación, no compromiso). */
+    envioPromesa: text("envio_promesa"),
+    /** Fecha estimada de entrega al crear el pedido (fecha civil argentina). */
+    envioEntregaEstimada: date("envio_entrega_estimada", { mode: "string" }),
+    /** Cuándo se confirmó el pedido (primer evento entre pago aprobado, pago manual y paso a confirmado). */
+    envioConfirmadoEn: timestamp("envio_confirmado_en", { withTimezone: true }),
+    /** Fecha de entrega calculada con el instante de confirmación y el horario congelado. */
+    envioEntregaConfirmada: date("envio_entrega_confirmada", { mode: "string" }),
+    /** Foto completa del envío (ver `EnvioDetalle` en lib/envio-snapshot.ts). Coordenadas = dato personal. */
+    envioDetalle: jsonb("envio_detalle").$type<EnvioDetalle>(),
     /**
      * Pedido hecho como invitado, sin cuenta (migración 0045, change `compra-como-invitado`). El
      * invitado se autoriza con un token firmado (`lib/pedido-token.ts`), no con una sesión. Un pedido
@@ -594,6 +612,10 @@ export const orders = shop.table(
     check(
       "orders_sitio_origen_check",
       sql`${t.sitioOrigen} is null or ${t.sitioOrigen} ~ '^https?://[^/[:space:]]+$'`,
+    ),
+    check(
+      "orders_envio_confirmado_check",
+      sql`${t.envioEntregaConfirmada} is null or ${t.envioConfirmadoEn} is not null`,
     ),
     // Cancelado ⇒ motivo. Vale para el CRM y para el Shop por igual.
     check(
@@ -1036,10 +1058,21 @@ export const direccionesEnvio = shop.table(
     /** Indicaciones para quien entrega. */
     referencias: text("referencias"),
     predeterminada: boolean("predeterminada").notNull().default(false),
+    /**
+     * Ubicación verificada de la dirección (migración 0046, change `envio-por-zona-con-tarifa`):
+     * sólo se escribe a partir de un `geoToken` firmado por el servidor (`lib/geo-token.ts`), nunca de
+     * coordenadas crudas. Ambas o ninguna. Dato personal: nunca en logs, URLs ni analytics.
+     */
+    lat: numeric("lat", { precision: 9, scale: 6 }),
+    lon: numeric("lon", { precision: 9, scale: 6 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check(
+      "dir_envio_lat_lon_check",
+      sql`(${t.lat} is null and ${t.lon} is null) or (${t.lat} is not null and ${t.lon} is not null and ${t.lat} between -56 and -21 and ${t.lon} between -74 and -53)`,
+    ),
     index("dir_envio_tenant_usuario").on(t.tenantId, t.clerkUserId),
     uniqueIndex("dir_envio_una_predeterminada")
       .on(t.tenantId, t.clerkUserId)

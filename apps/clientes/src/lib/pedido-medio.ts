@@ -28,6 +28,8 @@ export interface OpcionesCotizarMedio {
    * entrega del pedido. Viaja a las recotizaciones del 409 para que marquen las mismas líneas.
    */
   aPedido?: ReadonlySet<string>;
+  /** Costo del envío por zona (ver `cotizar`): viaja a toda recotización con estas opciones. */
+  costoEnvioPara?: (subtotalSinIva: number) => number;
 }
 
 export type ResultadoMedio =
@@ -90,10 +92,18 @@ export async function cotizarConMedio(a: {
   cupon?: CuponParaCotizar;
   /** Provincia de entrega (envío gratis del cupón por zona). */
   entregaProvincia?: string | null;
+  /**
+   * Costo del envío por zona (flag `envio-por-zona`, `lib/envio-plan.ts`): UN punto de entrada para todas
+   * las cotizaciones de este cálculo (la del medio, la base de las cuotas, el mínimo del cupón).
+   * Ausente = el envío no se cobra online, como siempre.
+   */
+  costoEnvioPara?: (subtotalSinIva: number) => number;
+  /** ¿El envío resuelto admite que un cupón de envío gratis anule la tarifa? Ausente = sí. */
+  envioGratisAplica?: boolean;
 }): Promise<ResultadoMedio> {
   const { lineas, entregaTipo, pagoMetodo, mediosCrm } = a;
   const cotizarEstas = async (o: Parameters<typeof cotizar>[1]) => {
-    const c = await cotizar(lineas, o);
+    const c = await cotizar(lineas, a.costoEnvioPara ? { ...o, costoEnvioPara: a.costoEnvioPara } : o);
     return a.ignorarStock ? ignorarProblemasDeStock(c) : c;
   };
   // Campañas de precios y pedido a excluir del conteo de unidades: viajan a cada cotización.
@@ -154,6 +164,7 @@ export async function cotizarConMedio(a: {
     soloVisibles: a.soloVisibles,
     ...(a.agrupar ? { agrupar: true } : {}),
     ...(a.aPedido ? { aPedido: a.aPedido } : {}),
+    ...(a.costoEnvioPara ? { costoEnvioPara: a.costoEnvioPara } : {}),
     ...conCampanias,
   };
   const aplicarCupon = a.cupon
@@ -161,7 +172,12 @@ export async function cotizarConMedio(a: {
         cupon: a.cupon,
         entrega: { tipo: entregaTipo, provincia: a.entregaProvincia ?? null },
         nombresMedios: nombresDeMedios(mediosCrm),
-        totalListaGeneral: async () => (await cotizarEstas({ ...opcionesCotizar, idListaMedio: undefined })).total,
+        // El mínimo del cupón se mide SIN el envío.
+        totalListaGeneral: async () => {
+          const g = await cotizarEstas({ ...opcionesCotizar, idListaMedio: undefined });
+          return g.total - g.costoEnvio;
+        },
+        ...(a.envioGratisAplica === false ? { envioGratisAplica: false } : {}),
       })
     : null;
   const cotizacionSinCupon = await cotizarEstas(opcionesCotizar);

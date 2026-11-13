@@ -134,6 +134,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         // Decisión C: rigen las campañas activas cuando se creó el pedido.
         ...(campanias.length ? { campanias } : {}),
         excluirPedidoId: id,
+        // El envío es el congelado en el pedido (con costo, las cuotas incluyen el envío como el total).
+        ...(pedido.costoEnvio > 0 ? { costoEnvioPara: () => pedido.costoEnvio } : {}),
       },
       // El pedido ya reserva sus unidades.
       ignorarStock: true,

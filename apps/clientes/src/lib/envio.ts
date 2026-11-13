@@ -13,6 +13,15 @@
 import { PROVINCIAS_AR } from "./provincias";
 import { claveProvincia } from "./sucursales";
 import { fmtPesosEnteros } from "./format";
+import { claveTexto } from "./texto-clave";
+import {
+  cotizarMetodo,
+  estimarPorLocalidad,
+  type ContextoCotizacion,
+  type DestinoEnvio,
+  type MetodoEnvio,
+  type ResultadoMetodo,
+} from "./envio-zona";
 
 export type EntregaTipo = "retiro" | "envio";
 export type PagoMetodo =
@@ -85,6 +94,12 @@ export interface ConfigEnvio {
     /** Sin impuestos; null = sin mínimo. */
     minimo: number | null;
   };
+  /**
+   * Métodos de envío por zona del CRM (change `envio-por-zona-con-tarifa`). Ausente o vacío = no hay
+   * (flag `envio-por-zona` apagado, tablas sin migrar o ninguno cargado): el envío a domicilio queda como
+   * siempre, con costo a coordinar o gratis.
+   */
+  metodos?: MetodoEnvio[];
 }
 
 /**
@@ -109,6 +124,46 @@ export interface EnvioEvaluado {
   motivo: MotivoEnvio | null;
   /** Lo que falta para el envío gratis (sin impuestos); 0 si no aplica. */
   faltante: number;
+  /**
+   * Costo del envío que se SUMA al total (con IVA), sólo si un método por zona lo resolvió. Ausente =
+   * no se cobra envío online (gratis o a coordinar fuera de línea): se lee como 0.
+   */
+  costo?: number;
+  /** El método por zona que resolvió el envío (zona, tarifa, regla, horario, ítem de Alegra). */
+  metodo?: ResultadoMetodo;
+  /**
+   * El destino está en una localidad que atiende un método pero falta la ubicación exacta de la
+   * dirección: el costo sale a coordinar y el pedido pide elegir una dirección de la lista (o elegir
+   * explícitamente "envío a coordinar").
+   */
+  sinUbicar?: true;
+}
+
+/** Lo que `evaluarEnvio` necesita, además de la regla de la tienda, para resolver un método por zona. */
+export interface ExtraEnvio {
+  /** Destino con las coordenadas YA verificadas por el servidor. Sin destino no se resuelve ningún método. */
+  destino?: DestinoEnvio | null;
+  /** Sucursal que despacha y si hay líneas a traer; ausente = no se conoce (la condición de origen se ignora). */
+  origen?: ContextoCotizacion["origen"];
+  /** Hay un cupón de envío gratis aplicable. */
+  gratisCupon?: boolean;
+}
+
+const normalizarDestinoLocalidad = (d: DestinoEnvio) => (d.localidad ? claveTexto(d.localidad) : "");
+
+/**
+ * ¿Algún método activo podría aplicar a este destino sólo por su localidad (sin la ubicación exacta)?
+ * Es la condición de `direccion_sin_ubicar`: la localidad está entre las que atiende el método y alguna
+ * zona la toca. Una localidad que ningún método atiende no pide ubicación: queda a coordinar.
+ */
+function podriaAplicarPorLocalidad(metodos: MetodoEnvio[], d: DestinoEnvio, origen: ExtraEnvio["origen"]): boolean {
+  const nombre = normalizarDestinoLocalidad(d);
+  return metodos.some((m) => {
+    if (!m.activo || !d.provinciaClave || d.provinciaClave !== m.provinciaClave) return false;
+    if (m.sucursalOrigen && origen && (origen.sucursal !== m.sucursalOrigen || origen.conTraslado)) return false;
+    const loc = m.localidades?.find((l) => (d.georefId && l.georefId === d.georefId) || (nombre && l.nombreNorm === nombre));
+    return loc ? estimarPorLocalidad(m, loc) !== null : false;
+  });
 }
 
 /**
@@ -118,6 +173,31 @@ export interface EnvioEvaluado {
  * normaliza con `claveProvincia`).
  */
 export function evaluarEnvio(
+  subtotalSinIva: number,
+  provincia: string | null | undefined,
+  config: ConfigEnvio,
+  extra?: ExtraEnvio,
+): EnvioEvaluado {
+  const base = evaluarEnvioTienda(subtotalSinIva, provincia, config);
+  const destino = extra?.destino;
+  const metodos = config.metodos;
+  if (!destino || !metodos?.length || !base.disponible) return base;
+  const ordenados = [...metodos].sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre));
+  for (const m of ordenados) {
+    const r = cotizarMetodo(m, destino, {
+      origen: extra?.origen ?? null,
+      subtotalSinIva,
+      gratisTienda: base.gratis,
+      gratisCupon: extra?.gratisCupon === true,
+    });
+    if (r) return { disponible: true, gratis: r.gratis, aCoordinar: false, motivo: null, faltante: 0, costo: r.costo, metodo: r };
+  }
+  if (!destino.punto && podriaAplicarPorLocalidad(ordenados, destino, extra?.origen)) return { ...base, sinUbicar: true };
+  return base;
+}
+
+/** La regla de la tienda sola (envío gratis con alcance y mínimo), sin métodos por zona. */
+function evaluarEnvioTienda(
   subtotalSinIva: number,
   provincia: string | null | undefined,
   config: ConfigEnvio,
@@ -220,9 +300,4 @@ export function textoEnvioFicha(
   }
   if (minimo) return `Gratis desde ${minimo} · si no, costo a coordinar`;
   return localidad ? `Gratis a ${localidad}` : "Envío gratis";
-}
-
-/** Costo del envío online. Siempre 0: si es gratis no se cobra y si no, el costo se coordina fuera de línea. */
-export function costoEnvio(): 0 {
-  return 0;
 }

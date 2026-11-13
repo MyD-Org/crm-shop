@@ -67,12 +67,14 @@ export function aplicarCupon(c: Cotizacion, p: PromocionCupon, ctx: ContextoCupo
   const pctAplicado = p.pct !== null && c.lineas.some(alcanza);
   const envioGratis =
     p.envioGratis &&
+    ctx.envioGratisAplica !== false &&
     ctx.entrega.tipo === "envio" &&
     (p.provinciasEnvio === null || p.provinciasEnvio.includes(claveProvincia(ctx.entrega.provincia)));
   if (!pctAplicado && !envioGratis) return error(p.pct !== null ? "todo_en_campania" : "solo_envio");
 
   const lineas = pctAplicado ? c.lineas.map((l) => (alcanza(l) ? descontar(l, p.pct!) : l)) : c.lineas;
-  const totales = totalizar(lineas, c.costoEnvio);
+  // El envío gratis del cupón anula la tarifa por zona (si el método lo admite); si no, el costo queda.
+  const totales = totalizar(lineas, envioGratis ? 0 : c.costoEnvio);
   const restringePago = Boolean(p.medios || p.formas);
   const avisos = [
     ...(!ctx.verificado ? [AVISO_INVITADO] : []),
@@ -87,7 +89,8 @@ export function aplicarCupon(c: Cotizacion, p: PromocionCupon, ctx: ContextoCupo
     pct: p.pct,
     pctAplicado,
     envioGratis,
-    descuento: redondear(c.total - totales.total),
+    // El descuento se mide SIN el envío: lo que el cupón rebajó de las líneas, no la tarifa que anuló.
+    descuento: redondear(c.total - c.costoEnvio - (totales.total - totales.costoEnvio)),
     subtotalAntes: c.subtotal,
     condiciones: p.condiciones,
     venceEn: p.venceEn,

@@ -146,6 +146,19 @@ export const shopOrders = shop.table("orders", {
   pagoCuenta: jsonb("pago_cuenta").$type<Record<string, unknown>>(),
   total: numeric("total", { precision: 14, scale: 2 }).notNull(),
 
+  // --- Envío por zona (0046 del Shop, change `envio-por-zona-con-tarifa`) ---
+  // Snapshot del método "Envío en el día" que escribe el Shop al crear el pedido (todo NULL = retiro,
+  // envío a coordinar o pedido anterior). `envio_confirmado_en` / `envio_entrega_confirmada` los escribe
+  // el primero que confirma (Shop al aprobarse el pago, CRM con pago manual o paso a confirmado).
+  // `envio_detalle` = EnvioDetalle v1 del Shop (apps/clientes/src/lib/envio-snapshot.ts).
+  envioMetodo: text("envio_metodo"),
+  envioZona: text("envio_zona"),
+  envioPromesa: text("envio_promesa"),
+  envioEntregaEstimada: date("envio_entrega_estimada", { mode: "string" }),
+  envioConfirmadoEn: timestamp("envio_confirmado_en", { withTimezone: true }),
+  envioEntregaConfirmada: date("envio_entrega_confirmada", { mode: "string" }),
+  envioDetalle: jsonb("envio_detalle").$type<Record<string, unknown>>(),
+
   // Aclaración que escribió el CLIENTE en el checkout (no confundir con el motivo interno).
   notas: text("notas"),
 

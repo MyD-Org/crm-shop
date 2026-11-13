@@ -9,6 +9,7 @@ describe("fechaEntrega (fixture compartido con el Shop)", () => {
         ...casos.fechas.horario,
         ...("dias" in c ? { dias: c.dias as number[] } : {}),
         ...("margenMin" in c ? { margenMin: c.margenMin as number } : {}),
+        ...("feriados" in c ? { feriados: c.feriados as string[] } : {}),
       }
       expect(fechaEntrega(new Date(c.instante), horario)).toEqual(c.esperado)
     })

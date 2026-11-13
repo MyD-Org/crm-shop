@@ -123,7 +123,17 @@
       { "caso": "jueves 23:30 AR es viernes 02:30 UTC", "instante": "2026-11-13T02:30:00Z", "esperado": { "fecha": "2026-11-13", "mismoDia": false } },
       { "caso": "sólo martes y jueves: martes tarde va al jueves", "dias": [2, 4], "instante": "2026-11-10T15:00:00Z", "esperado": { "fecha": "2026-11-12", "mismoDia": false } },
       { "caso": "sólo martes y jueves: jueves tarde va al martes siguiente", "dias": [2, 4], "instante": "2026-11-12T15:00:00Z", "esperado": { "fecha": "2026-11-17", "mismoDia": false } },
-      { "caso": "cambio de mes", "instante": "2026-10-30T18:00:00Z", "esperado": { "fecha": "2026-11-02", "mismoDia": false } }
+      { "caso": "cambio de mes", "instante": "2026-10-30T18:00:00Z", "esperado": { "fecha": "2026-11-02", "mismoDia": false } },
+      { "caso": "con sábado: sábado 08:00 entra, llega hoy", "dias": [1, 2, 3, 4, 5, 6], "instante": "2026-11-14T11:00:00Z", "esperado": { "fecha": "2026-11-14", "mismoDia": true } },
+      { "caso": "con sábado: sábado 10:00 después del corte pasa al lunes", "dias": [1, 2, 3, 4, 5, 6], "instante": "2026-11-14T13:00:00Z", "esperado": { "fecha": "2026-11-16", "mismoDia": false } },
+      { "caso": "con sábado: viernes tarde llega el sábado", "dias": [1, 2, 3, 4, 5, 6], "instante": "2026-11-13T18:00:00Z", "esperado": { "fecha": "2026-11-14", "mismoDia": false } },
+      { "caso": "con sábado: el domingo sigue sin entregarse, va al lunes", "dias": [1, 2, 3, 4, 5, 6], "instante": "2026-11-15T11:00:00Z", "esperado": { "fecha": "2026-11-16", "mismoDia": false } },
+      { "caso": "feriado un lunes: viernes tarde pasa al martes", "feriados": ["2026-11-16"], "instante": "2026-11-13T18:00:00Z", "esperado": { "fecha": "2026-11-17", "mismoDia": false } },
+      { "caso": "feriado hoy: el lunes feriado temprano tampoco entra, pasa al martes", "feriados": ["2026-11-16"], "instante": "2026-11-16T11:00:00Z", "esperado": { "fecha": "2026-11-17", "mismoDia": false } },
+      { "caso": "feriado seguido de domingo (viernes feriado, sábado sin entrega): jueves tarde pasa al lunes", "feriados": ["2026-11-13"], "instante": "2026-11-12T18:00:00Z", "esperado": { "fecha": "2026-11-16", "mismoDia": false } },
+      { "caso": "sábado feriado seguido de domingo: viernes tarde pasa al lunes", "dias": [1, 2, 3, 4, 5, 6], "feriados": ["2026-11-14"], "instante": "2026-11-13T18:00:00Z", "esperado": { "fecha": "2026-11-16", "mismoDia": false } },
+      { "caso": "sábado y lunes feriados con sábado operativo: viernes tarde llega el martes", "dias": [1, 2, 3, 4, 5, 6], "feriados": ["2026-11-14", "2026-11-16"], "instante": "2026-11-13T18:00:00Z", "esperado": { "fecha": "2026-11-17", "mismoDia": false } },
+      { "caso": "un feriado de otro día no cambia nada", "feriados": ["2026-11-20"], "instante": "2026-11-10T11:30:00Z", "esperado": { "fecha": "2026-11-10", "mismoDia": true } }
     ]
   }
 }

@@ -6,7 +6,8 @@
  *
  * Regla: se entrega el mismo día si el día LOCAL (America/Argentina/Buenos_Aires) es operativo y la
  * hora local es estrictamente anterior a `corte - margen`; si no, el siguiente día operativo.
- * Los días son ISO: 1 = lunes … 7 = domingo.
+ * Los días son ISO: 1 = lunes … 7 = domingo. Un feriado (`feriados`, "YYYY-MM-DD") es un día no operativo:
+ * ni se entrega en él ni se promete para él, aunque su día de la semana esté entre los operativos.
  */
 
 export const TZ_ENVIO = "America/Argentina/Buenos_Aires"
@@ -18,6 +19,8 @@ export interface HorarioEnvio {
   horaCorte: string
   /** Minutos antes del corte en los que ya no se promete el mismo día. */
   margenMin: number
+  /** Fechas "YYYY-MM-DD" en las que no se entrega (feriados). Ausente = ninguna. */
+  feriados?: string[]
 }
 
 export interface FechaEntrega {
@@ -76,13 +79,17 @@ export function fechaEntrega(confirmadoEn: Date, horario: HorarioEnvio): FechaEn
   if (horario.dias.length === 0) throw new Error("El método no tiene días operativos")
   const corte = minutosDeCorte(horario.horaCorte)
   const hoy = partesLocales(confirmadoEn)
-  const operativo = horario.dias.includes(diaIso(hoy.y, hoy.m, hoy.d))
+  const feriados = new Set(horario.feriados ?? [])
+  const esOperativo = (f: { y: number; m: number; d: number }) =>
+    horario.dias.includes(diaIso(f.y, f.m, f.d)) && !feriados.has(aTexto(f))
+  const operativo = esOperativo(hoy)
   if (operativo && hoy.minutos < corte - horario.margenMin) {
     return { fecha: aTexto(hoy), mismoDia: true }
   }
-  for (let n = 1; n <= 14; n++) {
+  // Con hasta 60 feriados cargados y una semana operativa corta, 400 días sobran para encontrar uno libre.
+  for (let n = 1; n <= 400; n++) {
     const f = sumarDias(hoy.y, hoy.m, hoy.d, n)
-    if (horario.dias.includes(diaIso(f.y, f.m, f.d))) return { fecha: aTexto(f), mismoDia: false }
+    if (esOperativo(f)) return { fecha: aTexto(f), mismoDia: false }
   }
   throw new Error("No se encontró un día operativo")
 }

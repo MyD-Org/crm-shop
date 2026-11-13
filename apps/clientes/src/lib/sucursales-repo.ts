@@ -24,7 +24,8 @@ import {
   type ZonaDato,
 } from "./sucursales";
 import { CONFIG_ENVIO_DEFAULT, type ConfigEnvio } from "./envio";
-import type { EntradaZona, LocalidadAtendida, MetodoEnvio, ZonaEnvio } from "./envio-zona";
+import type { EntradaZona, LocalidadAtendida, ZonaEnvio } from "./envio-zona";
+import { feriadosDeConfig, horarioEntregaDeConfig, type MetodoEnvioTienda } from "./envio-zona-tienda";
 import type { Geometria } from "./geo-poligono";
 import {
   normalizarExcepciones,
@@ -216,10 +217,10 @@ export function armarMetodosEnvio(
   zonas: FilaZona[],
   entradas: FilaEntrada[],
   localidades: FilaLocalidad[],
-): MetodoEnvio[] {
+): MetodoEnvioTienda[] {
   return metodos
     .filter((m) => m.tipo === "tarifa_zona")
-    .map((m): MetodoEnvio => {
+    .map((m): MetodoEnvioTienda => {
       const zonasDelMetodo = zonas
         .filter((z) => z.metodoId === m.id)
         .map((z): ZonaEnvio => ({
@@ -275,6 +276,10 @@ export function armarMetodosEnvio(
         itemAlegraIva: Number(m.itemAlegraIva),
         zonas: zonasDelMetodo,
         localidades: locs,
+        // `config.horarioEntrega` del CRM (change `envio-rapido`); sin horario no se agrega la clave.
+        ...(horarioEntregaDeConfig(m.config) ? { horarioEntrega: horarioEntregaDeConfig(m.config) } : {}),
+        // `config.feriados`: días sin entrega (el cálculo de la fecha los salta); sin feriados no se agrega la clave.
+        ...(feriadosDeConfig(m.config).length > 0 ? { feriados: feriadosDeConfig(m.config) } : {}),
       };
     });
 }
@@ -285,7 +290,7 @@ export function armarMetodosEnvio(
  * flag `envio-por-zona` prendido. Si la lectura falla (migración sin aplicar, base caída) devuelve `[]`:
  * el envío queda a coordinar, nunca un precio inventado.
  */
-export async function leerMetodosEnvio(db?: Ejecutor): Promise<MetodoEnvio[]> {
+export async function leerMetodosEnvio(db?: Ejecutor): Promise<MetodoEnvioTienda[]> {
   try {
     const ejecutor = db ?? getDb();
     const metodos = await ejecutor.select().from(crmMetodosEnvio).where(eq(crmMetodosEnvio.tenantId, shopTenantId()));

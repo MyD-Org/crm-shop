@@ -9,6 +9,9 @@ import type { GeoLocalidad } from "@/lib/metodos-envio-localidades"
 import type { MetodoEnvioValidado } from "@/lib/metodos-envio-validacion"
 import { claveTexto } from "@/lib/texto-clave"
 
+/** Método puro más los feriados que el CRM guarda en `config.feriados` (el módulo puro duplicado no los declara). */
+export type MetodoEnvioConFeriados = MetodoEnvio & { feriados?: string[] }
+
 export const MENSAJE_SIN_ZONA = "Sin zona: costo a coordinar."
 
 export type ResultadoPruebaDireccion =
@@ -33,7 +36,7 @@ export type ResultadoPruebaLocalidad =
 
 const pesos = (n: number) => `$${n.toLocaleString("es-AR", { maximumFractionDigits: 2 })}`
 
-export function probarDireccion(m: MetodoEnvio, d: Omit<DestinoEnvio, "provinciaClave"> & { provinciaClave?: string | null }, ahora: Date): ResultadoPruebaDireccion {
+export function probarDireccion(m: MetodoEnvioConFeriados, d: Omit<DestinoEnvio, "provinciaClave"> & { provinciaClave?: string | null }, ahora: Date): ResultadoPruebaDireccion {
   // La prueba ignora si el método está activo y de qué sucursal sale: sólo evalúa la zona y el precio.
   const r = cotizarMetodo(
     { ...m, activo: true, sucursalOrigen: null },
@@ -41,7 +44,7 @@ export function probarDireccion(m: MetodoEnvio, d: Omit<DestinoEnvio, "provincia
     { origen: null, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false },
   )
   if (!r) return { aplica: false, mensaje: MENSAJE_SIN_ZONA }
-  const entrega = fechaEntrega(ahora, r.horario)
+  const entrega = fechaEntrega(ahora, { ...r.horario, feriados: m.feriados })
   const aprox = r.precision === "calle" ? " La ubicación es aproximada (se resolvió sólo hasta la calle)." : ""
   return {
     aplica: true,
@@ -80,8 +83,9 @@ function nombreNormDeEtiqueta(etiqueta: string): string {
 }
 
 /** Un método todavía sin guardar (validado) en la forma de los módulos puros, para probarlo en vivo. */
-export function metodoDeBorrador(v: MetodoEnvioValidado): MetodoEnvio {
+export function metodoDeBorrador(v: MetodoEnvioValidado): MetodoEnvioConFeriados {
   return {
+    feriados: v.feriados,
     id: "borrador",
     slug: v.slug,
     nombre: v.nombre,

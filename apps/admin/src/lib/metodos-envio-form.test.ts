@@ -20,6 +20,8 @@ const dto: MetodoEnvioDto = {
   margenMin: 15,
   promesa: "Entrega en el día",
   avisoFeriados: "Los feriados pueden modificar la fecha.",
+  horarioEntrega: "antes de las 21 hs",
+  feriados: ["2026-11-16", "2026-12-08"],
   gratisAplica: false,
   itemAlegraId: "9001",
   itemAlegraIva: 21,
@@ -43,6 +45,7 @@ describe("formulario del método de envío", () => {
       horaCorte: "09:00",
       margenMin: 15,
       itemAlegraId: "9001",
+      horarioEntrega: "antes de las 21 hs",
     })
     expect(r.metodo.zonas.map((z) => [z.id, z.nombre, z.precio, z.activa])).toEqual([
       ["11111111-1111-4111-8111-111111111111", "Centro", 3000, true],
@@ -89,6 +92,13 @@ describe("resumenMetodo", () => {
     expect(lineas.join(" ")).toMatch(/\$3\.000/)
     expect(lineas.join(" ")).toMatch(/lunes a viernes/i)
     expect(lineas.join(" ")).toMatch(/09:00/)
+  })
+  it("con sábado dice «de lunes a sábado» y la validación lo acepta", () => {
+    const conSabado = { ...dto, diasOperativos: [1, 2, 3, 4, 5, 6] }
+    expect(resumenMetodo(conSabado).join(" ")).toMatch(/lunes a sábado/i)
+    expect(resumenMetodo({ ...dto, diasOperativos: [2, 6] }).join(" ")).toMatch(/martes, sábado/)
+    const r = validarMetodoEnvio(formACuerpo(dtoAForm(conSabado)))
+    expect(r.ok && r.metodo.diasOperativos).toEqual([1, 2, 3, 4, 5, 6])
   })
   it("marca las zonas inactivas y las que no tienen dibujo", () => {
     expect(resumenMetodo(dto).join(" ")).toMatch(/Costa.*sin dibujo|sin dibujo.*Costa/i)

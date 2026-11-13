@@ -41,6 +41,9 @@ export interface FormMetodo {
   margenMin: string
   promesa: string
   avisoFeriados: string
+  horarioEntrega: string
+  /** Fechas "YYYY-MM-DD" sin entrega. */
+  feriados: string[]
   gratisAplica: boolean
   itemAlegraId: string
   itemAlegraIva: string
@@ -75,6 +78,8 @@ export function formVacio(): FormMetodo {
     margenMin: "0",
     promesa: "",
     avisoFeriados: "",
+    horarioEntrega: "",
+    feriados: [],
     gratisAplica: false,
     itemAlegraId: "",
     itemAlegraIva: "21",
@@ -96,6 +101,8 @@ export function dtoAForm(m: MetodoEnvioDto): FormMetodo {
     margenMin: String(m.margenMin),
     promesa: m.promesa,
     avisoFeriados: m.avisoFeriados,
+    horarioEntrega: m.horarioEntrega,
+    feriados: [...m.feriados],
     gratisAplica: m.gratisAplica,
     itemAlegraId: m.itemAlegraId ?? "",
     itemAlegraIva: String(m.itemAlegraIva),
@@ -128,6 +135,8 @@ export function formACuerpo(f: FormMetodo) {
     margenMin: numero(f.margenMin, 0),
     promesa: f.promesa,
     avisoFeriados: f.avisoFeriados,
+    horarioEntrega: f.horarioEntrega,
+    feriados: f.feriados,
     gratisAplica: f.gratisAplica,
     itemAlegraId: f.itemAlegraId,
     itemAlegraIva: numero(f.itemAlegraIva, 21),
@@ -148,15 +157,17 @@ export function formACuerpo(f: FormMetodo) {
   }
 }
 
-const NOMBRES_DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes"]
+const NOMBRES_DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado"]
 const pesos = (n: number) => `$${n.toLocaleString("es-AR", { maximumFractionDigits: 2 })}`
 
 /** Cómo funciona el método, en lenguaje simple, para la lista. */
 export function resumenMetodo(m: MetodoEnvioDto): string[] {
   const dias =
-    m.diasOperativos.length === 5
+    m.diasOperativos.length === 5 && m.diasOperativos[4] === 5
       ? "de lunes a viernes"
-      : m.diasOperativos.map((d) => NOMBRES_DIAS[d - 1]).join(", ")
+      : m.diasOperativos.length === 6
+        ? "de lunes a sábado"
+        : m.diasOperativos.map((d) => NOMBRES_DIAS[d - 1]).join(", ")
   const lineas = [
     `En ${m.provincia}, ${dias}. Los pedidos confirmados antes de las ${m.horaCorte}${m.margenMin > 0 ? ` (menos ${m.margenMin} minutos de margen)` : ""} se entregan el mismo día; después, el siguiente día hábil.`,
   ]

@@ -7,11 +7,12 @@ import { fmtPesosEnteros } from "./format";
 import { TZ_ENVIO, fechaEntrega, type FechaEntrega, type HorarioEnvio } from "./entrega-fecha";
 import { estimarEntrega } from "./envio-snapshot";
 import { cotizarMetodo, estimarPorLocalidad, type DestinoEnvio, type MetodoEnvio } from "./envio-zona";
+import { horarioDeMetodo, type MetodoEnvioTienda } from "./envio-zona-tienda";
 import { claveProvincia } from "./sucursales";
 import { claveTexto } from "./texto-clave";
 
 export const TEXTOS_ENVIO_ZONA = {
-  /** Etiqueta del método cuando no tiene un nombre mejor. */
+  /** Mi cuenta: el pedido congelado no guarda el nombre del método, sólo su zona. */
   enElDia: "Envío en el día",
   sinUbicar: "Seleccione su dirección de la lista para calcular el envío en el día.",
   continuarACoordinar: "Continuar con envío a coordinar",
@@ -83,23 +84,32 @@ function minutosHastaCorte(ahora: Date, horario: HorarioEnvio): number {
 }
 
 /**
- * Como Mercado Libre: «comprando dentro de las próximas 2 h 15 min» / «… de los próximos 40 min». Sin
+ * Como Mercado Libre: «Comprando dentro de las próximas 2 h 15 min» / «… de los próximos 40 min». Sin
  * minutos (justo en el corte) no se promete nada.
  */
 export function textoCuentaRegresiva(minutos: number): string | null {
   if (!Number.isFinite(minutos) || minutos <= 0) return null;
-  if (minutos < 60) return `comprando dentro de los próximos ${minutos} min`;
+  if (minutos < 60) return `Comprando dentro de los próximos ${minutos} min`;
   const h = Math.floor(minutos / 60);
   const m = minutos % 60;
-  return `comprando dentro de las próximas ${h} h${m ? ` ${m} min` : ""}`;
+  return `Comprando dentro de las próximas ${h} h${m ? ` ${m} min` : ""}`;
+}
+
+/**
+ * «Llega hoy» + horario de entrega del método («antes de las 21 hs») y, si se pasa, el precio:
+ * «Llega hoy antes de las 21 hs por $ 4.490». Sin horario: «Llega el lunes 16/11 por $ 4.490».
+ */
+export function textoLineaLlegada(llegada: string, horarioEntrega?: string, precio?: number): string {
+  const h = horarioEntrega?.trim();
+  return [llegada, h, precio === undefined ? null : `por ${fmtPesosEnteros(precio)}`].filter(Boolean).join(" ");
 }
 
 export interface LlegadaEstimada {
-  /** "Llega hoy" / "Llega mañana" / "Llega el lunes 16/11". */
+  /** "Llega hoy antes de las 21 hs" / "Llega mañana" / "Llega el lunes 16/11 antes de las 21 hs". */
   texto: string;
   /** Sólo se promete el mismo día si el pago es en línea y llega antes del corte. */
   mismoDia: boolean;
-  /** Cuenta regresiva al corte, estilo Mercado Libre: «comprando dentro de las próximas 2 h 15 min». */
+  /** Cuenta regresiva al corte, estilo Mercado Libre: «Comprando dentro de las próximas 2 h 15 min». */
   condicion: string | null;
 }
 
@@ -108,21 +118,22 @@ export interface LlegadaEstimada {
  * real se fija al confirmar (primer evento de confirmación del pedido). Sin pago en línea nunca se
  * promete el mismo día (`estimarEntrega`).
  */
-export function llegadaEstimada(horario: HorarioEnvio, ahora: Date, medioOnline = true): LlegadaEstimada {
+export function llegadaEstimada(horario: HorarioEnvio, ahora: Date, medioOnline = true, horarioEntrega?: string): LlegadaEstimada {
   const e = estimarEntrega(ahora, horario, medioOnline);
   const condicion = e.mismoDia ? textoCuentaRegresiva(minutosHastaCorte(ahora, horario)) : null;
-  return { texto: textoLlegada(e, mananaDe(ahora)), mismoDia: e.mismoDia, condicion };
+  return { texto: textoLineaLlegada(textoLlegada(e, mananaDe(ahora)), horarioEntrega), mismoDia: e.mismoDia, condicion };
 }
 
 export interface EstimadoFicha {
   tipo: "exacto" | "desde";
   precio: number;
-  /** "Envío en el día: $4.500" / "Envío en el día desde $4.500". */
+  /** Línea principal: «Llega hoy antes de las 21 hs por $ 4.490»; con «desde» (varias zonas) sin precio. */
   texto: string;
   /** Con «desde»: las tarifas de las zonas activas del método, de menor a mayor, para mostrarlas todas. */
   zonas?: { nombre: string; precio: number }[];
   llegada: LlegadaEstimada;
   avisoFeriados: string;
+  /** Nombre del método (el que va en el cartel). */
   metodo: string;
 }
 
@@ -146,7 +157,7 @@ export function textoPrecioEstimado(nombre: string, tipo: "exacto" | "desde", pr
  * quedan los textos de siempre. La geometría nunca llega al navegador: esto corre en el servidor.
  */
 export function estimarEnvioPorLocalidad(
-  metodos: MetodoEnvio[] | undefined,
+  metodos: MetodoEnvioTienda[] | undefined,
   ubicacion: { localidad: string; provincia: string; id?: string } | null,
   ahora: Date,
 ): EstimadoFicha | null {
@@ -159,12 +170,13 @@ export function estimarEnvioPorLocalidad(
     if (!loc) continue;
     const e = estimarPorLocalidad(m, loc);
     if (!e) continue;
+    const llegada = llegadaEstimada(horarioDeMetodo(m), ahora, true, m.horarioEntrega);
     return {
       tipo: e.tipo,
       precio: e.precio,
-      texto: textoPrecioEstimado(TEXTOS_ENVIO_ZONA.enElDia, e.tipo, e.precio),
+      texto: textoLineaLlegada(llegada.texto, undefined, e.tipo === "exacto" ? e.precio : undefined),
       ...(e.tipo === "desde" ? { zonas: tarifasDeZonas(m) } : {}),
-      llegada: llegadaEstimada({ dias: m.diasOperativos, horaCorte: m.horaCorte, margenMin: m.margenMin }, ahora),
+      llegada,
       avisoFeriados: m.avisoFeriados.trim(),
       metodo: m.nombre,
     };
@@ -178,7 +190,7 @@ export function estimarEnvioPorLocalidad(
  * pedido. null = ninguna zona lo alcanza: costo a coordinar. La geometría nunca llega al navegador.
  */
 export function estimarEnvioPorPunto(
-  metodos: MetodoEnvio[] | undefined,
+  metodos: MetodoEnvioTienda[] | undefined,
   destino: DestinoEnvio,
   ahora: Date,
 ): EstimadoFicha | null {
@@ -187,11 +199,12 @@ export function estimarEnvioPorPunto(
   for (const m of ordenados) {
     const r = cotizarMetodo(m, destino, { origen: null, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false });
     if (!r) continue;
+    const llegada = llegadaEstimada(horarioDeMetodo(m), ahora, true, m.horarioEntrega);
     return {
       tipo: "exacto",
       precio: r.precio,
-      texto: textoPrecioEstimado(TEXTOS_ENVIO_ZONA.enElDia, "exacto", r.precio),
-      llegada: llegadaEstimada({ dias: m.diasOperativos, horaCorte: m.horaCorte, margenMin: m.margenMin }, ahora),
+      texto: textoLineaLlegada(llegada.texto, undefined, r.precio),
+      llegada,
       avisoFeriados: m.avisoFeriados.trim(),
       metodo: m.nombre,
     };

@@ -20,8 +20,8 @@ import {
   type ContextoCotizacion,
   type DestinoEnvio,
   type MetodoEnvio,
-  type ResultadoMetodo,
 } from "./envio-zona";
+import { conDatosDeTienda, type MetodoEnvioTienda, type ResultadoMetodoTienda } from "./envio-zona-tienda";
 
 export type EntregaTipo = "retiro" | "envio";
 export type PagoMetodo =
@@ -99,7 +99,7 @@ export interface ConfigEnvio {
    * (flag `envio-por-zona` apagado, tablas sin migrar o ninguno cargado): el envío a domicilio queda como
    * siempre, con costo a coordinar o gratis.
    */
-  metodos?: MetodoEnvio[];
+  metodos?: MetodoEnvioTienda[];
 }
 
 /**
@@ -141,7 +141,7 @@ export interface EnvioEvaluado {
    */
   costo?: number;
   /** El método por zona que resolvió el envío (zona, tarifa, regla, horario, ítem de Alegra). */
-  metodo?: ResultadoMetodo;
+  metodo?: ResultadoMetodoTienda;
   /**
    * El destino está en una localidad que atiende un método pero falta la ubicación exacta de la
    * dirección: el costo sale a coordinar y el pedido pide elegir una dirección de la lista (o elegir
@@ -201,7 +201,7 @@ export function evaluarEnvio(
       gratisTienda: base.gratis,
       gratisCupon: extra?.gratisCupon === true,
     });
-    if (r) return { disponible: true, gratis: r.gratis, aCoordinar: false, motivo: null, faltante: 0, costo: r.costo, metodo: r };
+    if (r) return { disponible: true, gratis: r.gratis, aCoordinar: false, motivo: null, faltante: 0, costo: r.costo, metodo: conDatosDeTienda(r, m) };
   }
   if (!destino.punto && podriaAplicarPorLocalidad(ordenados, destino, extra?.origen)) return { ...base, sinUbicar: true };
   return base;

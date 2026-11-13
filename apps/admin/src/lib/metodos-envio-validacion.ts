@@ -5,6 +5,7 @@
 
 import { claveProvinciaZona } from "@/lib/sucursales-zona"
 import { claveTexto } from "@/lib/texto-clave"
+import { MAX_FERIADOS, MAX_HORARIO_ENTREGA, normalizarFeriados, normalizarHorarioEntrega } from "@/lib/metodos-envio-horario"
 import { bboxDe, bboxInterseca, puntoEnGeometria, validarGeometria, type Geometria } from "@/lib/geo-poligono"
 
 export interface EntradaValidada {
@@ -45,6 +46,10 @@ export interface MetodoEnvioValidado {
   margenMin: number
   promesa: string
   avisoFeriados: string
+  /** Texto libre corto (hasta 40) que se guarda en `config.horarioEntrega`; "" = sin horario. */
+  horarioEntrega: string
+  /** Fechas "YYYY-MM-DD" sin entrega (hasta 60, ordenadas y sin repetir); se guardan en `config.feriados`. */
+  feriados: string[]
   gratisAplica: boolean
   itemAlegraId: string | null
   itemAlegraIva: number
@@ -162,8 +167,8 @@ export function validarMetodoEnvio(body: unknown): ResultadoValidacionMetodo {
   }
 
   const diasCrudos = Array.isArray(body.diasOperativos) ? body.diasOperativos : null
-  if (!diasCrudos || diasCrudos.length === 0 || !diasCrudos.every((d) => Number.isInteger(d) && d >= 1 && d <= 5)) {
-    return falla("diasOperativos", "Seleccione al menos un día de lunes a viernes.")
+  if (!diasCrudos || diasCrudos.length === 0 || !diasCrudos.every((d) => Number.isInteger(d) && d >= 1 && d <= 6)) {
+    return falla("diasOperativos", "Seleccione al menos un día de lunes a sábado.")
   }
   const diasOperativos = [...new Set(diasCrudos as number[])].sort((a, b) => a - b)
 
@@ -179,6 +184,12 @@ export function validarMetodoEnvio(body: unknown): ResultadoValidacionMetodo {
   if (promesa === null) return falla("promesa", "El texto de la promesa admite hasta 200 caracteres.")
   const avisoFeriados = body.avisoFeriados === undefined ? "" : texto(body.avisoFeriados, 300)
   if (avisoFeriados === null) return falla("avisoFeriados", "El aviso de feriados admite hasta 300 caracteres.")
+  const horarioEntrega = normalizarHorarioEntrega(body.horarioEntrega)
+  if (horarioEntrega === null) return falla("horarioEntrega", `El horario de entrega admite hasta ${MAX_HORARIO_ENTREGA} caracteres.`)
+  const feriados = normalizarFeriados(body.feriados)
+  if (feriados === null) {
+    return falla("feriados", `Ingrese hasta ${MAX_FERIADOS} feriados, cada uno con una fecha válida (AAAA-MM-DD).`)
+  }
 
   const activo = body.activo === true
   const gratisAplica = body.gratisAplica === true
@@ -311,6 +322,8 @@ export function validarMetodoEnvio(body: unknown): ResultadoValidacionMetodo {
       margenMin,
       promesa,
       avisoFeriados,
+      horarioEntrega,
+      feriados,
       gratisAplica,
       itemAlegraId,
       itemAlegraIva: iva,

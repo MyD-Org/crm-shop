@@ -23,6 +23,15 @@ const metodo: MetodoEnvio = {
 const ANTES_DEL_CORTE = new Date("2026-11-10T11:30:00Z")
 const DESPUES_DEL_CORTE = new Date("2026-11-10T13:00:00Z")
 
+describe("probarDireccion con feriados", () => {
+  it("la fecha de la prueba salta los feriados del método (viernes tarde con lunes feriado: martes)", () => {
+    const viernesTarde = new Date("2026-11-13T18:00:00Z")
+    const punto = { ...puntos.centro, precision: "altura" as const }
+    expect(probarDireccion(metodo, { punto }, viernesTarde)).toMatchObject({ entrega: { fecha: "2026-11-16" } })
+    expect(probarDireccion({ ...metodo, feriados: ["2026-11-16"] }, { punto }, viernesTarde)).toMatchObject({ entrega: { fecha: "2026-11-17" } })
+  })
+})
+
 describe("probarDireccion", () => {
   it("zona, regla, precio y promesa de un punto; entrega el mismo día antes del corte", () => {
     const r = probarDireccion(metodo, { punto: { ...puntos.centro, precision: "altura" } }, ANTES_DEL_CORTE)

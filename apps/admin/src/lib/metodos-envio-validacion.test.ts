@@ -85,8 +85,10 @@ describe("validarMetodoEnvio: rechazos", () => {
     expect(falla({ ...base(), margenMin: 241 }).campo).toBe("margenMin")
     expect(falla({ ...base(), margenMin: 1.5 }).campo).toBe("margenMin")
   })
-  it("días fuera de lunes a viernes o vacíos", () => {
-    expect(falla({ ...base(), diasOperativos: [1, 6] }).campo).toBe("diasOperativos")
+  it("días fuera de lunes a sábado o vacíos (el domingo no se puede elegir)", () => {
+    expect(falla({ ...base(), diasOperativos: [1, 7] }).campo).toBe("diasOperativos")
+    expect(falla({ ...base(), diasOperativos: [1, 7] }).error).toBe("Seleccione al menos un día de lunes a sábado.")
+    expect(falla({ ...base(), diasOperativos: [0] }).campo).toBe("diasOperativos")
     expect(falla({ ...base(), diasOperativos: [] }).campo).toBe("diasOperativos")
   })
   it("zona sin dibujo ni entradas", () => {

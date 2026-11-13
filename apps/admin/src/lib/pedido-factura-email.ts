@@ -19,6 +19,8 @@ export interface PedidoFacturaEmailInput {
   contactoNombre: string
   /** Link absoluto a "Mis pedidos" del Shop. Sin link, el mail no lleva botón. */
   pedidosUrl?: string | null
+  /** Pedido de invitado (sin Mi cuenta): «Cree su cuenta» en lugar de «Ver mis pedidos». */
+  cuentaUrl?: string | null
 }
 
 export function buildPedidoFacturaEmail(input: PedidoFacturaEmailInput): { subject: string; html: string; text: string } {
@@ -33,6 +35,12 @@ export function buildPedidoFacturaEmail(input: PedidoFacturaEmailInput): { subje
     200,
   )
 
+  const boton = input.cuentaUrl
+    ? { url: input.cuentaUrl, texto: "Cree su cuenta" }
+    : input.pedidosUrl
+      ? { url: input.pedidosUrl, texto: "Ver mis pedidos" }
+      : null
+
   const html = emailDocumentHtml(
     emailCardHtml({
       tenantName: input.tenantName,
@@ -41,7 +49,7 @@ export function buildPedidoFacturaEmail(input: PedidoFacturaEmailInput): { subje
       titulo,
       parrafos: [saludo, cuerpo],
       pie,
-      boton: input.pedidosUrl ? { url: input.pedidosUrl, texto: "Ver mis pedidos" } : null,
+      boton,
     }),
     titulo,
   )
@@ -53,7 +61,7 @@ export function buildPedidoFacturaEmail(input: PedidoFacturaEmailInput): { subje
     cuerpo,
     "",
     pie,
-    ...(input.pedidosUrl ? ["", `Ver mis pedidos: ${input.pedidosUrl}`] : []),
+    ...(boton ? ["", `${boton.texto}: ${boton.url}`] : []),
   ].join("\n")
 
   return { subject, html, text }

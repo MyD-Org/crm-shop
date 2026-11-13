@@ -73,11 +73,12 @@ describe("ubicacionExactaVerificada", () => {
 describe("ficha: tarifa exacta vs. listado por localidad", () => {
   const destino = (p: { lat: number; lon: number }) => ubicacionExactaVerificada(eleccion(token(p)), "buenosaires")!.destino;
 
-  it("el punto cae en una zona: «Envío en el día: $X» exacto, con llegada", () => {
+  it("el punto cae en una zona: «Llega … por $X» exacto, con el nombre del método", () => {
     const e = estimarEnvioPorPunto([metodoDePrueba()], destino(PUNTOS.centro), AHORA)!;
     expect(e.tipo).toBe("exacto");
     expect(e.precio).toBe(3000);
-    expect(e.texto).toMatch(/^Envío en el día: \$\s?3\.000$/);
+    expect(e.texto).toMatch(/^Llega .* por \$\s?3\.000$/);
+    expect(e.metodo).toBe("Envío en el día");
     expect(e.llegada.texto).toBeTruthy();
     expect(e).not.toHaveProperty("zonas");
   });
@@ -119,8 +120,8 @@ describe("EnvioProductoUbicacion", { timeout: 30_000 }, () => {
 
   it("con punto vigente muestra la tarifa exacta", async () => {
     const html = await ficha(eleccion(token(PUNTOS.centro)));
-    expect(html).toContain("Envío en el día: ");
-    expect(html).toMatch(/3\.000/);
+    expect(html).toContain("Envío en el día");
+    expect(html).toMatch(/Llega .* por \$\s?3\.000/);
     expect(html).not.toMatch(/desde/);
   });
 
@@ -136,12 +137,12 @@ describe("EnvioProductoUbicacion", { timeout: 30_000 }, () => {
 });
 
 describe("carrito: FilaEnvioZona con zona exacta", () => {
-  const metodo = { zona: "Centro", horario: { dias: [1, 2, 3, 4, 5], horaCorte: "09:00", margenMin: 0 } };
+  const metodo = { nombre: "Envío rápido", zona: "Centro", horario: { dias: [1, 2, 3, 4, 5], horaCorte: "09:00", margenMin: 0 } };
 
-  it("muestra el importe y «Envío en el día» con la llegada", () => {
+  it("muestra el importe, el cartel con el nombre del método y la llegada", () => {
     const html = renderToStaticMarkup(<FilaEnvioZona costo={3000} gratis={false} estimado={undefined} metodo={metodo} />);
     expect(html).toContain("3.000");
-    expect(html).toContain("Envío en el día");
+    expect(html).toContain("Envío rápido");
     expect(html).toContain("Llega");
   });
 

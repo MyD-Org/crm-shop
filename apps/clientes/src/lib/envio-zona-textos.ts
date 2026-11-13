@@ -100,9 +100,21 @@ export interface EstimadoFicha {
   precio: number;
   /** "Envío en el día: $4.500" / "Envío en el día desde $4.500". */
   texto: string;
+  /** Con «desde»: las tarifas de las zonas activas del método, de menor a mayor, para mostrarlas todas. */
+  zonas?: { nombre: string; precio: number }[];
   llegada: LlegadaEstimada;
   avisoFeriados: string;
   metodo: string;
+}
+
+/** Tarifas de las zonas activas (una por nombre), de menor a mayor. Sin geometría: sólo nombre y precio. */
+function tarifasDeZonas(m: MetodoEnvio): { nombre: string; precio: number }[] {
+  const vistas = new Set<string>();
+  return m.zonas
+    .filter((z) => z.activa)
+    .sort((a, b) => a.precio - b.precio)
+    .filter((z) => (vistas.has(z.nombre) ? false : (vistas.add(z.nombre), true)))
+    .map((z) => ({ nombre: z.nombre, precio: z.precio }));
 }
 
 export function textoPrecioEstimado(nombre: string, tipo: "exacto" | "desde", precio: number): string {
@@ -132,6 +144,7 @@ export function estimarEnvioPorLocalidad(
       tipo: e.tipo,
       precio: e.precio,
       texto: textoPrecioEstimado(TEXTOS_ENVIO_ZONA.enElDia, e.tipo, e.precio),
+      ...(e.tipo === "desde" ? { zonas: tarifasDeZonas(m) } : {}),
       llegada: llegadaEstimada({ dias: m.diasOperativos, horaCorte: m.horaCorte, margenMin: m.margenMin }, ahora),
       avisoFeriados: m.avisoFeriados.trim(),
       metodo: m.nombre,

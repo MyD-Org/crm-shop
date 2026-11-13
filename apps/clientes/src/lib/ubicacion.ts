@@ -215,6 +215,10 @@ export const TEXTOS_UBICACION = {
   errorBusqueda: "No pudimos buscar localidades en este momento. Inténtelo nuevamente.",
   errorUbicacion: "No pudimos determinar su ubicación. Ingrese su localidad.",
   sinPermiso: "No pudimos acceder a su ubicación. Ingrese su localidad.",
+  ubicacionBloqueada:
+    "Su navegador tiene bloqueada la ubicación para este sitio. Para habilitarla, toque el ícono que está a la izquierda de la dirección de la página (candado o ajustes), permita «Ubicación» y vuelva a intentarlo. También puede escribir su localidad abajo.",
+  ubicacionNoDisponible:
+    "No pudimos obtener su ubicación. Revise que la ubicación esté activada en su dispositivo y vuelva a intentarlo, o escriba su localidad abajo.",
   invalida: "Ubicación inválida.",
   demasiadas: "Demasiadas consultas. Espere un momento e inténtelo nuevamente.",
   quitar: "Quitar ubicación",

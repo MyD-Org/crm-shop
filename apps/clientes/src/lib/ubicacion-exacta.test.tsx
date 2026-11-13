@@ -119,7 +119,7 @@ describe("EnvioProductoUbicacion", { timeout: 30_000 }, () => {
 
   it("con punto vigente muestra la tarifa exacta", async () => {
     const html = await ficha(eleccion(token(PUNTOS.centro)));
-    expect(html).toContain("Envío en el día: ");
+    expect(html).toMatch(/Llega [^<]* por \$\s?3\.000/);
     expect(html).toMatch(/3\.000/);
     expect(html).not.toMatch(/desde/);
   });

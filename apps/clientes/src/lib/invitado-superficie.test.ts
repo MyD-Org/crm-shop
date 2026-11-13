@@ -18,6 +18,8 @@ const PERMITIDOS = [
   // El núcleo
   "lib/invitado-acceso.ts",
   "lib/invitado-respuesta.ts",
+  // Lado navegador: el único que ARMA el header (en memoria; ver invitado-token-cliente.ts)
+  "lib/invitado-token-cliente.ts",
   // Endpoints del pedido (D4)
   "app/api/pedidos/[id]/pago/route.ts",
   "app/api/pedidos/[id]/medio/route.ts",

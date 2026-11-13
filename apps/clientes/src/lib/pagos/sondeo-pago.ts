@@ -2,6 +2,7 @@
  * Lado navegador de la consulta del estado del pago (`GET /api/pedidos/[id]/pago`). Módulo puro: el
  * `fetch` y el reloj se inyectan, así lo usan el checkout y el detalle del pedido y se prueba sin DOM.
  */
+import { fetchConToken } from "../invitado-token-cliente";
 
 /** Cuánto se sigue consultando antes de dar la espera por agotada y mandar a Mi cuenta. */
 export const VENTANA_SONDEO_MS = 3 * 60_000;
@@ -46,7 +47,7 @@ const MENSAJE_NO_COBRABLE =
 
 export async function consultarPagoDelPedido(
   pedidoId: string,
-  doFetch: typeof fetch = fetch,
+  doFetch: typeof fetch = fetchConToken,
   /** Id del pago con el que volvió de Mercado Pago (`payment_id`): el servidor lo consulta si no lo conoce. */
   pagoMercadoPagoId?: string,
 ): Promise<ResultadoSondeo> {

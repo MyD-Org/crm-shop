@@ -24,6 +24,7 @@ import { hrefCompartido, MENSAJE_CARRITO } from "@/lib/carrito-compartido";
 import { topeCantidad } from "@/lib/catalogo-vista";
 import { TEXTO_CARRITO_A_CONFIRMAR } from "@/lib/venta-sin-stock";
 import { BotonIniciarCompra } from "@/components/carrito/BotonIniciarCompra";
+import { TEXTOS_INVITADO } from "@/lib/invitado-textos";
 import { BloquePiedra } from "@/components/piedra/BloquePiedra";
 import { CampoCupon } from "@/components/checkout/CampoCupon";
 import { LineaCupon } from "@/components/checkout/LineaCupon";
@@ -83,6 +84,7 @@ function AlertIcon() {
  */
 export function CarritoClient({
   conSesion,
+  compraInvitado = false,
   configEnvio = CONFIG_ENVIO_DEFAULT,
   provincia = null,
   entregaTipo = "retiro",
@@ -92,6 +94,8 @@ export function CarritoClient({
   pagoTransferencia = null,
 }: {
   conSesion: boolean;
+  /** Flag `compra-invitado`: el anónimo puede comprar sin cuenta. Sin flag, el cartel de siempre. */
+  compraInvitado?: boolean;
   /** Medio Transferencia con lista propia: el carrito muestra sus precios. null = precio general. */
   pagoTransferencia?: { listaKey: string; pagoMetodo: string } | null;
   /** Textura de piedra prendida en el sitio (decoración): el carrito vacío va sobre un bloque de piedra. */
@@ -326,6 +330,7 @@ export function CarritoClient({
   const botonCompra = (etiquetaBloqueado?: string) => (
     <BotonIniciarCompra
       anonimo={!conSesion || estado === "no_auth"}
+      compraInvitado={compraInvitado}
       items={items}
       total={total}
       bloqueado={cotizacion?.hayProblemas}
@@ -358,12 +363,21 @@ export function CarritoClient({
 
         {(!conSesion || estado === "no_auth") && (
           <div className="mb-6 rounded-[20px] border border-border bg-elevated p-4 text-sm">
-            <p className="text-muted">
-              Inicie sesión para completar su compra.{" "}
-              <Link href={rutaIngreso("/carrito")} className="font-semibold text-primary hover:underline">
-                Iniciar sesión
-              </Link>
-            </p>
+            {compraInvitado ? (
+              <p className="text-muted">
+                {TEXTOS_INVITADO.avisoCarrito}{" "}
+                <Link href={rutaIngreso("/carrito")} className="font-semibold text-primary hover:underline">
+                  {TEXTOS_INVITADO.ingresar}
+                </Link>
+              </p>
+            ) : (
+              <p className="text-muted">
+                Inicie sesión para completar su compra.{" "}
+                <Link href={rutaIngreso("/carrito")} className="font-semibold text-primary hover:underline">
+                  Iniciar sesión
+                </Link>
+              </p>
+            )}
           </div>
         )}
 

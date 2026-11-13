@@ -1,5 +1,7 @@
 "use client";
 
+import { fetchConToken } from "@/lib/invitado-token-cliente";
+
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button } from "@myd-org/ui";
 import { IconoSalida } from "./PagoIconos";
@@ -56,7 +58,7 @@ export function PagoCuentaMercadoPago({
       return;
     }
     try {
-      const res = await fetch("/api/pagos/mercadopago/preferencia", {
+      const res = await fetchConToken("/api/pagos/mercadopago/preferencia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pedidoId }),

@@ -11,6 +11,7 @@ import { track } from "@/lib/tracking/track";
  */
 export function BotonIniciarCompra({
   anonimo,
+  compraInvitado = false,
   items,
   total,
   bloqueado,
@@ -18,6 +19,8 @@ export function BotonIniciarCompra({
 }: {
   /** Sin sesión (o con la sesión vencida): el checkout lo manda a ingresar. */
   anonimo: boolean;
+  /** Flag `compra-invitado` encendido: `/checkout` ya no es un muro para el anónimo, no se mide como tal. */
+  compraInvitado?: boolean;
   items: { price: number; qty: number }[];
   /** Total cotizado, si ya llegó. */
   total: number | null;
@@ -30,7 +33,7 @@ export function BotonIniciarCompra({
       className="block"
       aria-disabled={bloqueado || undefined}
       onClick={() => {
-        if (anonimo) track(eventoMuroIngreso(items, total));
+        if (anonimo && !compraInvitado) track(eventoMuroIngreso(items, total));
       }}
     >
       <Button className="w-full" disabled={bloqueado}>

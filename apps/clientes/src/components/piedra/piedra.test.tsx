@@ -80,7 +80,7 @@ describe("sin el interruptor: la salida es la de siempre", () => {
   });
 
   it("login y registro: sin fondo, sin LA", async () => {
-    for (const pagina of [await IngresarPage(), await RegistroPage()]) {
+    for (const pagina of [await IngresarPage(), await RegistroPage({ searchParams: Promise.resolve({}) })]) {
       const h = html(pagina);
       sinRastros(h);
       expect(h).not.toContain("<svg");
@@ -107,7 +107,7 @@ describe("sin el interruptor: la salida es la de siempre", () => {
     const todo = [
       html(await NotFound()),
       html(await IngresarPage()),
-      html(await RegistroPage()),
+      html(await RegistroPage({ searchParams: Promise.resolve({}) })),
       html(await SiteFooter()),
       html(createElement(CarritoClient, { conSesion: false })),
     ].join("\n");
@@ -118,7 +118,7 @@ describe("sin el interruptor: la salida es la de siempre", () => {
 describe("con el interruptor prendido", () => {
   it("login y registro: piedra oscura detrás, LA encendido, encabezado y tarjeta en su lugar", async () => {
     prendida();
-    for (const [pagina, clerk] of [[await IngresarPage(), "sign-in"], [await RegistroPage(), "sign-up"]] as const) {
+    for (const [pagina, clerk] of [[await IngresarPage(), "sign-in"], [await RegistroPage({ searchParams: Promise.resolve({}) }), "sign-up"]] as const) {
       const h = html(pagina);
       expect(h).toContain("data-fondo-piedra");
       expect(h).toContain("data-encendido");

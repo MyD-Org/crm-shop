@@ -144,7 +144,9 @@ describe("migración 0101: métodos de envío por zona (DB real)", () => {
     await expect(metodo(TA, { slug: "Mal Slug" })).rejects.toThrow(/metodos_envio_slug_chk/)
     await expect(metodo(TA, { slug: "margen-neg", margen: -1 })).rejects.toThrow(/metodos_envio_margen_chk/)
     await expect(metodo(TA, { slug: "margen-alto", margen: 241 })).rejects.toThrow(/metodos_envio_margen_chk/)
-    await expect(metodo(TA, { slug: "dias-sab", dias: "{1,6}" })).rejects.toThrow(/metodos_envio_dias_chk/)
+    // Desde 0102 el sábado (6) vale; el domingo (7) no.
+    await expect(metodo(TA, { slug: "dias-sab", dias: "{1,6}" })).resolves.toBeDefined()
+    await expect(metodo(TA, { slug: "dias-dom", dias: "{1,7}" })).rejects.toThrow(/metodos_envio_dias_chk/)
     await expect(metodo(TA, { slug: "dias-vacio", dias: "{}" })).rejects.toThrow(/metodos_envio_dias_chk/)
   })
 

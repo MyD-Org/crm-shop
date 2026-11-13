@@ -21,6 +21,9 @@
   -webkit-mask-image: radial-gradient(ellipse at center, rgb(0 0 0 / .15) 0%, #000 42%, rgb(0 0 0 / 0) 82%);
   mask-image: radial-gradient(ellipse at center, rgb(0 0 0 / .15) 0%, #000 42%, rgb(0 0 0 / 0) 82%);
 }
+/* Las juntas que prende la luz: el sodio de la piedra oscura, con un resplandor suave detrás. */
+.juntasEncendidas { stroke: #FFB547; }
+.resplandor { stroke: #FFB547; opacity: .45; }
 .contenido {
   position: relative; max-width: 32rem; padding: 3rem 1rem;
   display: flex; flex-direction: column; gap: .75rem; align-items: center; text-align: center;

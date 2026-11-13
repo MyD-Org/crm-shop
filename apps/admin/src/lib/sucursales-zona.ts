@@ -7,6 +7,7 @@
  * Puro a propósito: sin DB, reloj ni Next. Acá sirve para interpretar la regla congelada en
  * `orders.sucursal_regla` y para reproducir la asignación en tests.
  */
+import { claveTexto } from "./texto-clave"
 
 /** Las 24 jurisdicciones (misma lista que `apps/clientes/src/lib/provincias.ts`). */
 const PROVINCIAS_AR = [
@@ -61,15 +62,6 @@ function provinciaCanonicaZona(v: string | null | undefined): ProvinciaAR | null
   const k = clave(v.trim())
   if (!k) return null
   return POR_CLAVE.get(k) ?? ALIAS[k] ?? null
-}
-
-/** Compara textos sin acentos, mayúsculas, espacios ni signos. */
-function claveTexto(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "")
 }
 
 /** Clave de zona de una provincia tal como llega. Un texto que no es una jurisdicción da "". */

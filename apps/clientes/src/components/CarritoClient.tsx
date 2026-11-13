@@ -370,12 +370,20 @@ export function CarritoClient({
         {(!conSesion || estado === "no_auth") && (
           <div className="mb-6 rounded-[20px] border border-border bg-elevated p-4 text-sm">
             {compraInvitado ? (
-              <p className="text-muted">
-                {TEXTOS_INVITADO.avisoCarrito}{" "}
-                <Link href={rutaIngreso("/carrito")} className="font-semibold text-primary hover:underline">
-                  {TEXTOS_INVITADO.ingresar}
-                </Link>
-              </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-semibold text-text">{TEXTOS_INVITADO.carritoTitulo}</p>
+                  <p className="text-muted">{TEXTOS_INVITADO.carritoAyuda}</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <Button variant="outline" size="sm" href={rutaIngreso("/carrito")}>
+                    {TEXTOS_INVITADO.botonIngresar}
+                  </Button>
+                  <Button variant="outline" size="sm" href={`/registro?redirect_url=${encodeURIComponent("/carrito")}`}>
+                    {TEXTOS_INVITADO.botonRegistrarse}
+                  </Button>
+                </div>
+              </div>
             ) : (
               <p className="text-muted">
                 Inicie sesión para completar su compra.{" "}

@@ -143,10 +143,11 @@ describe("carrito", () => {
     expect(boton).toContain("if (anonimo && !compraInvitado) track(eventoMuroIngreso(items, total));");
   });
 
-  it("flag apagado: el cartel de siempre; encendido: compra sin cuenta + «Ya tengo cuenta, ingresar»", () => {
+  it("flag apagado: el cartel de siempre; encendido: «Está comprando como invitado» + botones Ingresar y Crear cuenta", () => {
     expect(carrito).toContain("Inicie sesión para completar su compra.");
-    expect(carrito).toContain("{TEXTOS_INVITADO.avisoCarrito}");
-    expect(carrito).toContain("{TEXTOS_INVITADO.ingresar}");
+    expect(carrito).toContain("{TEXTOS_INVITADO.carritoTitulo}");
+    expect(carrito).toContain("{TEXTOS_INVITADO.botonIngresar}");
+    expect(carrito).toContain("{TEXTOS_INVITADO.botonRegistrarse}");
     expect(carrito).toContain("compraInvitado = false,");
     const pagina = leer("app/carrito/page.tsx");
     expect(pagina).toContain("!(clerkUserId || cliente) && (await compraInvitadoHabilitada())");

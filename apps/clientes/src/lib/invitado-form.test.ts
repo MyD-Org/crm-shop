@@ -119,3 +119,12 @@ describe("textos de invitado: registro de usted", () => {
     expect(TEXTOS_INVITADO.sinToken).toBe("Para continuar, use el enlace «Pagar su pedido» que le enviamos por correo.");
   });
 });
+
+describe("emailParaCupon", () => {
+  it("sólo devuelve el email válido y confirmado, normalizado", async () => {
+    const { emailParaCupon } = await import("./invitado-form");
+    expect(emailParaCupon({ email: " Ana@Cliente.example ", emailConfirmacion: "ana@cliente.example" })).toBe("ana@cliente.example");
+    expect(emailParaCupon({ email: "ana@cliente", emailConfirmacion: "ana@cliente" })).toBe("");
+    expect(emailParaCupon({ email: "ana@cliente.example", emailConfirmacion: "" })).toBe("");
+  });
+});

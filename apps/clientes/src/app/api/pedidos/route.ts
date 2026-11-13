@@ -700,6 +700,19 @@ export async function POST(req: Request) {
           { status: 409 },
         );
       }
+      // El cupón que el comprador vio dejó de aplicar al validarlo con su cuenta o su email (p. ej. sólo
+      // primera compra): el total sube por eso, no por los precios. Se dice el motivo del cupón.
+      if (body.cupon && cotizacion.cuponError) {
+        return NextResponse.json(
+          {
+            error: `${cotizacion.cuponError.mensaje} Revise el nuevo total antes de confirmar.`,
+            motivo: "cupon",
+            totalNuevo: cotizacion.total,
+            cotizacion,
+          },
+          { status: 409 },
+        );
+      }
       return NextResponse.json(
         {
           error: "El precio de algunos productos cambió. Revise el nuevo total antes de confirmar.",

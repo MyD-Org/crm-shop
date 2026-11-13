@@ -110,14 +110,33 @@ describe("POST /api/pedidos con cupón", () => {
     expect(resolverCupon).not.toHaveBeenCalled();
   });
 
-  it("cupón que dejó de valer con totalVisto que lo incluía: 409 precio_cambio con el motivo del cupón, sin pedido", async () => {
+  it("cupón que dejó de valer con totalVisto que lo incluía: 409 motivo cupon con su mensaje (no «precio cambió»), sin pedido", async () => {
     resolverCupon.mockResolvedValue({ ok: false, error: { motivo: "vencido", mensaje: "Este cupón venció." } });
     const r = await post({ cupon: "LUZ-7KQ2M", totalVisto: 900 });
     expect(r.status).toBe(409);
     const j = await r.json();
-    expect(j.motivo).toBe("precio_cambio");
+    expect(j.motivo).toBe("cupon");
+    expect(j.error).toBe("Este cupón venció. Revise el nuevo total antes de confirmar.");
+    expect(j.totalNuevo).toBe(1000);
     expect(j.cotizacion.cuponError).toEqual({ motivo: "vencido", mensaje: "Este cupón venció." });
     expect(crearPedido).not.toHaveBeenCalled();
+  });
+
+  it("cupón visto sin verificar que al confirmar no es primera compra: 409 motivo cupon con ese motivo", async () => {
+    resolverCupon.mockResolvedValue({ ...valido(), motivoCuenta: "no_primera_compra" });
+    const r = await post({ cupon: "LUZ-7KQ2M", totalVisto: 900 });
+    expect(r.status).toBe(409);
+    const j = await r.json();
+    expect(j.motivo).toBe("cupon");
+    expect(j.error).toBe("Este cupón es sólo para la primera compra en la tienda. Revise el nuevo total antes de confirmar.");
+    expect(crearPedido).not.toHaveBeenCalled();
+  });
+
+  it("con el cupón aplicado y el precio cambiado sigue siendo precio_cambio", async () => {
+    precio = 1100;
+    const r = await post({ cupon: "LUZ-7KQ2M", totalVisto: 900 });
+    expect(r.status).toBe(409);
+    expect((await r.json()).motivo).toBe("precio_cambio");
   });
 
   it("cupón ilegible (no_disponible): nunca cobra de más sin avisar", async () => {

@@ -8,7 +8,7 @@
 
 import { getDocumentPdf } from "@/lib/alegra"
 import { maskEmail, sendEmail } from "@/lib/email"
-import { looksLikeEmail, pedidosUrl } from "@/lib/pedido-estado-aviso"
+import { enlacesInvitado, esPedidoDeInvitado, looksLikeEmail, pedidosUrl } from "@/lib/pedido-estado-aviso"
 import { buildPedidoFacturaEmail, esPdf, nombreAdjuntoFactura } from "@/lib/pedido-factura-email"
 import { formatearNumeroPedido, type PedidoRow } from "@/lib/pedidos-repo"
 import { ATTACH_MAX_BYTES } from "@/lib/receipt-email"
@@ -105,7 +105,9 @@ export async function enviarFacturaPedido(input: {
       numeroPedido: formatearNumeroPedido(pedido.numero),
       numeroFactura,
       contactoNombre: pedido.contactoNombre,
-      pedidosUrl: pedidosUrl(tenant, pedido.sitioOrigen),
+      ...(esPedidoDeInvitado(pedido)
+        ? { cuentaUrl: enlacesInvitado(tenant, pedido, "pago_recibido", to).cuentaUrl }
+        : { pedidosUrl: pedidosUrl(tenant, pedido.sitioOrigen) }),
     })
     const base = `pedido-factura/${pedido.id}/${alegraId}`
     const enviado = await sendEmail({ ...tenant, name: marca.name, resendFrom: marca.resendFrom }, to, subject, html, text, {

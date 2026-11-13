@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/email"
 import { buildPedidoEstadoEmail, seAvisaTransicion, type AvisoPedido } from "@/lib/pedido-estado-email"
 import { formatearNumeroPedido, type PedidoRow } from "@/lib/pedidos-repo"
 import type { EstadoPedido } from "@/lib/pedidos-transiciones"
+import { tokenLinkPago } from "@/lib/pedido-link"
 import { urlPublicaShopParaPedido } from "@/lib/shop-destino"
 import { getTenantByIdFromDb } from "@/lib/tenants"
 import { marcaParaSitio } from "@/lib/marca-sitio"
@@ -33,6 +34,45 @@ export function pedidosUrl(
   return base ? `${base}${PATH_PEDIDOS}` : null
 }
 
+/** Medios que se cobran en línea (`pago_metodo`); los mismos que `PROCESADOR_DE_MEDIO` del Shop. */
+const PAGO_METODOS_EN_LINEA = ["mercadopago", "payway"]
+
+/** Pedido de invitado SIN cuenta: ya reclamado (`clerk_user_id`) o con cliente vinculado, es de una cuenta. */
+export function esPedidoDeInvitado(p: Pick<PedidoRow, "compraInvitado" | "clerkUserId" | "clienteCodigo">): boolean {
+  return p.compraInvitado && !p.clerkUserId && !p.clienteCodigo
+}
+
+/**
+ * Datos del mail de un pedido de invitado: «Pagar su pedido» (link firmado al Shop, sólo si sigue
+ * pendiente de pago en línea y el aviso no es el del pago ni la cancelación; sin `PEDIDO_LINK_SECRET`
+ * no hay link) y «Cree su cuenta» (`/registro?email=`). Sin URL del Shop no hay ninguno de los dos.
+ */
+export function enlacesInvitado(
+  tenant: { id: string; shopUrl?: string; shopInternalUrl?: string; shopDestinosExtra?: unknown },
+  pedido: PedidoRow,
+  aviso: AvisoPedido,
+  email: string,
+): { pagarUrl: string | null; cuentaUrl: string | null } {
+  const base = urlPublicaShopParaPedido(tenant, pedido.sitioOrigen, process.env)
+  if (!base) return { pagarUrl: null, cuentaUrl: null }
+  const cuentaUrl = `${base}/registro?email=${encodeURIComponent(email)}`
+  const cobrable =
+    aviso !== "pago_recibido" &&
+    aviso !== "cancelado" &&
+    pedido.estado !== "cancelado" &&
+    (pedido.pagoEstado === "pendiente" || pedido.pagoEstado === "fallido") &&
+    PAGO_METODOS_EN_LINEA.includes(pedido.pagoMetodo)
+  const token = cobrable
+    ? tokenLinkPago({
+        orderId: pedido.id,
+        tenant: tenant.id,
+        creadoEn: pedido.createdAt.getTime(),
+        reservaVenceEn: pedido.reservaVenceEn ? pedido.reservaVenceEn.getTime() : null,
+      })
+    : null
+  return { pagarUrl: token ? `${base}/pagar/${token}` : null, cuentaUrl }
+}
+
 export async function avisarClientePedido(input: {
   tenantId: string
   pedido: PedidoRow
@@ -57,6 +97,7 @@ export async function avisarClientePedido(input: {
       aviso,
       entregaTipo: pedido.entregaTipo,
       pedidosUrl: pedidosUrl(tenant, pedido.sitioOrigen),
+      ...(esPedidoDeInvitado(pedido) ? { invitado: enlacesInvitado(tenant, pedido, aviso, to) } : {}),
     })
     const enviado = await sendEmail({ ...tenant, name: marca.name, resendFrom: marca.resendFrom }, to, subject, html, text, {
       tags: [{ name: "tipo", value: `pedido_${aviso}` }],

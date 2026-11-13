@@ -1,0 +1,12 @@
+{
+  "logo": "logo.local.svg",
+  "logoColores": { "#FFFFFF": "#000", "#FFB547": "#000" },
+  "rubro": "Iluminación · electricidad · herramientas",
+  "direccion": "Calle Falsa 123",
+  "ciudad": "Ciudad Ejemplo",
+  "whatsapp": "000 000-0000",
+  "web": "tienda.example",
+  "qr": "https://www.tienda.example",
+  "gapMm": 3,
+  "densidad": 10
+}

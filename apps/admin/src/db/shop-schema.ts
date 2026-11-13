@@ -64,6 +64,10 @@ export const shopOrders = shop.table("orders", {
   // Origin del Shop donde se hizo el pedido (0044 del Shop); NULL = pedidos viejos. Define a qué
   // dominio apuntan los mails del pedido.
   sitioOrigen: text("sitio_origen"),
+  // Pedido hecho como invitado, sin cuenta (0045 del Shop). Los mails de estado del pedido de un
+  // invitado llevan «Pagar su pedido» en vez del link fijo a Mi cuenta (cuando clerk_user_id y
+  // cliente_codigo siguen NULL). `aviso_pago_pendiente_en` la escribe sólo el cron del Shop: no se declara.
+  compraInvitado: boolean("compra_invitado").notNull().default(false),
   entregaCiudad: text("entrega_ciudad"),
   entregaDireccion: text("entrega_direccion"),
 

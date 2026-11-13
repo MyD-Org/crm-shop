@@ -741,6 +741,21 @@ async function productosDeLineas(items: FilaItem[]): Promise<Map<string, Product
 export interface DuenoPedidos {
   clerkUserId: string | null;
   clienteCodigo?: string;
+  /**
+   * Tercera llave, del invitado (change `compra-como-invitado`): el id del ÚNICO pedido que un token
+   * firmado vigente le autoriza (`lib/invitado-acceso.ts`, que la completa sólo después de verificar
+   * firma, propósito, tenant y vencimiento). Da acceso a ese pedido y a ninguno más, y sólo si es de
+   * invitado y todavía sin dueño (ver `esDeSuDueno`). Las listas la descartan (`soloCuenta`).
+   */
+  invitadoOrderId?: string;
+}
+
+/**
+ * El dueño sin la llave del invitado, para lo que lista o resume pedidos: el invitado no tiene
+ * "Mis pedidos", sólo el pedido puntual que su token autoriza.
+ */
+function soloCuenta(dueno: DuenoPedidos): DuenoPedidos {
+  return { clerkUserId: dueno.clerkUserId, clienteCodigo: dueno.clienteCodigo };
 }
 
 /**
@@ -770,6 +785,18 @@ function esDeSuDueno(dueno: DuenoPedidos) {
   }
   if (dueno.clienteCodigo) {
     condiciones.push(eq(orders.clienteCodigo, dueno.clienteCodigo));
+  }
+  if (dueno.invitadoOrderId) {
+    // Un pedido de invitado SIN dueño: uno con cuenta (clerk_user_id o cliente_codigo) o hecho con
+    // cuenta (compra_invitado = false) no se abre con un token de invitado, aunque el id coincida.
+    condiciones.push(
+      and(
+        eq(orders.id, dueno.invitadoOrderId),
+        eq(orders.compraInvitado, true),
+        isNull(orders.clerkUserId),
+        isNull(orders.clienteCodigo),
+      ),
+    );
   }
   const deSuDueno = condiciones.length === 0 ? sql`false` : or(...condiciones);
   return and(esDeEsteTenant(), deSuDueno);
@@ -831,7 +858,7 @@ export async function listarPedidos(
   const filas = await db
     .select()
     .from(orders)
-    .where(esDeSuDueno(dueno))
+    .where(esDeSuDueno(soloCuenta(dueno)))
     .orderBy(desc(orders.createdAt))
     .limit(limite);
 
@@ -872,12 +899,13 @@ const getPedidoCacheado = cache(async function getPedidoCacheado(
   id: string,
   clerkUserId: string | null,
   clienteCodigo: string | undefined,
+  invitadoOrderId: string | undefined,
 ): Promise<Order | null> {
   const db = getDb();
   const [fila] = await db
     .select()
     .from(orders)
-    .where(and(eq(orders.id, id), esDeSuDueno({ clerkUserId, clienteCodigo })))
+    .where(and(eq(orders.id, id), esDeSuDueno({ clerkUserId, clienteCodigo, invitadoOrderId })))
     .limit(1);
 
   if (!fila) return null;
@@ -897,7 +925,7 @@ const getPedidoCacheado = cache(async function getPedidoCacheado(
  * (`cache()`): la página del detalle y el breadcrumb lo comparten.
  */
 export function getPedido(id: string, dueno: DuenoPedidos): Promise<Order | null> {
-  return getPedidoCacheado(id, dueno.clerkUserId, dueno.clienteCodigo);
+  return getPedidoCacheado(id, dueno.clerkUserId, dueno.clienteCodigo, dueno.invitadoOrderId);
 }
 
 // --- Pago online -----------------------------------------------------------
@@ -1072,7 +1100,8 @@ export async function getPedidoParaComprobante(
   const [fila] = await getDb()
     .select()
     .from(orders)
-    .where(and(eq(orders.id, id), esDeSuDueno(dueno)))
+    // Subir comprobante es de cuenta: el invitado informa el pago por WhatsApp o mail (no hay token).
+    .where(and(eq(orders.id, id), esDeSuDueno(soloCuenta(dueno))))
     .limit(1);
 
   if (!fila) return null;
@@ -1895,7 +1924,7 @@ export async function pedidoPendienteMasReciente(
     .from(orders)
     .where(
       and(
-        esDeSuDueno(dueno),
+        esDeSuDueno(soloCuenta(dueno)),
         // También con el pago rechazado: si no, recargar el checkout tras un rechazo creaba un pedido
         // nuevo y el viejo quedaba reservando stock hasta vencer. Se retoma (o se cancela si el carrito
         // ya es otro) igual que uno pendiente.
@@ -2050,7 +2079,8 @@ export async function cancelarPedidoPendiente(
       .where(
         and(
           eq(orders.id, id),
-          esDeSuDueno(dueno),
+          // Cancelar es de cuenta: el invitado no cancela en v1 (contacta al local), ni con token.
+          esDeSuDueno(soloCuenta(dueno)),
           eq(orders.estado, "pendiente"),
           // `fallido` también: un cobro rechazado no vuelve al pedido incancelable
           // (el intento abierto, si lo hay, se sigue chequeando abajo).
@@ -2603,7 +2633,7 @@ export async function resumenPedidos(
       comprado: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.estado} <> 'cancelado' and ${delAnio}), 0)::float8`,
     })
     .from(orders)
-    .where(esDeSuDueno(dueno));
+    .where(esDeSuDueno(soloCuenta(dueno)));
 
   return {
     pedidosEsteAnio: fila?.pedidos ?? 0,

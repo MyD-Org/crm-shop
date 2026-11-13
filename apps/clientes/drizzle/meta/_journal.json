@@ -316,6 +316,13 @@
       "when": 1793995926245,
       "tag": "0044_orders_sitio_origen",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1794535006853,
+      "tag": "0045_compra_invitado",
+      "breakpoints": true
     }
   ]
 }

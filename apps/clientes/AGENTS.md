@@ -8,6 +8,17 @@ Las reglas comunes (Next.js, ecosistema, repo público, textos de UI) están en 
 - Cambios de búsqueda o de catálogo (sinónimos, diccionario, medidas, categorías, atributos, facetas, banco de búsquedas): usar la skill `ingeniero-rubro` (`docs/skills/ingeniero-rubro/`), con su proceso de banco antes/después. Vive en `docs/` porque el repo no versiona `.claude/`: para que Claude Code la cargue sola, enlazarla una vez con `ln -s "$(pwd)/docs/skills/ingeniero-rubro" ~/.claude/skills/ingeniero-rubro` desde la raíz del checkout principal.
 - Filtros del catálogo: las características del panel salen por tipo de producto (registro en `src/lib/catalogo-facetas-registro.ts`, filtro estricto `?car=`, SQL en `catalogo-facetas-sql.ts`). `?atr=` sigue vivo para la búsqueda (medidas, plan, links viejos, chips) pero ya no es una faceta del panel.
 
+## Envío por zona con tarifa (flag `envio-por-zona`)
+
+Change `envio-por-zona-con-tarifa`. El CRM define los métodos de envío (`public.metodos_envio*`, polígonos dibujados en un mapa; migración 0101 del CRM) y el Shop cotiza el envío por la dirección y lo suma al total. **Con el flag apagado (Vercel Flags, default) nada cambia**: `leerConfigEnvio` no trae `metodos`, no se leen las tablas nuevas y el envío queda "a coordinar".
+
+- Módulos puros duplicados con el CRM (`geo-poligono.ts`, `envio-zona.ts`, `entrega-fecha.ts`, `texto-clave.ts`) comparten `src/lib/__fixtures__/envio-zona-casos.json`, **idéntico byte a byte** al de `apps/admin` (lo verifica un test en cada app). Si cambia uno, cambia el otro.
+- El costo entra por UN punto: `cotizar(lineas, { costoEnvioPara })` (`cotizacion.ts`); carrito, totales por opción, cuotas y pedido lo heredan por `opcionesCotizar`. `lib/envio-plan.ts` arma destino, origen y plan; `evaluarEnvio(subtotal, provincia, config, extra?)` resuelve el método.
+- Las coordenadas NUNCA se toman del body: valen una dirección guardada del propio usuario (`direcciones_envio.lat/lon`, escritas por el servidor) o un `geoToken` firmado (`lib/geo-token.ts`, HMAC con `GEOCODE_FIRMA_SECRET`, vence a 24 h, la calle firmada debe ser `entregaDireccion`). El secreto se lee sólo al firmar o verificar: si falta, no hay ubicación verificada y no se rompe nada.
+- `POST /api/pedidos`: `409 direccion_sin_ubicar` si la localidad la atiende un método pero no hay ubicación exacta (el comprador puede mandar `envioACoordinar: true`); `409 envio_cambio` si la sucursal real de origen difiere dentro de la transacción o si cambió el costo (`costoEnvioVisto`). El pedido congela el costo y el snapshot (`orders.envio_*`, `envio_detalle`, migración 0046); cambiar el medio de pago conserva el envío congelado.
+- La fecha real de entrega la fija el primer evento de confirmación (`confirmarEnvioTx`, en `registrarCobroTx` cuando el pago pasa a aprobado; el CRM hace lo mismo con pago manual y paso a `confirmado`), con el horario congelado del pedido. Idempotente.
+- No prender el flag antes de que el CRM facture la línea "Envío" (rebanada D).
+
 ## Sumar un procesador de pago
 
 El cobro en línea es por procesador: el medio de pago (`slug` de `medios_pago_shop`) apunta a su procesador y el resto del flujo (ruta de cobro, webhook, reconciliación, rescate del pendiente, pie del checkout) no menciona a ninguno. Para sumar uno:

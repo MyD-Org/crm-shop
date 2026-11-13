@@ -6,6 +6,9 @@ import { variantesSelector } from "@/lib/variantes-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
+import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
+import { leerDestinoBody, origenDeEnvio, planEnvio, resolverDestinoEnvio } from "@/lib/envio-plan";
+import { direccionParaEnvio } from "@/lib/direcciones-envio-db";
 import { permitirAsync } from "@/lib/rate-limit";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { contextoUnion } from "@/lib/disponibilidad-contexto";
@@ -100,6 +103,13 @@ function ipDe(req: Request): string | null {
  * bloquea: vuelve `cuponError`. Con `pedidoId` (cambio de medio) rige el cupón congelado del pedido
  * de este comprador y se ignora `cupon`. El envío gratis de la tienda se evalúa sobre el subtotal
  * ANTES del cupón; el envío gratis del cupón lo fuerza.
+ *
+ * Envío por zona (flag `envio-por-zona`, change `envio-por-zona-con-tarifa`): `destino` ({ direccionId?,
+ * geoToken?, calle?, localidad?, cp?, georefId? }) ubica el envío. Las coordenadas sólo valen si salen de una
+ * dirección guardada del propio usuario o de un `geoToken` firmado por el servidor cuya calle coincide con
+ * `destino.calle`; cualquier lat/lon crudo del body se ignora. El costo entra por `costoEnvioPara` de
+ * `cotizar` (un solo punto) y suma al total; sin zona o sin ubicación exacta el envío queda a coordinar.
+ * Apagado: la respuesta es la de siempre.
  */
 export async function POST(req: Request) {
   const { clerkUserId, cliente, email } = await identidadActual();
@@ -130,6 +140,7 @@ export async function POST(req: Request) {
     totalesOpciones?: unknown;
     cupon?: unknown;
     pedidoId?: unknown;
+    destino?: unknown;
   };
   try {
     body = await req.json();
@@ -141,6 +152,10 @@ export async function POST(req: Request) {
   const entregaTipo: EntregaTipo =
     body.entregaTipo === "envio" ? "envio" : "retiro";
   const provinciaTexto = typeof body.provincia === "string" ? body.provincia : null;
+  // Flag `envio-por-zona`: sólo prendido se leen los métodos de envío del CRM (tablas nuevas).
+  const zonaActiva = await envioPorZonaHabilitado();
+  // La config de envío se relee SIN caché: la UI puede mostrar lo de hace minutos, el servidor decide.
+  const configEnvio = await leerConfigEnvio(undefined, { conMetodos: zonaActiva });
 
   if (lineas.length === 0) {
     return NextResponse.json({
@@ -151,7 +166,7 @@ export async function POST(req: Request) {
       total: 0,
       hayProblemas: false,
       flujo: "normal",
-      envio: evaluarEnvio(0, provinciaTexto, await leerConfigEnvio()),
+      envio: evaluarEnvio(0, provinciaTexto, configEnvio),
     });
   }
 
@@ -228,6 +243,23 @@ export async function POST(req: Request) {
     }
     // Campañas de precios activas AHORA, leídas sin caché (lo que cotiza va siempre en vivo).
     const campanias = await campaniasActivasEn(new Date());
+    // Envío por zona: destino con coordenadas verificadas y origen del despacho (sólo con métodos).
+    const conMetodos = entregaTipo === "envio" && (configEnvio.metodos?.length ?? 0) > 0;
+    const destinoEnvio = conMetodos
+      ? await resolverDestinoEnvio({
+          destino: leerDestinoBody(body.destino),
+          provincia: provinciaTexto,
+          clerkUserId,
+          leerDireccion: direccionParaEnvio,
+        })
+      : { provinciaClave: provincia || null };
+    const plan = planEnvio({
+      config: configEnvio,
+      provincia: provinciaTexto,
+      entregaTipo,
+      destino: destinoEnvio,
+      origen: origenDeEnvio(disp, disponibilidad),
+    });
     const opcionesCotizar = {
       soloVisibles,
       ...(agrupar ? { agrupar: true } : {}),
@@ -236,6 +268,7 @@ export async function POST(req: Request) {
       disp: disp ? contextoUnion(disp) : undefined,
       ...(aPedido ? { aPedido } : {}),
       ...(campanias.length ? { campanias } : {}),
+      ...(plan.costoEnvioPara ? { costoEnvioPara: plan.costoEnvioPara } : {}),
     };
     // Monto mínimo por cantidad de cuotas: la base es el total con impuestos a la lista del PAGO ÚNICO
     // del medio. Sólo se cotiza si hay algún mínimo cargado y se pidieron cuotas u opciones.
@@ -303,7 +336,12 @@ export async function POST(req: Request) {
         cupon: cuponParaCotizar,
         entrega: { tipo: entregaTipo, provincia: provinciaTexto },
         nombresMedios: nombres,
-        totalListaGeneral: async () => (await cotizarConLista(undefined)).total,
+        // El mínimo del cupón se mide SIN el costo de envío.
+        totalListaGeneral: async () => {
+          const g = await cotizarConLista(undefined);
+          return g.total - g.costoEnvio;
+        },
+        ...(plan.envioGratisAplica ? {} : { envioGratisAplica: false }),
       });
       const slugCupon = aConfirmar ? "a_coordinar" : conMedio ? pagoMetodo : "";
       cotizacion = await aplicar(cotizacion, slugCupon ? opcionCupon(slugCupon, forma ?? formaPedida, cuotas) : null);
@@ -451,7 +489,7 @@ export async function POST(req: Request) {
       ...(cuentaTransferencia !== undefined ? { cuentaTransferencia } : {}),
       ...(disponibilidad ? { disponibilidad } : {}),
       envio: envioConCupon(
-        evaluarEnvio(cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal, provinciaTexto, await leerConfigEnvio()),
+        plan.evaluar(cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal, cotizacion.cupon?.envioGratis === true),
         cotizacion.cupon?.envioGratis === true,
       ),
     });

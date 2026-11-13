@@ -147,6 +147,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       excluirPedidoId: id,
       ignorarStock: true,
       origen: "/api/pedidos/:id/medio",
+      // El envío es el congelado en el pedido: no se recalcula con la zona de hoy (flag `envio-por-zona`).
+      ...(pedido.costoEnvio > 0 ? { costoEnvioPara: () => pedido.costoEnvio, envioGratisAplica: false } : {}),
       // El cupón congelado del pedido (sin volver a mirar vigencia, mínimo ni cuenta): con una opción
       // no elegible la cotización sale sin descuento y el pedido lo pierde.
       ...(pedido.cupon

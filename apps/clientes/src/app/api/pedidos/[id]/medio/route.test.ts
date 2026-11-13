@@ -159,6 +159,28 @@ describe("POST /api/pedidos/:id/medio", () => {
     vi.unstubAllEnvs();
   });
 
+  it("el envío por zona es el CONGELADO en el pedido: cambiar el medio no lo recalcula", async () => {
+    pedidoParaCambiarMedio.mockResolvedValue({
+      entregaTipo: "envio",
+      pagoMetodo: "mercadopago",
+      lineas: [{ id: "1", qty: 2 }],
+      costoEnvio: 3000,
+    });
+    cotizar.mockImplementation(async (_l: unknown, o: { costoEnvioPara?: (s: number) => number }) => ({
+      ...COT,
+      costoEnvio: o.costoEnvioPara ? o.costoEnvioPara(100) : 0,
+      total: 121 + (o.costoEnvioPara ? o.costoEnvioPara(100) : 0),
+    }));
+    const r = await llamar({ pagoMetodo: "transferencia" });
+    expect(r.status).toBe(200);
+    expect(cambiarMedioPedido.mock.calls[0][2].cotizacion).toMatchObject({ costoEnvio: 3000, total: 3121 });
+  });
+
+  it("sin costo de envío congelado (retiro o flag apagado) no se pasa costoEnvioPara", async () => {
+    await llamar({ pagoMetodo: "transferencia" });
+    for (const [, o] of cotizar.mock.calls) expect(o).not.toHaveProperty("costoEnvioPara");
+  });
+
   it("la cotización ignora el stock que el propio pedido ya reserva", async () => {
     cotizar.mockResolvedValue({
       ...COT,

@@ -25,7 +25,7 @@ import {
 } from "./sucursales";
 import { CONFIG_ENVIO_DEFAULT, type ConfigEnvio } from "./envio";
 import type { EntradaZona, LocalidadAtendida, ZonaEnvio } from "./envio-zona";
-import { horarioEntregaDeConfig, type MetodoEnvioTienda } from "./envio-zona-tienda";
+import { feriadosDeConfig, horarioEntregaDeConfig, type MetodoEnvioTienda } from "./envio-zona-tienda";
 import type { Geometria } from "./geo-poligono";
 import {
   normalizarExcepciones,
@@ -278,6 +278,8 @@ export function armarMetodosEnvio(
         localidades: locs,
         // `config.horarioEntrega` del CRM (change `envio-rapido`); sin horario no se agrega la clave.
         ...(horarioEntregaDeConfig(m.config) ? { horarioEntrega: horarioEntregaDeConfig(m.config) } : {}),
+        // `config.feriados`: días sin entrega (el cálculo de la fecha los salta); sin feriados no se agrega la clave.
+        ...(feriadosDeConfig(m.config).length > 0 ? { feriados: feriadosDeConfig(m.config) } : {}),
       };
     });
 }

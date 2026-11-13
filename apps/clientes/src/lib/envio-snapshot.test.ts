@@ -95,6 +95,44 @@ describe("origenCompatible (re-verificación dentro de la transacción)", () => 
   });
 });
 
+describe("feriados en el horario congelado", () => {
+  const m = metodoDePrueba();
+  const base = cotizarMetodo(m, { provinciaClave: "buenosaires", punto: puntoDePrueba("centro") }, CTX)!;
+  const conFeriados = { ...base, horario: { ...base.horario, feriados: ["2026-11-16", "2026-11-12"] } };
+
+  it("el pedido congela los feriados vigentes (ordenados) junto al horario", () => {
+    const r = armarEnvioPedido(conFeriados, { punto: null, medioOnline: true, ahora: MARTES_10 });
+    expect(r.detalle.horario.feriados).toEqual(["2026-11-12", "2026-11-16"]);
+  });
+
+  it("la estimación del pedido salta el feriado: miércoles 11 después del corte con jueves feriado va al viernes", () => {
+    const miercolesTarde = new Date("2026-11-11T18:00:00Z");
+    const r = armarEnvioPedido(conFeriados, { punto: null, medioOnline: true, ahora: miercolesTarde });
+    expect(r.columnas.envioEntregaEstimada).toBe("2026-11-13");
+  });
+
+  it("sin feriados no agrega la clave (el detalle queda como antes)", () => {
+    const r = armarEnvioPedido(base, { punto: null, medioOnline: true, ahora: MARTES_8 });
+    expect(r.detalle.horario).not.toHaveProperty("feriados");
+  });
+
+  it("horarioDeDetalle lee los feriados; un pedido viejo sin el campo sigue andando", () => {
+    const h = { dias: [1, 2, 3, 4, 5], horaCorte: "09:00", margenMin: 0 };
+    expect(horarioDeDetalle({ horario: { ...h, feriados: ["2026-11-16", "2026-11-16", "2026-02-31", "x", 5] } })).toEqual({ ...h, feriados: ["2026-11-16"] });
+    expect(horarioDeDetalle({ horario: h })).toEqual(h);
+    expect(horarioDeDetalle({ horario: { ...h, feriados: "no es lista" } })).toEqual(h);
+  });
+
+  it("fecha real con los feriados del pedido: viernes tarde con lunes feriado, el martes; el pedido viejo, el lunes", async () => {
+    const { fechaEntrega } = await import("./entrega-fecha");
+    const viernesTarde = new Date("2026-11-13T18:00:00Z");
+    const nuevo = horarioDeDetalle({ horario: { dias: [1, 2, 3, 4, 5], horaCorte: "09:00", margenMin: 0, feriados: ["2026-11-16"] } })!;
+    const viejo = horarioDeDetalle({ horario: { dias: [1, 2, 3, 4, 5], horaCorte: "09:00", margenMin: 0 } })!;
+    expect(fechaEntrega(viernesTarde, nuevo).fecha).toBe("2026-11-17");
+    expect(fechaEntrega(viernesTarde, viejo).fecha).toBe("2026-11-16");
+  });
+});
+
 describe("horarioDeDetalle (lectura del snapshot que escribió el Shop o el CRM)", () => {
   const ok = { horario: { dias: [1, 2, 3, 4, 5], horaCorte: "09:00", margenMin: 30, tz: "America/Argentina/Buenos_Aires" } };
 

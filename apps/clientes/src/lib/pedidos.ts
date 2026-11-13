@@ -58,7 +58,7 @@ import { sitioOrigenDeEntorno } from "./sitio-origen";
 import type { Asignacion, EntradaAsignacion } from "./sucursales";
 import { EnvioCambioError, armarEnvioPedido, horarioDeDetalle, origenCompatible, vistaEnvioDePedido, type EnvioDetalle } from "./envio-snapshot";
 import { fechaEntrega } from "./entrega-fecha";
-import type { ResultadoMetodo } from "./envio-zona";
+import type { ResultadoMetodoTienda } from "./envio-zona-tienda";
 import { leerReglasVenta, leerSucursalesYZonas, type ReglasVentaTenant } from "./sucursales-repo";
 import { decidirSucursalDePedido } from "./sucursales-pedido";
 import { disponibleNeto } from "./sucursales-disponibilidad";
@@ -189,7 +189,7 @@ export interface DatosPedido {
    * re-verifica dentro de la transacción (`EnvioCambioError`). Ausente = retiro, a coordinar o flag apagado.
    */
   envioZona?: {
-    resultado: ResultadoMetodo;
+    resultado: ResultadoMetodoTienda;
     /** Coordenadas verificadas con las que se resolvió la zona (dato personal); null si fue por CP/localidad. */
     punto: { lat: number; lon: number } | null;
     /** Condición de origen del método (`sucursal_origen`). */

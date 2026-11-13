@@ -133,6 +133,20 @@ describe("envío rápido: nombre del método y horario de entrega", () => {
     expect(llegadaEstimada(horario, sabado8).texto).toBe("Llega el lunes 16/11");
   });
 
+  it("feriado un lunes: el viernes tarde llega el martes; el feriado seguido de domingo salta los dos", () => {
+    const viernesTarde = new Date("2026-11-13T18:00:00Z");
+    expect(llegadaEstimada({ ...horario, feriados: ["2026-11-16"] }, viernesTarde).texto).toBe("Llega el martes 17/11");
+    expect(llegadaEstimada(horario, viernesTarde).texto).toBe("Llega el lunes 16/11");
+    const jueves = new Date("2026-11-12T18:00:00Z");
+    expect(llegadaEstimada({ ...horario, feriados: ["2026-11-13"] }, jueves).texto).toBe("Llega el lunes 16/11");
+  });
+
+  it("la ficha usa los feriados del método", () => {
+    const viernesTarde = new Date("2026-11-13T18:00:00Z");
+    const e = estimarEnvioPorLocalidad([metodo({ feriados: ["2026-11-16"] })], MDP, viernesTarde)!;
+    expect(e.llegada.texto).toBe("Llega el martes 17/11");
+  });
+
   it("sin horario (o vacío): «Llega el lunes 16/11 por $ …»", () => {
     const viernes = new Date("2026-11-13T15:00:00Z");
     for (const h of [undefined, "", "  "]) {

@@ -6,7 +6,7 @@
  * Módulo PURO (sin DB ni reloj propio): `crearPedido` lo llama con el instante de la creación.
  */
 import { TZ_ENVIO, fechaEntrega, type FechaEntrega, type HorarioEnvio } from "./entrega-fecha";
-import type { ResultadoMetodo } from "./envio-zona";
+import { fechasFeriadas, type ResultadoMetodoTienda } from "./envio-zona-tienda";
 
 export interface EnvioDetalle {
   v: 1;
@@ -20,7 +20,8 @@ export interface EnvioDetalle {
   precision: "altura" | "calle" | null;
   /** Coordenadas verificadas de la dirección (dato personal) o null si la regla fue cp/georef. */
   punto: { lat: number; lon: number } | null;
-  horario: { dias: number[]; horaCorte: string; margenMin: number; tz: string };
+  /** `feriados` es opcional: los pedidos anteriores no lo traen (se calcula como si no hubiera feriados). */
+  horario: { dias: number[]; horaCorte: string; margenMin: number; tz: string; feriados?: string[] };
   alegra: { itemId: string | null; ivaPct: number };
   avisoFeriados: string;
   /** El pago es en línea (la promesa del día vale sólo con pago aprobado). */
@@ -50,7 +51,7 @@ export function estimarEntrega(ahora: Date, horario: HorarioEnvio, medioOnline: 
 }
 
 export function armarEnvioPedido(
-  r: ResultadoMetodo,
+  r: ResultadoMetodoTienda,
   a: { punto: { lat: number; lon: number } | null; medioOnline: boolean; ahora: Date },
 ): { columnas: ColumnasEnvio; detalle: EnvioDetalle } {
   const estimada = estimarEntrega(a.ahora, r.horario, a.medioOnline);
@@ -71,7 +72,14 @@ export function armarEnvioPedido(
       regla: r.regla,
       precision: a.punto ? r.precision : null,
       punto: a.punto ? { lat: a.punto.lat, lon: a.punto.lon } : null,
-      horario: { dias: r.horario.dias, horaCorte: r.horario.horaCorte, margenMin: r.horario.margenMin, tz: TZ_ENVIO },
+      // Los feriados vigentes al crear el pedido se congelan con el horario: la fecha real (al confirmar) usa los de ese momento.
+      horario: {
+        dias: r.horario.dias,
+        horaCorte: r.horario.horaCorte,
+        margenMin: r.horario.margenMin,
+        tz: TZ_ENVIO,
+        ...(r.horario.feriados?.length ? { feriados: fechasFeriadas(r.horario.feriados) } : {}),
+      },
       alegra: { itemId: r.alegra.itemId, ivaPct: r.alegra.ivaPct },
       avisoFeriados: r.avisoFeriados,
       medioOnline: a.medioOnline,
@@ -81,7 +89,8 @@ export function armarEnvioPedido(
 
 /**
  * El horario congelado de un `envio_detalle` leído de la base, validado (el JSON es un contrato con el
- * CRM): días ISO 1..7 no vacíos, hora de corte "HH:MM" y margen numérico. null = no se puede confiar en él
+ * CRM): días ISO 1..7 no vacíos, hora de corte "HH:MM" y margen numérico; los feriados son opcionales (pedido anterior sin
+ * el campo = ninguno) y se descartan los que no sean fechas válidas. null = no se puede confiar en él
  * (no se calcula ninguna fecha: nunca una fecha inventada).
  */
 export function horarioDeDetalle(detalle: unknown): HorarioEnvio | null {
@@ -92,7 +101,8 @@ export function horarioDeDetalle(detalle: unknown): HorarioEnvio | null {
   if (!Array.isArray(dias) || dias.length === 0 || !dias.every((d) => Number.isInteger(d) && d >= 1 && d <= 7)) return null;
   if (typeof horaCorte !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(horaCorte)) return null;
   if (typeof margenMin !== "number" || !Number.isFinite(margenMin) || margenMin < 0) return null;
-  return { dias: dias as number[], horaCorte, margenMin };
+  const feriados = fechasFeriadas((h as { feriados?: unknown }).feriados);
+  return { dias: dias as number[], horaCorte, margenMin, ...(feriados.length > 0 ? { feriados } : {}) };
 }
 
 /**

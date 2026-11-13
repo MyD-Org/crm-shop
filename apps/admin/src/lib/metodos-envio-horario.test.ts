@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { configConHorario, horarioDeConfig, normalizarHorarioEntrega } from "./metodos-envio-horario"
+import { configConHorario, esFechaIso, feriadosDeConfig, horarioDeConfig, normalizarFeriados, normalizarHorarioEntrega } from "./metodos-envio-horario"
 import { validarMetodoEnvio } from "./metodos-envio-validacion"
 
 const base = () => ({
@@ -46,5 +46,38 @@ describe("horario de entrega en config", () => {
     expect(configConHorario({ otra: 1 }, "antes de las 21 hs")).toEqual({ otra: 1, horarioEntrega: "antes de las 21 hs" })
     expect(configConHorario({ otra: 1, horarioEntrega: "x" }, "")).toEqual({ otra: 1 })
     expect(configConHorario(null, "")).toEqual({})
+  })
+})
+
+describe("feriados del método", () => {
+  it("fechas reales en formato AAAA-MM-DD", () => {
+    expect(esFechaIso("2026-11-16")).toBe(true)
+    for (const f of ["2026-02-30", "2026-13-01", "16/11/2026", "2026-1-5", "", null, 5, "1999-01-01"]) expect(esFechaIso(f)).toBe(false)
+  })
+  it("se validan, ordenan y quitan duplicados; ausente es lista vacía", () => {
+    expect(normalizarFeriados(undefined)).toEqual([])
+    expect(normalizarFeriados(["2026-12-08", " 2026-11-16 ", "2026-12-08"])).toEqual(["2026-11-16", "2026-12-08"])
+  })
+  it("rechaza lo que no es lista, una fecha inválida o más de 60", () => {
+    expect(normalizarFeriados("2026-11-16")).toBeNull()
+    expect(normalizarFeriados(["2026-11-16", "mañana"])).toBeNull()
+    const dias = (n: number) => Array.from({ length: n }, (_, i) => new Date(Date.UTC(2027, 0, 1 + i)).toISOString().slice(0, 10))
+    expect(normalizarFeriados(dias(60))).toHaveLength(60)
+    expect(normalizarFeriados(dias(61))).toBeNull()
+  })
+  it("la validación del método los devuelve ordenados y rechaza los inválidos", () => {
+    const r = validarMetodoEnvio({ ...base(), feriados: ["2026-12-08", "2026-11-16"] })
+    expect(r.ok && r.metodo.feriados).toEqual(["2026-11-16", "2026-12-08"])
+    expect(validarMetodoEnvio({ ...base() })).toMatchObject({ ok: true, metodo: { feriados: [] } })
+    expect(validarMetodoEnvio({ ...base(), feriados: ["2026-02-31"] })).toMatchObject({ ok: false, campo: "feriados" })
+  })
+  it("se leen de config.feriados tolerando basura", () => {
+    expect(feriadosDeConfig({ feriados: ["2026-12-08", "x", "2026-11-16", "2026-11-16"] })).toEqual(["2026-11-16", "2026-12-08"])
+    for (const c of [null, {}, { feriados: "x" }, { feriados: 3 }]) expect(feriadosDeConfig(c)).toEqual([])
+  })
+  it("al guardar conserva el resto de la config y quita la clave si no quedan feriados", () => {
+    expect(configConHorario({ otra: 1 }, "", ["2026-11-16"])).toEqual({ otra: 1, feriados: ["2026-11-16"] })
+    expect(configConHorario({ otra: 1, feriados: ["2026-11-16"] }, "", [])).toEqual({ otra: 1 })
+    expect(configConHorario({ feriados: ["2026-11-16"] }, "x")).toEqual({ horarioEntrega: "x", feriados: ["2026-11-16"] })
   })
 })

@@ -21,6 +21,7 @@ const dto: MetodoEnvioDto = {
   promesa: "Entrega en el día",
   avisoFeriados: "Los feriados pueden modificar la fecha.",
   horarioEntrega: "antes de las 21 hs",
+  feriados: ["2026-11-16", "2026-12-08"],
   gratisAplica: false,
   itemAlegraId: "9001",
   itemAlegraIva: 21,

@@ -21,7 +21,7 @@ import {
   type DestinoEnvio,
   type MetodoEnvio,
 } from "./envio-zona";
-import type { MetodoEnvioTienda, ResultadoMetodoTienda } from "./envio-zona-tienda";
+import { conDatosDeTienda, type MetodoEnvioTienda, type ResultadoMetodoTienda } from "./envio-zona-tienda";
 
 export type EntregaTipo = "retiro" | "envio";
 export type PagoMetodo =
@@ -201,7 +201,7 @@ export function evaluarEnvio(
       gratisTienda: base.gratis,
       gratisCupon: extra?.gratisCupon === true,
     });
-    if (r) return { disponible: true, gratis: r.gratis, aCoordinar: false, motivo: null, faltante: 0, costo: r.costo, metodo: m.horarioEntrega ? { ...r, horarioEntrega: m.horarioEntrega } : r };
+    if (r) return { disponible: true, gratis: r.gratis, aCoordinar: false, motivo: null, faltante: 0, costo: r.costo, metodo: conDatosDeTienda(r, m) };
   }
   if (!destino.punto && podriaAplicarPorLocalidad(ordenados, destino, extra?.origen)) return { ...base, sinUbicar: true };
   return base;

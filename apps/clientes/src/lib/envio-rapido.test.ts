@@ -46,6 +46,13 @@ describe("evaluarEnvio con el horario de entrega", () => {
     expect(e.costo).toBe(4490);
   });
 
+  it("el método resuelto lleva los feriados dentro del horario (los usa el cálculo de llegada y se congelan en el pedido)", () => {
+    const e = evaluarEnvio(10000, "Buenos Aires", { ...CONFIG_ENVIO_DEFAULT, metodos: [metodo({ feriados: ["2026-11-16"] })] }, { destino });
+    expect(e.metodo?.horario.feriados).toEqual(["2026-11-16"]);
+    const sin = evaluarEnvio(10000, "Buenos Aires", { ...CONFIG_ENVIO_DEFAULT, metodos: [metodo()] }, { destino });
+    expect(sin.metodo?.horario).not.toHaveProperty("feriados");
+  });
+
   it("sin horario configurado el método no trae la clave", () => {
     const e = evaluarEnvio(10000, "Buenos Aires", { ...CONFIG_ENVIO_DEFAULT, metodos: [metodo()] }, { destino });
     expect(e.metodo).not.toHaveProperty("horarioEntrega");

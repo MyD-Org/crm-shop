@@ -5,10 +5,11 @@ import { PROVINCIAS } from "@/lib/provincias"
 import { claveProvinciaZona } from "@/lib/sucursales-zona"
 import { claveTexto } from "@/lib/texto-clave"
 import type { Bbox, Geometria } from "@/lib/geo-poligono"
-import type { LocalidadAtendida, MetodoEnvio } from "@/lib/envio-zona"
+import type { LocalidadAtendida } from "@/lib/envio-zona"
+import type { MetodoEnvioConFeriados } from "@/lib/metodos-envio-probar"
 import type { GeoLocalidad } from "@/lib/metodos-envio-localidades"
 import type { MetodoEnvioValidado } from "@/lib/metodos-envio-validacion"
-import { configConHorario, horarioDeConfig } from "@/lib/metodos-envio-horario"
+import { configConHorario, feriadosDeConfig, horarioDeConfig } from "@/lib/metodos-envio-horario"
 
 // Acceso a datos de los métodos de envío por zona (change `envio-por-zona-con-tarifa`, rebanada A).
 // TODO filtra por `tenantId` (el del guard, nunca el del body): un método de otro tenant se comporta
@@ -58,6 +59,8 @@ export interface MetodoEnvioDto {
   avisoFeriados: string
   /** `config.horarioEntrega`; "" = sin horario. */
   horarioEntrega: string
+  /** `config.feriados`: fechas "YYYY-MM-DD" sin entrega. */
+  feriados: string[]
   gratisAplica: boolean
   itemAlegraId: string | null
   itemAlegraIva: number
@@ -173,6 +176,7 @@ async function cargar(tenantId: string, soloActivos: boolean): Promise<Cargado[]
         promesa: m.promesa,
         avisoFeriados: m.avisoFeriados,
         horarioEntrega: horarioDeConfig(m.config),
+        feriados: feriadosDeConfig(m.config),
         gratisAplica: m.gratisAplica,
         itemAlegraId: m.itemAlegraId,
         itemAlegraIva: Number(m.itemAlegraIva),
@@ -187,8 +191,9 @@ export async function listarMetodos(tenantId: string): Promise<MetodoEnvioDto[]>
   return (await cargar(tenantId, false)).map((c) => c.dto)
 }
 
-function aMetodoPuro({ dto, entradaNombreNorm, localidadNombreNorm }: Cargado): MetodoEnvio {
+function aMetodoPuro({ dto, entradaNombreNorm, localidadNombreNorm }: Cargado): MetodoEnvioConFeriados {
   return {
+    feriados: dto.feriados,
     id: dto.id,
     slug: dto.slug,
     nombre: dto.nombre,
@@ -226,12 +231,12 @@ function aMetodoPuro({ dto, entradaNombreNorm, localidadNombreNorm }: Cargado): 
 }
 
 /** Métodos activos en la forma que consumen los módulos puros (`resolverZona`, `estimarPorLocalidad`). */
-export async function leerMetodosActivos(tenantId: string): Promise<MetodoEnvio[]> {
+export async function leerMetodosActivos(tenantId: string): Promise<MetodoEnvioConFeriados[]> {
   return (await cargar(tenantId, true)).map(aMetodoPuro)
 }
 
 /** Un método del tenant (activo o no) en la forma de los módulos puros; null si no existe o es de otro tenant. */
-export async function leerMetodoPuro(tenantId: string, id: string): Promise<MetodoEnvio | null> {
+export async function leerMetodoPuro(tenantId: string, id: string): Promise<MetodoEnvioConFeriados | null> {
   const c = (await cargar(tenantId, false)).find((x) => x.dto.id === id)
   return c ? aMetodoPuro(c) : null
 }
@@ -313,8 +318,8 @@ function columnasMetodo(m: MetodoParaGuardar) {
   }
 }
 
-/** Columna `config` conservando las claves que no administra este editor (sólo toca `horarioEntrega`). */
-const configDeMetodo = (actual: unknown, m: MetodoParaGuardar) => configConHorario(actual, m.horarioEntrega)
+/** Columna `config` conservando las claves que no administra este editor (sólo toca `horarioEntrega` y `feriados`). */
+const configDeMetodo = (actual: unknown, m: MetodoParaGuardar) => configConHorario(actual, m.horarioEntrega, m.feriados)
 
 async function leerUno(tenantId: string, id: string): Promise<MetodoEnvioDto> {
   const m = (await cargar(tenantId, false)).find((c) => c.dto.id === id)

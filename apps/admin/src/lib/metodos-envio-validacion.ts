@@ -5,7 +5,7 @@
 
 import { claveProvinciaZona } from "@/lib/sucursales-zona"
 import { claveTexto } from "@/lib/texto-clave"
-import { MAX_HORARIO_ENTREGA, normalizarHorarioEntrega } from "@/lib/metodos-envio-horario"
+import { MAX_FERIADOS, MAX_HORARIO_ENTREGA, normalizarFeriados, normalizarHorarioEntrega } from "@/lib/metodos-envio-horario"
 import { bboxDe, bboxInterseca, puntoEnGeometria, validarGeometria, type Geometria } from "@/lib/geo-poligono"
 
 export interface EntradaValidada {
@@ -48,6 +48,8 @@ export interface MetodoEnvioValidado {
   avisoFeriados: string
   /** Texto libre corto (hasta 40) que se guarda en `config.horarioEntrega`; "" = sin horario. */
   horarioEntrega: string
+  /** Fechas "YYYY-MM-DD" sin entrega (hasta 60, ordenadas y sin repetir); se guardan en `config.feriados`. */
+  feriados: string[]
   gratisAplica: boolean
   itemAlegraId: string | null
   itemAlegraIva: number
@@ -184,6 +186,10 @@ export function validarMetodoEnvio(body: unknown): ResultadoValidacionMetodo {
   if (avisoFeriados === null) return falla("avisoFeriados", "El aviso de feriados admite hasta 300 caracteres.")
   const horarioEntrega = normalizarHorarioEntrega(body.horarioEntrega)
   if (horarioEntrega === null) return falla("horarioEntrega", `El horario de entrega admite hasta ${MAX_HORARIO_ENTREGA} caracteres.`)
+  const feriados = normalizarFeriados(body.feriados)
+  if (feriados === null) {
+    return falla("feriados", `Ingrese hasta ${MAX_FERIADOS} feriados, cada uno con una fecha válida (AAAA-MM-DD).`)
+  }
 
   const activo = body.activo === true
   const gratisAplica = body.gratisAplica === true
@@ -317,6 +323,7 @@ export function validarMetodoEnvio(body: unknown): ResultadoValidacionMetodo {
       promesa,
       avisoFeriados,
       horarioEntrega,
+      feriados,
       gratisAplica,
       itemAlegraId,
       itemAlegraIva: iva,

@@ -24,7 +24,7 @@ export function FilaEnvioZona({
   metodo?: {
     nombre?: string;
     zona: string;
-    horario: { dias: number[]; horaCorte: string; margenMin: number };
+    horario: { dias: number[]; horaCorte: string; margenMin: number; feriados?: string[] };
     horarioEntrega?: string;
   } | null;
 }) {

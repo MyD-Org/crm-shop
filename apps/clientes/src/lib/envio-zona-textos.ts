@@ -7,7 +7,7 @@ import { fmtPesosEnteros } from "./format";
 import { TZ_ENVIO, fechaEntrega, type FechaEntrega, type HorarioEnvio } from "./entrega-fecha";
 import { estimarEntrega } from "./envio-snapshot";
 import { cotizarMetodo, estimarPorLocalidad, type DestinoEnvio, type MetodoEnvio } from "./envio-zona";
-import type { MetodoEnvioTienda } from "./envio-zona-tienda";
+import { horarioDeMetodo, type MetodoEnvioTienda } from "./envio-zona-tienda";
 import { claveProvincia } from "./sucursales";
 import { claveTexto } from "./texto-clave";
 
@@ -170,7 +170,7 @@ export function estimarEnvioPorLocalidad(
     if (!loc) continue;
     const e = estimarPorLocalidad(m, loc);
     if (!e) continue;
-    const llegada = llegadaEstimada({ dias: m.diasOperativos, horaCorte: m.horaCorte, margenMin: m.margenMin }, ahora, true, m.horarioEntrega);
+    const llegada = llegadaEstimada(horarioDeMetodo(m), ahora, true, m.horarioEntrega);
     return {
       tipo: e.tipo,
       precio: e.precio,
@@ -199,7 +199,7 @@ export function estimarEnvioPorPunto(
   for (const m of ordenados) {
     const r = cotizarMetodo(m, destino, { origen: null, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false });
     if (!r) continue;
-    const llegada = llegadaEstimada({ dias: m.diasOperativos, horaCorte: m.horaCorte, margenMin: m.margenMin }, ahora, true, m.horarioEntrega);
+    const llegada = llegadaEstimada(horarioDeMetodo(m), ahora, true, m.horarioEntrega);
     return {
       tipo: "exacto",
       precio: r.precio,

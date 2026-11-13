@@ -84,6 +84,16 @@ describe("armarMetodosEnvio", () => {
     }
   });
 
+  it("lee config.feriados: válidos, ordenados, sin repetir; sin ellos no agrega la clave", () => {
+    const config = { feriados: ["2026-12-08", "2026-11-16", "2026-11-16", "2026-02-30", "basura", 7] };
+    const [con] = armarMetodosEnvio([{ ...METODO, config }], [ZONA], [ENTRADA], [LOCALIDAD]);
+    expect(con.feriados).toEqual(["2026-11-16", "2026-12-08"]);
+    for (const c of [{}, { feriados: [] }, { feriados: "x" }, { feriados: ["no"] }]) {
+      const [sin] = armarMetodosEnvio([{ ...METODO, config: c }], [ZONA], [ENTRADA], [LOCALIDAD]);
+      expect(sin).not.toHaveProperty("feriados");
+    }
+  });
+
   it("localidad sin centro ni caja: null (no se inventa)", () => {
     const l = { ...LOCALIDAD, centroLat: null, centroLon: null, bboxSur: null };
     const [m] = armarMetodosEnvio([METODO], [], [], [l]);

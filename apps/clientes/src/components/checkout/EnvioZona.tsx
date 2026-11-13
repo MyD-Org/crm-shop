@@ -18,7 +18,7 @@ function useLlegada(envio: EnvioEvaluado, pagaEnLinea: boolean) {
   const horarioEntrega = envio.metodo?.horarioEntrega;
   // Se calcula en el navegador cuando ya hay cotización (nunca en el render del servidor): sin desajuste de hidratación.
   return useMemo(
-    () => (horario ? llegadaEstimada({ dias: horario.dias, horaCorte: horario.horaCorte, margenMin: horario.margenMin }, new Date(), pagaEnLinea, horarioEntrega) : null),
+    () => (horario ? llegadaEstimada(horario, new Date(), pagaEnLinea, horarioEntrega) : null),
     [horario, horarioEntrega, pagaEnLinea],
   );
 }

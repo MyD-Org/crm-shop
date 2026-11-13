@@ -6,10 +6,17 @@
  * Módulo PURO (sin DB ni reloj).
  */
 import type { HorarioEnvio } from "./entrega-fecha"
+import { esFechaIso } from "./metodos-envio-horario"
+
+/** Feriados congelados en el pedido: sólo las fechas válidas, ordenadas y sin repetir (campo opcional). */
+function feriadosDeHorario(v: unknown): string[] {
+  return Array.isArray(v) ? [...new Set(v.filter(esFechaIso))].sort() : []
+}
 
 /**
  * El horario congelado de un `envio_detalle`, validado: días ISO 1..7 no vacíos, hora de corte
- * "HH:MM" y margen numérico. null = no se puede confiar en él (no se calcula ninguna fecha: nunca
+ * "HH:MM" y margen numérico; los feriados (opcionales: los pedidos anteriores no los traen) son las fechas
+ * "YYYY-MM-DD" válidas que haya. null = no se puede confiar en él (no se calcula ninguna fecha: nunca
  * una fecha inventada). Copia de `horarioDeDetalle` del Shop.
  */
 export function horarioDeDetalle(detalle: unknown): HorarioEnvio | null {
@@ -20,7 +27,8 @@ export function horarioDeDetalle(detalle: unknown): HorarioEnvio | null {
   if (!Array.isArray(dias) || dias.length === 0 || !dias.every((d) => Number.isInteger(d) && d >= 1 && d <= 7)) return null
   if (typeof horaCorte !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(horaCorte)) return null
   if (typeof margenMin !== "number" || !Number.isFinite(margenMin) || margenMin < 0) return null
-  return { dias: dias as number[], horaCorte, margenMin }
+  const feriados = feriadosDeHorario((h as { feriados?: unknown }).feriados)
+  return { dias: dias as number[], horaCorte, margenMin, ...(feriados.length > 0 ? { feriados } : {}) }
 }
 
 export type ReglaEnvio = "poligono" | "cp" | "georef"

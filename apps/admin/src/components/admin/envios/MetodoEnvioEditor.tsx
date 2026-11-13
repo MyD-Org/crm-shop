@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Alert, Button, Checkbox, Field, Input, Select, Switch, useToast } from "@myd-org/ui"
 import { PROVINCIAS } from "@/lib/provincias"
 import { formACuerpo, type FormMetodo } from "@/lib/metodos-envio-form"
-import { MAX_HORARIO_ENTREGA } from "@/lib/metodos-envio-horario"
+import { MAX_FERIADOS, MAX_HORARIO_ENTREGA, esFechaIso } from "@/lib/metodos-envio-horario"
 import type { MetodoEnvioDto } from "@/lib/metodos-envio-repo"
 import { LocalidadesAtendidasEditor } from "./LocalidadesAtendidasEditor"
 import { PruebaDireccionPanel } from "./PruebaDireccionPanel"
@@ -42,6 +42,7 @@ export function MetodoEnvioEditor({
   const [errores, setErrores] = useState<Errores>({})
   const [avisos, setAvisos] = useState<string[]>([])
   const [guardando, setGuardando] = useState(false)
+  const [nuevoFeriado, setNuevoFeriado] = useState("")
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
   const [seleccionada, setSeleccionada] = useState<string | null>(inicial.zonas[0]?.clave ?? null)
   const [punto, setPunto] = useState<{ lat: number; lon: number } | null>(null)
@@ -63,6 +64,13 @@ export function MetodoEnvioEditor({
     setForm((f) => ({ ...f, [campo]: valor }))
     setErrores((e) => ({ ...e, [campo]: "", general: "" }))
   }
+
+  const agregarFeriado = () => {
+    if (!esFechaIso(nuevoFeriado) || form.feriados.includes(nuevoFeriado) || form.feriados.length >= MAX_FERIADOS) return
+    cambiar("feriados", [...form.feriados, nuevoFeriado].sort())
+    setNuevoFeriado("")
+  }
+  const quitarFeriado = (f: string) => cambiar("feriados", form.feriados.filter((x) => x !== f))
 
   const alternarDia = (n: number, marcado: boolean) =>
     cambiar("dias", marcado ? [...new Set([...form.dias, n])].sort() : form.dias.filter((d) => d !== n))
@@ -209,6 +217,39 @@ export function MetodoEnvioEditor({
             />
           </Field>
         </div>
+
+        <Field
+          label="Feriados (no se entrega)"
+          hint={`Opcional. En estas fechas no se entrega y el pedido pasa al siguiente día de entrega. Hasta ${MAX_FERIADOS} fechas.`}
+          error={errores.feriados}
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="date"
+                value={nuevoFeriado}
+                onChange={(e) => setNuevoFeriado(e.target.value)}
+                aria-label="Fecha del feriado"
+                className="max-w-[12rem]"
+              />
+              <Button type="button" variant="outline" size="sm" onClick={agregarFeriado} disabled={!esFechaIso(nuevoFeriado)}>
+                Agregar feriado
+              </Button>
+            </div>
+            {form.feriados.length > 0 && (
+              <ul className="flex flex-wrap gap-2" aria-label="Feriados cargados">
+                {form.feriados.map((f) => (
+                  <li key={f} className="flex items-center gap-1 rounded-md border px-2 py-1 text-sm" style={{ color: "var(--ink)" }}>
+                    <span>{f.split("-").reverse().join("/")}</span>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => quitarFeriado(f)} aria-label={`Quitar el feriado ${f.split("-").reverse().join("/")}`}>
+                      Quitar
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Field>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <Field label="Ítem de Alegra del envío" hint="Id del servicio “Envío” en Alegra. Es obligatorio para activar el método." error={errores.itemAlegraId}>

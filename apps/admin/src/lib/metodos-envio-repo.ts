@@ -8,6 +8,7 @@ import type { Bbox, Geometria } from "@/lib/geo-poligono"
 import type { LocalidadAtendida, MetodoEnvio } from "@/lib/envio-zona"
 import type { GeoLocalidad } from "@/lib/metodos-envio-localidades"
 import type { MetodoEnvioValidado } from "@/lib/metodos-envio-validacion"
+import { configConHorario, horarioDeConfig } from "@/lib/metodos-envio-horario"
 
 // Acceso a datos de los métodos de envío por zona (change `envio-por-zona-con-tarifa`, rebanada A).
 // TODO filtra por `tenantId` (el del guard, nunca el del body): un método de otro tenant se comporta
@@ -55,6 +56,8 @@ export interface MetodoEnvioDto {
   margenMin: number
   promesa: string
   avisoFeriados: string
+  /** `config.horarioEntrega`; "" = sin horario. */
+  horarioEntrega: string
   gratisAplica: boolean
   itemAlegraId: string | null
   itemAlegraIva: number
@@ -169,6 +172,7 @@ async function cargar(tenantId: string, soloActivos: boolean): Promise<Cargado[]
         margenMin: m.margenMin,
         promesa: m.promesa,
         avisoFeriados: m.avisoFeriados,
+        horarioEntrega: horarioDeConfig(m.config),
         gratisAplica: m.gratisAplica,
         itemAlegraId: m.itemAlegraId,
         itemAlegraIva: Number(m.itemAlegraIva),
@@ -309,6 +313,9 @@ function columnasMetodo(m: MetodoParaGuardar) {
   }
 }
 
+/** Columna `config` conservando las claves que no administra este editor (sólo toca `horarioEntrega`). */
+const configDeMetodo = (actual: unknown, m: MetodoParaGuardar) => configConHorario(actual, m.horarioEntrega)
+
 async function leerUno(tenantId: string, id: string): Promise<MetodoEnvioDto> {
   const m = (await cargar(tenantId, false)).find((c) => c.dto.id === id)
   if (!m) throw new Error("El método recién guardado no se encontró")
@@ -324,7 +331,7 @@ export async function crearMetodo(tenantId: string, m: MetodoParaGuardar): Promi
         .from(metodosEnvio)
         .where(and(eq(metodosEnvio.tenantId, tenantId), eq(metodosEnvio.slug, m.slug)))
       if (existente) return null
-      const [fila] = await tx.insert(metodosEnvio).values({ ...columnasMetodo(m), tenantId }).returning({ id: metodosEnvio.id })
+      const [fila] = await tx.insert(metodosEnvio).values({ ...columnasMetodo(m), config: configDeMetodo({}, m), tenantId }).returning({ id: metodosEnvio.id })
       await escribirHijos(tx, fila.id, m, new Map())
       return fila.id
     })
@@ -341,7 +348,7 @@ export async function guardarMetodo(tenantId: string, id: string, m: MetodoParaG
     const resultado = await getDb().transaction(async (tx): Promise<"ok" | "not_found" | "slug"> => {
       await bloquearTenant(tx, tenantId)
       const [actual] = await tx
-        .select({ id: metodosEnvio.id })
+        .select({ id: metodosEnvio.id, config: metodosEnvio.config })
         .from(metodosEnvio)
         .where(and(eq(metodosEnvio.tenantId, tenantId), eq(metodosEnvio.id, id)))
       if (!actual) return "not_found"
@@ -367,7 +374,7 @@ export async function guardarMetodo(tenantId: string, id: string, m: MetodoParaG
         }),
       )
 
-      await tx.update(metodosEnvio).set({ ...columnasMetodo(m), updatedAt: new Date() }).where(eq(metodosEnvio.id, id))
+      await tx.update(metodosEnvio).set({ ...columnasMetodo(m), config: configDeMetodo(actual.config, m), updatedAt: new Date() }).where(eq(metodosEnvio.id, id))
       // Las entradas caen en cascada con sus zonas.
       await tx.delete(metodosEnvioZonas).where(eq(metodosEnvioZonas.metodoId, id))
       await tx.delete(metodosEnvioLocalidades).where(eq(metodosEnvioLocalidades.metodoId, id))

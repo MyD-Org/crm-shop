@@ -7,7 +7,7 @@ import type { EstimadoFicha } from "@/lib/envio-zona-textos";
 const estimado = (tipo: "exacto" | "desde"): EstimadoFicha => ({
   tipo,
   precio: 4500,
-  texto: "x",
+  texto: "Llega mañana",
   llegada: { texto: "Llega mañana", mismoDia: false, condicion: null },
   avisoFeriados: "Los feriados no hay entregas.",
   metodo: "Envío en el día",
@@ -29,6 +29,28 @@ describe("FilaEnvioZona", () => {
     expect(html).toContain("No está incluido en el total");
     expect(html).toContain("Llega mañana");
     expect(html).toContain("Los feriados no hay entregas.");
+  });
+});
+
+describe("FilaEnvioZona: cartel del método", () => {
+  it("el estimado lleva el cartel verde con el NOMBRE del método (no un texto fijo)", () => {
+    const html = renderToStaticMarkup(<FilaEnvioZona costo={undefined} gratis={false} estimado={{ ...estimado("exacto"), metodo: "Envío rápido" }} />);
+    expect(html).toContain("Envío rápido");
+    expect(html).toContain("bg-success-soft");
+    expect(html).not.toContain("Envío en el día");
+  });
+
+  it("con costo resuelto: cartel, «Llega … por $» y la condición en verde", () => {
+    const html = renderToStaticMarkup(
+      <FilaEnvioZona
+        costo={4490}
+        gratis={false}
+        estimado={undefined}
+        metodo={{ nombre: "Envío rápido", zona: "Centro", horario: { dias: [1, 2, 3, 4, 5, 6, 7], horaCorte: "23:59", margenMin: 0 }, horarioEntrega: "antes de las 21 hs" }}
+      />,
+    );
+    expect(html).toContain("Envío rápido");
+    expect(html).toContain("antes de las 21 hs por");
   });
 });
 

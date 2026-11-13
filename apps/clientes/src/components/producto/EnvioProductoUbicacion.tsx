@@ -4,8 +4,9 @@ import { TEXTOS_UBICACION, envioFichaSegunUbicacion } from "@/lib/ubicacion";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { ubicacionExactaVerificada } from "@/lib/ubicacion-exacta";
 import { claveProvincia } from "@/lib/sucursales";
-import { TEXTOS_ENVIO_ZONA, estimarEnvioPorLocalidad, estimarEnvioPorPunto } from "@/lib/envio-zona-textos";
+import { estimarEnvioPorLocalidad, estimarEnvioPorPunto } from "@/lib/envio-zona-textos";
 import { fmtPesosEnteros } from "@/lib/format";
+import { CartelEnvioRapido } from "@/components/envio/CartelEnvioRapido";
 import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
 import { CLASE_TONO } from "@/components/producto/EntregaProducto";
 import type { LineaDisponibilidad } from "@/lib/disponibilidad-textos";
@@ -54,22 +55,17 @@ export async function EnvioProductoUbicacion({
   if (zona) {
     return (
       <>
-        {zona.zonas && zona.zonas.length > 1 ? (
-          <>
-            <span className="font-semibold text-text">{TEXTOS_ENVIO_ZONA.enElDia}</span>
-            {zona.zonas.map((z) => (
-              <span key={z.nombre} className="block text-text">
-                {z.nombre}: {fmtPesosEnteros(z.precio)}
-              </span>
-            ))}
-          </>
-        ) : (
-          <span className="font-semibold text-text">{zona.texto}</span>
-        )}
         <span className="block">
-          {zona.llegada.texto}
-          {zona.llegada.condicion ? `, ${zona.llegada.condicion}` : ""}.
+          <CartelEnvioRapido nombre={zona.metodo} />
         </span>
+        <span className="block font-semibold text-text">{zona.texto}</span>
+        {zona.zonas && zona.zonas.length > 1 &&
+          zona.zonas.map((z) => (
+            <span key={z.nombre} className="block text-text">
+              {z.nombre}: {fmtPesosEnteros(z.precio)}
+            </span>
+          ))}
+        {zona.llegada.condicion && <span className="block text-success">{zona.llegada.condicion}</span>}
         {zona.avisoFeriados && <span className="block text-xs">{zona.avisoFeriados}</span>}
         {/* Sin el plazo de despacho genérico («Despacho dentro de las 24 h hábiles»): la llegada del método
             ya dice cuándo llega y las dos líneas juntas se contradicen. */}

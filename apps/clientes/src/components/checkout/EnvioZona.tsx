@@ -4,7 +4,8 @@ import { useMemo } from "react";
 import { Button } from "@myd-org/ui";
 import { fmtPrecio } from "@/lib/format";
 import type { EnvioEvaluado } from "@/lib/envio";
-import { TEXTOS_ENVIO_ZONA, llegadaEstimada } from "@/lib/envio-zona-textos";
+import { TEXTOS_ENVIO_ZONA, llegadaEstimada, textoLineaLlegada } from "@/lib/envio-zona-textos";
+import { CartelEnvioRapido } from "@/components/envio/CartelEnvioRapido";
 
 /**
  * Piezas del checkout para el envío por zona (flag `envio-por-zona`). Todas dibujan sólo con datos que el
@@ -14,10 +15,11 @@ import { TEXTOS_ENVIO_ZONA, llegadaEstimada } from "@/lib/envio-zona-textos";
 /** Cuándo llega, según el horario del método y el medio de pago (sin pago en línea nunca es «hoy»). */
 function useLlegada(envio: EnvioEvaluado, pagaEnLinea: boolean) {
   const horario = envio.metodo?.horario;
+  const horarioEntrega = envio.metodo?.horarioEntrega;
   // Se calcula en el navegador cuando ya hay cotización (nunca en el render del servidor): sin desajuste de hidratación.
   return useMemo(
-    () => (horario ? llegadaEstimada({ dias: horario.dias, horaCorte: horario.horaCorte, margenMin: horario.margenMin }, new Date(), pagaEnLinea) : null),
-    [horario, pagaEnLinea],
+    () => (horario ? llegadaEstimada({ dias: horario.dias, horaCorte: horario.horaCorte, margenMin: horario.margenMin }, new Date(), pagaEnLinea, horarioEntrega) : null),
+    [horario, horarioEntrega, pagaEnLinea],
   );
 }
 
@@ -38,9 +40,10 @@ export function FilaEnvioResumen({ envio, pagaEnLinea }: { envio: EnvioEvaluado;
       {llegada && (
         <p className="mt-0.5 text-xs text-muted">
           {llegada.texto}
-          {llegada.condicion ? `, ${llegada.condicion}` : pagaEnLinea ? "" : `, ${TEXTOS_ENVIO_ZONA.pagoConfirmado}`}.
+          {!llegada.condicion && !pagaEnLinea ? `, ${TEXTOS_ENVIO_ZONA.pagoConfirmado}` : ""}.
         </p>
       )}
+      {llegada?.condicion && <p className="mt-0.5 text-xs text-success">{llegada.condicion}</p>}
       {envio.metodo?.avisoFeriados && <p className="mt-0.5 text-xs text-muted">{envio.metodo.avisoFeriados}</p>}
     </div>
   );
@@ -90,16 +93,15 @@ export function AvisoEnvioZona({
   if (!envio.metodo) return null;
   return (
     <div className="mt-3 rounded-lg bg-bg p-3 text-xs text-text" data-envio-zona="metodo">
-      <p className="font-semibold">
-        {envio.metodo.nombre}
-        {envio.gratis || (envio.costo ?? 0) === 0 ? ": sin cargo" : `: ${fmtPrecio(envio.costo ?? 0)}`}
-      </p>
+      <CartelEnvioRapido nombre={envio.metodo.nombre} />
       {llegada && (
-        <p className="mt-0.5 text-muted">
-          {llegada.texto}
-          {llegada.condicion ? `, ${llegada.condicion}` : pagaEnLinea ? "" : `, ${TEXTOS_ENVIO_ZONA.pagoConfirmado}`}.
+        <p className="mt-1.5 font-semibold">
+          {textoLineaLlegada(llegada.texto, undefined, envio.gratis || (envio.costo ?? 0) === 0 ? undefined : (envio.costo ?? 0))}
+          {envio.gratis || (envio.costo ?? 0) === 0 ? " sin cargo" : ""}
+          {!llegada.condicion && !pagaEnLinea ? `, ${TEXTOS_ENVIO_ZONA.pagoConfirmado}` : ""}
         </p>
       )}
+      {llegada?.condicion && <p className="mt-0.5 text-success">{llegada.condicion}</p>}
       {envio.metodo.avisoFeriados && <p className="mt-0.5 text-muted">{envio.metodo.avisoFeriados}</p>}
       {envio.metodo.precision === "calle" && <p className="mt-1 text-warning">{TEXTOS_ENVIO_ZONA.direccionAproximada}</p>}
     </div>

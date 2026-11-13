@@ -5,6 +5,7 @@
 
 import { claveProvinciaZona } from "@/lib/sucursales-zona"
 import { claveTexto } from "@/lib/texto-clave"
+import { MAX_HORARIO_ENTREGA, normalizarHorarioEntrega } from "@/lib/metodos-envio-horario"
 import { bboxDe, bboxInterseca, puntoEnGeometria, validarGeometria, type Geometria } from "@/lib/geo-poligono"
 
 export interface EntradaValidada {
@@ -45,6 +46,8 @@ export interface MetodoEnvioValidado {
   margenMin: number
   promesa: string
   avisoFeriados: string
+  /** Texto libre corto (hasta 40) que se guarda en `config.horarioEntrega`; "" = sin horario. */
+  horarioEntrega: string
   gratisAplica: boolean
   itemAlegraId: string | null
   itemAlegraIva: number
@@ -179,6 +182,8 @@ export function validarMetodoEnvio(body: unknown): ResultadoValidacionMetodo {
   if (promesa === null) return falla("promesa", "El texto de la promesa admite hasta 200 caracteres.")
   const avisoFeriados = body.avisoFeriados === undefined ? "" : texto(body.avisoFeriados, 300)
   if (avisoFeriados === null) return falla("avisoFeriados", "El aviso de feriados admite hasta 300 caracteres.")
+  const horarioEntrega = normalizarHorarioEntrega(body.horarioEntrega)
+  if (horarioEntrega === null) return falla("horarioEntrega", `El horario de entrega admite hasta ${MAX_HORARIO_ENTREGA} caracteres.`)
 
   const activo = body.activo === true
   const gratisAplica = body.gratisAplica === true
@@ -311,6 +316,7 @@ export function validarMetodoEnvio(body: unknown): ResultadoValidacionMetodo {
       margenMin,
       promesa,
       avisoFeriados,
+      horarioEntrega,
       gratisAplica,
       itemAlegraId,
       itemAlegraIva: iva,

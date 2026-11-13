@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Alert, Button, Checkbox, Field, Input, Select, Switch, useToast } from "@myd-org/ui"
 import { PROVINCIAS } from "@/lib/provincias"
 import { formACuerpo, type FormMetodo } from "@/lib/metodos-envio-form"
+import { MAX_HORARIO_ENTREGA } from "@/lib/metodos-envio-horario"
 import type { MetodoEnvioDto } from "@/lib/metodos-envio-repo"
 import { LocalidadesAtendidasEditor } from "./LocalidadesAtendidasEditor"
 import { PruebaDireccionPanel } from "./PruebaDireccionPanel"
@@ -188,6 +189,22 @@ export function MetodoEnvioEditor({
               value={form.avisoFeriados}
               onChange={(e) => cambiar("avisoFeriados", e.target.value)}
               placeholder="Los feriados pueden modificar la fecha de entrega."
+            />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Field
+            label="Horario de entrega"
+            hint="Opcional. Cómo se lee en la tienda: Llega hoy antes de las 21 hs"
+            error={errores.horarioEntrega}
+          >
+            <Input
+              value={form.horarioEntrega}
+              maxLength={MAX_HORARIO_ENTREGA}
+              onChange={(e) => cambiar("horarioEntrega", e.target.value)}
+              placeholder="antes de las 21 hs"
+              aria-invalid={Boolean(errores.horarioEntrega)}
             />
           </Field>
         </div>

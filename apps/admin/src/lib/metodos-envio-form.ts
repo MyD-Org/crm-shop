@@ -41,6 +41,7 @@ export interface FormMetodo {
   margenMin: string
   promesa: string
   avisoFeriados: string
+  horarioEntrega: string
   gratisAplica: boolean
   itemAlegraId: string
   itemAlegraIva: string
@@ -75,6 +76,7 @@ export function formVacio(): FormMetodo {
     margenMin: "0",
     promesa: "",
     avisoFeriados: "",
+    horarioEntrega: "",
     gratisAplica: false,
     itemAlegraId: "",
     itemAlegraIva: "21",
@@ -96,6 +98,7 @@ export function dtoAForm(m: MetodoEnvioDto): FormMetodo {
     margenMin: String(m.margenMin),
     promesa: m.promesa,
     avisoFeriados: m.avisoFeriados,
+    horarioEntrega: m.horarioEntrega,
     gratisAplica: m.gratisAplica,
     itemAlegraId: m.itemAlegraId ?? "",
     itemAlegraIva: String(m.itemAlegraIva),
@@ -128,6 +131,7 @@ export function formACuerpo(f: FormMetodo) {
     margenMin: numero(f.margenMin, 0),
     promesa: f.promesa,
     avisoFeriados: f.avisoFeriados,
+    horarioEntrega: f.horarioEntrega,
     gratisAplica: f.gratisAplica,
     itemAlegraId: f.itemAlegraId,
     itemAlegraIva: numero(f.itemAlegraIva, 21),

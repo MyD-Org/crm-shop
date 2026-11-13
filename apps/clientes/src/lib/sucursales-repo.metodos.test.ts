@@ -75,6 +75,15 @@ describe("armarMetodosEnvio", () => {
     });
   });
 
+  it("lee config.horarioEntrega del CRM (recortado); sin él no agrega la clave", () => {
+    const [con] = armarMetodosEnvio([{ ...METODO, config: { horarioEntrega: "  antes de las 21 hs " } }], [ZONA], [ENTRADA], [LOCALIDAD]);
+    expect(con.horarioEntrega).toBe("antes de las 21 hs");
+    for (const config of [{}, { horarioEntrega: "" }, { horarioEntrega: 21 }, { horarioEntrega: "x".repeat(41) }, { otra: "cosa" }]) {
+      const [sin] = armarMetodosEnvio([{ ...METODO, config }], [ZONA], [ENTRADA], [LOCALIDAD]);
+      expect(sin).not.toHaveProperty("horarioEntrega");
+    }
+  });
+
   it("localidad sin centro ni caja: null (no se inventa)", () => {
     const l = { ...LOCALIDAD, centroLat: null, centroLon: null, bboxSur: null };
     const [m] = armarMetodosEnvio([METODO], [], [], [l]);

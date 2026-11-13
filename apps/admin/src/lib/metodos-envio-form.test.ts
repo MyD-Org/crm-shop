@@ -20,6 +20,7 @@ const dto: MetodoEnvioDto = {
   margenMin: 15,
   promesa: "Entrega en el día",
   avisoFeriados: "Los feriados pueden modificar la fecha.",
+  horarioEntrega: "antes de las 21 hs",
   gratisAplica: false,
   itemAlegraId: "9001",
   itemAlegraIva: 21,
@@ -43,6 +44,7 @@ describe("formulario del método de envío", () => {
       horaCorte: "09:00",
       margenMin: 15,
       itemAlegraId: "9001",
+      horarioEntrega: "antes de las 21 hs",
     })
     expect(r.metodo.zonas.map((z) => [z.id, z.nombre, z.precio, z.activa])).toEqual([
       ["11111111-1111-4111-8111-111111111111", "Centro", 3000, true],

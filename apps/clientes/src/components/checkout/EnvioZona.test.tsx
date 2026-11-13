@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { AvisoEnvioZona, FilaEnvioResumen } from "./EnvioZona";
 import type { EnvioEvaluado } from "@/lib/envio";
-import type { ResultadoMetodo } from "@/lib/envio-zona";
+import type { ResultadoMetodoTienda as ResultadoMetodo } from "@/lib/envio-zona-tienda";
 
 const metodo = (extra: Partial<ResultadoMetodo> = {}): ResultadoMetodo => ({
   metodoId: "m1",
@@ -47,6 +47,31 @@ describe("FilaEnvioResumen", () => {
   });
   it("sin pago en línea aclara que cuenta desde la confirmación del pago", () => {
     expect(renderToStaticMarkup(<FilaEnvioResumen envio={envio()} pagaEnLinea={false} />)).toContain("a partir de la confirmación de su pago");
+  });
+});
+
+describe("AvisoEnvioZona: envío rápido", () => {
+  it("cartel verde con el nombre del método y línea «Llega … horario por $»", () => {
+    const html = renderToStaticMarkup(
+      <AvisoEnvioZona
+        envio={envio({ metodo: metodo({ nombre: "Envío rápido", horarioEntrega: "antes de las 21 hs", horario: { dias: [1, 2, 3, 4, 5, 6, 7], horaCorte: "23:59", margenMin: 0 } }) })}
+        pagaEnLinea
+        envioACoordinar={false}
+        onCoordinar={noop}
+        onUbicar={noop}
+      />,
+    );
+    expect(html).toContain("bg-success-soft");
+    expect(html).toContain("Envío rápido");
+    expect(html).toContain("antes de las 21 hs por");
+    expect(html).toContain("Comprando dentro de");
+    expect(html).toContain("text-success");
+    expect(html).not.toContain("Envío en el día");
+  });
+  it("sin horario no inventa ninguno", () => {
+    const html = renderToStaticMarkup(<AvisoEnvioZona envio={envio()} pagaEnLinea envioACoordinar={false} onCoordinar={noop} onUbicar={noop} />);
+    expect(html).not.toContain("antes de las");
+    expect(html).toContain("Los feriados no hay entregas.");
   });
 });
 

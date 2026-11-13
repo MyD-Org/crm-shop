@@ -14,15 +14,7 @@
  * traer", visibilidad por sucursal). Sin `lineas` el comportamiento es el de la A, idéntico.
  */
 import { provinciaCanonica } from "./provincias";
-
-/** Compara textos sin acentos, mayúsculas, espacios ni signos (misma normalización que `envio.ts`). */
-function claveTexto(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
+import { claveTexto } from "./texto-clave";
 
 /**
  * Clave de zona de una provincia tal como llega (perfil, formulario, cookie): la de su nombre

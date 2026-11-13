@@ -7,8 +7,8 @@ export const FILTRO_PEDIDO_TODOS = "todos"
 export const HORAS_DEFAULT = 1
 export const DIAS_DEFAULT = 30
 
-export const ROTULO_MONTO = "Monto referencial (precio de lista; puede diferir del que verá en el pago)"
-export const NOTA_MONTO = "No considera descuentos, cuotas ni campañas."
+export const ROTULO_MONTO = "Monto referencial (precio general de la web, con IVA; puede diferir del que verá en el pago)"
+export const NOTA_MONTO = "No considera precios por medio de pago ni listas propias de la cuenta."
 export const NOTA_SESION = "Solo se muestran compradores con sesión iniciada."
 export const VACIO = "No hay carritos abandonados para mostrar"
 export const CLIENTE_ELIMINADO = "Cliente eliminado"
@@ -67,13 +67,22 @@ export function nombreCliente(c: { nombre: string | null; email: string | null }
   return c.nombre?.trim() || c.email?.trim() || "Cliente sin nombre"
 }
 
+/** Una línea de la celda de productos: "2 × Nombre" y, si lo tiene, el código debajo. */
+export interface LineaProducto {
+  texto: string
+  codigo: string | null
+}
+
 /**
- * Resumen de productos para la celda: los primeros (hasta 3) con su cantidad y un "y N más" si el
- * carrito tiene más líneas de las que se traen.
+ * Resumen de productos para la celda: los primeros (hasta 3) con su cantidad y código, y un
+ * "y N más" si el carrito tiene más líneas de las que se traen.
  */
-export function resumenProductos(productos: readonly CarritoProductoDto[], lineas: number): string[] {
-  const filas = productos.map((p) => `${p.qty} × ${p.nombre?.trim() || "Producto no disponible"}`)
+export function resumenProductos(productos: readonly CarritoProductoDto[], lineas: number): LineaProducto[] {
+  const filas: LineaProducto[] = productos.map((p) => ({
+    texto: `${p.qty} × ${p.nombre?.trim() || "Producto no disponible"}`,
+    codigo: p.codigo?.trim() || null,
+  }))
   const resto = lineas - productos.length
-  if (resto > 0) filas.push(`y ${resto} más`)
+  if (resto > 0) filas.push({ texto: `y ${resto} más`, codigo: null })
   return filas
 }

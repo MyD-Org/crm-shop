@@ -41,17 +41,31 @@ describe("nombreCliente / resumenProductos", () => {
     expect(nombreCliente({ nombre: null, email: null })).toBe("Cliente sin nombre")
   })
 
-  it("lista cantidad x nombre y suma 'y N más' si hay más líneas que las traídas", () => {
+  it("lista cantidad x nombre con su código y suma 'y N más' si hay más líneas que las traídas", () => {
     expect(
-      resumenProductos([{ nombre: "Lámpara", brand: null, qty: 2 }, { nombre: null, brand: null, qty: 1 }], 2),
-    ).toEqual(["2 × Lámpara", "1 × Producto no disponible"])
-    expect(resumenProductos([{ nombre: "A", brand: null, qty: 1 }], 4)).toEqual(["1 × A", "y 3 más"])
+      resumenProductos(
+        [
+          { nombre: "Lámpara", brand: null, codigo: "LMP-01", qty: 2 },
+          { nombre: null, brand: null, codigo: " ", qty: 1 },
+        ],
+        2,
+      ),
+    ).toEqual([
+      { texto: "2 × Lámpara", codigo: "LMP-01" },
+      { texto: "1 × Producto no disponible", codigo: null },
+    ])
+    expect(resumenProductos([{ nombre: "A", brand: null, codigo: null, qty: 1 }], 4)).toEqual([
+      { texto: "1 × A", codigo: null },
+      { texto: "y 3 más", codigo: null },
+    ])
   })
 })
 
 describe("textos fijos en usted", () => {
   it("rotula el monto como referencial y aclara que son compradores con sesión", () => {
-    expect(ROTULO_MONTO).toBe("Monto referencial (precio de lista; puede diferir del que verá en el pago)")
+    expect(ROTULO_MONTO).toBe(
+      "Monto referencial (precio general de la web, con IVA; puede diferir del que verá en el pago)",
+    )
     expect(NOTA_SESION).toBe("Solo se muestran compradores con sesión iniciada.")
   })
 })

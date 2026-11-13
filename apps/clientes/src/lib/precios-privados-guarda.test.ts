@@ -37,6 +37,8 @@ const LISTA_BLANCA = new Set([
   "app/api/pedidos/[id]/medio/route.ts",
   "app/api/pedidos/[id]/cuotas/route.ts",
   "app/api/chat-ia/productos/route.ts",
+  // Sólo "¿tiene lista privada?", por sesión (página dinámica): decide si el carrito rotula transferencia.
+  "app/carrito/page.tsx",
 ]);
 
 const todos = archivos(SRC).map((p) => ({ ruta: relative(SRC, p), texto: readFileSync(p, "utf8") }));

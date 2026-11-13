@@ -23,6 +23,7 @@ import { BotonCompartirLista } from "@/components/BotonCompartirLista";
 import { hrefCompartido, MENSAJE_CARRITO } from "@/lib/carrito-compartido";
 import { topeCantidad } from "@/lib/catalogo-vista";
 import { TEXTO_CARRITO_A_CONFIRMAR } from "@/lib/venta-sin-stock";
+import { BotonIniciarCompra } from "@/components/carrito/BotonIniciarCompra";
 import { BloquePiedra } from "@/components/piedra/BloquePiedra";
 import { CampoCupon } from "@/components/checkout/CampoCupon";
 import { LineaCupon } from "@/components/checkout/LineaCupon";
@@ -88,8 +89,11 @@ export function CarritoClient({
   sucursalRetiro = null,
   ubicacionConocida,
   piedra = false,
+  pagoTransferencia = null,
 }: {
   conSesion: boolean;
+  /** Medio Transferencia con lista propia: el carrito muestra sus precios. null = precio general. */
+  pagoTransferencia?: { listaKey: string; pagoMetodo: string } | null;
   /** Textura de piedra prendida en el sitio (decoración): el carrito vacío va sobre un bloque de piedra. */
   piedra?: boolean;
   /** Configuración de envío del CRM (cacheada: sólo para mostrar; el servidor decide al pedir). */
@@ -209,6 +213,15 @@ export function CarritoClient({
     cupon,
     ...(entregaTipo === "envio" && provincia ? { provincia } : {}),
     ...(entregaTipo === "retiro" && sucursalRetiro ? { sucursalRetiro } : {}),
+    ...(pagoTransferencia ?? {}),
+  });
+  // Total con los demás medios (precio general), para avisar que con tarjeta cambia.
+  const { cotizacion: cotizacionGeneral, estado: estadoGeneral } = useCotizacion({
+    entregaTipo,
+    cupon,
+    activo: Boolean(pagoTransferencia),
+    ...(entregaTipo === "envio" && provincia ? { provincia } : {}),
+    ...(entregaTipo === "retiro" && sucursalRetiro ? { sucursalRetiro } : {}),
   });
 
   // Los precios de cada línea salen de la cotización, con IVA como en la ficha
@@ -279,6 +292,10 @@ export function CarritoClient({
   const subtotal = antesDelCupon ? antesDelCupon.subtotal : (estimados?.subtotal ?? null);
   const iva = antesDelCupon ? antesDelCupon.iva : (estimados?.iva ?? null);
   const total = confirmado ? cotizacion.total : (estimados?.total ?? null);
+  const totalOtrosMedios =
+    pagoTransferencia && estadoGeneral === "ok" && cotizacionGeneral && total !== null && cotizacionGeneral.total > total
+      ? cotizacionGeneral.total
+      : null;
 
   /**
    * Unidades que efectivamente suman al subtotal.
@@ -307,11 +324,13 @@ export function CarritoClient({
   const aConfirmar = cotizacion?.flujo === "a_confirmar";
 
   const botonCompra = (etiquetaBloqueado?: string) => (
-    <Link href="/checkout" className="block" aria-disabled={cotizacion?.hayProblemas || undefined}>
-      <Button className="w-full" disabled={cotizacion?.hayProblemas}>
-        {cotizacion?.hayProblemas && etiquetaBloqueado ? etiquetaBloqueado : "Iniciar compra"}
-      </Button>
-    </Link>
+    <BotonIniciarCompra
+      anonimo={!conSesion || estado === "no_auth"}
+      items={items}
+      total={total}
+      bloqueado={cotizacion?.hayProblemas}
+      etiquetaBloqueado={etiquetaBloqueado}
+    />
   );
 
   return (
@@ -380,6 +399,11 @@ export function CarritoClient({
                 linea,
                 ultimasLineas?.find((l) => l.id === item.id),
               );
+              // Precio general de la línea (otros medios): sólo si es mayor que el de transferencia.
+              const lineaGeneral = pagoTransferencia ? cotizacionGeneral?.lineas.find((l) => l.id === item.id) : undefined;
+              const precioGeneral =
+                lineaGeneral && lineaGeneral.qty === item.qty ? precioLineaCarrito(item.qty, lineaGeneral, undefined) : null;
+              const generalMayor = precio && precioGeneral && precioGeneral.total > precio.total ? precioGeneral : null;
 
               const campania = linea ? campaniaDeLinea(linea) : null;
               const marca = linea?.brand || item.brand;
@@ -509,13 +533,23 @@ export function CarritoClient({
                             )}
                           </div>
                           {precio && (
-                            <p
-                              className={`font-display text-base font-semibold tabular-nums lg:text-xl ${
-                                linea?.problema ? "text-muted line-through" : "text-text"
-                              }`}
-                            >
-                              {fmtPrecio(precio.total)}
-                            </p>
+                            <div className="text-right">
+                              <p
+                                className={`font-display text-base font-semibold tabular-nums lg:text-xl ${
+                                  linea?.problema ? "text-muted line-through" : "text-text"
+                                }`}
+                              >
+                                {fmtPrecio(precio.total)}
+                              </p>
+                              {pagoTransferencia && (
+                                <p className="text-[12px] leading-tight text-muted">con transferencia</p>
+                              )}
+                              {generalMayor && (
+                                <p className="mt-0.5 text-[12px] leading-tight tabular-nums text-muted">
+                                  {fmtPrecio(generalMayor.total)} con otros medios
+                                </p>
+                              )}
+                            </div>
                           )}
                         </div>
                       </article>
@@ -574,14 +608,21 @@ export function CarritoClient({
             {ahorro > 0 && (
               <p className="-mt-2 text-right text-[13px] font-bold text-success">Usted ahorra {fmtPrecio(ahorro)}</p>
             )}
-            <div className="flex items-baseline justify-between gap-3 border-t border-border pt-4">
-              <span className="font-bold text-text">Total</span>
-              {total === null ? (
-                <span className="text-sm font-medium text-muted">{textoTotal}</span>
-              ) : (
-                <span className="font-display text-[28px] font-bold tracking-tight tabular-nums text-text">
-                  {fmtPrecio(total)}
-                </span>
+            <div className="border-t border-border pt-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="font-bold text-text">{pagoTransferencia ? "Total con transferencia" : "Total"}</span>
+                {total === null ? (
+                  <span className="text-sm font-medium text-muted">{textoTotal}</span>
+                ) : (
+                  <span className="font-display text-[28px] font-bold tracking-tight tabular-nums text-text">
+                    {fmtPrecio(total)}
+                  </span>
+                )}
+              </div>
+              {totalOtrosMedios !== null && (
+                <p className="mt-1 text-right text-[13px] text-muted">
+                  Con otros medios de pago: <span className="tabular-nums">{fmtPrecio(totalOtrosMedios)}</span>
+                </p>
               )}
             </div>
 
@@ -629,7 +670,10 @@ export function CarritoClient({
             {total === null ? (
               <p className="font-display text-lg font-bold text-muted">{textoTotal}</p>
             ) : (
-              <p className="font-display text-lg font-bold tabular-nums text-text">{fmtPrecio(total)}</p>
+              <>
+                <p className="font-display text-lg font-bold tabular-nums text-text">{fmtPrecio(total)}</p>
+                {pagoTransferencia && <p className="text-[11px] leading-tight text-muted">con transferencia</p>}
+              </>
             )}
           </div>
           <div className="min-w-0 flex-1">

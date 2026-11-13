@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest"
 import { NextRequest } from "next/server"
 import { getDb } from "@/db"
-import { catalogProducts } from "@/db/schema"
+import { campanias, catalogProducts } from "@/db/schema"
 import { invalidateTenantRegistry } from "@/lib/tenants"
 import { listarCarritosAbandonados } from "@/lib/carritos-repo"
 import {
@@ -48,7 +48,9 @@ async function seedProducto(
       alegraId,
       name: `Producto ${alegraId}`,
       brand: "Marca Test",
-      prices:
+      // Los de Alegra no cuentan para el monto: se ponen distintos para que el test lo note.
+      prices: precio === null ? [] : [{ idPriceList: "1", name: "General", price: precio * 3, main: true }],
+      preciosOnline:
         precio === null
           ? []
           : [
@@ -145,6 +147,39 @@ describe("carritos abandonados: repo", () => {
     expect(montoTotalReferencial).toBe(250)
     expect(items[0].productos.map((p) => p.nombre).sort()).toEqual(["Producto 10", "Producto 11"])
     expect(items[0].productos.find((p) => p.nombre === "Producto 10")).toMatchObject({ brand: "Marca Test", qty: 2 })
+  })
+
+  it("monto con IVA: el precio general de la web (neto + IVA al centavo), como la ficha", async () => {
+    await seedProducto(TENANT_A, "20", 160133.6, { ivaPorcentaje: "21", code: "NK-ELEC-00008-BL-NOAK" })
+    await carrito(TENANT_A, "user_iva", [{ id: "20", qty: 2 }], 2 * HORA)
+    const [c] = (await listar()).items
+    expect(c.montoReferencial).toBeCloseTo(193761.66 * 2, 2)
+    expect(c.productos[0]).toMatchObject({ codigo: "NK-ELEC-00008-BL-NOAK", qty: 2 })
+  })
+
+  it("con una campaña activa usa su precio de la lista general; vencida o futura, el normal", async () => {
+    const [activa] = await getDb()
+      .insert(campanias)
+      .values({ tenantId: TENANT_A, nombre: "Activa", etiqueta: "Oferta", inicio: hace(HORA), fin: new Date(Date.now() + DIA * 60_000) })
+      .returning()
+    const [futura] = await getDb()
+      .insert(campanias)
+      .values({ tenantId: TENANT_A, nombre: "Futura", etiqueta: "Pronto", inicio: new Date(Date.now() + DIA * 60_000), fin: new Date(Date.now() + 2 * DIA * 60_000) })
+      .returning()
+    const entrada = (id: string, precio: number) => ({
+      id,
+      reglaId: null,
+      unidades: null,
+      precios: [
+        { idPriceList: "2", price: 1 },
+        { idPriceList: "1", price: precio },
+      ],
+    })
+    await seedProducto(TENANT_A, "30", 100, { ivaPorcentaje: "21", campaniasOnline: [entrada(futura.id, 50), entrada(activa.id, 80)] })
+    await seedProducto(TENANT_A, "31", 100, { ivaPorcentaje: "21", campaniasOnline: [entrada(futura.id, 50)] })
+    await carrito(TENANT_A, "user_camp", [{ id: "30", qty: 1 }, { id: "31", qty: 1 }], 2 * HORA)
+    // 80 + 16,80 de IVA (campaña) + 100 + 21 (normal)
+    expect((await listar()).items[0].montoReferencial).toBeCloseTo(96.8 + 121, 2)
   })
 
   it("producto sin espejo o sin precio: cuenta como faltante y el monto es parcial", async () => {

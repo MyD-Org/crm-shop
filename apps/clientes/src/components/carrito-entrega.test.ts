@@ -17,9 +17,18 @@ describe("carrito según la elección", () => {
   it("cotiza con el entregaTipo recibido (default retiro) y sólo manda provincia en envío", () => {
     expect(cliente).toMatch(/entregaTipo = "retiro"/);
     expect(cliente).toMatch(
-      /useCotizacion\(\{\s*entregaTipo,\s*conProgresoCuotas: true,\s*cupon,\s*\.\.\.\(entregaTipo === "envio" && provincia \? \{ provincia \} : \{\}\),\s*\.\.\.\(entregaTipo === "retiro" && sucursalRetiro \? \{ sucursalRetiro \} : \{\}\),\s*\}\)/,
+      /useCotizacion\(\{\s*entregaTipo,\s*conProgresoCuotas: true,\s*cupon,\s*\.\.\.\(entregaTipo === "envio" && provincia \? \{ provincia \} : \{\}\),\s*\.\.\.\(entregaTipo === "retiro" && sucursalRetiro \? \{ sucursalRetiro \} : \{\}\),\s*\.\.\.\(pagoTransferencia \?\? \{\}\),\s*\}\)/,
     );
     expect(cliente).not.toMatch(/useCotizacion\(\{\s*entregaTipo: "retiro"/);
+  });
+
+  it("con Transferencia cotiza a su precio y muestra también el de otros medios", () => {
+    expect(cliente).toContain('pagoTransferencia ? "Total con transferencia" : "Total"');
+    expect(cliente).toMatch(/activo: Boolean\(pagoTransferencia\)/);
+    expect(cliente).toContain("con otros medios");
+    const page = leer("app", "carrito", "page.tsx");
+    expect(page).toContain("m.slug === SLUG_TRANSFERENCIA && m.activo");
+    expect(page).toContain("esCompradorCuentaCorriente(cliente) || (cliente ? Boolean(await listaPrivadaDelComprador()");
   });
 
   it("la barra de envío gratis usa la provincia recibida (null con retiro)", () => {

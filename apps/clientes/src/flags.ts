@@ -89,6 +89,14 @@ export const avisoReingresoFlag = flag<boolean>({
   adapter: vercelAdapter,
 });
 
+export const compraInvitadoFlag = flag<boolean>({
+  key: "compra-invitado",
+  description:
+    "Compra como invitado: un anónimo puede completar el checkout sin cuenta (email, teléfono, entrega y facturación) con un token firmado de pocas horas, sin guardar nada en el navegador. Apagado: /checkout lleva a ingresar y los endpoints del pedido no aceptan invitados, como siempre. No afecta al link «Pagar su pedido» de los mails",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});
+
 /** Quién compra, para las reglas de Vercel Flags (`user.id`, `user.email`). Vacío = visitante. */
 export interface EntidadesComprador {
   user?: { id: string; email?: string };

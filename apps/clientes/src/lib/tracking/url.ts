@@ -38,3 +38,13 @@ const PREFIJOS_SIN_TRACKING = ["/ingresar", "/registro", "/__gate", "/__clerk"];
 export function rutaSinTracking(pathname: string): boolean {
   return PREFIJOS_SIN_TRACKING.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
+
+/** Origen + pathname, sin query ni fragmento ni atribución; "" si no se puede leer. */
+export function urlSinQuery(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return "";
+  }
+}

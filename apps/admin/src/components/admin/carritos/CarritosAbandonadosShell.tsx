@@ -108,9 +108,16 @@ export function CarritosAbandonadosShell() {
       header: "Productos",
       hideBelow: "md",
       render: (c) => (
-        <ul className="text-xs" style={{ color: "var(--ink-soft)" }}>
+        <ul className="space-y-1 text-xs" style={{ color: "var(--ink-soft)" }}>
           {resumenProductos(c.productos, c.lineas).map((linea, i) => (
-            <li key={i}>{linea}</li>
+            <li key={i}>
+              <div>{linea.texto}</div>
+              {linea.codigo && (
+                <div className="font-mono text-[11px]" style={{ color: "var(--ink-faint)" }}>
+                  {linea.codigo}
+                </div>
+              )}
+            </li>
           ))}
         </ul>
       ),

@@ -8,8 +8,8 @@
  * la vacía y no sale nada. Nunca tira: un proveedor caído o bloqueado no puede
  * romper el agregar al carrito ni el checkout.
  */
-import { aGa4, aMeta, aPosthog, esEventoBusqueda, type EventoShop } from "./eventos";
-import { limpiarUrl, rutaSinTracking } from "./url";
+import { aGa4, aMeta, aPosthog, esEventoSoloPosthog, permitidoSinTracking, type EventoShop } from "./eventos";
+import { limpiarUrl, rutaSinTracking, urlSinQuery } from "./url";
 
 /** Firmas de `fbq` y `gtag` (los globales de Meta y Google, ver stubs.ts). */
 export type Fbq = (accion: string, ...args: unknown[]) => void;
@@ -53,11 +53,13 @@ function intentar(fn: () => void) {
 }
 
 function enviar(d: DestinosTracking, e: EventoShop, href: string) {
-  // Los de la búsqueda no son de ecommerce: sólo PostHog.
-  if (esEventoBusqueda(e)) {
+  // Los de la búsqueda y los del embudo no son de ecommerce: sólo PostHog.
+  if (esEventoSoloPosthog(e)) {
     if (d.posthog) {
       const p = aPosthog(e);
-      intentar(() => d.posthog!.capture(p.nombre, p.props));
+      // En las rutas sin tracking la URL va sin query: puede traer parámetros de Clerk.
+      const props = permitidoSinTracking(e) ? { ...p.props, $current_url: urlSinQuery(href) } : p.props;
+      intentar(() => d.posthog!.capture(p.nombre, props));
     }
     return;
   }
@@ -80,7 +82,9 @@ function enviar(d: DestinosTracking, e: EventoShop, href: string) {
 
 export function track(e: EventoShop): void {
   const loc = ubicacion();
-  if (!loc || rutaSinTracking(loc.pathname)) return;
+  if (!loc) return;
+  // Login y registro: nada, salvo los eventos del embudo (sólo PostHog, URL sin query).
+  if (rutaSinTracking(loc.pathname) && !permitidoSinTracking(e)) return;
   if (!estado.destinos) {
     if (estado.cola.length < MAX_COLA) estado.cola.push(e);
     return;

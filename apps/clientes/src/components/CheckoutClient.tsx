@@ -1935,8 +1935,6 @@ export function CheckoutClient({
                       {...(envioPorZona && ciudad.trim()
                         ? { ciudad, provincia: PROVINCIAS_SELECTOR.find((p) => p.clave === provinciaManual)?.nombre }
                         : {})}
-                      // El invitado no usa las sugerencias (/api/geocode es sólo para cuentas).
-                      suspendido={invitadoActivo}
                       onSeleccionar={(s) => {
                         setUbicacionSel(
                           s.geoToken ? { geoToken: s.geoToken, calle: s.calle, cp: s.cp, precision: s.precision } : null,

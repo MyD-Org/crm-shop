@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { reconciliarPagosPendientes } from "@/lib/pagos/reconciliar";
-import { avisarPedidoSiFalta, pedidosConAvisosPendientes } from "@/lib/pedido-avisos";
+import {
+  avisarPagoPendiente,
+  avisarPedidoSiFalta,
+  pedidosConAvisoPagoPendiente,
+  pedidosConAvisosPendientes,
+} from "@/lib/pedido-avisos";
 import { bearerMatches } from "@/lib/secure-compare";
 
 // Cada consulta a MP es un round-trip HTTP; el default puede quedar corto si
@@ -11,7 +16,8 @@ export const maxDuration = 120;
  * Barre pedidos con pago pendiente para el caso en que el webhook nunca haya
  * llegado. Y, como respaldo, manda los avisos de los pedidos por transferencia que siguen sin avisar
  * a los 15 minutos (el navegador no llegó a avisar al irse de la pantalla: ver
- * `/api/pedidos/:id/avisos`). Lo dispara Vercel Cron (ver vercel.json), autenticado con
+ * `/api/pedidos/:id/avisos`). También manda, una sola vez, el aviso «su pedido está pendiente de pago»
+ * a los invitados con pago en línea que a los 30 minutos siguen sin pagar. Lo dispara Vercel Cron (ver vercel.json), autenticado con
  * CRON_SECRET. Para probar a mano:
  *
  *   curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/pagos-reconciliar
@@ -34,7 +40,17 @@ export async function GET(req: Request) {
       console.error("[cron/pagos-reconciliar] no se pudieron buscar los avisos pendientes:", err);
     }
     if (avisados > 0) console.log(`[cron/pagos-reconciliar] avisos de pedidos enviados=${avisados}`);
-    return NextResponse.json({ ok: true, ...resultado, avisados });
+    // Invitados con pago en línea sin completar (aviso único). Idem: no tapa nada de lo anterior.
+    let avisadosPagoPendiente = 0;
+    try {
+      for (const id of await pedidosConAvisoPagoPendiente()) if (await avisarPagoPendiente(id)) avisadosPagoPendiente++;
+    } catch (err) {
+      console.error("[cron/pagos-reconciliar] no se pudieron buscar los pagos pendientes a avisar:", err);
+    }
+    if (avisadosPagoPendiente > 0) {
+      console.log(`[cron/pagos-reconciliar] avisos de pago pendiente enviados=${avisadosPagoPendiente}`);
+    }
+    return NextResponse.json({ ok: true, ...resultado, avisados, avisadosPagoPendiente });
   } catch (err) {
     console.error("[cron/pagos-reconciliar] error inesperado:", err);
     return NextResponse.json(

@@ -175,12 +175,12 @@ export function describirMatrizAislamiento(cfg: ConfigMatriz) {
       expect(cfg.repoLlamadas).toEqual([]);
     });
 
-    it("flag apagado => 401 aunque el token sea válido", async () => {
+    it("flag apagado => el token válido de un pedido existente sigue sirviendo (el flag gobierna crear, no pagar); sin token, 401", async () => {
       setFlag("compra-invitado", false);
       const r = await cfg.llamar({ token: tokenDe(PA), pedidoId: PA });
-      expect(r.status).toBe(401);
-      expect(await cuerpoDe(r)).toEqual({ error: "No autorizado" });
-      expect(cfg.repoLlamadas).toEqual([]);
+      expect(r.status).not.toBe(401);
+      const sin = await cfg.llamar({ token: null, pedidoId: PA });
+      expect(sin.status).toBe(401);
     });
 
     it("límite excedido (por IP o por pedido) => 429 en usted, sin consultar", async () => {

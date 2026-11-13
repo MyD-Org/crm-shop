@@ -118,6 +118,7 @@ import {
   type DatosInvitado,
 } from "@/lib/invitado-form";
 import { ERRORES_INVITADO, TEXTOS_INVITADO } from "@/lib/invitado-textos";
+import { CrearCuentaCta } from "@/components/CrearCuentaCta";
 import { fetchConToken, fijarTokenInvitado, quitarTokenDeLaUrl } from "@/lib/invitado-token-cliente";
 
 /*
@@ -1743,6 +1744,7 @@ export function CheckoutClient({
               <Button variant="ghost">Seguir comprando</Button>
             </Link>
           </div>
+          {invitadoActivo && <CrearCuentaCta email={emailCliente} className={`mt-6 ${ENTRADA_EXITO} delay-[320ms]`} />}
           {!pagado && confirmado.contacto && (
             <PedidoContacto
               contacto={confirmado.contacto}
@@ -1762,7 +1764,7 @@ export function CheckoutClient({
       <main className="mx-auto flex w-full max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20 text-center">
         <p role="alert" className="text-lg font-semibold text-text">{errorReintento}</p>
         <div className="flex flex-wrap justify-center gap-3">
-          {pedidoReintento && (
+          {pedidoReintento && !invitadoActivo && (
             <Link href={`/mi-cuenta/pedidos/${pedidoReintento}`}>
               <Button>Volver a comprar</Button>
             </Link>

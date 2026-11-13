@@ -3,8 +3,10 @@ import { verifyWebhook } from "@clerk/nextjs/webhooks";
 import {
   datosDeUsuarioClerk,
   eliminarUsuarioClerk,
+  emailVerificadoDeUsuarioClerk,
   registrarUsuarioClerk,
 } from "@/lib/clientes-espejo";
+import { reclamarPedidosInvitado } from "@/lib/reclamo-invitado";
 import { shopTenantId } from "@/lib/tenant";
 
 /**
@@ -21,6 +23,10 @@ import { shopTenantId } from "@/lib/tenant";
  * - Responde 2xx recién DESPUÉS de escribir; si la base falla, 500 y Clerk
  *   reintenta con backoff. El orden de eventos y la idempotencia los resuelve
  *   la función SQL (un evento viejo vuelve 'ignorado', igual 200).
+ * - Compra como invitado: tras escribir el espejo de `user.created` / `user.updated`, si el email
+ *   primario está VERIFICADO se reclaman los pedidos de invitado de ese correo (idempotente, ver
+ *   `reclamo-invitado.ts`). Un fallo del reclamo se loguea y NO falla el webhook: el camino perezoso
+ *   de `identidadActual` lo reintenta.
  * - Logs de una línea con tipo, id de usuario y resultado. Nunca email, nombre
  *   ni payload.
  *
@@ -60,6 +66,9 @@ export async function POST(req: NextRequest) {
         ? await eliminarUsuarioClerk(tenant, id)
         : await registrarUsuarioClerk(tenant, datosDeUsuarioClerk(evt.data));
     console.info(`clerk-webhook tipo=${tipo} id=${id} resultado=${resultado}`);
+    if (evt.type !== "user.deleted" && (resultado === "insertado" || resultado === "actualizado")) {
+      await reclamarPedidos(tipo, id, emailVerificadoDeUsuarioClerk(evt.data), tenant);
+    }
     return NextResponse.json({ ok: true, resultado });
   } catch (err) {
     // Sólo el nombre y el código: el mensaje de un error de Postgres puede traer valores.
@@ -67,5 +76,18 @@ export async function POST(req: NextRequest) {
     const codigo = (err as { code?: unknown })?.code;
     console.error(`clerk-webhook tipo=${tipo} id=${id} error=${nombre}${codigo ? ` codigo=${String(codigo)}` : ""}`);
     return NextResponse.json({ error: "No se pudo registrar el evento" }, { status: 500 });
+  }
+}
+
+/** Reclamo de pedidos de invitado: nunca lanza ni loguea el email (sólo el id del usuario y la cantidad). */
+async function reclamarPedidos(tipo: string, id: string, email: string | null, tenant: string) {
+  if (!email) return;
+  try {
+    const ids = await reclamarPedidosInvitado(tenant, id, email);
+    if (ids.length > 0) console.info(`clerk-webhook tipo=${tipo} id=${id} reclamados=${ids.length}`);
+  } catch (err) {
+    const nombre = err instanceof Error ? err.name : "desconocido";
+    const codigo = (err as { code?: unknown })?.code;
+    console.error(`clerk-webhook tipo=${tipo} id=${id} reclamo-error=${nombre}${codigo ? ` codigo=${String(codigo)}` : ""}`);
   }
 }

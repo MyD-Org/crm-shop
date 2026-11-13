@@ -1167,6 +1167,45 @@ export async function getPedidoParaPago(
   };
 }
 
+/** Qué muestra `/pagar/[token]` de un pedido (change `compra-como-invitado`, S3). */
+export type PedidoParaLink = "disponible" | "pagado" | "no_disponible";
+
+/**
+ * Estado de un pedido para el link «Pagar su pedido». SIN dueño: la autorización es la firma del link
+ * (ya verificada por quien llama). Sólo pedidos de INVITADO sin cuenta, de este tenant: uno con cuenta
+ * (o ya reclamado) responde igual que uno inexistente. `disponible` = pendiente, con cobro en línea y
+ * todavía cobrable (`motivoNoCobrable`); `pagado` = ya cobrado (sin detalle); lo demás (cancelado,
+ * vencido, en revisión, en curso, otro medio, inexistente) es `no_disponible`, siempre la misma respuesta.
+ */
+export async function getPedidoParaLink(orderId: string, ahora = Date.now()): Promise<PedidoParaLink> {
+  const [fila] = await getDb()
+    .select({
+      estado: orders.estado,
+      pagoEstado: orders.pagoEstado,
+      pagoMetodo: orders.pagoMetodo,
+      pagoRevision: orders.pagoRevision,
+      createdAt: orders.createdAt,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.id, orderId),
+        esDeEsteTenant(),
+        eq(orders.compraInvitado, true),
+        isNull(orders.clerkUserId),
+        isNull(orders.clienteCodigo),
+      ),
+    )
+    .limit(1);
+  if (!fila) return "no_disponible";
+  if (fila.pagoEstado === "pagado") return "pagado";
+  if (!esPagoEnLinea(fila.pagoMetodo)) return "no_disponible";
+  if (motivoNoCobrable({ estado: fila.estado as OrderEstado, creadoEn: fila.createdAt, pagoRevision: fila.pagoRevision ?? null }, ahora)) {
+    return "no_disponible";
+  }
+  return "disponible";
+}
+
 /**
  * Líneas del pedido para el control de fraude del procesador: código o id de Alegra como SKU, nombre,
  * cantidad y total de la línea (con IVA, en pesos). Sólo se llama con un pedido que ya pasó por

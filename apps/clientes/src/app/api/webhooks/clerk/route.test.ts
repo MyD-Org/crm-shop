@@ -155,3 +155,46 @@ describe("POST /api/webhooks/clerk", () => {
     expect(grabadora.consultas).toHaveLength(0);
   });
 });
+
+describe("POST /api/webhooks/clerk: reclamo de pedidos de invitado", () => {
+  const conEmail = (status: string | null) => ({
+    ...USUARIO,
+    email_addresses: [
+      { id: "idn_1", email_address: "Ana@Cliente.example", verification: status ? { status, strategy: "email_code" } : null },
+    ],
+  });
+  const reclamos = () => grabadora.consultas.filter((c) => c.sql.startsWith("update"));
+
+  it.each(["user.created", "user.updated"])("%s con email verificado => reclama (email normalizado, tenant del deploy)", async (tipo) => {
+    verifyWebhook.mockResolvedValue(evento(tipo, conEmail("verified")));
+    expect((await POST(req())).status).toBe(200);
+    const [c] = reclamos();
+    expect(c.sql).toContain('"shop"."orders"');
+    expect(c.params).toContain("user_abc123");
+    expect(c.params).toContain("tenant-shop");
+    expect(c.params).toContain("ana@cliente.example");
+  });
+
+  it.each([["unverified"], [null]])("email no verificado (%s) => no reclama", async (estado) => {
+    verifyWebhook.mockResolvedValue(evento("user.created", conEmail(estado)));
+    expect((await POST(req())).status).toBe(200);
+    expect(reclamos()).toHaveLength(0);
+  });
+
+  it("evento viejo ('ignorado') => no reclama", async () => {
+    resultado = "ignorado";
+    verifyWebhook.mockResolvedValue(evento("user.updated", conEmail("verified")));
+    await POST(req());
+    expect(reclamos()).toHaveLength(0);
+  });
+
+  it("si el reclamo falla => 200 igual, y el log no lleva el email", async () => {
+    grabadora = dbGrabadora((c) => {
+      if (c.sql.includes("shop.clientes_")) return [{ resultado }] as unknown as unknown[][];
+      throw new Error("falla ana@cliente.example");
+    });
+    verifyWebhook.mockResolvedValue(evento("user.created", conEmail("verified")));
+    expect((await POST(req())).status).toBe(200);
+    expect(logs.some((l) => l.includes("reclamo-error"))).toBe(true);
+  });
+});

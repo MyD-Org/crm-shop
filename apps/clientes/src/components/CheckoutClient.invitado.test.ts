@@ -37,8 +37,9 @@ describe("flag apagado: el checkout es el de siempre", () => {
 
   it("la página sólo evalúa el flag sin sesión y con flag apagado redirige a /ingresar", () => {
     const pagina = leer("app/checkout/page.tsx");
-    expect(pagina).toContain("if (!(await compraInvitadoHabilitada())) redirect(rutaIngreso(\"/checkout\"));");
-    expect(pagina).toMatch(/if \(!clerkUserId && !cliente\) \{\n\s+if \(!\(await compraInvitadoHabilitada\(\)\)\)/);
+    // Con un token de compra válido (lo acuña /pagar) se retoma el pago aunque el flag esté apagado (S3, Q6).
+    expect(pagina).toContain("if (!retornoInvitado.tokenRetorno && !(await compraInvitadoHabilitada())) redirect(rutaIngreso(\"/checkout\"));");
+    expect(pagina).toMatch(/if \(!clerkUserId && !cliente\) \{\n(?:.*\n)*?\s+if \(!retornoInvitado\.tokenRetorno && !\(await compraInvitadoHabilitada\(\)\)\)/);
   });
 });
 

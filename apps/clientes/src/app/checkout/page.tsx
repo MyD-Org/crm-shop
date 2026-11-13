@@ -88,11 +88,14 @@ export default async function CheckoutPage({
   // El flag se evalúa SÓLO para quien no tiene sesión: quien la tiene nunca ve el formulario de invitado.
   let invitado: InvitadoCheckout | null = null;
   if (!clerkUserId && !cliente) {
-    if (!(await compraInvitadoHabilitada())) redirect(rutaIngreso("/checkout"));
+    const retornoInvitado = resolverRetornoInvitado(pedidoReintento, typeof t === "string" && t ? t : null);
+    // Con un token de compra válido de ESE pedido (lo acuña `/pagar/[token]` o vuelve de un pago) se retoma
+    // el cobro aunque el flag esté apagado: el flag gobierna crear pedidos nuevos, no pagar uno existente.
+    if (!retornoInvitado.tokenRetorno && !(await compraInvitadoHabilitada())) redirect(rutaIngreso("/checkout"));
     invitado = {
       activo: true,
       turnstileSiteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "",
-      ...resolverRetornoInvitado(pedidoReintento, typeof t === "string" && t ? t : null),
+      ...retornoInvitado,
     };
   }
 

@@ -1,0 +1,5 @@
+# Datos reales de la tienda, listas de productos y trabajos generados: nunca al repo (es público).
+*.local.*
+*.tspl
+salida/
+lista*.json

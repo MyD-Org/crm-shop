@@ -4,7 +4,7 @@ import { TEXTOS_UBICACION, envioFichaSegunUbicacion } from "@/lib/ubicacion";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { ubicacionExactaVerificada } from "@/lib/ubicacion-exacta";
 import { claveProvincia } from "@/lib/sucursales";
-import { TEXTOS_ENVIO_ZONA, estimarEnvioPorLocalidad, estimarEnvioPorPunto } from "@/lib/envio-zona-textos";
+import { estimarEnvioPorLocalidad, estimarEnvioPorPunto } from "@/lib/envio-zona-textos";
 import { fmtPesosEnteros } from "@/lib/format";
 import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
 import { CLASE_TONO } from "@/components/producto/EntregaProducto";
@@ -54,9 +54,12 @@ export async function EnvioProductoUbicacion({
   if (zona) {
     return (
       <>
+        {/* Como Mercado Libre: la llegada y el precio en una línea («Llega el lunes 16/11 por $ 4.490»); con
+            varias zonas posibles, la llegada y debajo la tarifa de cada una. Sin el nombre del método: «en el
+            día» junto a «llega el lunes» se leía como dos promesas distintas. */}
         {zona.zonas && zona.zonas.length > 1 ? (
           <>
-            <span className="font-semibold text-text">{TEXTOS_ENVIO_ZONA.enElDia}</span>
+            <span className="font-semibold text-text">{zona.llegada.texto}</span>
             {zona.zonas.map((z) => (
               <span key={z.nombre} className="block text-text">
                 {z.nombre}: {fmtPesosEnteros(z.precio)}
@@ -64,12 +67,16 @@ export async function EnvioProductoUbicacion({
             ))}
           </>
         ) : (
-          <span className="font-semibold text-text">{zona.texto}</span>
+          <span className="font-semibold text-text">
+            {zona.llegada.texto} por {fmtPesosEnteros(zona.precio)}
+          </span>
         )}
-        <span className="block">
-          {zona.llegada.texto}
-          {zona.llegada.condicion ? `, ${zona.llegada.condicion}` : ""}.
-        </span>
+        {zona.llegada.condicion && (
+          <span className="block">
+            {zona.llegada.condicion.charAt(0).toUpperCase()}
+            {zona.llegada.condicion.slice(1)}
+          </span>
+        )}
         {zona.avisoFeriados && <span className="block text-xs">{zona.avisoFeriados}</span>}
         {/* Sin el plazo de despacho genérico («Despacho dentro de las 24 h hábiles»): la llegada del método
             ya dice cuándo llega y las dos líneas juntas se contradicen. */}

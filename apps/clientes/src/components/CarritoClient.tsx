@@ -350,14 +350,15 @@ export function CarritoClient({
         <div className="mb-5 flex items-center gap-3 lg:mb-6">
           <div className="flex items-baseline gap-3">
             <h1 className="font-display text-[26px] font-semibold tracking-tight text-text lg:text-[32px]">Carrito</h1>
-            <span className="text-sm font-semibold text-muted">
+            <span className="whitespace-nowrap text-sm font-semibold text-muted">
               {unidadesCarrito} {unidadesCarrito === 1 ? "producto" : "productos"}
             </span>
           </div>
           <div className="ml-auto">
             <BotonCompartirLista
               href={hrefCompartido(items)}
-              label="Compartir carrito"
+              // "Compartir carrito" no entra en una línea en un celular angosto.
+              label="Compartir"
               mensaje={MENSAJE_CARRITO}
               toast={{
                 title: "Enlace copiado",
@@ -491,7 +492,8 @@ export function CarritoClient({
                             </p>
                           )}
                           {/* Mobile: el unitario va acá; al lado del stepper no entra con el total. */}
-                          {precio && (
+                          {/* Con 1 unidad el unitario es el total: no se repite. */}
+                          {precio && item.qty > 1 && (
                             <p className="text-[13px] tabular-nums text-muted lg:hidden">
                               {item.qty} × {fmtPrecio(precio.unitario)}
                             </p>
@@ -539,7 +541,7 @@ export function CarritoClient({
                         {/* Cantidad y total en una fila propia: así el nombre sólo
                             comparte el ancho con la papelera, no con el total. En
                             mobile ocupa todo el ancho de la tarjeta. */}
-                        <div className="col-span-3 flex flex-wrap items-center justify-between gap-x-3.5 gap-y-2 lg:col-span-2 lg:col-start-2">
+                        <div className="col-span-3 flex items-center justify-between gap-x-3.5 lg:col-span-2 lg:col-start-2">
                           <div className="flex items-center gap-3.5">
                             <QuantityStepper
                               name="cantidad"
@@ -561,7 +563,7 @@ export function CarritoClient({
                             )}
                           </div>
                           {precio && (
-                            <div className="text-right">
+                            <div className="ml-auto min-w-0 text-right">
                               <p
                                 className={`font-display text-base font-semibold tabular-nums lg:text-xl ${
                                   linea?.problema ? "text-muted line-through" : "text-text"
@@ -574,7 +576,8 @@ export function CarritoClient({
                               )}
                               {generalMayor && (
                                 <p className="mt-0.5 text-[12px] leading-tight tabular-nums text-muted">
-                                  {fmtPrecio(generalMayor.total)} con otros medios
+                                  <span className="whitespace-nowrap">{fmtPrecio(generalMayor.total)}</span>{" "}
+                                  <span className="whitespace-nowrap">con otros medios</span>
                                 </p>
                               )}
                             </div>

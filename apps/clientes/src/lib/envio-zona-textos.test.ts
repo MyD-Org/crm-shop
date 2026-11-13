@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fmtPesosEnteros } from "./format";
 import type { MetodoEnvio } from "./envio-zona";
-import { TEXTOS_ENVIO_ZONA, estimarEnvioPorLocalidad, llegadaEstimada, textoLlegada } from "./envio-zona-textos";
+import { TEXTOS_ENVIO_ZONA, estimarEnvioPorLocalidad, llegadaEstimada, textoCuentaRegresiva, textoLlegada } from "./envio-zona-textos";
 
 // Cuadrado grande alrededor de Mar del Plata ([lon, lat]).
 const CUADRADO = [[[[-58, -39], [-57, -39], [-57, -37.5], [-58, -37.5], [-58, -39]]]];
@@ -75,11 +75,18 @@ describe("estimarEnvioPorLocalidad", () => {
 describe("llegadaEstimada", () => {
   const horario = { dias: [1, 2, 3, 4, 5], horaCorte: "09:00", margenMin: 0 };
 
-  it("antes del corte con pago en línea: llega hoy, condicionado al pago", () => {
+  it("antes del corte con pago en línea: llega hoy, con la cuenta regresiva al corte", () => {
     const l = llegadaEstimada(horario, LUNES_8);
     expect(l.texto).toBe("Llega hoy");
     expect(l.mismoDia).toBe(true);
-    expect(l.condicion).toBe("si confirma su pago antes de las 09:00");
+    expect(l.condicion).toBe(textoCuentaRegresiva(60));
+  });
+
+  it("cuenta regresiva como Mercado Libre", () => {
+    expect(textoCuentaRegresiva(40)).toBe("comprando dentro de los próximos 40 min");
+    expect(textoCuentaRegresiva(60)).toBe("comprando dentro de las próximas 1 h");
+    expect(textoCuentaRegresiva(135)).toBe("comprando dentro de las próximas 2 h 15 min");
+    expect(textoCuentaRegresiva(0)).toBeNull();
   });
 
   it("después del corte: llega mañana", () => {

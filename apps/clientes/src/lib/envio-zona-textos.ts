@@ -4,7 +4,7 @@
  * neutro). Lo usan la ficha (servidor), el carrito y el checkout (cliente).
  */
 import { fmtPesosEnteros } from "./format";
-import { fechaEntrega, type FechaEntrega, type HorarioEnvio } from "./entrega-fecha";
+import { TZ_ENVIO, fechaEntrega, type FechaEntrega, type HorarioEnvio } from "./entrega-fecha";
 import { estimarEntrega } from "./envio-snapshot";
 import { estimarPorLocalidad, type MetodoEnvio } from "./envio-zona";
 import { claveProvincia } from "./sucursales";
@@ -73,12 +73,33 @@ export function textoEntregaPedido(e: {
   return null;
 }
 
+/** Minutos que faltan para el corte del día (hora local de Argentina, descontado el margen). */
+function minutosHastaCorte(ahora: Date, horario: HorarioEnvio): number {
+  const partes = new Intl.DateTimeFormat("en-GB", { timeZone: TZ_ENVIO, hour: "2-digit", minute: "2-digit", hour12: false })
+    .formatToParts(ahora);
+  const n = (t: string) => Number(partes.find((p) => p.type === t)?.value ?? 0);
+  const [hc, mc] = horario.horaCorte.split(":").map(Number);
+  return hc * 60 + mc - (horario.margenMin ?? 0) - (n("hour") * 60 + n("minute"));
+}
+
+/**
+ * Como Mercado Libre: «comprando dentro de las próximas 2 h 15 min» / «… de los próximos 40 min». Sin
+ * minutos (justo en el corte) no se promete nada.
+ */
+export function textoCuentaRegresiva(minutos: number): string | null {
+  if (!Number.isFinite(minutos) || minutos <= 0) return null;
+  if (minutos < 60) return `comprando dentro de los próximos ${minutos} min`;
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  return `comprando dentro de las próximas ${h} h${m ? ` ${m} min` : ""}`;
+}
+
 export interface LlegadaEstimada {
   /** "Llega hoy" / "Llega mañana" / "Llega el lunes 16/11". */
   texto: string;
   /** Sólo se promete el mismo día si el pago es en línea y llega antes del corte. */
   mismoDia: boolean;
-  /** Aclaración sobre el corte: «si confirma su pago antes de las 09:00». */
+  /** Cuenta regresiva al corte, estilo Mercado Libre: «comprando dentro de las próximas 2 h 15 min». */
   condicion: string | null;
 }
 
@@ -89,9 +110,7 @@ export interface LlegadaEstimada {
  */
 export function llegadaEstimada(horario: HorarioEnvio, ahora: Date, medioOnline = true): LlegadaEstimada {
   const e = estimarEntrega(ahora, horario, medioOnline);
-  const condicion = e.mismoDia
-    ? `si confirma su pago antes de las ${horario.horaCorte.slice(0, 5)}`
-    : null;
+  const condicion = e.mismoDia ? textoCuentaRegresiva(minutosHastaCorte(ahora, horario)) : null;
   return { texto: textoLlegada(e, mananaDe(ahora)), mismoDia: e.mismoDia, condicion };
 }
 

@@ -34,6 +34,10 @@ export const TEXTOS_INVITADO = {
   verificacionFallida: "No pudimos verificar la solicitud. Recargue la página e inténtelo nuevamente.",
   ingresar: "Ya tengo cuenta, ingresar",
   avisoCarrito: "Puede completar su compra sin crear una cuenta.",
+  carritoTitulo: "Está comprando como invitado",
+  carritoAyuda: "Puede completar su compra sin crear una cuenta. Si ingresa, sus datos y pedidos quedan guardados.",
+  botonIngresar: "Ingresar",
+  botonRegistrarse: "Crear cuenta",
   /** El invitado recarga o vuelve sin el token: no se muestra nada del pedido. */
   sinToken:
     "Para continuar, use el enlace «Pagar su pedido» que le enviamos por correo.",

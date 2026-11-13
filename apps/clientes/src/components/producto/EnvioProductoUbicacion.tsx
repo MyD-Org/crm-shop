@@ -71,7 +71,8 @@ export async function EnvioProductoUbicacion({
           {zona.llegada.condicion ? `, ${zona.llegada.condicion}` : ""}.
         </span>
         {zona.avisoFeriados && <span className="block text-xs">{zona.avisoFeriados}</span>}
-        {plazo && <span className={`block font-semibold ${CLASE_TONO[plazo.tono]}`}>{plazo.texto}</span>}
+        {/* Sin el plazo de despacho genérico («Despacho dentro de las 24 h hábiles»): la llegada del método
+            ya dice cuándo llega y las dos líneas juntas se contradicen. */}
       </>
     );
   }

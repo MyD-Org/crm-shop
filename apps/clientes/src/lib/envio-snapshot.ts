@@ -119,3 +119,37 @@ export class EnvioCambioError extends Error {
     this.name = "EnvioCambioError";
   }
 }
+
+/** Lo que Mi cuenta muestra del envío por zona de un pedido (todo sale del pedido congelado). */
+export interface EnvioPedidoVista {
+  zona: string;
+  /** "YYYY-MM-DD" estimada al crear el pedido. */
+  entregaEstimada: string | null;
+  /** "YYYY-MM-DD" fijada al confirmar el pedido; null = todavía no se confirmó. */
+  entregaConfirmada: string | null;
+  avisoFeriados: string;
+  /** El pago es en línea (la promesa del día vale sólo con pago aprobado). */
+  medioOnline: boolean;
+}
+
+/**
+ * Resumen del envío por zona de un pedido para la UI, o null si no tuvo método (retiro, a coordinar,
+ * pedido anterior al cambio). Lee `envio_detalle` con cautela: es un JSON con contrato versionado.
+ */
+export function vistaEnvioDePedido(fila: {
+  envioMetodo: string | null;
+  envioZona: string | null;
+  envioEntregaEstimada: string | null;
+  envioEntregaConfirmada: string | null;
+  envioDetalle: unknown;
+}): EnvioPedidoVista | null {
+  if (!fila.envioMetodo || !fila.envioZona) return null;
+  const d = typeof fila.envioDetalle === "object" && fila.envioDetalle !== null ? (fila.envioDetalle as Record<string, unknown>) : {};
+  return {
+    zona: fila.envioZona,
+    entregaEstimada: fila.envioEntregaEstimada,
+    entregaConfirmada: fila.envioEntregaConfirmada,
+    avisoFeriados: typeof d.avisoFeriados === "string" ? d.avisoFeriados.trim() : "",
+    medioOnline: d.medioOnline === true,
+  };
+}

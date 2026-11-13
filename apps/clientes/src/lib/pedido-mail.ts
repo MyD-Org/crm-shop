@@ -60,6 +60,8 @@ export interface DatosMailPedido {
   /** "recibido" y "pago_recibido": resumen del pedido. */
   lineas?: LineaMail[];
   total?: number;
+  /** Envío por zona: lo que se cobró de envío (con IVA). Sólo si es mayor que 0; ausente = no se muestra. */
+  costoEnvio?: number;
   /** Cupón del pedido: la misma línea que el checkout ("Cupón LUZ-7KQ2M (10 %)", −$X), antes del total. */
   cupon?: CuponMail | null;
   entrega?: string;
@@ -218,6 +220,7 @@ function resumen(d: DatosMailPedido): string {
   const filas = (d.lineas ?? []).map(filaLineaHtml).join("");
   const datos: [string, string | undefined][] = [
     ...filaCupon(d.cupon),
+    ["Envío", d.costoEnvio && d.costoEnvio > 0 ? moneda(d.costoEnvio) : undefined],
     ["Total", d.total !== undefined ? moneda(d.total) : undefined],
     ["Entrega", d.entrega],
     ["Pago", textoPago(d)],
@@ -293,6 +296,7 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
         "",
         ...(d.lineas ?? []).map(lineaTexto),
         ...filaCupon(d.cupon).map(([k, v]) => `${k}: ${v}`),
+        ...(d.costoEnvio && d.costoEnvio > 0 ? [`Envío: ${moneda(d.costoEnvio)}`] : []),
         ...(d.total !== undefined ? [`Total: ${moneda(d.total)}`] : []),
         ...(d.entrega ? [`Entrega: ${d.entrega}`] : []),
         ...(d.pago ? [`Pago: ${textoPago(d)}`] : []),

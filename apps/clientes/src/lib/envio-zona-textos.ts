@@ -52,6 +52,27 @@ function mananaDe(ahora: Date): string {
   return fechaEntrega(ahora, { dias: [1, 2, 3, 4, 5, 6, 7], horaCorte: "00:00", margenMin: 0 }).fecha;
 }
 
+/** "YYYY-MM-DD" → "lunes 16/11". */
+export function fechaCorta(fecha: string): string {
+  return `${diaDeSemana(fecha)} ${diaMes(fecha)}`;
+}
+
+/**
+ * Línea de entrega de un pedido ya creado, para Mi cuenta. Con la fecha confirmada es la que vale; antes
+ * es una estimación que cuenta desde la confirmación del pago. Sin fechas, null.
+ */
+export function textoEntregaPedido(e: {
+  entregaEstimada: string | null;
+  entregaConfirmada: string | null;
+  medioOnline: boolean;
+}): string | null {
+  if (e.entregaConfirmada) return `Entrega prevista: ${fechaCorta(e.entregaConfirmada)}`;
+  if (e.entregaEstimada) {
+    return `Entrega estimada: ${fechaCorta(e.entregaEstimada)}, ${TEXTOS_ENVIO_ZONA.pagoConfirmado}`;
+  }
+  return null;
+}
+
 export interface LlegadaEstimada {
   /** "Llega hoy" / "Llega mañana" / "Llega el lunes 16/11". */
   texto: string;

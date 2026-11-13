@@ -113,3 +113,20 @@ describe("registro de los textos", () => {
     expect(readFileSync(new URL("./envio-zona-textos.ts", import.meta.url), "utf8")).toBeTruthy();
   });
 });
+
+describe("textoEntregaPedido", () => {
+  it("con fecha confirmada manda esa", async () => {
+    const { textoEntregaPedido } = await import("./envio-zona-textos");
+    expect(textoEntregaPedido({ entregaEstimada: "2026-11-16", entregaConfirmada: "2026-11-17", medioOnline: true })).toBe("Entrega prevista: martes 17/11");
+  });
+  it("sin confirmar es una estimación que cuenta desde la confirmación del pago", async () => {
+    const { textoEntregaPedido } = await import("./envio-zona-textos");
+    expect(textoEntregaPedido({ entregaEstimada: "2026-11-16", entregaConfirmada: null, medioOnline: false })).toBe(
+      "Entrega estimada: lunes 16/11, a partir de la confirmación de su pago",
+    );
+  });
+  it("sin fechas: null", async () => {
+    const { textoEntregaPedido } = await import("./envio-zona-textos");
+    expect(textoEntregaPedido({ entregaEstimada: null, entregaConfirmada: null, medioOnline: true })).toBeNull();
+  });
+});

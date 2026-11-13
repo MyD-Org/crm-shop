@@ -15,6 +15,9 @@ import { useRouter } from "next/navigation";
 import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, Stepper, type PaymentLogo } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
+import { AvisoEnvioZona, FilaEnvioResumen } from "@/components/checkout/EnvioZona";
+import { TEXTOS_ENVIO_ZONA } from "@/lib/envio-zona-textos";
+import { camposPedidoEnvioZona, destinoParaCotizar, type UbicacionElegida } from "@/lib/envio-zona-checkout";
 import { formaInicialDelMedio, pagoParaCotizar } from "@/lib/lista-medio";
 import { ahorroFrente, bajadaOpcion, opcionElegida, opcionesDePago, PIE_CUENTA_MP, textoConfirmar, tituloEnFrase, tituloOpcion, type OpcionPago } from "@/lib/opciones-pago";
 import { leerFormaCobro, type OpcionCobro } from "@/lib/pagos/opciones-cobro";
@@ -354,6 +357,11 @@ interface Props {
    */
   eleccionInicial?: EleccionInicialCheckout | null;
   /**
+   * Envío por zona (flag `envio-por-zona` prendido y con métodos cargados; lo resuelve el server).
+   * Apagado, el checkout no manda destino ni muestra nada nuevo: es el de siempre.
+   */
+  envioPorZona?: boolean;
+  /**
    * Compra como invitado (flag `compra-invitado`, resuelto en el server): sin sesión ni cuenta. El
    * token de la sesión de compra vive sólo en la memoria de la página. null = checkout de siempre.
    */
@@ -437,6 +445,7 @@ export function CheckoutClient({
   perfilFacturacion = null,
   admiteEnvio,
   configEnvio,
+  envioPorZona = false,
   direccionesGuardadas = [],
   sugerirVincular = false,
   sucursales = null,
@@ -502,6 +511,10 @@ export function CheckoutClient({
   const [provinciaManual, setProvinciaManual] = useState(inicial.provinciaManual);
   const [ciudad, setCiudad] = useState("");
   const [direccion, setDireccion] = useState("");
+  // Envío por zona: la sugerencia elegida del autocompletado (trae un token firmado) y si el comprador
+  // eligió seguir con el envío a coordinar. La elección de coordinar vale sólo para el destino en que se hizo.
+  const [ubicacionSel, setUbicacionSel] = useState<UbicacionElegida | null>(null);
+  const [coordinarPara, setCoordinarPara] = useState<string | null>(null);
   // Envío a domicilio arranca con la predeterminada. `ciudad` y `direccion`
   // quedan para "otra dirección para esta compra", que no toca las guardadas.
   const [eleccionDireccion, setEleccionDireccion] = useState(inicial.eleccionDireccion);
@@ -890,7 +903,19 @@ export function CheckoutClient({
   const omitirAvisoAlSalir = useAvisarAlSalir(confirmado && !pagado && conCuenta ? confirmado.id : null);
   const localParaCuenta = sucursales && entrega === "retiro" && localRetiro ? localRetiro : undefined;
 
+  // Envío por zona: a dónde va el envío, sin coordenadas (dirección guardada o token firmado).
+  const entradaDestino = {
+    guardadaId: !usarFiscal ? (guardada?.id ?? null) : null,
+    ubicacion: !usarFiscal && !guardada ? ubicacionSel : null,
+    calleActual: direccionEntrega,
+    ciudad: ciudadEntrega,
+  };
+  const destinoZona = envioPorZona && aDomicilio ? destinoParaCotizar(entradaDestino) : undefined;
+  const claveDestino = JSON.stringify(destinoZona ?? {});
+  const envioACoordinar = coordinarPara !== null && coordinarPara === claveDestino;
+
   const { cotizacion, estado, error, recotizar, ultimasCuotasOpciones } = useCotizacion({
+    ...(destinoZona ? { destino: destinoZona } : {}),
     entregaTipo: entrega,
     ciudad: aDomicilio ? ciudadEntrega : undefined,
     // La provincia de entrega define si el envío es gratis y, con el flag de sucursales, la zona:
@@ -1032,6 +1057,10 @@ export function CheckoutClient({
       setErrorPaso("El envío a domicilio no está disponible. Elija retiro en el local.");
       return false;
     }
+    if (sinUbicarPendiente) {
+      setErrorPaso(TEXTOS_ENVIO_ZONA.sinUbicar);
+      return false;
+    }
     setErrorPaso(null);
     return true;
   }
@@ -1039,6 +1068,10 @@ export function CheckoutClient({
   function continuarDesdeEntrega() {
     if (validarEntrega()) irAPaso("pago");
   }
+
+  // Envío por zona: la localidad la atiende un método pero falta una dirección ubicada, y todavía no se eligió
+  // seguir con el envío a coordinar.
+  const sinUbicarPendiente = envioPorZona && aDomicilio && cotizacion?.envio.sinUbicar === true && !envioACoordinar;
 
   const invitadoPendiente = invitadoActivo && pedidoACambiar === null && (!invitadoListo || turnstileToken === null);
   const puedeConfirmar =
@@ -1049,6 +1082,8 @@ export function CheckoutClient({
     // Al cambiarle el medio a un pedido que ya existe, el servidor usa sus datos y su entrega: sólo
     // cuentan el medio y las cuotas (ver `lib/cambiar-medio-pago.ts`).
     (pedidoACambiar !== null || (datosCompletos && facturacionCompleta && (!aDomicilio || envioDisponible))) &&
+    // Envío por zona: con la dirección sin ubicar hay que elegir una de la lista o seguir a coordinar.
+    (pedidoACambiar !== null || !sinUbicarPendiente) &&
     // Invitado: datos válidos y, sin la verificación (Turnstile), no se confirma (falla cerrada).
     !invitadoPendiente &&
     pasoActual === pasoFinal &&
@@ -1173,6 +1208,10 @@ export function CheckoutClient({
           // Sólo con el flag `sucursales` (props presentes): local de retiro y provincia de entrega.
           sucursalRetiro: sucursales && entrega === "retiro" && localRetiro ? localRetiro : undefined,
           entregaProvincia: aDomicilio && provinciaEntrega ? provinciaEntrega : undefined,
+          // Envío por zona: sólo con el flag (si no, el cuerpo es el de siempre).
+          ...(envioPorZona && aDomicilio
+            ? camposPedidoEnvioZona({ entrada: entradaDestino, envioACoordinar, costoEnvioVisto: cotizacion?.costoEnvio })
+            : {}),
           // Sólo el invitado: correo (dos veces), facturación en línea, desafío, tiempo y campo señuelo.
           ...(invitadoActivo
             ? camposDeInvitadoParaPedido(datosInv, entregaInvitado, {
@@ -1208,6 +1247,14 @@ export function CheckoutClient({
         setFaltantes409(Array.isArray(json.faltantes) ? json.faltantes : facturacion.faltantes);
         if (facturacion.vinculado) setModalFacturacion(true);
         else irAPaso("datos");
+        return;
+      }
+      if (res.status === 409 && (json?.motivo === "direccion_sin_ubicar" || json?.motivo === "envio_cambio")) {
+        // La dirección no se pudo ubicar, o el costo del envío cambió según la dirección o el origen: nada se
+        // creó. Se recotiza para ver el costo nuevo y confirmarlo (o elegir una dirección de la lista).
+        setErrorEnvio(json.error ?? TEXTOS_ENVIO_ZONA.precioCambio);
+        irAPaso("entrega");
+        recotizar();
         return;
       }
       if (res.status === 409 && json?.motivo === "cupon") {
@@ -1884,9 +1931,16 @@ export function CheckoutClient({
                     <DireccionAutocomplete
                       value={direccion}
                       onChange={setDireccion}
+                      // Acota la búsqueda a la localidad ya elegida (el servidor lo respeta sólo con el flag).
+                      {...(envioPorZona && ciudad.trim()
+                        ? { ciudad, provincia: PROVINCIAS_SELECTOR.find((p) => p.clave === provinciaManual)?.nombre }
+                        : {})}
                       // El invitado no usa las sugerencias (/api/geocode es sólo para cuentas).
                       suspendido={invitadoActivo}
                       onSeleccionar={(s) => {
+                        setUbicacionSel(
+                          s.geoToken ? { geoToken: s.geoToken, calle: s.calle, cp: s.cp, precision: s.precision } : null,
+                        );
                         setDireccion(s.calle);
                         // Solo se pisa lo que la sugerencia trae resuelto.
                         if (s.ciudad) setCiudad(s.ciudad);
@@ -1921,6 +1975,15 @@ export function CheckoutClient({
                   <p className="mt-3 text-xs text-muted">
                     Esta dirección no tiene una provincia válida. Elija otra dirección o cárguela de nuevo.
                   </p>
+                )}
+                {envioPorZona && cotizacion && (
+                  <AvisoEnvioZona
+                    envio={cotizacion.envio}
+                    pagaEnLinea={pagaEnLinea}
+                    envioACoordinar={envioACoordinar}
+                    onCoordinar={() => setCoordinarPara(claveDestino)}
+                    onUbicar={() => setCoordinarPara(null)}
+                  />
                 )}
                 {cotizacion && !envioDisponible && (
                   <p className="mt-3 flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-xs text-text">
@@ -1974,6 +2037,8 @@ export function CheckoutClient({
                     ? "Complete todos los campos para continuar."
                     : aDomicilio && !envioDisponible
                       ? "Elija retiro en el local: el envío no está disponible."
+                      : sinUbicarPendiente
+                        ? TEXTOS_ENVIO_ZONA.sinUbicar
                       : "Confirmando precios y stock…"
       : null;
   // A confirmar (venta sin stock): no se cobra, el pie no habla de ningún medio.
@@ -2437,7 +2502,9 @@ export function CheckoutClient({
                 onQuitar={() => setCupon(null)}
               />
             )}
-            {entrega === "envio" && (
+            {entrega === "envio" && envioPorZona && cotizacion?.envio.costo !== undefined ? (
+              <FilaEnvioResumen envio={cotizacion.envio} pagaEnLinea={pagaEnLinea} />
+            ) : entrega === "envio" && (
               <div className="flex justify-between">
                 <span className="text-muted">Envío</span>
                 {cotizacion?.envio.gratis ? (

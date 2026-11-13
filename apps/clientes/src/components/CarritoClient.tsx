@@ -11,7 +11,8 @@ import { AvisoQuitado } from "@/components/AvisoQuitado";
 import { CONFIG_ENVIO_DEFAULT, progresoEnvioGratis, type ConfigEnvio, type EntregaTipo } from "@/lib/envio";
 import { useCart } from "@/context/CartContext";
 import { resumenDisponibilidadCarrito, sinEntregaPosible } from "@/lib/disponibilidad-textos";
-import { useCotizacion } from "@/hooks/useCotizacion";
+import { useCotizacion, type DestinoCotizacion } from "@/hooks/useCotizacion";
+import { FilaEnvioZona } from "@/components/carrito/FilaEnvioZona";
 import { MetasCarrito } from "@/components/carrito/MetasCarrito";
 import { metaCuotas, metaEnvio, ordenarMetas } from "@/lib/metas-carrito";
 import { fmtPrecio } from "@/lib/format";
@@ -90,6 +91,7 @@ export function CarritoClient({
   entregaTipo = "retiro",
   sucursalRetiro = null,
   ubicacionConocida,
+  destinoEnvio,
   piedra = false,
   pagoTransferencia = null,
 }: {
@@ -116,6 +118,8 @@ export function CarritoClient({
   sucursalRetiro?: string | null;
   /** Hay elección (retiro o envío con provincia): no se pide la localidad. Por defecto, hay provincia. */
   ubicacionConocida?: boolean;
+  /** Envío por zona (flag `envio-por-zona`): localidad del visitante para anticipar la tarifa. Sin flag, ausente. */
+  destinoEnvio?: DestinoCotizacion;
 }) {
   const { items, updateQty, removeItem: remove, restoreItem, ready, cupon, setCupon } = useCart();
   // Líneas que se están yendo: colapsan SALIDA_MS antes de salir del carrito.
@@ -215,6 +219,7 @@ export function CarritoClient({
     entregaTipo,
     conProgresoCuotas: true,
     cupon,
+    ...(entregaTipo === "envio" && destinoEnvio ? { destino: destinoEnvio } : {}),
     ...(entregaTipo === "envio" && provincia ? { provincia } : {}),
     ...(entregaTipo === "retiro" && sucursalRetiro ? { sucursalRetiro } : {}),
     ...(pagoTransferencia ?? {}),
@@ -224,6 +229,7 @@ export function CarritoClient({
     entregaTipo,
     cupon,
     activo: Boolean(pagoTransferencia),
+    ...(entregaTipo === "envio" && destinoEnvio ? { destino: destinoEnvio } : {}),
     ...(entregaTipo === "envio" && provincia ? { provincia } : {}),
     ...(entregaTipo === "retiro" && sucursalRetiro ? { sucursalRetiro } : {}),
   });
@@ -599,6 +605,9 @@ export function CarritoClient({
                 <dd className="font-medium tabular-nums text-text">{iva === null ? "—" : fmtPrecio(iva)}</dd>
               </div>
               {confirmado && cotizacion.cupon && <LineaCupon cupon={cotizacion.cupon} onQuitar={() => setCupon(null)} />}
+              {confirmado && entregaTipo === "envio" && (
+                <FilaEnvioZona costo={cotizacion.envio.costo} gratis={cotizacion.envio.gratis} estimado={cotizacion.envioEstimado} />
+              )}
             </dl>
             <CampoCupon
               cupon={cupon}

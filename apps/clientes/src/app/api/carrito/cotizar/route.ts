@@ -7,6 +7,7 @@ import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
 import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
+import { estimarEnvioPorLocalidad } from "@/lib/envio-zona-textos";
 import { leerDestinoBody, origenDeEnvio, planEnvio, resolverDestinoEnvio } from "@/lib/envio-plan";
 import { direccionParaEnvio } from "@/lib/direcciones-envio-db";
 import { permitirAsync } from "@/lib/rate-limit";
@@ -495,6 +496,23 @@ export async function POST(req: Request) {
       if (Object.keys(elegibles).length > 0) cuponPorOpcion = elegibles;
     }
 
+    const envio = envioConCupon(
+      plan.evaluar(cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal, cotizacion.cupon?.envioGratis === true),
+      cotizacion.cupon?.envioGratis === true,
+    );
+    // Envío por zona sin dirección exacta ni tarifa resuelta: se anticipa por la localidad («desde $X» no
+    // suma al total; el checkout calcula el costo con la dirección). Sin métodos (flag apagado) no existe.
+    const envioEstimado =
+      conMetodos && envio.costo === undefined && !destinoEnvio.punto
+        ? estimarEnvioPorLocalidad(
+            configEnvio.metodos,
+            destinoEnvio.localidad && provinciaTexto
+              ? { localidad: destinoEnvio.localidad, provincia: provinciaTexto, id: destinoEnvio.georefId ?? undefined }
+              : null,
+            new Date(),
+          )
+        : null;
+
     return NextResponse.json({
       ...cotizacion,
       ...(totalesOpciones ? { totalesOpciones } : {}),
@@ -504,10 +522,8 @@ export async function POST(req: Request) {
       ...(progreso ? { progresoCuotas: progreso } : {}),
       ...(cuentaTransferencia !== undefined ? { cuentaTransferencia } : {}),
       ...(disponibilidad ? { disponibilidad } : {}),
-      envio: envioConCupon(
-        plan.evaluar(cotizacion.cupon?.subtotalAntes ?? cotizacion.subtotal, cotizacion.cupon?.envioGratis === true),
-        cotizacion.cupon?.envioGratis === true,
-      ),
+      envio,
+      ...(envioEstimado ? { envioEstimado } : {}),
     });
   } catch (err) {
     console.error("[/api/carrito/cotizar] error:", err);

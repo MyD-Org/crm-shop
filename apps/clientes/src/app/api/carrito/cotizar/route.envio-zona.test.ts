@@ -127,6 +127,23 @@ describe("POST /api/carrito/cotizar — envío por zona", () => {
       expect(r.envio).toMatchObject({ aCoordinar: true, sinUbicar: true });
     });
 
+    it("sólo la localidad (sin dirección): envioEstimado «desde», sin sumar al total", async () => {
+      const r = await (await pedir({ destino: { localidad: "Ciudad Ejemplo", georefId: "9990012" } })).json();
+      expect(r.envioEstimado).toMatchObject({ tipo: "desde" });
+      expect(r.envioEstimado.precio).toBeGreaterThan(0);
+      expect(r.costoEnvio).toBe(0);
+      expect(r.total).toBe(1210);
+      // La geometría de las zonas nunca viaja en la respuesta.
+      expect(JSON.stringify(r)).not.toContain("geometria");
+    });
+
+    it("con la dirección ubicada no hay estimado (hay costo exacto)", async () => {
+      const r = await (
+        await pedir({ destino: { geoToken: token(), calle: "Calle Ejemplo 123", localidad: "Ciudad Ejemplo", georefId: "9990012" } })
+      ).json();
+      expect(r.envioEstimado).toBeUndefined();
+    });
+
     it("retiro: nunca suma envío ni lee la dirección", async () => {
       const r = await (await pedir({ entregaTipo: "retiro", destino: { geoToken: token(), calle: "Calle Ejemplo 123" } })).json();
       expect(r.costoEnvio).toBe(0);

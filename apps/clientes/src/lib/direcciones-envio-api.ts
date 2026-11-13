@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { MAX_DIRECCIONES, validarDireccion, type DatosDireccion } from "./direcciones-envio";
 import { permitirAsync } from "./rate-limit";
+import { verificarGeo } from "./geo-token";
 
 /** Usos por minuto y por usuario, sumando todos los métodos y rutas. */
 const USOS_POR_MINUTO = 60;
@@ -39,10 +40,26 @@ export async function solicitante(): Promise<{ userId: string } | { error: NextR
   return { userId };
 }
 
+/** Ubicación de una dirección, escrita por el servidor a partir de un `geoToken` firmado. */
+export interface UbicacionDireccion {
+  lat: number;
+  lon: number;
+}
+
+/**
+ * Ubicación que vale del cuerpo: sólo la de un `geoToken` válido cuya calle es la que se guarda. Nunca
+ * lat/lon sueltos. null = sin ubicación verificada (sin token, falsificado, vencido o de otra calle).
+ */
+export function ubicacionDelCuerpo(cuerpo: unknown, calle: string): UbicacionDireccion | null {
+  if (typeof cuerpo !== "object" || cuerpo === null) return null;
+  const g = verificarGeo((cuerpo as { geoToken?: unknown }).geoToken, { calle });
+  return g ? { lat: g.lat, lon: g.lon } : null;
+}
+
 /** Datos validados del cuerpo, o la respuesta de error (400 / 422). */
 export async function datosDelCuerpo(
   req: Request,
-): Promise<{ datos: DatosDireccion } | { error: NextResponse }> {
+): Promise<{ datos: DatosDireccion; ubicacion: UbicacionDireccion | null } | { error: NextResponse }> {
   let cuerpo: unknown;
   try {
     cuerpo = await req.json();
@@ -50,7 +67,7 @@ export async function datosDelCuerpo(
     cuerpo = undefined;
   }
   const r = validarDireccion(cuerpo);
-  if (r.ok) return { datos: r.datos };
+  if (r.ok) return { datos: r.datos, ubicacion: ubicacionDelCuerpo(cuerpo, r.datos.calle) };
   if (r.motivo === "cuerpo") return { error: json({ error: "Solicitud inválida." }, 400) };
   return { error: json({ error: "Revise los datos de la dirección.", errores: r.errores }, 422) };
 }

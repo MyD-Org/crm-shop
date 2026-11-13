@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { textoEnvioFicha, type ConfigEnvio } from "@/lib/envio";
 import { TEXTOS_UBICACION, envioFichaSegunUbicacion } from "@/lib/ubicacion";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
+import { estimarEnvioPorLocalidad } from "@/lib/envio-zona-textos";
 import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
 import { CLASE_TONO } from "@/components/producto/EntregaProducto";
 import type { LineaDisponibilidad } from "@/lib/disponibilidad-textos";
@@ -36,6 +37,23 @@ export async function EnvioProductoUbicacion({
   // Con retiro elegido la fila de envío sigue la regla general: la ubicación derivada del local no
   // es un destino de envío y el plazo (de la zona del local) tampoco aplica.
   if (resuelta.eleccion.tipo === "retiro") return <>{textoEnvioFicha(configEnvio)}</>;
+  // Envío por zona (flag `envio-por-zona`; sin él `configEnvio.metodos` no existe y esto no hace nada): con la
+  // localidad del visitante se anticipa la tarifa («desde $X» si la localidad toca más de una zona) y cuándo
+  // llega. La geometría no sale del servidor.
+  const zona = estimarEnvioPorLocalidad(configEnvio.metodos, resuelta.ubicacion, new Date());
+  if (zona) {
+    return (
+      <>
+        <span className="font-semibold text-text">{zona.texto}</span>
+        <span className="block">
+          {zona.llegada.texto}
+          {zona.llegada.condicion ? `, ${zona.llegada.condicion}` : ""}.
+        </span>
+        {zona.avisoFeriados && <span className="block text-xs">{zona.avisoFeriados}</span>}
+        {plazo && <span className={`block font-semibold ${CLASE_TONO[plazo.tono]}`}>{plazo.texto}</span>}
+      </>
+    );
+  }
   const envio = envioFichaSegunUbicacion(configEnvio, resuelta.ubicacion);
   if (!envio) return null;
   if (envio.tipo === "texto")

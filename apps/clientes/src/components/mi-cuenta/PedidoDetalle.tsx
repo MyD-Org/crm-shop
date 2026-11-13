@@ -18,6 +18,7 @@ import { InformarPagoPedido } from "./InformarPagoPedido";
 import { CancelarPedido } from "./CancelarPedido";
 import { PedidoAcciones } from "./PedidoAcciones";
 import { PedidoLinea } from "./PedidoLinea";
+import { TEXTOS_ENVIO_ZONA, textoEntregaPedido } from "@/lib/envio-zona-textos";
 
 function Fila({ label, valor, fuerte = false }: { label: string; valor: string; fuerte?: boolean }) {
   return (
@@ -123,6 +124,13 @@ export function PedidoDetalle({
               {pedido.entregaDireccion}
               {pedido.entregaCiudad ? `, ${pedido.entregaCiudad}` : ""}
             </p>
+          )}
+          {pedido.envio && (
+            <div className="mt-2 text-sm" data-envio-zona="pedido">
+              <p className="text-text">{TEXTOS_ENVIO_ZONA.enElDia} · {pedido.envio.zona}</p>
+              {textoEntregaPedido(pedido.envio) && <p className="text-muted">{textoEntregaPedido(pedido.envio)}</p>}
+              {pedido.envio.avisoFeriados && <p className="text-xs text-muted">{pedido.envio.avisoFeriados}</p>}
+            </div>
           )}
         </Card>
       </div>

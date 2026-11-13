@@ -128,6 +128,7 @@ async function enviarAviso(
       sitioUrl: urlSitioMail(sitio),
       lineas: lineas.map(lineaParaMail),
       total: Number(pedido.total),
+      ...(Number(pedido.costoEnvio) > 0 ? { costoEnvio: Number(pedido.costoEnvio) } : {}),
       cupon: cuponParaResumen(pedido.cupon),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, medios),

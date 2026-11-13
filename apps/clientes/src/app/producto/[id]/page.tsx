@@ -15,8 +15,9 @@ import { ProductoClient } from "@/components/ProductoClient";
 import { getContenidoHome } from "@/lib/home-datos";
 import { estadoPromo } from "@/lib/promociones/promo";
 import { quedanEstrella } from "@/lib/promociones/stock";
-import { CONFIG_ENVIO_DEFAULT, textoEnvioFicha } from "@/lib/envio";
+import { CONFIG_ENVIO_DEFAULT, configEnvioPublica, textoEnvioFicha } from "@/lib/envio";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
+import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
 import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto";
 import { dispCatalogo, dispDelVisitante } from "@/lib/zona-servidor";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
@@ -62,7 +63,8 @@ export default async function ProductoPage({ params }: Props) {
   const id = idDeRuta((await params).id);
   const [producto, reglas, { soloVisibles, variantes, mediosPrecio }, disp, dispEntrega, tarjetas, { promociones }, campanias, avisoReingreso] = await Promise.all([
     productoDe(id),
-    reglasVentaCacheadas(),
+    // Flag `envio-por-zona`: prendido, la config de envío trae los métodos por zona (para estimar en la ficha).
+    envioPorZonaHabilitado().then((envioZona) => reglasVentaCacheadas(envioZona)),
     flagsPublicos(),
     dispCatalogo(),
     dispDelVisitante(),
@@ -127,7 +129,7 @@ export default async function ProductoPage({ params }: Props) {
       />
       <ProductoClient
         producto={producto}
-        configEnvio={configEnvio}
+        configEnvio={configEnvioPublica(configEnvio)}
         localElegido={localElegido}
         quedanPromo={quedanPromo}
         slugDestacadoPromo={mediosPrecio?.destacado?.slug}

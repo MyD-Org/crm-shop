@@ -112,13 +112,20 @@ export function DireccionForm({
         label="Calle y número"
         value={form.calle}
         onChange={(v) => {
-          set("calle", v);
+          // Escribir a mano invalida la ubicación de la sugerencia anterior.
+          setForm((f) => {
+            const { geoToken: _t, ...sinToken } = f;
+            void _t;
+            return { ...sinToken, calle: v };
+          });
           setRespaldo(null);
         }}
         onSeleccionar={(s) => {
           setForm((f) => conSugerencia(f, s));
           setRespaldo(null);
         }}
+        ciudad={form.ciudad}
+        provincia={form.provincia}
         placeholder="Escriba la calle y el número…"
         error={errores.calle}
       />

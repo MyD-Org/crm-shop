@@ -17,7 +17,7 @@ describe("carrito según la elección", () => {
   it("cotiza con el entregaTipo recibido (default retiro) y sólo manda provincia en envío", () => {
     expect(cliente).toMatch(/entregaTipo = "retiro"/);
     expect(cliente).toMatch(
-      /useCotizacion\(\{\s*entregaTipo,\s*conProgresoCuotas: true,\s*cupon,\s*\.\.\.\(entregaTipo === "envio" && provincia \? \{ provincia \} : \{\}\),\s*\.\.\.\(entregaTipo === "retiro" && sucursalRetiro \? \{ sucursalRetiro \} : \{\}\),\s*\.\.\.\(pagoTransferencia \?\? \{\}\),\s*\}\)/,
+      /useCotizacion\(\{\s*entregaTipo,\s*conProgresoCuotas: true,\s*cupon,\s*\.\.\.\(entregaTipo === "envio" && destinoEnvio \? \{ destino: destinoEnvio \} : \{\}\),\s*\.\.\.\(entregaTipo === "envio" && provincia \? \{ provincia \} : \{\}\),\s*\.\.\.\(entregaTipo === "retiro" && sucursalRetiro \? \{ sucursalRetiro \} : \{\}\),\s*\.\.\.\(pagoTransferencia \?\? \{\}\),\s*\}\)/,
     );
     expect(cliente).not.toMatch(/useCotizacion\(\{\s*entregaTipo: "retiro"/);
   });

@@ -23,6 +23,7 @@ import { BotonCompartirLista } from "@/components/BotonCompartirLista";
 import { hrefCompartido, MENSAJE_CARRITO } from "@/lib/carrito-compartido";
 import { topeCantidad } from "@/lib/catalogo-vista";
 import { TEXTO_CARRITO_A_CONFIRMAR } from "@/lib/venta-sin-stock";
+import { BotonIniciarCompra } from "@/components/carrito/BotonIniciarCompra";
 import { BloquePiedra } from "@/components/piedra/BloquePiedra";
 import { CampoCupon } from "@/components/checkout/CampoCupon";
 import { LineaCupon } from "@/components/checkout/LineaCupon";
@@ -323,11 +324,13 @@ export function CarritoClient({
   const aConfirmar = cotizacion?.flujo === "a_confirmar";
 
   const botonCompra = (etiquetaBloqueado?: string) => (
-    <Link href="/checkout" className="block" aria-disabled={cotizacion?.hayProblemas || undefined}>
-      <Button className="w-full" disabled={cotizacion?.hayProblemas}>
-        {cotizacion?.hayProblemas && etiquetaBloqueado ? etiquetaBloqueado : "Iniciar compra"}
-      </Button>
-    </Link>
+    <BotonIniciarCompra
+      anonimo={!conSesion || estado === "no_auth"}
+      items={items}
+      total={total}
+      bloqueado={cotizacion?.hayProblemas}
+      etiquetaBloqueado={etiquetaBloqueado}
+    />
   );
 
   return (

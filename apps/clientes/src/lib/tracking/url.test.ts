@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { limpiarUrl, rutaSinTracking } from "./url";
+import { limpiarUrl, rutaSinTracking, urlSinQuery } from "./url";
+
+describe("urlSinQuery", () => {
+  it("origen + pathname: sin query, sin fragmento y sin atribución", () => {
+    expect(urlSinQuery("https://tienda.example/ingresar?__clerk_ticket=x&utm_source=ig#f")).toBe("https://tienda.example/ingresar");
+  });
+  it("'' si no es una URL", () => {
+    expect(urlSinQuery("no es url")).toBe("");
+  });
+});
 
 describe("limpiarUrl", () => {
   it("deja origen, path y sólo los parámetros de atribución", () => {

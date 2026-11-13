@@ -67,6 +67,56 @@ describe("track", () => {
     expect(capture).not.toHaveBeenCalled();
   });
 
+  it("en login y registro pasan sólo los eventos del embudo, a PostHog y con la URL sin query", () => {
+    const fbq = vi.fn();
+    const gtag = vi.fn();
+    const capture = vi.fn();
+    activarTracking({ fbq, gtag, posthog: { capture } });
+    enRuta("/ingresar/factor-uno", "?__clerk_ticket=secreto&redirect_url=%2Fcheckout#frag");
+    track({ tipo: "ingreso_pantalla", ruta: "/ingresar/factor-uno" });
+    expect(capture).toHaveBeenCalledOnce();
+    expect(capture).toHaveBeenCalledWith("ingreso_pantalla", {
+      ruta: "/ingresar/factor-uno",
+      $current_url: "https://tienda.example/ingresar/factor-uno",
+    });
+    expect(fbq).not.toHaveBeenCalled();
+    expect(gtag).not.toHaveBeenCalled();
+
+    // Lo que no es del embudo sigue sin salir (ni a PostHog).
+    track(evento);
+    track({ tipo: "busqueda_conversar", origen: "pregunta" });
+    track({ tipo: "iniciar_checkout", items: [] });
+    expect(capture).toHaveBeenCalledOnce();
+  });
+
+  it("checkout_requiere_ingreso va sólo a PostHog, con la URL sin query", () => {
+    const fbq = vi.fn();
+    const gtag = vi.fn();
+    const capture = vi.fn();
+    activarTracking({ fbq, gtag, posthog: { capture } });
+    enRuta("/carrito", "?i=secreto&utm_source=ig");
+    track({ tipo: "checkout_requiere_ingreso", items: 2, valor: 300 });
+    expect(capture).toHaveBeenCalledWith("checkout_requiere_ingreso", {
+      items: 2,
+      valor: 300,
+      moneda: "ARS",
+      $current_url: "https://tienda.example/carrito",
+    });
+    expect(fbq).not.toHaveBeenCalled();
+    expect(gtag).not.toHaveBeenCalled();
+  });
+
+  it("un evento del embudo en /registro espera en la cola hasta que PostHog carga", () => {
+    enRuta("/registro", "?__clerk_status=verified");
+    track({ tipo: "ingreso_pantalla", ruta: "/registro" });
+    const capture = vi.fn();
+    activarTracking({ posthog: { capture } });
+    expect(capture).toHaveBeenCalledWith("ingreso_pantalla", {
+      ruta: "/registro",
+      $current_url: "https://tienda.example/registro",
+    });
+  });
+
   it("un proveedor que tira no corta a los demás ni al que llama", () => {
     const capture = vi.fn();
     activarTracking({

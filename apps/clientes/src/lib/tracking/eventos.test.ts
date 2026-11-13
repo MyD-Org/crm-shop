@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { aGa4, aMeta, aPosthog, itemDe, valorDe, type EventoTracking } from "./eventos";
+import {
+  aGa4,
+  aMeta,
+  aPosthog,
+  esEventoEmbudo,
+  esEventoSoloPosthog,
+  eventoMuroIngreso,
+  itemDe,
+  permitidoSinTracking,
+  valorDe,
+  type EventoShop,
+  type EventoTracking,
+} from "./eventos";
 
 const lampara = itemDe({ id: "p1", name: "Lámpara LED 9W", brand: "Genérica", price: 1500.5 }, 2);
 const cable = itemDe({ id: "p2", name: "Cable 2,5 mm", price: 800 }, 1);
@@ -90,5 +102,47 @@ describe("cupón en el tracking", () => {
     for (const v of Object.values(aMeta(conCupon).params)) {
       if (typeof v === "string") expect(v).not.toMatch(/^[A-Z]{2,8}-[A-Z0-9]{5}$/);
     }
+  });
+});
+
+describe("eventos del embudo anónimo (S0)", () => {
+  it("checkout_requiere_ingreso lleva sólo líneas, valor y moneda, sin PII ni URL", () => {
+    const e = eventoMuroIngreso(
+      [
+        { price: 100, qty: 2 },
+        { price: 50.555, qty: 1 },
+      ],
+      null,
+    );
+    expect(e).toEqual({ tipo: "checkout_requiere_ingreso", items: 2, valor: 250.56 });
+    const p = aPosthog(e);
+    expect(p).toEqual({ nombre: "checkout_requiere_ingreso", props: { items: 2, valor: 250.56, moneda: "ARS" } });
+    expect(JSON.stringify(p)).not.toMatch(/@|https?:|\?/);
+  });
+
+  it("con el total cotizado, ése es el valor", () => {
+    expect(eventoMuroIngreso([{ price: 10, qty: 1 }], 999).valor).toBe(999);
+  });
+
+  it("ingreso_pantalla lleva la ruta sin query ni fragmento", () => {
+    expect(aPosthog({ tipo: "ingreso_pantalla", ruta: "/ingresar" }).props).toEqual({ ruta: "/ingresar" });
+    expect(aPosthog({ tipo: "ingreso_pantalla", ruta: "/ingresar/factor-uno?__clerk_ticket=x#y" }).props).toEqual({
+      ruta: "/ingresar/factor-uno",
+    });
+  });
+
+  it("no son de ecommerce: sólo PostHog, y son los únicos que pasan en rutas sin tracking", () => {
+    const muro = eventoMuroIngreso([], 0);
+    const pantalla: EventoShop = { tipo: "ingreso_pantalla", ruta: "/registro" };
+    for (const e of [muro, pantalla]) {
+      expect(esEventoEmbudo(e)).toBe(true);
+      expect(esEventoSoloPosthog(e)).toBe(true);
+      expect(permitidoSinTracking(e)).toBe(true);
+    }
+    for (const e of [verProducto, agregar, checkout, pedido]) {
+      expect(esEventoEmbudo(e)).toBe(false);
+      expect(permitidoSinTracking(e)).toBe(false);
+    }
+    expect(permitidoSinTracking({ tipo: "busqueda_ver_tal_cual" })).toBe(false);
   });
 });

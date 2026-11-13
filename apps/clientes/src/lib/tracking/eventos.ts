@@ -61,8 +61,20 @@ export type EventoBusqueda =
    */
   | { tipo: "busqueda_filtro_car"; clave: string; accion: "agregar" | "quitar" | "rango"; valor?: string };
 
+/**
+ * Eventos del embudo anónimo (change compra-como-invitado, S0). Sólo van a PostHog (no son de
+ * ecommerce: ni Meta ni GA4 los entienden) y no llevan datos personales: cantidades, un importe y
+ * una ruta sin query ni fragmento. Son los únicos que pasan en las rutas sin tracking
+ * (`/ingresar`, `/registro`), ver `permitidoSinTracking`.
+ */
+export type EventoEmbudo =
+  /** Un anónimo toca «Iniciar compra» y el muro lo manda a ingresar. `items` = líneas del carrito. */
+  | { tipo: "checkout_requiere_ingreso"; items: number; valor: number }
+  /** Pantalla de ingreso o de registro vista (`ruta` = pathname, sin query ni fragmento). */
+  | { tipo: "ingreso_pantalla"; ruta: string };
+
 /** Todo lo que el Shop puede mandar por `track()`. */
-export type EventoShop = EventoTracking | EventoBusqueda;
+export type EventoShop = EventoTracking | EventoBusqueda | EventoEmbudo;
 
 const TIPOS_BUSQUEDA = new Set<EventoShop["tipo"]>([
   "busqueda_enviada",
@@ -77,6 +89,22 @@ export function esEventoBusqueda(e: EventoShop): e is EventoBusqueda {
   return TIPOS_BUSQUEDA.has(e.tipo);
 }
 
+const TIPOS_EMBUDO = new Set<EventoShop["tipo"]>(["checkout_requiere_ingreso", "ingreso_pantalla"]);
+
+export function esEventoEmbudo(e: EventoShop): e is EventoEmbudo {
+  return TIPOS_EMBUDO.has(e.tipo);
+}
+
+/** Eventos que no son de ecommerce: sólo PostHog. */
+export function esEventoSoloPosthog(e: EventoShop): e is EventoBusqueda | EventoEmbudo {
+  return esEventoBusqueda(e) || esEventoEmbudo(e);
+}
+
+/** Los únicos eventos que se mandan aunque la ruta sea de las sin tracking (login, registro). */
+export function permitidoSinTracking(e: EventoShop): boolean {
+  return esEventoEmbudo(e);
+}
+
 type Params = Record<string, unknown>;
 
 function itemsDe(e: EventoTracking): ItemTracking[] {
@@ -84,6 +112,9 @@ function itemsDe(e: EventoTracking): ItemTracking[] {
 }
 
 const redondear = (n: number) => Math.round(n * 100) / 100;
+
+/** Pathname sin query ni fragmento (por si alguien pasa una ruta con `?` o `#`). */
+const rutaSinQuery = (ruta: string) => ruta.split(/[?#]/)[0];
 
 /** Valor del evento: el total del pedido, o precio × cantidad de los ítems. */
 export function valorDe(e: EventoTracking): number {
@@ -158,6 +189,10 @@ export function aGa4(e: EventoTracking): { nombre: string; params: Params } {
 
 /** `posthog.capture(nombre, props)`: el nombre del dominio, props planas. */
 export function aPosthog(e: EventoShop): { nombre: string; props: Params } {
+  if (e.tipo === "ingreso_pantalla") return { nombre: e.tipo, props: { ruta: rutaSinQuery(e.ruta) } };
+  if (e.tipo === "checkout_requiere_ingreso") {
+    return { nombre: e.tipo, props: { items: e.items, valor: redondear(e.valor), moneda: MONEDA } };
+  }
   if (esEventoBusqueda(e)) {
     if (e.tipo === "busqueda_chip_quitado") return { nombre: e.tipo, props: { tipo: e.chip, valor: e.valor } };
     const { tipo, ...props } = e;
@@ -184,4 +219,16 @@ export function aPosthog(e: EventoShop): { nombre: string; props: Params } {
 /** Ítem de tracking desde un ítem del carrito o un producto de la ficha. */
 export function itemDe(p: { id: string; name: string; brand?: string; price: number }, cantidad = 1): ItemTracking {
   return { id: p.id, nombre: p.name, ...(p.brand ? { marca: p.brand } : {}), precio: p.price, cantidad };
+}
+
+/**
+ * `checkout_requiere_ingreso` desde el carrito. `valor` = el total cotizado si ya llegó; si no,
+ * precio × cantidad de lo que hay (referencial, igual que el resto de los eventos del carrito).
+ */
+export function eventoMuroIngreso(
+  items: { price: number; qty: number }[],
+  total: number | null,
+): Extract<EventoEmbudo, { tipo: "checkout_requiere_ingreso" }> {
+  const valor = total ?? items.reduce((s, i) => s + i.price * i.qty, 0);
+  return { tipo: "checkout_requiere_ingreso", items: items.length, valor: redondear(valor) };
 }

@@ -32,6 +32,33 @@ describe("metadataProducto", () => {
     expect(m.description).toBe(`${fmtPrecio(1210)} · Marca · Código 02141N`);
   });
 
+  it("suma los precios por medio de la ficha, en su orden, después del de lista", () => {
+    const m = metadataProducto(
+      {
+        ...base,
+        precioFinal: 1210,
+        preciosMedios: [
+          { slug: "transferencia", nombre: "Transferencia", price: 900, precioFinal: 1089 },
+          { slug: "mercadopago", nombre: "Mercado Pago", price: 950, precioFinal: 1149.5, forma: "credito" },
+        ],
+      },
+      false,
+      "Tienda Uno",
+    );
+    const descripcion = `${fmtPrecio(1210)} · ${fmtPrecio(1089)} con Transferencia · ${fmtPrecio(1149.5)} con crédito · Marca · Código 02141N`;
+    expect(m.description).toBe(descripcion);
+    expect(m.openGraph).toMatchObject({ description: descripcion });
+  });
+
+  it("sin precio publicado no muestra precios por medio", () => {
+    const m = metadataProducto(
+      { ...base, price: 0, preciosMedios: [{ slug: "transferencia", nombre: "Transferencia", price: 900 }] },
+      false,
+      "Tienda Uno",
+    );
+    expect(m.description).toBe("Marca · Código 02141N");
+  });
+
   it("sin precio publicado (\"Consulte el precio\") no muestra ninguno", () => {
     expect(metadataProducto({ ...base, price: 0 }, false, "Tienda Uno").description).toBe("Marca · Código 02141N");
   });

@@ -9,7 +9,7 @@ import {
   type AlegraInvoiceCreateInput,
 } from "@/lib/alegra"
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
-import { crearContactoEnCuenta } from "@/lib/contacto-en-cuenta"
+import { contactoInputDelPedido, crearContactoEnCuenta } from "@/lib/contacto-en-cuenta"
 import { asegurarItemsEnCuenta, itemsSinIdEnCuenta, type LineaParaCuenta } from "@/lib/alegra-items-cuenta"
 import {
   armarCuentaFacturaDto,
@@ -226,11 +226,6 @@ function respuestaResultado(result: FacturaResult, incluirCosto: boolean, aviso?
   return Response.json(body, { headers: NO_STORE })
 }
 
-/** Nombre a usar si hay que crear el contacto: razón social de facturación, o el del contacto del pedido. */
-function nombreParaContacto(pedido: PedidoRow): string {
-  return pedido.facturacionRazonSocial?.trim() || pedido.contactoNombre
-}
-
 /** Líneas del pedido tal como las necesita `asegurarItemsEnCuenta` (sin las que no tienen ítem). */
 function lineasParaCuenta(items: PedidoItemRow[]): LineaParaCuenta[] {
   return armarLineasFactura(items).lineas.map((l) => ({
@@ -398,15 +393,7 @@ export async function POST(req: Request, { params }: IdParams) {
   try {
     if (preview.contacto.esNuevo || !contactoAlegraId) {
       // La vista previa ya buscó por documento en ESTA cuenta y no lo encontró: se crea.
-      const creado = await crearContactoEnCuenta(
-        config,
-        {
-          name: nombreParaContacto(pedido),
-          identification: pedido.facturacionNroDoc?.trim() || undefined,
-          email: pedido.clienteEmail?.trim() || undefined,
-        },
-        cuenta.principal,
-      )
+      const creado = await crearContactoEnCuenta(config, contactoInputDelPedido(pedido), cuenta.principal)
       contactoAlegraId = creado.alegraId
     }
   } catch (err) {

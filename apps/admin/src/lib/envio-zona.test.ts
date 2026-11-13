@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest"
+import { existsSync, readFileSync } from "node:fs"
+import { join } from "node:path"
 import casos from "./__fixtures__/envio-zona-casos.json"
 import { cotizarMetodo, estimarPorLocalidad, resolverZona, type DestinoEnvio, type MetodoEnvio } from "./envio-zona"
 import type { Geometria } from "./geo-poligono"
@@ -77,5 +79,14 @@ describe("cotizarMetodo (fixture compartido con el Shop)", () => {
       alegra: { itemId: "9001", ivaPct: 21 },
       horario: { dias: [1, 2, 3, 4, 5], horaCorte: "09:00", margenMin: 0 },
     })
+  })
+})
+
+describe("fixture compartido con el Shop", () => {
+  const delShop = join(process.cwd(), "../clientes/src/lib/__fixtures__/envio-zona-casos.json")
+  // La copia del Shop llega con la rebanada B; desde entonces las dos tienen que ser idénticas.
+  it.skipIf(!existsSync(delShop))("es idéntico byte a byte al del Shop (si cambia uno, cambia el otro)", () => {
+    const propio = readFileSync(join(process.cwd(), "src/lib/__fixtures__/envio-zona-casos.json"))
+    expect(readFileSync(delShop).equals(propio)).toBe(true)
   })
 })

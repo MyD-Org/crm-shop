@@ -36,6 +36,35 @@ describe("headersDeSeguridad", () => {
   })
 })
 
+describe("mapa de zonas de envío (/admin/envios)", () => {
+  const directiva = (csp: string, nombre: string) => csp.split("; ").find((p) => p.startsWith(`${nombre} `))
+  const TILES = "https://tile.openstreetmap.org"
+
+  it("img-src admite los mosaicos de OpenStreetMap sólo con la opción `mapa`", () => {
+    expect(directiva(politicaCsp({}), "img-src")).not.toContain(TILES)
+    const mapa = politicaCsp({}, { mapa: true })
+    expect(directiva(mapa, "img-src")).toContain(TILES)
+    // Leaflet usa data: y blob: para sus íconos; ya estaban permitidos.
+    expect(directiva(mapa, "img-src")).toMatch(/data: blob:/)
+    // Sólo img-src: ni scripts, ni estilos, ni fetch.
+    expect(directiva(mapa, "script-src")).toBe("script-src 'self' 'unsafe-inline'")
+    expect(directiva(mapa, "connect-src")).not.toContain("openstreetmap")
+    expect(directiva(mapa, "style-src")).toBe(directiva(politicaCsp({}), "style-src"))
+  })
+
+  it("next.config: /admin/envios lleva la política con el mapa, después de la general", async () => {
+    const reglas = await nextConfig.headers!()
+    const iGeneral = reglas.findIndex((r) => r.source === "/:path*")
+    const iEnvios = reglas.findIndex((r) => r.source === "/admin/envios/:path*")
+    expect(iEnvios).toBeGreaterThan(iGeneral)
+    const csp = reglas[iEnvios].headers.find((h) => h.key === "Content-Security-Policy-Report-Only")!.value
+    expect(csp).toContain(TILES)
+    // El resto de las rutas no.
+    const general = reglas[iGeneral].headers.find((h) => h.key === "Content-Security-Policy-Report-Only")!.value
+    expect(general).not.toContain(TILES)
+  })
+})
+
 describe("politicaCsp", () => {
   const directiva = (csp: string, nombre: string) => csp.split("; ").find((p) => p.startsWith(`${nombre} `))
 

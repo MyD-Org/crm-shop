@@ -1,0 +1,129 @@
+{
+  "_comentario": "Fixture COMPARTIDO por apps/admin y apps/clientes (copias idénticas, verificado por un test en cada app). Geometrías sintéticas en [lon, lat]; ninguna es una zona real. Si cambia acá, cambia en la otra app.",
+  "geometrias": {
+    "centro": [
+      [
+        [[-57.6, -38.05], [-57.5, -38.05], [-57.5, -37.95], [-57.6, -37.95], [-57.6, -38.05]],
+        [[-57.56, -38.01], [-57.54, -38.01], [-57.54, -37.99], [-57.56, -37.99], [-57.56, -38.01]]
+      ]
+    ],
+    "costa": [[[[-57.5, -38.05], [-57.4, -38.05], [-57.4, -37.95], [-57.5, -37.95], [-57.5, -38.05]]]],
+    "ampliada": [[[[-57.7, -38.15], [-57.3, -38.15], [-57.3, -37.85], [-57.7, -37.85], [-57.7, -38.15]]]],
+    "islas": [
+      [[[-57.2, -38.02], [-57.18, -38.02], [-57.18, -38.0], [-57.2, -38.0], [-57.2, -38.02]]],
+      [[[-57.16, -38.02], [-57.14, -38.02], [-57.14, -38.0], [-57.16, -38.0], [-57.16, -38.02]]]
+    ],
+    "apagada": [[[[-57.0, -38.05], [-56.9, -38.05], [-56.9, -37.95], [-57.0, -37.95], [-57.0, -38.05]]]]
+  },
+  "puntos": {
+    "centro": { "lat": -38.0, "lon": -57.58 },
+    "hueco": { "lat": -38.0, "lon": -57.55 },
+    "borde": { "lat": -38.0, "lon": -57.5 },
+    "costa": { "lat": -38.0, "lon": -57.45 },
+    "ampliada": { "lat": -38.1, "lon": -57.65 },
+    "afuera": { "lat": -37.0, "lon": -57.5 },
+    "isla2": { "lat": -38.01, "lon": -57.15 },
+    "apagada": { "lat": -38.0, "lon": -56.95 }
+  },
+  "metodo": {
+    "id": "m-1",
+    "slug": "envio-en-el-dia",
+    "nombre": "Envío en el día",
+    "tipo": "tarifa_zona",
+    "activo": true,
+    "orden": 0,
+    "provinciaClave": "buenosaires",
+    "sucursalOrigen": "mdp",
+    "diasOperativos": [1, 2, 3, 4, 5],
+    "horaCorte": "09:00",
+    "margenMin": 0,
+    "promesa": "Entrega en el día",
+    "avisoFeriados": "",
+    "gratisAplica": false,
+    "itemAlegraId": "9001",
+    "itemAlegraIva": 21,
+    "zonas": [
+      { "id": "z-centro", "nombre": "Centro", "precio": 3000, "orden": 1, "activa": true, "geometria": "centro", "entradas": [{ "tipo": "cp", "valor": "7600" }] },
+      { "id": "z-costa", "nombre": "Costa", "precio": 4500, "orden": 2, "activa": true, "geometria": "costa", "entradas": [{ "tipo": "georef", "valor": "9990001", "nombreNorm": "ciudadcosta" }] },
+      { "id": "z-ampliada", "nombre": "Ampliada", "precio": 6000, "orden": 3, "activa": true, "geometria": "ampliada", "entradas": [{ "tipo": "cp", "valor": "7601" }, { "tipo": "georef", "valor": "9990002", "nombreNorm": "ciudadampliada" }] },
+      { "id": "z-islas", "nombre": "Islas", "precio": 7000, "orden": 4, "activa": true, "geometria": "islas", "entradas": [] },
+      { "id": "z-rural", "nombre": "Rural", "precio": 9000, "orden": 5, "activa": true, "geometria": null, "entradas": [{ "tipo": "georef", "valor": "9990003", "nombreNorm": "pueblolejano" }] },
+      { "id": "z-apagada", "nombre": "Apagada", "precio": 1, "orden": 0, "activa": false, "geometria": "apagada", "entradas": [] }
+    ]
+  },
+  "resolver": [
+    { "caso": "punto en el centro", "destino": { "provinciaClave": "buenosaires", "punto": "centro" }, "esperado": { "zona": "Centro", "regla": "poligono" } },
+    { "caso": "punto en el hueco del centro cae en la ampliada", "destino": { "provinciaClave": "buenosaires", "punto": "hueco" }, "esperado": { "zona": "Ampliada", "regla": "poligono" } },
+    { "caso": "borde compartido: gana la de menor orden", "destino": { "provinciaClave": "buenosaires", "punto": "borde" }, "esperado": { "zona": "Centro", "regla": "poligono" } },
+    { "caso": "solape: gana la de menor orden", "destino": { "provinciaClave": "buenosaires", "punto": "costa" }, "esperado": { "zona": "Costa", "regla": "poligono" } },
+    { "caso": "solo la ampliada", "destino": { "provinciaClave": "buenosaires", "punto": "ampliada" }, "esperado": { "zona": "Ampliada", "regla": "poligono" } },
+    { "caso": "multipolígono: segunda isla", "destino": { "provinciaClave": "buenosaires", "punto": "isla2" }, "esperado": { "zona": "Islas", "regla": "poligono" } },
+    { "caso": "zona inactiva se ignora", "destino": { "provinciaClave": "buenosaires", "punto": "apagada" }, "esperado": null },
+    { "caso": "fuera de todo con CP cargado cae al CP", "destino": { "provinciaClave": "buenosaires", "punto": "afuera", "cp": "7600" }, "esperado": { "zona": "Centro", "regla": "cp" } },
+    { "caso": "fuera de todo con id Georef cargado", "destino": { "provinciaClave": "buenosaires", "punto": "afuera", "georefId": "9990001" }, "esperado": { "zona": "Costa", "regla": "georef" } },
+    { "caso": "Georef por nombre normalizado en la provincia del método", "destino": { "provinciaClave": "buenosaires", "localidad": "Ciudad  Costa" }, "esperado": { "zona": "Costa", "regla": "georef" } },
+    { "caso": "polígono gana al CP", "destino": { "provinciaClave": "buenosaires", "punto": "centro", "cp": "7601" }, "esperado": { "zona": "Centro", "regla": "poligono" } },
+    { "caso": "CP gana al Georef", "destino": { "provinciaClave": "buenosaires", "cp": "7601", "georefId": "9990001" }, "esperado": { "zona": "Ampliada", "regla": "cp" } },
+    { "caso": "CPA se compara por sus 4 dígitos", "destino": { "provinciaClave": "buenosaires", "cp": "B7600ABC" }, "esperado": { "zona": "Centro", "regla": "cp" } },
+    { "caso": "provincia homónima no matchea", "destino": { "provinciaClave": "entrerios", "localidad": "Ciudad Costa", "georefId": "9990001" }, "esperado": null },
+    { "caso": "sin provincia no matchea", "destino": { "provinciaClave": null, "punto": "centro" }, "esperado": null },
+    { "caso": "sin nada", "destino": { "provinciaClave": "buenosaires" }, "esperado": null },
+    { "caso": "punto fuera de todo y sin respaldo", "destino": { "provinciaClave": "buenosaires", "punto": "afuera" }, "esperado": null }
+  ],
+  "localidades": {
+    "centro": { "georefId": "9990010", "bbox": { "sur": -38.04, "oeste": -57.59, "norte": -38.02, "este": -57.51 }, "centro": { "lat": -38.03, "lon": -57.55 } },
+    "centroConHueco": { "georefId": "9990011", "bbox": { "sur": -38.03, "oeste": -57.59, "norte": -37.97, "este": -57.51 }, "centro": { "lat": -38.0, "lon": -57.55 } },
+    "costa": { "georefId": "9990001", "bbox": { "sur": -38.04, "oeste": -57.49, "norte": -37.96, "este": -57.41 }, "centro": { "lat": -38.0, "lon": -57.45 } },
+    "mixta": { "georefId": "9990012", "bbox": { "sur": -38.04, "oeste": -57.55, "norte": -38.02, "este": -57.45 }, "centro": { "lat": -38.03, "lon": -57.5 } },
+    "lejana": { "georefId": "9990003", "bbox": { "sur": -36.5, "oeste": -58.5, "norte": -36.4, "este": -58.4 }, "centro": { "lat": -36.45, "lon": -58.45 } },
+    "ignota": { "georefId": "9990099", "bbox": { "sur": -36.0, "oeste": -58.5, "norte": -35.9, "este": -58.4 }, "centro": { "lat": -35.95, "lon": -58.45 } },
+    "soloCentro": { "georefId": "9990013", "centro": { "lat": -38.04, "lon": -57.58 } },
+    "sinDatosConEntrada": { "georefId": "9990003" },
+    "sinDatosSinEntrada": { "georefId": "9990098" }
+  },
+  "estimar": [
+    { "caso": "localidad entera dentro de la primera zona: la ampliada queda tapada y el estimado es exacto", "localidad": "centro", "esperado": { "tipo": "exacto", "precio": 3000, "zona": "Centro" } },
+    { "caso": "el hueco de la zona deja pasar a la ampliada: desde", "localidad": "centroConHueco", "esperado": { "tipo": "desde", "precio": 3000 } },
+    { "caso": "localidad entera en la costa", "localidad": "costa", "esperado": { "tipo": "exacto", "precio": 4500, "zona": "Costa" } },
+    { "caso": "localidad que cruza dos zonas: desde el mínimo", "localidad": "mixta", "esperado": { "tipo": "desde", "precio": 3000 } },
+    { "caso": "localidad sólo con entrada y sin polígonos cerca: exacto", "localidad": "lejana", "esperado": { "tipo": "exacto", "precio": 9000, "zona": "Rural" } },
+    { "caso": "localidad sin zona ni entrada", "localidad": "ignota", "esperado": null },
+    { "caso": "sólo centro, sin bbox: nunca exacto", "localidad": "soloCentro", "esperado": { "tipo": "desde", "precio": 3000 } },
+    { "caso": "sin centro ni bbox y con entrada: desde el mínimo de lo que podría aplicar", "localidad": "sinDatosConEntrada", "esperado": { "tipo": "desde", "precio": 3000 } },
+    { "caso": "sin centro ni bbox ni entrada", "localidad": "sinDatosSinEntrada", "esperado": null }
+  ],
+  "cotizar": [
+    { "caso": "tarifa de la zona", "destino": { "provinciaClave": "buenosaires", "punto": "centro" }, "ctx": { "origen": { "sucursal": "mdp", "conTraslado": false }, "subtotalSinIva": 10000, "gratisTienda": false, "gratisCupon": false }, "esperado": { "zona": "Centro", "precio": 3000, "costo": 3000, "gratis": false, "regla": "poligono" } },
+    { "caso": "gratis de tienda no anula si gratisAplica=false", "destino": { "provinciaClave": "buenosaires", "punto": "centro" }, "ctx": { "origen": { "sucursal": "mdp", "conTraslado": false }, "subtotalSinIva": 10000, "gratisTienda": true, "gratisCupon": false }, "esperado": { "zona": "Centro", "precio": 3000, "costo": 3000, "gratis": false, "regla": "poligono" } },
+    { "caso": "cupón de envío gratis tampoco anula si gratisAplica=false", "destino": { "provinciaClave": "buenosaires", "punto": "centro" }, "ctx": { "origen": { "sucursal": "mdp", "conTraslado": false }, "subtotalSinIva": 10000, "gratisTienda": false, "gratisCupon": true }, "esperado": { "zona": "Centro", "precio": 3000, "costo": 3000, "gratis": false, "regla": "poligono" } },
+    { "caso": "gratis de tienda anula si gratisAplica=true", "cambios": { "gratisAplica": true }, "destino": { "provinciaClave": "buenosaires", "punto": "centro" }, "ctx": { "origen": { "sucursal": "mdp", "conTraslado": false }, "subtotalSinIva": 10000, "gratisTienda": true, "gratisCupon": false }, "esperado": { "zona": "Centro", "precio": 3000, "costo": 0, "gratis": true, "regla": "poligono" } },
+    { "caso": "cupón anula si gratisAplica=true", "cambios": { "gratisAplica": true }, "destino": { "provinciaClave": "buenosaires", "punto": "centro" }, "ctx": { "origen": { "sucursal": "mdp", "conTraslado": false }, "subtotalSinIva": 10000, "gratisTienda": false, "gratisCupon": true }, "esperado": { "zona": "Centro", "precio": 3000, "costo": 0, "gratis": true, "regla": "poligono" } },
+    { "caso": "otra sucursal de origen: no aplica", "destino": { "provinciaClave": "buenosaires", "punto": "centro" }, "ctx": { "origen": { "sucursal": "igz", "conTraslado": false }, "subtotalSinIva": 10000, "gratisTienda": false, "gratisCupon": false }, "esperado": null },
+    { "caso": "con traslado: no aplica", "destino": { "provinciaClave": "buenosaires", "punto": "centro" }, "ctx": { "origen": { "sucursal": "mdp", "conTraslado": true }, "subtotalSinIva": 10000, "gratisTienda": false, "gratisCupon": false }, "esperado": null },
+    { "caso": "origen desconocido se ignora", "destino": { "provinciaClave": "buenosaires", "punto": "centro" }, "ctx": { "origen": null, "subtotalSinIva": 10000, "gratisTienda": false, "gratisCupon": false }, "esperado": { "zona": "Centro", "precio": 3000, "costo": 3000, "gratis": false, "regla": "poligono" } },
+    { "caso": "método sin sucursal de origen aplica siempre", "cambios": { "sucursalOrigen": null }, "destino": { "provinciaClave": "buenosaires", "punto": "centro" }, "ctx": { "origen": { "sucursal": "igz", "conTraslado": true }, "subtotalSinIva": 10000, "gratisTienda": false, "gratisCupon": false }, "esperado": { "zona": "Centro", "precio": 3000, "costo": 3000, "gratis": false, "regla": "poligono" } },
+    { "caso": "método inactivo", "cambios": { "activo": false }, "destino": { "provinciaClave": "buenosaires", "punto": "centro" }, "ctx": { "origen": null, "subtotalSinIva": 10000, "gratisTienda": false, "gratisCupon": false }, "esperado": null },
+    { "caso": "sin zona: a coordinar", "destino": { "provinciaClave": "buenosaires", "punto": "afuera" }, "ctx": { "origen": null, "subtotalSinIva": 10000, "gratisTienda": false, "gratisCupon": false }, "esperado": null }
+  ],
+  "fechas": {
+    "horario": { "dias": [1, 2, 3, 4, 5], "horaCorte": "09:00", "margenMin": 0 },
+    "casos": [
+      { "caso": "martes 08:30 antes del corte", "instante": "2026-11-10T11:30:00Z", "esperado": { "fecha": "2026-11-10", "mismoDia": true } },
+      { "caso": "martes 09:00 en punto: estricto, pasa al día siguiente", "instante": "2026-11-10T12:00:00Z", "esperado": { "fecha": "2026-11-11", "mismoDia": false } },
+      { "caso": "martes 08:59 todavía entra", "instante": "2026-11-10T11:59:00Z", "esperado": { "fecha": "2026-11-10", "mismoDia": true } },
+      { "caso": "martes 10:00 después del corte", "instante": "2026-11-10T13:00:00Z", "esperado": { "fecha": "2026-11-11", "mismoDia": false } },
+      { "caso": "margen 15: 08:44 entra", "margenMin": 15, "instante": "2026-11-10T11:44:00Z", "esperado": { "fecha": "2026-11-10", "mismoDia": true } },
+      { "caso": "margen 15: 08:45 ya no (estricto)", "margenMin": 15, "instante": "2026-11-10T11:45:00Z", "esperado": { "fecha": "2026-11-11", "mismoDia": false } },
+      { "caso": "miércoles 11:00 confirmación tarde", "instante": "2026-11-11T14:00:00Z", "esperado": { "fecha": "2026-11-12", "mismoDia": false } },
+      { "caso": "viernes 15:00 pasa al lunes", "instante": "2026-11-13T18:00:00Z", "esperado": { "fecha": "2026-11-16", "mismoDia": false } },
+      { "caso": "viernes 08:00 entra", "instante": "2026-11-13T11:00:00Z", "esperado": { "fecha": "2026-11-13", "mismoDia": true } },
+      { "caso": "sábado", "instante": "2026-11-14T13:00:00Z", "esperado": { "fecha": "2026-11-16", "mismoDia": false } },
+      { "caso": "domingo", "instante": "2026-11-15T13:00:00Z", "esperado": { "fecha": "2026-11-16", "mismoDia": false } },
+      { "caso": "domingo 23:30 AR es lunes 02:30 UTC: se evalúa el día argentino", "instante": "2026-11-16T02:30:00Z", "esperado": { "fecha": "2026-11-16", "mismoDia": false } },
+      { "caso": "jueves 23:30 AR es viernes 02:30 UTC", "instante": "2026-11-13T02:30:00Z", "esperado": { "fecha": "2026-11-13", "mismoDia": false } },
+      { "caso": "sólo martes y jueves: martes tarde va al jueves", "dias": [2, 4], "instante": "2026-11-10T15:00:00Z", "esperado": { "fecha": "2026-11-12", "mismoDia": false } },
+      { "caso": "sólo martes y jueves: jueves tarde va al martes siguiente", "dias": [2, 4], "instante": "2026-11-12T15:00:00Z", "esperado": { "fecha": "2026-11-17", "mismoDia": false } },
+      { "caso": "cambio de mes", "instante": "2026-10-30T18:00:00Z", "esperado": { "fecha": "2026-11-02", "mismoDia": false } }
+    ]
+  }
+}

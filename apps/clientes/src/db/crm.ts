@@ -26,6 +26,7 @@
 import {
   PgSchema,
   boolean,
+  customType,
   date,
   integer,
   jsonb,
@@ -693,4 +694,96 @@ export const crmModalidadesSinStock = publico.table("modalidades_sin_stock", {
   plazoDias: integer("plazo_dias"),
   flujo: text("flujo").notNull(),
   activa: boolean("activa").notNull(),
+});
+
+/**
+ * `time` sin zona. drizzle lo declara como "time" y Postgres lo informa como "time without time
+ * zone": el contrato de columnas compara con `format_type`, así que se declara con el nombre completo.
+ * Llega como texto "HH:MM:SS".
+ */
+const horaSinZona = customType<{ data: string }>({
+  dataType() {
+    return "time without time zone";
+  },
+});
+
+/**
+ * Métodos de envío por zona (`public.metodos_envio`, change `envio-por-zona-con-tarifa`, migración
+ * 0101 del CRM). SELECT de la tabla entera (nada sensible: el ítem de Alegra se copia al pedido).
+ * `tenant_id = shopTenantId()` en toda lectura. El CRM es el dueño; el Shop sólo lee. Con el flag
+ * `envio-por-zona` apagado el Shop ni las consulta.
+ */
+export const crmMetodosEnvio = publico.table("metodos_envio", {
+  id: uuid("id").notNull(),
+  tenantId: text("tenant_id").notNull(),
+  slug: text("slug").notNull(),
+  nombre: text("nombre").notNull(),
+  /** Hoy sólo `tarifa_zona`. */
+  tipo: text("tipo").notNull(),
+  activo: boolean("activo").notNull(),
+  orden: smallint("orden").notNull(),
+  /** `claveProvincia` (ej. `buenosaires`): el método sólo aplica en esa provincia. */
+  provinciaClave: text("provincia_clave").notNull(),
+  /** Slug de `sucursales`; null = sin condición de origen. */
+  sucursalOrigen: text("sucursal_origen"),
+  /** Días operativos ISO (1 = lunes … 5 = viernes). */
+  diasOperativos: smallint("dias_operativos").array().notNull(),
+  /** "HH:MM:SS" en hora argentina. */
+  horaCorte: horaSinZona("hora_corte").notNull(),
+  margenMin: smallint("margen_min").notNull(),
+  promesa: text("promesa").notNull(),
+  avisoFeriados: text("aviso_feriados").notNull(),
+  gratisAplica: boolean("gratis_aplica").notNull(),
+  itemAlegraId: text("item_alegra_id"),
+  itemAlegraIva: numeric("item_alegra_iva", { precision: 5, scale: 2 }).notNull(),
+  config: jsonb("config").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
+/**
+ * Zonas de un método (`public.metodos_envio_zonas`, 0101 del CRM). `geometria` = `coordinates` de un
+ * GeoJSON MultiPolygon en [lon, lat]; `[]` = sin dibujo (vive de sus entradas). Precio FINAL con IVA.
+ */
+export const crmMetodosEnvioZonas = publico.table("metodos_envio_zonas", {
+  id: uuid("id").notNull(),
+  metodoId: uuid("metodo_id").notNull(),
+  nombre: text("nombre").notNull(),
+  precio: numeric("precio", { precision: 12, scale: 2 }).notNull(),
+  /** Si dos zonas se superponen, gana la de menor orden. */
+  orden: smallint("orden").notNull(),
+  activa: boolean("activa").notNull(),
+  geometria: jsonb("geometria").$type<number[][][][]>().notNull(),
+});
+
+/** Respaldo de una zona por localidad Georef o CP (`public.metodos_envio_zona_entradas`, 0101 del CRM). */
+export const crmMetodosEnvioEntradas = publico.table("metodos_envio_zona_entradas", {
+  id: uuid("id").notNull(),
+  zonaId: uuid("zona_id").notNull(),
+  metodoId: uuid("metodo_id").notNull(),
+  /** `georef` (id de localidad) | `cp` (4 dígitos o CPA). */
+  tipo: text("tipo").notNull(),
+  valor: text("valor").notNull(),
+  etiqueta: text("etiqueta").notNull(),
+  /** `claveTexto` del nombre de la localidad (georef) o del CP. */
+  nombreNorm: text("nombre_norm").notNull(),
+});
+
+/**
+ * Localidades que atiende el método (`public.metodos_envio_localidades`, 0101 del CRM): abreviaturas
+ * del autocompletado ("mdp"), centro y rectángulo para estimar el precio antes de tener la dirección.
+ */
+export const crmMetodosEnvioLocalidades = publico.table("metodos_envio_localidades", {
+  id: uuid("id").notNull(),
+  metodoId: uuid("metodo_id").notNull(),
+  georefId: text("georef_id").notNull(),
+  etiqueta: text("etiqueta").notNull(),
+  nombreNorm: text("nombre_norm").notNull(),
+  abreviaturas: text("abreviaturas").array().notNull(),
+  centroLat: numeric("centro_lat", { precision: 9, scale: 6 }),
+  centroLon: numeric("centro_lon", { precision: 9, scale: 6 }),
+  bboxSur: numeric("bbox_sur", { precision: 9, scale: 6 }),
+  bboxOeste: numeric("bbox_oeste", { precision: 9, scale: 6 }),
+  bboxNorte: numeric("bbox_norte", { precision: 9, scale: 6 }),
+  bboxEste: numeric("bbox_este", { precision: 9, scale: 6 }),
 });

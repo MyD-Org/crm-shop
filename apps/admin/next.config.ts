@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   headers: async () => [
     { source: "/:path*", headers: headersDeSeguridad() },
     { source: "/admin/inbox/:path*", headers: headersDeSeguridad(undefined, { correo: true }) },
+    // Envíos: el editor de zonas dibuja un mapa con mosaicos de OpenStreetMap (img-src).
+    { source: "/admin/envios/:path*", headers: headersDeSeguridad(undefined, { mapa: true }) },
   ],
   // sharp ya está en la lista automática de Next; heic-decode/libheif-js no: se excluyen del
   // bundling de Server Components para que carguen su wasm/binario con require nativo.

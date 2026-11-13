@@ -60,6 +60,11 @@ export interface OpcionesCsp {
    * cualquier host, así que en estas páginas `img-src` admite `https:`. El resto del CRM no.
    */
   correo?: boolean
+  /**
+   * Editor de zonas de envío (`/admin/envios`): el mapa (Leaflet) pide mosaicos PNG a
+   * tile.openstreetmap.org. Sólo `img-src`; los marcadores son SVG/CSS (sin íconos externos).
+   */
+  mapa?: boolean
 }
 
 /** Origen (`https://host`) de una URL, o null si no es una URL https válida. */
@@ -95,6 +100,9 @@ const R2 = "https://*.r2.cloudflarestorage.com"
  */
 const VERCEL_TOOLBAR = "https://vercel.live"
 
+/** Mosaicos del mapa de zonas de envío (política de uso de OSM: tráfico bajo de operadores). */
+const TILES_OSM = "https://tile.openstreetmap.org"
+
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com"
 const GOOGLE_FONTS_ARCHIVOS = "https://fonts.gstatic.com"
 
@@ -110,7 +118,7 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
     "script-src": ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...(preview ? [VERCEL_TOOLBAR] : [])],
     // El DS y el widget inyectan estilos inline; Google Fonts sirve la hoja de Bowlby One.
     "style-src": ["'self'", "'unsafe-inline'", GOOGLE_FONTS_CSS],
-    "img-src": ["'self'", "data:", "blob:", R2, ...(fotos ? [fotos] : []), ...(opciones.correo ? ["https:"] : [])],
+    "img-src": ["'self'", "data:", "blob:", R2, ...(fotos ? [fotos] : []), ...(opciones.correo ? ["https:"] : []), ...(opciones.mapa ? [TILES_OSM] : [])],
     "font-src": ["'self'", "data:", GOOGLE_FONTS_ARCHIVOS],
     // Adjuntos de audio/video del inbox (URL firmada de R2).
     "media-src": ["'self'", "blob:", R2],

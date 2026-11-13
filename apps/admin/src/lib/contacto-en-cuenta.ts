@@ -8,6 +8,41 @@ import type { TenantConfig } from "./tenants"
 // no está, se crea. Crear en una secundaria NO escribe el espejo de contactos (que es el padrón de
 // la principal del tenant): un contacto de otra cuenta lo ensuciaría.
 
+// Condición de IVA del Shop (`orders.facturacion_condicion_iva`) → la de Alegra. Mismo mapeo que
+// `apps/clientes/src/lib/contacto-alegra.ts`. Sin dato se usa consumidor final: algunas cuentas de
+// Alegra (AR) rechazan el alta sin condición de IVA (code 2055).
+const IVA_SHOP_A_ALEGRA: Record<string, string> = {
+  consumidor_final: "FINAL_CONSUMER",
+  responsable_inscripto: "IVA_RESPONSABLE",
+  monotributo: "UNIQUE_TRIBUTE_RESPONSABLE",
+  exento: "IVA_EXEMPT",
+}
+// Tipos de documento que Alegra acepta en `identificationObject.type` (no tiene CUIL).
+const TIPOS_DOC_ALEGRA = new Set(["CUIT", "DNI"])
+
+type PedidoParaContacto = {
+  clienteCodigo: string | null
+  facturacionNroDoc: string | null
+  facturacionTipoDoc?: string | null
+  facturacionCondicionIva?: string | null
+  facturacionRazonSocial: string | null
+  contactoNombre: string
+  clienteEmail: string | null
+}
+
+/** Datos para crear en Alegra el contacto de un pedido (nombre, documento, condición de IVA, email). */
+export function contactoInputDelPedido(pedido: PedidoParaContacto): AlegraContactInput {
+  const documento = pedido.facturacionNroDoc?.trim() || undefined
+  const tipo = pedido.facturacionTipoDoc?.trim().toUpperCase()
+  return {
+    name: pedido.facturacionRazonSocial?.trim() || pedido.contactoNombre,
+    identification: documento,
+    identificationType: documento && tipo && TIPOS_DOC_ALEGRA.has(tipo) ? tipo : undefined,
+    ivaCondition: IVA_SHOP_A_ALEGRA[pedido.facturacionCondicionIva?.trim() ?? ""] ?? "FINAL_CONSUMER",
+    email: pedido.clienteEmail?.trim() || undefined,
+  }
+}
+
 /** Crea el contacto en la cuenta de `config`; sólo la principal escribe el espejo (write-through). */
 export async function crearContactoEnCuenta(
   config: TenantConfig,
@@ -25,7 +60,7 @@ export async function crearContactoEnCuenta(
  */
 export async function contactoDelPedidoEnCuenta(
   config: TenantConfig,
-  pedido: { clienteCodigo: string | null; facturacionNroDoc: string | null; facturacionRazonSocial: string | null; contactoNombre: string; clienteEmail: string | null },
+  pedido: PedidoParaContacto,
   cuentaPrincipal: boolean,
 ): Promise<{ alegraId: string; esNuevo: boolean } | null> {
   if (cuentaPrincipal && pedido.clienteCodigo) return { alegraId: pedido.clienteCodigo, esNuevo: false }
@@ -36,10 +71,6 @@ export async function contactoDelPedidoEnCuenta(
   }
   const nombre = pedido.facturacionRazonSocial?.trim() || pedido.contactoNombre
   if (!nombre) return null
-  const creado = await crearContactoEnCuenta(
-    config,
-    { name: nombre, identification: documento || undefined, email: pedido.clienteEmail?.trim() || undefined },
-    cuentaPrincipal,
-  )
+  const creado = await crearContactoEnCuenta(config, contactoInputDelPedido(pedido), cuentaPrincipal)
   return { alegraId: creado.alegraId, esNuevo: true }
 }

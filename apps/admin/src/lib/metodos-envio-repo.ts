@@ -183,9 +183,8 @@ export async function listarMetodos(tenantId: string): Promise<MetodoEnvioDto[]>
   return (await cargar(tenantId, false)).map((c) => c.dto)
 }
 
-/** Métodos activos en la forma que consumen los módulos puros (`resolverZona`, `estimarPorLocalidad`). */
-export async function leerMetodosActivos(tenantId: string): Promise<MetodoEnvio[]> {
-  return (await cargar(tenantId, true)).map(({ dto, entradaNombreNorm, localidadNombreNorm }): MetodoEnvio => ({
+function aMetodoPuro({ dto, entradaNombreNorm, localidadNombreNorm }: Cargado): MetodoEnvio {
+  return {
     id: dto.id,
     slug: dto.slug,
     nombre: dto.nombre,
@@ -219,7 +218,18 @@ export async function leerMetodosActivos(tenantId: string): Promise<MetodoEnvio[
       centro: l.centro,
       bbox: l.bbox,
     })),
-  }))
+  }
+}
+
+/** Métodos activos en la forma que consumen los módulos puros (`resolverZona`, `estimarPorLocalidad`). */
+export async function leerMetodosActivos(tenantId: string): Promise<MetodoEnvio[]> {
+  return (await cargar(tenantId, true)).map(aMetodoPuro)
+}
+
+/** Un método del tenant (activo o no) en la forma de los módulos puros; null si no existe o es de otro tenant. */
+export async function leerMetodoPuro(tenantId: string, id: string): Promise<MetodoEnvio | null> {
+  const c = (await cargar(tenantId, false)).find((x) => x.dto.id === id)
+  return c ? aMetodoPuro(c) : null
 }
 
 /** Escribe zonas, entradas y localidades de un método (ya sin las anteriores). */

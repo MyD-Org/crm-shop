@@ -114,8 +114,8 @@ import { acotarPorDeducidas, condicionAmplia, condicionRecuperar, terminosQueRec
 import { puntajeBusqueda } from "./busqueda-v2/ordenar";
 import { patronTermino, type CriterioPlan, type PiezasBusqueda } from "./busqueda-v2/piezas";
 
-/** Debajo de esta cantidad, el stock se muestra como "bajo". */
-const STOCK_BAJO = 5;
+/** Debajo de esta cantidad, el stock se muestra como "bajo" («Queda 1»): sólo la última unidad. */
+const STOCK_BAJO = 2;
 
 /**
  * Deriva el estado de stock del shop a partir de una cantidad de inventario.

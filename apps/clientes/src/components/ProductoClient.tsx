@@ -22,6 +22,8 @@ import { estadoFicha, type TonoFicha } from "@/lib/ficha-venta-sin-stock";
 import { agotadoSinModalidad, esAPedido, TEXTO_SE_CONFIRMA_POR_CONTACTO } from "@/lib/venta-sin-stock";
 import { maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
 import { useCart } from "@/context/CartContext";
+import { useHidratado } from "@/lib/hidratado";
+import { abrirHojaCarrito } from "@/components/BarraCarritoMobile";
 import { AvisoReingresoForm } from "@/components/AvisoReingresoForm";
 import { mostrarAvisoReingreso } from "@/lib/aviso-reingreso-visibilidad";
 import { BotonFavorito } from "@/components/BotonFavorito";
@@ -155,7 +157,9 @@ export function ProductoClient({
   );
   const precioPendiente = producto.precioCuenta === "pendiente";
   const [qty, setQty] = useState(1);
-  const { addItem } = useCart();
+  const { addItem, items: itemsCarrito, count: cantidadCarrito, updateQty, removeItem } = useCart();
+  // Mientras hidrata, "no está en el carrito", como en el servidor (ver useHidratado).
+  const hidratado = useHidratado();
   // Una vista por producto (no por cada cambio de precio de cuenta).
   const idVisto = productoElegido.id;
   useEffect(() => {
@@ -182,17 +186,16 @@ export function ProductoClient({
     [],
   );
 
+  // Una variante entra al carrito como "Modelo / Opción" (flag `variantes-selector`).
+  const lineaCarrito = () => ({
+    ...producto,
+    name: nombreDeLinea(producto),
+    image: producto.images?.[0]?.url,
+    ...(producto.campania ? { precioHasta: producto.campania.fin } : {}),
+  });
+
   function agregar() {
-    // Una variante entra al carrito como "Modelo / Opción" (flag `variantes-selector`).
-    addItem(
-      {
-        ...producto,
-        name: nombreDeLinea(producto),
-        image: producto.images?.[0]?.url,
-        ...(producto.campania ? { precioHasta: producto.campania.fin } : {}),
-      },
-      qty,
-    );
+    addItem(lineaCarrito(), qty);
     setAgregado(true);
     if (timerAgregado.current) clearTimeout(timerAgregado.current);
     timerAgregado.current = setTimeout(() => setAgregado(false), MS_AGREGADO);
@@ -256,6 +259,49 @@ export function ProductoClient({
           Agregado
         </span>
       </span>
+    </Button>
+  );
+
+  // Barra de mobile: igual que la card del catálogo. Sin cantidad previa: un
+  // toque agrega 1 y el botón pasa a ser el contador del carrito (cada + o −
+  // cambia el carrito al momento; con 1, el − es un tacho). Al lado, «Ver
+  // carrito» abre la hoja del carrito (BarraCarritoMobile).
+  const enCarrito = hidratado ? itemsCarrito.find((i) => i.id === producto.id) : undefined;
+  const barraMobile = enCarrito ? (
+    <div className="flex items-center gap-3">
+      <QuantityStepper
+        name="cantidad-carrito"
+        aria-label="Cantidad en el carrito"
+        value={enCarrito.qty}
+        min={0}
+        // Sin stock o sin precio no se suma más, pero se puede bajar.
+        max={agotado || noComprable ? enCarrito.qty : Math.max(maxCantidad(producto), enCarrito.qty)}
+        onValueChange={(n) => (n <= 0 ? removeItem(producto.id) : updateQty(producto.id, n))}
+        decrementLabel="Quitar uno"
+        incrementLabel="Agregar uno más"
+        removeLabel="Quitar del carrito"
+        tone="soft"
+        size="lg"
+      />
+      <Button
+        size="lg"
+        onClick={abrirHojaCarrito}
+        aria-haspopup="dialog"
+        className="flex min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap"
+      >
+        <CartIcon />
+        Ver carrito ({cantidadCarrito})
+      </Button>
+    </div>
+  ) : (
+    <Button
+      size="lg"
+      onClick={() => addItem(lineaCarrito(), 1)}
+      disabled={agotado || noComprable}
+      className="flex w-full items-center justify-center gap-2 whitespace-nowrap"
+    >
+      <CartIcon />
+      {sinPrecio ? "Consulte el precio" : agotado ? "Sin stock" : "Agregar al carrito"}
     </Button>
   );
 
@@ -477,10 +523,7 @@ export function ProductoClient({
             footer, así nunca lo tapa. `data-barra-compra`: el launcher del
             chat se corre arriba de ella (globals.css). */}
         <div data-sin-footer-mobile data-barra-compra className="sticky bottom-0 z-30 -mx-4 mt-10 border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
-          <div className="flex items-center gap-3">
-            {selector}
-            {botonAgregar}
-          </div>
+          {barraMobile}
           {aConfirmar && (
             <p className="mt-2 text-center text-xs text-muted" data-testid="se-confirma-por-contacto-barra">
               {TEXTO_SE_CONFIRMA_POR_CONTACTO}

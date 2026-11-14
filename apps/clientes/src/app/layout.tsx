@@ -22,6 +22,7 @@ import { datosPromoCliente } from "@/lib/promociones/promo";
 import { getMarca } from "@/lib/marca";
 import { metadataDeMarca } from "@/lib/metadata-marca";
 import { urlCanonicaDelSitio } from "@/lib/sitio-url";
+import { BarraCarritoMobile } from "@/components/BarraCarritoMobile";
 import "./globals.css";
 
 // Fuentes del diseño aprobado, self-hosted vía next/font; la paleta cálida las
@@ -156,6 +157,7 @@ export default async function RootLayout({
                 pantalla para que el footer no suba mientras llega. */}
             <Suspense fallback={<main className="min-h-dvh flex-1" />}>{children}</Suspense>
             <SiteFooter />
+            <BarraCarritoMobile />
             <Suspense fallback={null}>
               <BloqueoFavoritos />
             </Suspense>

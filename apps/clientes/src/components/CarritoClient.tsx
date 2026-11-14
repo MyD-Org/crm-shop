@@ -372,10 +372,7 @@ export function CarritoClient({
           <div className="mb-6 rounded-[20px] border border-border bg-elevated p-4 text-sm">
             {compraInvitado ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-semibold text-text">{TEXTOS_INVITADO.carritoTitulo}</p>
-                  <p className="text-muted">{TEXTOS_INVITADO.carritoAyuda}</p>
-                </div>
+                <p className="font-semibold text-text">{TEXTOS_INVITADO.carritoTitulo}</p>
                 <div className="flex shrink-0 gap-2">
                   <Button variant="outline" size="sm" href={rutaIngreso("/carrito")}>
                     {TEXTOS_INVITADO.botonIngresar}

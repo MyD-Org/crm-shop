@@ -16,5 +16,10 @@ const ROTULO_FORMA: Record<OpcionCobro, string> = {
  * "$ 90.000,00 con débito".
  */
 export function textoConMedio(m: PrecioMedio): string {
-  return `${fmtPrecio(m.precioFinal ?? m.price)} con ${m.forma ? ROTULO_FORMA[m.forma] : m.nombre}`;
+  return `${fmtPrecio(m.precioFinal ?? m.price)} ${rotuloMedio(m)}`;
+}
+
+/** "con Transferencia" / "con débito": la mitad de texto de `textoConMedio`, sin el precio. */
+export function rotuloMedio(m: PrecioMedio): string {
+  return `con ${m.forma ? ROTULO_FORMA[m.forma] : m.nombre}`;
 }

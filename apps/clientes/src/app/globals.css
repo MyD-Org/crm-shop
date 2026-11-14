@@ -23,6 +23,16 @@
       transform: none;
     }
   }
+  /* Hoja que sube desde abajo (carrito en el celular). */
+  --animate-subir: subir 240ms cubic-bezier(0.23, 1, 0.32, 1);
+  @keyframes subir {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: none;
+    }
+  }
 }
 
 /* Token propio de la app, redefinido por tema más abajo: no existe en el DS
@@ -84,7 +94,8 @@ html[data-chat-dock="abierto"] .site-header > header + div {
    `lg:hidden`) se apoyan encima de ella en vez de quedar tapadas. El chat no
    tiene burbuja flotante: se abre desde el botón "Asistente" del header. */
 @media (width < 64rem) {
-  html[data-chat-peek] [data-barra-compra] {
+  html[data-chat-peek] [data-barra-compra],
+  html[data-chat-peek] [data-barra-carrito] > button {
     bottom: calc(var(--aichat-peek-height, 64px) + env(safe-area-inset-bottom, 0px));
   }
 }
@@ -213,6 +224,14 @@ body:has([data-fondo-piedra]) .footer-global {
   body:has([data-sin-footer-mobile]) .footer-global {
     display: none;
   }
+}
+
+/* Barra del carrito del celular (BarraCarritoMobile): no va donde la página ya
+   tiene su barra de compra (ficha, carrito) ni en el checkout. Nunca dos barras
+   fijas abajo. */
+body:has([data-barra-compra]) [data-barra-carrito],
+body:has([data-sin-footer-mobile]) [data-barra-carrito] {
+  display: none;
 }
 
 /* ==================================================================

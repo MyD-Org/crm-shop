@@ -50,14 +50,27 @@ function CruzIcon() {
  * IVA, y cotizar en cada página sería un pedido a Alegra por visita. La hoja sí
  * cotiza (como /carrito), y sólo mientras está abierta.
  */
+/** Evento con el que otra parte de la página (la barra de la ficha) abre la hoja. */
+const EVENTO_ABRIR_HOJA = "carrito:abrir-hoja";
+
+/** Abre la hoja del carrito desde fuera de la barra (la ficha no muestra la barra). */
+export function abrirHojaCarrito() {
+  window.dispatchEvent(new Event(EVENTO_ABRIR_HOJA));
+}
+
 export function BarraCarritoMobile() {
   const carrito = useCart();
   const hidratado = useHidratado();
   const [abierta, setAbierta] = useState(false);
   const cerrarRef = useRef<HTMLButtonElement>(null);
-  const barraRef = useRef<HTMLButtonElement>(null);
 
   const count = hidratado ? carrito.count : 0;
+
+  useEffect(() => {
+    const abrir = () => setAbierta(true);
+    window.addEventListener(EVENTO_ABRIR_HOJA, abrir);
+    return () => window.removeEventListener(EVENTO_ABRIR_HOJA, abrir);
+  }, []);
 
   // Hoja abierta: Escape la cierra, el foco entra al botón de cerrar y la
   // página de fondo no scrollea.
@@ -66,8 +79,9 @@ export function BarraCarritoMobile() {
     const html = document.documentElement;
     const antes = html.style.overflow;
     html.style.overflow = "hidden";
+    // Al cerrar, el foco vuelve a lo que la abrió (la barra o el botón de la ficha).
+    const previo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     cerrarRef.current?.focus();
-    const barra = barraRef.current;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setAbierta(false);
     }
@@ -75,7 +89,7 @@ export function BarraCarritoMobile() {
     return () => {
       html.style.overflow = antes;
       document.removeEventListener("keydown", onKey);
-      barra?.focus({ preventScroll: true });
+      previo?.focus({ preventScroll: true });
     };
   }, [abierta]);
 
@@ -84,14 +98,16 @@ export function BarraCarritoMobile() {
 
   if (count === 0) return null;
 
+  // La hoja va fuera de `data-barra-carrito`: en la ficha la barra se oculta por
+  // CSS, pero la hoja se abre igual desde su botón «Ver carrito».
   return (
+    <>
     <div data-barra-carrito className="lg:hidden">
       {/* Reserva el alto de la barra al final de la página: sin esto tapaba el
           final del footer. */}
       <div aria-hidden className="h-[calc(5.5rem+env(safe-area-inset-bottom))]" />
 
       <button
-        ref={barraRef}
         type="button"
         onClick={() => setAbierta(true)}
         aria-haspopup="dialog"
@@ -109,9 +125,10 @@ export function BarraCarritoMobile() {
           <ChevronArribaIcon />
         </span>
       </button>
-
-      {abierta && <HojaCarrito count={count} cerrarRef={cerrarRef} onCerrar={() => setAbierta(false)} />}
     </div>
+
+    {abierta && <HojaCarrito count={count} cerrarRef={cerrarRef} onCerrar={() => setAbierta(false)} />}
+    </>
   );
 }
 

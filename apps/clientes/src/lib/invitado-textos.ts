@@ -35,7 +35,6 @@ export const TEXTOS_INVITADO = {
   ingresar: "Ya tengo cuenta, ingresar",
   avisoCarrito: "Puede completar su compra sin crear una cuenta.",
   carritoTitulo: "Está comprando como invitado",
-  carritoAyuda: "Puede completar su compra sin crear una cuenta. Si ingresa, sus datos y pedidos quedan guardados.",
   botonIngresar: "Ingresar",
   botonRegistrarse: "Crear cuenta",
   /** El invitado recarga o vuelve sin el token: no se muestra nada del pedido. */

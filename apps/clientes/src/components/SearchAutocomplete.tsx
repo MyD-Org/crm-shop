@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Skeleton } from "@myd-org/ui";
 import type { Product } from "@/data/products";
@@ -17,6 +18,7 @@ import {
   placeholderBuscador,
   vistaDesplegable,
 } from "@/lib/busqueda-inteligente/descubrimiento";
+import { CONSULTA_MOBILE, useMediaQuery } from "@/lib/media-query";
 import { GuiaBusqueda } from "./GuiaBusqueda";
 
 function SearchIcon() {
@@ -24,6 +26,24 @@ function SearchIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+function CruzIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
+function FlechaAtrasIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M19 12H5" />
+      <path d="m12 19-7-7 7-7" />
     </svg>
   );
 }
@@ -128,7 +148,8 @@ export function SearchAutocomplete({
 
   useEffect(() => {
     function onMouseDown(e: MouseEvent) {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!containerRef.current?.contains(t) && !overlayRef.current?.contains(t)) setOpen(false);
     }
     document.addEventListener("mousedown", onMouseDown);
     return () => document.removeEventListener("mousedown", onMouseDown);
@@ -161,76 +182,125 @@ export function SearchAutocomplete({
     submit(texto);
   };
 
-  return (
-    <div
-      ref={containerRef}
-      // Con teclado: si el foco sale del buscador (Tab después del último
-      // ejemplo de la guía o de la última sugerencia), el desplegable se cierra.
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
-      }}
-      className="relative flex w-full max-w-2xl"
-    >
-      {/* Blanco (surface) con borde y sombra suave, no el relleno elevated: el
-          campo se lee como campo, y el borde sale de la tinta del tema. */}
-      <div className="flex w-full overflow-hidden rounded-lg border border-[color-mix(in_srgb,var(--color-text)_14%,transparent)] bg-surface shadow-[0_1px_2px_rgba(22,40,63,0.06)] focus-within:border-primary">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-          ref={inputRef}
-          onFocus={() => setOpen(true)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") submit();
-            // ↓ entra a la guía; Escape la cierra.
-            if (e.key === "ArrowDown" && guiaAbierta) {
-              e.preventDefault();
-              guiaRef.current?.querySelector("button")?.focus();
-            }
-            if (e.key === "Escape") setOpen(false);
-          }}
-          // Corto a propósito: al lado está la lupa, y cualquier texto más
-          // largo se cortaba a mitad de palabra en el header angosto. Con la
-          // búsqueda inteligente rota entre ejemplos (el que no entra se
-          // desvanece con el mask).
-          placeholder={placeholderBuscador(busquedaIa, indicePlaceholder)}
-          name="q"
-          aria-label="Buscar productos"
-          // Con el flag, el campo es un combobox: abre la guía o las sugerencias.
-          role={busquedaIa ? "combobox" : undefined}
-          aria-expanded={busquedaIa ? guiaAbierta || showDropdown : undefined}
-          aria-controls={guiaAbierta ? idGuia : undefined}
-          // El mask difumina el borde derecho: si el placeholder (o lo tipeado)
-          // no entra, se desvanece en vez de cortarse a mitad de palabra.
-          className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm text-text placeholder:text-muted outline-none [mask-image:linear-gradient(to_right,black_calc(100%-16px),transparent)]"
-        />
-        <button
-          onClick={() => submit()}
-          aria-label="Buscar"
-          className="flex shrink-0 items-center gap-2 bg-transparent px-4 text-sm font-medium text-muted transition-colors hover:text-text"
-        >
-          <SearchIcon />
-        </button>
-        {/* Acción extra dentro del campo (el botón del asistente), tras un separador. */}
-        {extra ? (
-          <>
-            <span aria-hidden className="my-2 w-px shrink-0 bg-border" />
-            {extra}
-          </>
-        ) : null}
-      </div>
+  // En el celular el buscador se abre a pantalla completa (como Mercado Libre o
+  // Amazon): el campo del header comparte la fila con la marca y el carrito, y
+  // la guía o las sugerencias quedaban angostas, flotando sobre la página. Va
+  // en un portal: la barra compacta del header es `fixed` con translate y
+  // backdrop-blur, y adentro de ella un `fixed` se mide contra la barra.
+  const esMobile = useMediaQuery(CONSULTA_MOBILE);
+  const pantallaCompleta = open && esMobile;
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const overlayInputRef = useRef<HTMLInputElement>(null);
 
+  // El foco pasa al campo de la pantalla completa en el mismo evento que la
+  // abrió (focus es un evento discreto: React aplica el estado y corre este
+  // efecto sin soltar el gesto), así iOS no cierra el teclado.
+  useLayoutEffect(() => {
+    if (pantallaCompleta) overlayInputRef.current?.focus({ preventScroll: true });
+  }, [pantallaCompleta]);
+
+  // Sin scroll de la página de fondo mientras está abierta.
+  useEffect(() => {
+    if (!pantallaCompleta) return;
+    const html = document.documentElement;
+    const antes = html.style.overflow;
+    html.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = antes;
+    };
+  }, [pantallaCompleta]);
+
+  const cerrar = () => {
+    setOpen(false);
+    overlayInputRef.current?.blur();
+    inputRef.current?.blur();
+  };
+
+  const dentro = (nodo: Node | null) =>
+    !!nodo && (!!containerRef.current?.contains(nodo) || !!overlayRef.current?.contains(nodo));
+
+  const campo = (ref: typeof inputRef, conExtra: boolean) => (
+    // Blanco (surface) con borde y sombra suave, no el relleno elevated: el
+    // campo se lee como campo, y el borde sale de la tinta del tema.
+    <div className="flex w-full min-w-0 overflow-hidden rounded-lg border border-[color-mix(in_srgb,var(--color-text)_14%,transparent)] bg-surface shadow-[0_1px_2px_rgba(22,40,63,0.06)] focus-within:border-primary">
+      <input
+        type="text"
+        // En la pantalla completa, la tecla del teclado dice "Buscar".
+        enterKeyHint="search"
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        ref={ref}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          // ↓ entra a la guía; Escape la cierra.
+          if (e.key === "ArrowDown" && guiaAbierta) {
+            e.preventDefault();
+            guiaRef.current?.querySelector("button")?.focus();
+          }
+          if (e.key === "Escape") cerrar();
+        }}
+        // Corto a propósito: al lado está la lupa, y cualquier texto más
+        // largo se cortaba a mitad de palabra en el header angosto. Con la
+        // búsqueda inteligente rota entre ejemplos (el que no entra se
+        // desvanece con el mask).
+        placeholder={placeholderBuscador(busquedaIa, indicePlaceholder)}
+        name="q"
+        aria-label="Buscar productos"
+        // Con el flag, el campo es un combobox: abre la guía o las sugerencias.
+        role={busquedaIa ? "combobox" : undefined}
+        aria-expanded={busquedaIa ? guiaAbierta || showDropdown : undefined}
+        aria-controls={guiaAbierta ? idGuia : undefined}
+        // El mask difumina el borde derecho: si el placeholder (o lo tipeado)
+        // no entra, se desvanece en vez de cortarse a mitad de palabra.
+        // 16px en el celular: con menos, iOS hace zoom al enfocar.
+        className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-base text-text placeholder:text-muted outline-none [mask-image:linear-gradient(to_right,black_calc(100%-16px),transparent)] lg:text-sm"
+      />
+      {ref === overlayInputRef && query ? (
+        <button
+          type="button"
+          onClick={() => { setQuery(""); overlayInputRef.current?.focus(); }}
+          aria-label="Borrar búsqueda"
+          className="flex shrink-0 items-center px-2 text-muted transition-colors hover:text-text"
+        >
+          <CruzIcon />
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => submit()}
+        aria-label="Buscar"
+        className="flex shrink-0 items-center gap-2 bg-transparent px-4 text-sm font-medium text-muted transition-colors hover:text-text"
+      >
+        <SearchIcon />
+      </button>
+      {/* Acción extra dentro del campo (el botón del asistente), tras un separador. */}
+      {conExtra && extra ? (
+        <>
+          <span aria-hidden className="my-2 w-px shrink-0 bg-border" />
+          {extra}
+        </>
+      ) : null}
+    </div>
+  );
+
+  // Guía o sugerencias. En el desplegable flotan bajo el campo; en la pantalla
+  // completa ocupan el resto de la pantalla, sin caja.
+  const caja = pantallaCompleta
+    ? "min-h-0 flex-1 overflow-y-auto overscroll-contain"
+    : "absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border border-border bg-surface shadow-2";
+
+  const panel = (
+    <>
       {guiaAbierta && (
         // Mismo caso que las sugerencias (ver abajo).
-        <div
-          onMouseDown={(e) => e.preventDefault()}
-          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border border-border bg-surface shadow-2">
+        <div onMouseDown={(e) => e.preventDefault()} className={caja}>
           <GuiaBusqueda
             ref={guiaRef}
             id={idGuia}
             frecuentes={frecuentes}
             onElegir={elegirEjemplo}
-            onEscape={() => inputRef.current?.focus()}
+            onEscape={() => (pantallaCompleta ? overlayInputRef : inputRef).current?.focus()}
           />
         </div>
       )}
@@ -239,9 +309,7 @@ export function SearchAutocomplete({
         // En mobile (iOS) tocar un botón no le da foco: el input pierde el foco
         // con relatedTarget null, el onBlur cierra el desplegable antes del
         // click y el toque no navega. preventDefault deja el foco en el input.
-        <div
-          onMouseDown={(e) => e.preventDefault()}
-          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border border-border bg-surface shadow-2">
+        <div onMouseDown={(e) => e.preventDefault()} className={caja}>
           {results.length === 0 ? (
             <div className="px-4 py-3 text-sm text-muted">
               {loading ? (
@@ -297,6 +365,51 @@ export function SearchAutocomplete({
           )}
         </div>
       )}
+    </>
+  );
+
+  return (
+    <div
+      ref={containerRef}
+      // Con teclado: si el foco sale del buscador (Tab después del último
+      // ejemplo de la guía o de la última sugerencia), el desplegable se cierra.
+      // A pantalla completa no: ocultar el teclado no la cierra (se cierra con
+      // la flecha, Escape o al buscar). Los eventos del portal también pasan
+      // por acá.
+      onBlur={(e) => {
+        if (pantallaCompleta) return;
+        if (!dentro(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+      className="relative flex w-full max-w-2xl"
+    >
+      {campo(inputRef, true)}
+
+      {pantallaCompleta ? null : panel}
+
+      {pantallaCompleta &&
+        createPortal(
+          <div
+            ref={overlayRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Buscar productos"
+            className="fixed inset-0 z-[70] flex flex-col bg-surface motion-safe:animate-aparecer"
+          >
+            <div className="flex items-center gap-1 border-b border-border py-2.5 pl-1 pr-3 pt-[calc(0.625rem+env(safe-area-inset-top))]">
+              <button
+                type="button"
+                onClick={cerrar}
+                aria-label="Cerrar búsqueda"
+                className="flex h-11 w-11 shrink-0 items-center justify-center text-text"
+              >
+                <FlechaAtrasIcon />
+              </button>
+              {campo(overlayInputRef, false)}
+            </div>
+            {panel}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

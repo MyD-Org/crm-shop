@@ -1,0 +1,40 @@
+{
+  "id": "9004",
+  "date": "2026-11-15",
+  "dueDate": "2026-11-15",
+  "observations": null,
+  "status": "open",
+  "provider": { "id": "900", "name": "Proveedor Ejemplo" },
+  "numberTemplate": { "number": "PRUEBA-API-00004", "fullNumber": "PRUEBA-API-00004" },
+  "total": 12100,
+  "totalPaid": 11900,
+  "balance": 200,
+  "warehouse": { "id": "wh-ejemplo-1", "name": "Principal" },
+  "payments": [
+    {
+      "id": "8001",
+      "prefix": "00001",
+      "number": "41",
+      "date": "2026-11-15",
+      "amount": 11900,
+      "paymentMethod": "cash",
+      "observations": null,
+      "status": "open"
+    }
+  ],
+  "purchases": {
+    "items": [
+      {
+        "id": "7001",
+        "name": "PRODUCTO EJEMPLO",
+        "price": 10000,
+        "discount": 0,
+        "quantity": 1,
+        "subtotal": 10000,
+        "total": 12100,
+        "tax": [{ "id": "1", "name": "IVA", "percentage": "21.00", "type": "IVA", "amount": 2100 }]
+      }
+    ]
+  },
+  "retentions": []
+}

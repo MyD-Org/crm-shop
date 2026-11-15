@@ -1,0 +1,33 @@
+{
+  "id": "9001",
+  "date": "2026-11-15",
+  "dueDate": "2026-12-15",
+  "observations": "[CRM compra:ab12cd34] Prueba de API: borrar.",
+  "termsConditions": "",
+  "status": "open",
+  "provider": { "id": "900", "name": "Proveedor Ejemplo", "identification": "30000000000", "email": "compras@proveedor.example" },
+  "numberTemplate": { "number": "PRUEBA-API-00001", "fullNumber": "PRUEBA-API-00001" },
+  "total": 1210,
+  "totalPaid": 0,
+  "balance": 1210,
+  "decimalPrecision": 2,
+  "calculationScale": 6,
+  "warehouse": { "id": "wh-ejemplo-1", "name": "Principal" },
+  "payments": [],
+  "purchases": {
+    "categories": [
+      {
+        "id": "5246",
+        "name": "Mercadería en tránsito",
+        "price": 1000,
+        "discount": 0,
+        "quantity": 1,
+        "subtotal": 1000,
+        "total": 1210,
+        "tax": [{ "id": "1", "name": "IVA", "percentage": "21.00", "type": "IVA", "amount": 210 }]
+      }
+    ]
+  },
+  "retentions": [],
+  "costCenter": null
+}

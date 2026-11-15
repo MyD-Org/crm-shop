@@ -388,7 +388,7 @@ export function esErrorTransitorio(r: { status?: number; error?: unknown }): boo
   return name === "TimeoutError" || name === "AbortError"
 }
 
-async function alegraFetch(
+export async function alegraFetch(
   config: TenantConfig,
   path: string,
   params?: Record<string, string>,
@@ -405,6 +405,9 @@ async function alegraFetch(
     // Cuántas veces reintentar un error transitorio (ver esErrorTransitorio). Default 0: sólo
     // el paginado de listados lo pide, con timeout por request.
     reintentosTransitorios?: number
+    // Tope de duración por request. Lo usan las escrituras de compras: un corte deja el resultado
+    // incierto y NO se reintenta.
+    timeoutMs?: number
   } = {},
 ) {
   const { onRequest } = extra
@@ -427,7 +430,11 @@ async function alegraFetch(
         },
         body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
         cache: "no-store",
-        ...(reintentosTransitorios > 0 ? { signal: AbortSignal.timeout(PAGINA_TIMEOUT_MS) } : {}),
+        ...(extra.timeoutMs !== undefined
+          ? { signal: AbortSignal.timeout(extra.timeoutMs) }
+          : reintentosTransitorios > 0
+            ? { signal: AbortSignal.timeout(PAGINA_TIMEOUT_MS) }
+            : {}),
       })
     } catch (error) {
       if (transitorios < reintentosTransitorios && esErrorTransitorio({ error })) {

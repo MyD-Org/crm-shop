@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { assignableRoles, canActOnRole, canManageUsers, isKnownAdminRole, roleRank } from "./roles"
+import { assignableRoles, canActOnRole, canManageUsers, esRolCompras, isKnownAdminRole, roleRank } from "./roles"
 
 describe("roles", () => {
   it("ranking operator < admin < superadmin", () => {
@@ -23,8 +23,8 @@ describe("roles", () => {
   })
 
   it("assignableRoles: el admin crea operadores y admins, nunca superadmins", () => {
-    expect(assignableRoles("superadmin")).toEqual(["operator", "admin", "superadmin"])
-    expect(assignableRoles("admin")).toEqual(["operator", "admin"])
+    expect(assignableRoles("superadmin")).toEqual(["operator", "admin", "superadmin", "compras"])
+    expect(assignableRoles("admin")).toEqual(["operator", "admin", "compras"])
     expect(assignableRoles("admin")).not.toContain("superadmin")
     expect(assignableRoles("operator")).toEqual([])
   })
@@ -41,5 +41,25 @@ describe("roles", () => {
     expect(canActOnRole("admin", "superadmin")).toBe(false)
     // operator no puede con nadie
     expect(canActOnRole("operator", "operator")).toBe(false)
+  })
+
+  it("compras: fuera del ranking y de la allow-list, rank 0, asignable sólo por admin+", () => {
+    expect(isKnownAdminRole("compras")).toBe(false)
+    expect(roleRank("compras")).toBe(0)
+    expect(esRolCompras("compras")).toBe(true)
+    for (const r of ["operator", "admin", "superadmin", "Compras", ""]) expect(esRolCompras(r)).toBe(false)
+    expect(assignableRoles("admin")).toContain("compras")
+    expect(assignableRoles("superadmin")).toContain("compras")
+    expect(assignableRoles("operator")).toEqual([])
+    expect(assignableRoles("compras")).toEqual([])
+  })
+
+  it("compras: sólo admin+ actúan sobre él; él no gestiona a nadie ni a usuarios", () => {
+    expect(canActOnRole("admin", "compras")).toBe(true)
+    expect(canActOnRole("superadmin", "compras")).toBe(true)
+    expect(canActOnRole("operator", "compras")).toBe(false)
+    expect(canActOnRole("compras", "operator")).toBe(false)
+    expect(canActOnRole("compras", "compras")).toBe(false)
+    expect(canManageUsers("compras")).toBe(false)
   })
 })

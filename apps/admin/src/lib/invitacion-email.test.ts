@@ -8,6 +8,13 @@ describe("roleLabel", () => {
     expect(roleLabel("operador")).toBe("Operador")
   })
 
+  it("compras tiene su etiqueta y el mail de invitación la nombra en usted", () => {
+    expect(roleLabel("compras")).toBe("Compras")
+    const m = buildInvitacionEmail({ tenantName: "Empresa", nombre: "Ana", role: "compras", inviteUrl: "https://crm.empresa.example/admin/reset-password/abc" })
+    expect(m.html).toContain("Fue invitado como <strong>Compras</strong>")
+    expect(m.text).toContain("Fue invitado como Compras del backoffice.")
+  })
+
   it("cualquier otro valor cae en Operador", () => {
     expect(roleLabel("lo-que-sea")).toBe("Operador")
   })

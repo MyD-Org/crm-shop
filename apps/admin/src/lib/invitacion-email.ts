@@ -9,6 +9,7 @@ import { emailCardHtml, emailDocumentHtml, escapeHtml, oneLine, saludo } from "@
 export function roleLabel(role: string): string {
   if (role === "superadmin") return "Superadmin"
   if (role === "admin") return "Admin"
+  if (role === "compras") return "Compras"
   return "Operador"
 }
 

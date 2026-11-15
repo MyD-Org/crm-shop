@@ -10,7 +10,7 @@ import { AvailabilityToggle, type Availability } from "./AvailabilityToggle"
 import { NotificationsPrompt } from "./NotificationsPrompt"
 import { PendingRepliesDialog, type PendingContact } from "./PendingRepliesDialog"
 import type { InboxContact } from "@/lib/inbox-api"
-import { roleRank, type AdminRole } from "@/lib/roles"
+import { esRolCompras, roleRank, type AdminRole } from "@/lib/roles"
 import { UnsavedGuardProvider, useUnsavedGuardCtx } from "@/lib/unsaved-guard"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
 import { bannerText, type WaCostsSummary } from "@/lib/wa-costos"
@@ -90,13 +90,15 @@ function useWaCostsBanner(enabled: boolean): string | null {
   return text
 }
 
-function usePendingCounts(): PendingCounts | null {
+function usePendingCounts(enabled: boolean): PendingCounts | null {
   const [counts, setCounts] = useState<PendingCounts | null>(null)
   // Last-visit por sección. Lazy (se lee en el primer load, no durante el render) y en ref:
   // no es estado, no debe re-renderizar ni re-inicializar.
   const sinceRef = useRef<Record<BadgeSection, string | null> | null>(null)
 
   const load = useCallback(async () => {
+    // El rol «compras» no ve ninguna sección con badges: no hay nada que consultar.
+    if (!enabled) return
     try {
       // Primer load: lectura lazy de localStorage (window no existe durante el render).
       if (!sinceRef.current) {
@@ -117,7 +119,7 @@ function usePendingCounts(): PendingCounts | null {
     } catch {
       // Fallo de red o 502: mantener lo último conocido (badge viejo o ninguno), en silencio.
     }
-  }, [])
+  }, [enabled])
 
   // Carga inicial al montar; poll cada 30 s pausado con la pestaña oculta (useVisiblePoll,
   // que además pega de una al volver). El caso "estoy en OTRA pestaña" lo cubre Web Push;
@@ -155,9 +157,12 @@ function usePendingCounts(): PendingCounts | null {
 function roleLabel(role: AdminRole): string {
   if (role === "superadmin") return "Superadmin"
   if (role === "admin") return "Admin"
+  if (role === "compras") return "Compras"
   return "Operador"
 }
 
+// `acceso`: entradas que además se abren al rol lateral «compras». Ese rol ve SÓLO las entradas
+// con `acceso: "compras"` (allow-list); el resto del menú no existe para él, tenga o no `minRole`.
 // `flag`: entradas gateadas por feature flag (evaluado server-side y pasado por prop).
 // `minRole`: nivel mínimo para ver la entrada (usa el ranking de roles).
 // `badge`: contador de pendientes que va sobre el ícono (ver usePendingCounts).
@@ -165,7 +170,18 @@ function roleLabel(role: AdminRole): string {
 //   Operación (lo de todos los días, con badges) · Datos (lo que se carga y mantiene) ·
 //   Administración (se toca cada tanto). El operador sólo ve Operación y Clientes.
 //   Las entradas van ya ordenadas por grupo: SideNav no reordena.
-const NAV = [
+interface NavEntry {
+  href: string
+  label: string
+  group: string
+  icon: React.ReactNode
+  minRole?: "admin" | "superadmin"
+  badge?: BadgeSection
+  flag?: "usagePanel"
+  acceso?: "compras"
+}
+
+const NAV: NavEntry[] = [
   { href: "/admin/inbox", label: "Mensajes", group: "Operación", icon: <MessageSquare size={16} strokeWidth={1.6} />, badge: "inbox" as const },
   { href: "/admin/pedidos", label: "Pedidos", group: "Operación", icon: <ShoppingBag size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "pedidos" as const },
   { href: "/admin/comprobantes", label: "Comprobantes", group: "Operación", icon: <Receipt size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "comprobantes" as const },
@@ -205,12 +221,15 @@ function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, avai
   // versión expanded (footerSlot) y la compact (footerSlotCompact, rail) muestren el mismo
   // estado sin desincronizarse cuando el operador colapsa/expande el sidebar.
   const [availability, setAvailability] = useState<Availability>(initialAvailability)
-  const pendingCounts = usePendingCounts()
+  const esCompras = esRolCompras(role)
+  const pendingCounts = usePendingCounts(!esCompras)
   const waBanner = useWaCostsBanner(role === "superadmin" && !!usagePanelEnabled)
 
   // Antes de ausentarse o cerrar sesión, chequea si el operador tiene conversaciones
   // asignadas dentro de la ventana de 24hs y sin responder; si las hay, pide confirmación.
   async function guardAgainstPendingReplies(action: "away" | "logout"): Promise<boolean> {
+    // «compras» no tiene inbox ni conversaciones asignadas.
+    if (esCompras) return true
     let contacts: InboxContact[]
     try {
       const res = await fetch("/api/admin/inbox/contacts?scope=active")
@@ -261,6 +280,7 @@ function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, avai
   }
 
   const visibleNav = NAV.filter((item) => {
+    if (esCompras) return item.acceso === "compras"
     if (item.minRole && roleRank(role) < roleRank(item.minRole)) return false
     if (item.flag === "usagePanel" && !usagePanelEnabled) return false
     return true

@@ -5,12 +5,17 @@
 // El admin administra al equipo del cliente sin tocar datos de plataforma. La frontera dura
 // es superadmin: solo el dueño puede otorgar ese rol o actuar sobre quien lo tiene, porque
 // es el que da acceso al catálogo, al gasto y a los topes.
-export type AdminRole = "operator" | "admin" | "superadmin"
+//  - compras:    rol lateral, FUERA del ranking: sólo accede al módulo Compras (allow-list). Ver
+//                `esRolCompras` y `requireComprasAccess`.
+export type AdminRole = "operator" | "admin" | "superadmin" | "compras"
 
-const RANK: Record<AdminRole, number> = { operator: 0, admin: 1, superadmin: 2 }
+// Ranking de los tres roles jerárquicos. "compras" NO está acá a propósito: así queda fuera de
+// `isKnownAdminRole` (la allow-list de los guards de inbox, pedidos, sucursales…) y, aunque
+// `roleRank("compras")` valga 0 por el fallback, ningún guard por rango ni por allow-list lo deja pasar.
+const RANK: Record<"operator" | "admin" | "superadmin", number> = { operator: 0, admin: 1, superadmin: 2 }
 
 export function roleRank(role: string): number {
-  return RANK[role as AdminRole] ?? 0
+  return RANK[role as keyof typeof RANK] ?? 0
 }
 
 /**
@@ -20,8 +25,13 @@ export function roleRank(role: string): number {
  * rango que operator), así que esa cuenta dejaría pasar cualquier string que aparezca en
  * `admin_users.role` (la columna es `text`, sin CHECK). Acá la lista es explícita.
  */
-export function isKnownAdminRole(role: string): role is AdminRole {
+export function isKnownAdminRole(role: string): role is "operator" | "admin" | "superadmin" {
   return Object.hasOwn(RANK, role)
+}
+
+/** ¿Es el rol lateral «compras»? Sólo ve el módulo Compras. */
+export function esRolCompras(role: string): role is "compras" {
+  return role === "compras"
 }
 
 // ¿Puede entrar a la gestión de usuarios? admin y superadmin.
@@ -38,8 +48,8 @@ export function canSeeCosts(role: string): boolean {
 // Roles que `actor` puede ASIGNAR al invitar/editar. El admin puede crear operadores y otros
 // admins (administra el equipo del cliente); superadmin lo asigna únicamente el superadmin.
 export function assignableRoles(actor: string): AdminRole[] {
-  if (actor === "superadmin") return ["operator", "admin", "superadmin"]
-  if (actor === "admin") return ["operator", "admin"]
+  if (actor === "superadmin") return ["operator", "admin", "superadmin", "compras"]
+  if (actor === "admin") return ["operator", "admin", "compras"]
   return []
 }
 

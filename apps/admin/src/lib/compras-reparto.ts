@@ -157,7 +157,7 @@ export interface SnapshotBill {
 
 /** Forma canónica de las líneas (sin nombres, taxIds y líneas ordenados) + total. */
 export function normalizarSnapshot(
-  lineas: Pick<BillLineaEscritura, "tipo" | "id" | "precioCentavos" | "cantidadMilesimas" | "taxIds">[],
+  lineas: (BillLineaEscritura & { nombre?: string | null })[],
   totalCentavos: number,
 ): SnapshotBill {
   const norm = lineas.map((l) => ({

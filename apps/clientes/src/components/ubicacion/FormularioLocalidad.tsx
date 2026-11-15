@@ -32,7 +32,7 @@ export interface LocalidadElegida {
 /** Lo que queda marcado en "Enviar a". `detectada` y `actual` ya están guardadas: confirmar sólo cierra. */
 export type SeleccionEnvio =
   | { tipo: "actual"; titulo: string; detalle?: string }
-  | { tipo: "detectada"; titulo: string; detalle?: string }
+  | { tipo: "detectada"; titulo: string; detalle?: string; calle?: string; geoToken?: string }
   | { tipo: "localidad"; id: string; titulo: string }
   | { tipo: "calle"; calle: string; geoToken: string; titulo: string; detalle?: string };
 
@@ -137,7 +137,9 @@ export function FormularioLocalidad({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
           });
-          const data = (await res.json().catch(() => null)) as { localidad?: string; calle?: string; error?: string } | null;
+          const data = (await res.json().catch(() => null)) as
+            | { localidad?: string; calle?: string; geoToken?: string; error?: string }
+            | null;
           if (!res.ok || !data?.localidad) {
             setError(data?.error ?? T.errorUbicacion);
             return;
@@ -147,7 +149,12 @@ export function FormularioLocalidad({
           setResultados(null);
           onGeolocalizada(
             data.calle
-              ? { tipo: "detectada", titulo: data.calle, detalle: data.localidad }
+              ? {
+                  tipo: "detectada",
+                  titulo: data.calle,
+                  detalle: data.localidad,
+                  ...(data.geoToken ? { calle: data.calle, geoToken: data.geoToken } : {}),
+                }
               : { tipo: "detectada", titulo: data.localidad },
           );
         } catch {

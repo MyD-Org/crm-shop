@@ -182,7 +182,9 @@ export function FormularioLocalidad({
     : [];
 
   return (
-    <div className="min-w-0 space-y-2">
+    // flex + gap y no space-y: el margen de space-y no le gana al m-0 del fieldset del RadioGroup y el
+    // buscador quedaba pegado a la opción marcada (mismo caso que en VistaEnviarA).
+    <div className="flex min-w-0 flex-col gap-3">
       {opciones.length > 0 ? (
         <RadioGroup
           legend={T.legendEnviarA}
@@ -231,7 +233,7 @@ export function FormularioLocalidad({
         </ul>
       )}
 
-      <div id="enviar-a-localidad-estado" aria-live="polite" className="text-sm">
+      <div id="enviar-a-localidad-estado" aria-live="polite" className="text-sm empty:hidden">
         {error || errorLocalidad ? (
           <p className="text-danger">{error ?? errorLocalidad}</p>
         ) : resultados && resultados.length === 0 && !buscando ? (
@@ -239,16 +241,19 @@ export function FormularioLocalidad({
         ) : null}
       </div>
 
-      <Button
-        type="button"
-        variant="link"
-        size="inline"
-        onClick={usarMiUbicacion}
-        loading={ubicando}
-        disabled={ubicando || deshabilitado}
-      >
-        {ubicando ? T.ubicando : T.usarMiUbicacionActual}
-      </Button>
+      {/* En un div: dentro del flex en columna el botón se estiraría a todo el ancho. */}
+      <div>
+        <Button
+          type="button"
+          variant="link"
+          size="inline"
+          onClick={usarMiUbicacion}
+          loading={ubicando}
+          disabled={ubicando || deshabilitado}
+        >
+          {ubicando ? T.ubicando : T.usarMiUbicacionActual}
+        </Button>
+      </div>
     </div>
   );
 }

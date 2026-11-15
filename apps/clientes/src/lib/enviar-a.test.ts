@@ -33,6 +33,14 @@ const respuesta = (status: number, cuerpo: unknown) =>
   ({ ok: status >= 200 && status < 300, status, json: async () => cuerpo }) as Response;
 
 describe("lineasEnviarA (header de dos líneas)", () => {
+  it("con calle exacta muestra la calle detectada, no sólo la localidad", () => {
+    const l = lineasEnviarA(
+      { tipo: "envio", localidad: "Mar del Plata", provincia: "buenosaires", exacta: { calle: "Avenida Colón 2500", geoToken: "a.b" } },
+      null,
+    );
+    expect(l.valor).toBe("Avenida Colón 2500");
+  });
+
   it("con sesión y dirección guardada: Enviar a {nombre} / {calle altura}", () => {
     const l = lineasEnviarA(
       {
@@ -206,12 +214,18 @@ describe("cargas y guardado (fetch inyectado)", () => {
     expect(await cargarDirecciones(f as unknown as typeof fetch, ctrl.signal)).toBeNull();
   });
 
+  it("cuerpoLocalidad: con calle elegida manda calle y token; sin calle, sólo el id", () => {
+    expect(cuerpoLocalidad("1", { calle: "Colón 1", geoToken: "a.b" })).toEqual({ ok: true, cuerpo: { id: "1", calle: "Colón 1", geoToken: "a.b" } });
+    expect(cuerpoLocalidad("1")).toEqual({ ok: true, cuerpo: { id: "1" } });
+  });
+
   it("cargarLocales: lee {locales, unico}; error → null", async () => {
     const ctrl = new AbortController();
     const ok = vi.fn(async () => respuesta(200, { locales: [{ slug: "a", nombre: "A", direccion: "", horario: "" }], unico: false }));
     expect(await cargarLocales(ok as unknown as typeof fetch, ctrl.signal)).toEqual({
       locales: [{ slug: "a", nombre: "A", direccion: "", horario: "" }],
       unico: false,
+      direccionExacta: false,
     });
     expect(ok).toHaveBeenCalledWith("/api/ubicacion/opciones", { signal: ctrl.signal });
     const mal = vi.fn(async () => respuesta(500, {}));

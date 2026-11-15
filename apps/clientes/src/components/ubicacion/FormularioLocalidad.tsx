@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button, Field, Input, Spinner } from "@myd-org/ui";
+import { Alert, Button, Field, Input, Spinner } from "@myd-org/ui";
+import { DireccionAutocomplete } from "@/components/DireccionAutocomplete";
+import type { CalleElegida } from "@/lib/enviar-a";
 import { MIN_CARACTERES_LOCALIDAD } from "@/lib/georef";
 
 /** Mínimo para consultar: con 2 o 3 caracteres sólo responde una abreviatura del comercio. */
@@ -12,7 +14,8 @@ import { TEXTOS_UBICACION as T } from "@/lib/ubicacion";
  * Sin sesión: la localidad (Georef, autocompletado o "Usar mi ubicación"). No se pide código
  * postal: la zona, la disponibilidad y el envío salen de la provincia de la localidad. No guarda
  * nada por su cuenta: avisa al modal qué localidad se eligió y el modal manda `{ id }` al
- * confirmar. La geolocalización ya deja la localidad aplicada: el modal se cierra.
+ * confirmar. La geolocalización ya deja la localidad aplicada (cookie) y completa localidad y calle
+ * para que el visitante vea qué se detectó y confirme o corrija, como en las apps de delivery.
  * El navegador nunca llama a Georef: todo pasa por `/api/ubicacion/*`.
  */
 const DEBOUNCE_MS = 400;
@@ -22,20 +25,39 @@ export interface LocalidadElegida {
   etiqueta: string;
 }
 
+/** Lo que detectó «Usar mi ubicación» (ya aplicado en la cookie). */
+export interface UbicacionDetectada {
+  localidad: LocalidadElegida | null;
+  etiquetaLocalidad: string;
+  calle: string | null;
+}
+
 export function FormularioLocalidad({
   elegida,
   onElegir,
   errorLocalidad,
   onGeolocalizada,
   deshabilitado,
+  conCalle = false,
+  calle = null,
+  onCalle,
+  errorCalle = null,
 }: {
   elegida: LocalidadElegida | null;
   onElegir: (l: LocalidadElegida) => void;
   errorLocalidad: string | null;
-  /** La geolocalización aplicó una localidad: cerrar el modal y refrescar el header. */
-  onGeolocalizada: () => void;
+  /** La geolocalización aplicó una ubicación (cookie): el modal la muestra para confirmar. */
+  onGeolocalizada: (d: UbicacionDetectada) => void;
   deshabilitado: boolean;
+  /** Envío por zona: después de la localidad se puede indicar la calle y altura (opcional). */
+  conCalle?: boolean;
+  calle?: CalleElegida | null;
+  /** null = el texto cambió y ya no es una sugerencia elegida (el token deja de valer). */
+  onCalle?: (c: CalleElegida | null, texto: string) => void;
+  errorCalle?: string | null;
 }) {
+  const [textoCalle, setTextoCalle] = useState(calle?.calle ?? "");
+  const [detectada, setDetectada] = useState(false);
   const [texto, setTexto] = useState(elegida?.etiqueta ?? "");
   const [opciones, setOpciones] = useState<LocalidadElegida[] | null>(null);
   const [buscando, setBuscando] = useState(false);
@@ -54,6 +76,7 @@ export function FormularioLocalidad({
 
   function buscar(valor: string) {
     setTexto(valor);
+    setDetectada(false);
     setError(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     abortRef.current?.abort();
@@ -91,6 +114,8 @@ export function FormularioLocalidad({
     onElegir(op);
     setTexto(op.etiqueta);
     setOpciones(null);
+    // Otra localidad: la calle anterior ya no corresponde.
+    setTextoCalle("");
   }
 
   function usarMiUbicacion() {
@@ -108,13 +133,23 @@ export function FormularioLocalidad({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
           });
-          const data = (await res.json().catch(() => null)) as { localidad?: string; error?: string } | null;
+          const data = (await res.json().catch(() => null)) as
+            | { localidad?: string; id?: string; calle?: string; error?: string }
+            | null;
           if (!res.ok || !data?.localidad) {
             setError(data?.error ?? T.errorUbicacion);
             return;
           }
-          // La localidad ya quedó aplicada (cookie): no hay nada más que pedir.
-          onGeolocalizada();
+          // Ya quedó aplicada (cookie). Se completan los campos con lo detectado para que lo vea y confirme.
+          setTexto(data.localidad);
+          setTextoCalle(data.calle ?? "");
+          setOpciones(null);
+          setDetectada(true);
+          onGeolocalizada({
+            localidad: data.id ? { id: data.id, etiqueta: data.localidad } : null,
+            etiquetaLocalidad: data.localidad,
+            calle: data.calle ?? null,
+          });
         } catch {
           setError(T.errorUbicacion);
         } finally {
@@ -138,6 +173,12 @@ export function FormularioLocalidad({
       <Button type="button" variant="outline" onClick={usarMiUbicacion} loading={ubicando} disabled={ubicando}>
         {ubicando ? T.ubicando : T.usarMiUbicacion}
       </Button>
+
+      {detectada && (
+        <Alert tone="success" role="status" title={T.ubicacionDetectada}>
+          {T.ubicacionDetectadaAyuda}
+        </Alert>
+      )}
 
       <div className="relative">
         <Field label={T.etiquetaInput} error={errorLocalidad ?? undefined}>
@@ -164,6 +205,26 @@ export function FormularioLocalidad({
         ) : null}
       </div>
 
+      {conCalle && (elegida || detectada) && !opciones?.length && (
+        <DireccionAutocomplete
+          label={T.etiquetaCalle}
+          placeholder={T.placeholderCalle}
+          ayuda={T.ayudaCalle}
+          value={textoCalle}
+          ciudad={nombreDeLocalidad(elegida?.etiqueta ?? texto)}
+          error={errorCalle ?? undefined}
+          onChange={(v) => {
+            setTextoCalle(v);
+            setDetectada(false);
+            onCalle?.(null, v);
+          }}
+          onSeleccionar={(s) => {
+            setTextoCalle(s.calle);
+            onCalle?.(s.geoToken ? { calle: s.calle, geoToken: s.geoToken } : null, s.calle);
+          }}
+        />
+      )}
+
       {opciones && opciones.length > 0 && (
         <ul className="max-h-48 overflow-y-auto rounded-menu-1 border border-border bg-surface p-1">
           {opciones.map((op) => (
@@ -182,4 +243,9 @@ export function FormularioLocalidad({
       )}
     </fieldset>
   );
+}
+
+/** La etiqueta puede traer la provincia o el departamento ("Mar del Plata, Buenos Aires"): para acotar la calle va sólo la localidad. */
+function nombreDeLocalidad(etiqueta: string): string {
+  return etiqueta.split(",")[0]?.trim() ?? etiqueta;
 }

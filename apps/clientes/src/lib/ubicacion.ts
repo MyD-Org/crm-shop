@@ -288,6 +288,14 @@ export const TEXTOS_UBICACION = {
   elegirOpcion: "Seleccione una opción.",
   legendLocalidad: "Enviar a una localidad",
   elegirLocalidad: "Seleccione su localidad de la lista.",
+  // Calle exacta (envío por zona) y aviso de «Usar mi ubicación».
+  etiquetaCalle: "Calle y altura (opcional)",
+  placeholderCalle: "Por ejemplo: Av. Colón 2500",
+  ayudaCalle: "Con la dirección exacta le mostramos el costo de envío.",
+  elegirCalle: "Seleccione la dirección de la lista.",
+  direccionSinVerificar: "No pudimos ubicar esa dirección. Elíjala de nuevo de la lista o confirme sólo la localidad.",
+  ubicacionDetectada: "Detectamos esta ubicación",
+  ubicacionDetectadaAyuda: "Revísela y corríjala si hace falta. Después toque «Confirmar».",
   // Ficha (PR3): retiro en el local elegido.
   retiroGratisEn: (local: string) => `Retiro gratis en ${local}`,
   envioA: (destino: string) => `Envío a ${destino}`,

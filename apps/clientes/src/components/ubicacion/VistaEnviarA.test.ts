@@ -163,7 +163,7 @@ describe("ModalEnviarA (guardas de fuente del flujo)", () => {
   });
 
   it("sin sesión valida la localidad con cuerpoLocalidad y no pide código postal", () => {
-    expect(modal).toContain("cuerpoLocalidad(localidad?.id ?? null)");
+    expect(modal).toContain("cuerpoLocalidad(localidad?.id ?? null, calle)");
     expect(modal).not.toMatch(/\bsetCp\b|errorCp/);
   });
 

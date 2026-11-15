@@ -18,12 +18,13 @@ import {
   cuerpoLocalidad,
   guardarEleccion,
   idNuevo,
+  type CalleElegida,
   type CargaDirecciones,
   type CuerpoEleccion,
   type OpcionesRetiro,
 } from "@/lib/enviar-a";
 import { TEXTOS_UBICACION as T } from "@/lib/ubicacion";
-import { FormularioLocalidad, type LocalidadElegida } from "./FormularioLocalidad";
+import { FormularioLocalidad, type LocalidadElegida, type UbicacionDetectada } from "./FormularioLocalidad";
 import { VistaEnviarA } from "./VistaEnviarA";
 
 /**
@@ -67,6 +68,12 @@ export default function ModalEnviarA({
     localidadActual ? { id: localidadActual.id, etiqueta: localidadActual.etiqueta } : null,
   );
   const [errorLocalidad, setErrorLocalidad] = useState<string | null>(null);
+  // Calle y altura (opcional, envío por zona): sólo vale una sugerencia elegida, con su token.
+  const [calle, setCalle] = useState<CalleElegida | null>(null);
+  const [textoCalle, setTextoCalle] = useState("");
+  const [errorCalle, setErrorCalle] = useState<string | null>(null);
+  // «Usar mi ubicación» ya guardó la elección: si no se cambia nada, «Confirmar» sólo cierra.
+  const [detectada, setDetectada] = useState<UbicacionDetectada | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -107,8 +114,18 @@ export default function ModalEnviarA({
   }
 
   async function confirmar() {
+    if (valor === LOCALIDAD && detectada) {
+      onOpenChange(false);
+      router.refresh();
+      return;
+    }
     if (valor === LOCALIDAD) {
-      const c = cuerpoLocalidad(localidad?.id ?? null);
+      // Escribió una calle pero no eligió ninguna sugerencia: no se descarta en silencio.
+      if (textoCalle.trim() && !calle) {
+        setErrorCalle(T.elegirCalle);
+        return;
+      }
+      const c = cuerpoLocalidad(localidad?.id ?? null, calle);
       setErrorLocalidad(c.ok ? null : c.error);
       if (!c.ok) return;
       await aplicar(c.cuerpo);
@@ -217,13 +234,34 @@ export default function ModalEnviarA({
             <FormularioLocalidad
               elegida={localidad}
               onElegir={(l) => {
+                setDetectada(null);
                 setLocalidad(l);
+                setCalle(null);
+                setTextoCalle("");
+                setErrorCalle(null);
                 elegirValor(LOCALIDAD);
                 setErrorLocalidad(null);
               }}
+              conCalle={Boolean(locales?.direccionExacta)}
+              calle={calle}
+              onCalle={(c, texto) => {
+                setDetectada(null);
+                setCalle(c);
+                setTextoCalle(texto);
+                setErrorCalle(null);
+                if (c) elegirValor(LOCALIDAD);
+              }}
+              errorCalle={errorCalle}
               errorLocalidad={errorLocalidad}
-              onGeolocalizada={() => {
-                onOpenChange(false);
+              onGeolocalizada={(d) => {
+                setDetectada(d);
+                setLocalidad(d.localidad);
+                setCalle(null);
+                setTextoCalle(d.calle ?? "");
+                setErrorCalle(null);
+                setErrorLocalidad(null);
+                elegirValor(LOCALIDAD);
+                // El header y la ficha ya muestran lo detectado detrás del modal.
                 router.refresh();
               }}
               deshabilitado={enviando}

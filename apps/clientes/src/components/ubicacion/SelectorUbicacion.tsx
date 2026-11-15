@@ -2,7 +2,7 @@
 
 import { type ReactNode, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import type { LocalidadElegida } from "./FormularioLocalidad";
+import type { UbicacionActual } from "@/lib/enviar-a";
 
 /**
  * Disparador del modal "Seleccione dónde recibir su compra" (`ModalEnviarA`). Lo usan el header
@@ -28,8 +28,8 @@ export function SelectorUbicacion({
   conUbicacion?: boolean;
   /** Opción del modal que corresponde a la elección vigente (se muestra marcada). */
   vigente?: string;
-  /** Localidad vigente elegida de Georef (envío sin dirección guardada): precarga el formulario. */
-  localidadActual?: LocalidadElegida & { cp?: string };
+  /** Ubicación vigente sin dirección guardada (localidad o calle exacta): la opción "Actual" del modal. */
+  localidadActual?: UbicacionActual;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [apertura, setApertura] = useState(0);

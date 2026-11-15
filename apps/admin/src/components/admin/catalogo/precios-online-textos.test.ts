@@ -103,3 +103,18 @@ describe("ajustes avanzados (umbrales)", () => {
     expect(TEXTOS.listas.umbralRetencionInfo).toContain("usted lo apruebe")
   })
 })
+
+describe("asignación masiva (R5)", () => {
+  it("rótulos y conteos", () => {
+    expect(TEXTOS.ajusteLote.ajustar).toBe("Ajustar porcentajes")
+    expect(TEXTOS.ajusteLote.seleccionarTodos(120)).toBe("Seleccionar los 120 resultados")
+    expect(TEXTOS.ajusteLote.cantidad(1)).toBe("1 seleccionado")
+    expect(TEXTOS.ajusteLote.cantidad(3)).toBe("3 seleccionados")
+    expect(TEXTOS.tipoCambio.ajuste_lote).toBe("Ajuste masivo de productos")
+  })
+  it("están en el registro de usted", () => {
+    for (const t of cadenas(TEXTOS.ajusteLote)) {
+      for (const re of PROHIBIDAS) expect(t.replace(LEGITIMAS, "").match(re), t).toBeNull()
+    }
+  })
+})

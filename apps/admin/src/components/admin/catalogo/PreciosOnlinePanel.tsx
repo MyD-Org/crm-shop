@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Alert, Badge, Button, Checkbox, EmptyState, SearchInput, Select, Table, Tabs, Input, type TableColumn } from "@myd-org/ui"
 import type { AlertasPrecios } from "@/lib/precios-online-costos"
-import type { EstadoGrilla, FilaGrilla, ReferenciaAlegra } from "@/lib/precios-online-grilla"
+import type { EstadoGrilla, FilaGrilla, ProductoId, ReferenciaAlegra } from "@/lib/precios-online-grilla"
 import type { ListaDto } from "@/lib/precios-online-repo"
+import { AjusteProductosDialog } from "./AjusteProductosDialog"
 import { HistorialPanel } from "./HistorialPanel"
 import { ListasPrecioPanel } from "./ListasPrecioPanel"
 import { RetenidosPanel } from "./RetenidosPanel"
@@ -99,7 +100,7 @@ export function PreciosOnlinePanel({ categorias }: Props) {
       />
 
       {sub === "productos" && (
-        <GrillaPrecios key={`${estadoInicial.n}-${version}`} categorias={categorias} listas={listas} estadoInicial={estadoInicial.estado} />
+        <GrillaPrecios key={`${estadoInicial.n}-${version}`} categorias={categorias} listas={listas} estadoInicial={estadoInicial.estado} onCambio={alCambio} />
       )}
       {sub === "listas" && <ListasPrecioPanel categorias={categorias} onCambio={alCambio} />}
       {sub === "retenidos" && <RetenidosPanel onCambio={alCambio} />}
@@ -123,9 +124,10 @@ interface GrillaProps {
   categorias: CategoriaDto[]
   listas: ListaDto[]
   estadoInicial: EstadoGrilla | ""
+  onCambio: () => void
 }
 
-function GrillaPrecios({ categorias, listas, estadoInicial }: GrillaProps) {
+function GrillaPrecios({ categorias, listas, estadoInicial, onCambio }: GrillaProps) {
   const [q, setQ] = useState("")
   const [marca, setMarca] = useState("")
   const [categoria, setCategoria] = useState("")
@@ -136,6 +138,12 @@ function GrillaPrecios({ categorias, listas, estadoInicial }: GrillaProps) {
   const [error, setError] = useState("")
   const [cargando, setCargando] = useState(false)
   const [verReferencia, setVerReferencia] = useState(false)
+  // Selección masiva (R5): ids elegidos, que se conservan al paginar y al cambiar de filtro.
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
+  const [avisoSeleccion, setAvisoSeleccion] = useState("")
+  const [errorSeleccion, setErrorSeleccion] = useState("")
+  const [ajustando, setAjustando] = useState(false)
+  const [buscandoIds, setBuscandoIds] = useState(false)
 
   // Búsqueda con demora: no se consulta en cada tecla.
   const [consulta, setConsulta] = useState({ q: "", marca: "" })
@@ -147,15 +155,47 @@ function GrillaPrecios({ categorias, listas, estadoInicial }: GrillaProps) {
     return () => clearTimeout(t)
   }, [q, marca])
 
+  /** Los mismos filtros para la grilla y para `modo=ids`. */
+  const filtrosA = (p: URLSearchParams) => {
+    if (consulta.q) p.set("q", consulta.q)
+    if (consulta.marca) p.set("marca", consulta.marca)
+    if (categoria) p.set("categoria", categoria)
+    if (estado) p.set("estado", estado)
+  }
+
+  const seleccionarTodos = async () => {
+    setBuscandoIds(true)
+    setErrorSeleccion("")
+    try {
+      const p = new URLSearchParams({ modo: "ids" })
+      filtrosA(p)
+      const r = await api<{ items: ProductoId[]; total: number; tope: number }>(`/api/admin/catalogo/precios-online?${p}`)
+      setSeleccion(new Set(r.items.map((i) => i.alegraId)))
+      setAvisoSeleccion(r.total > r.items.length ? TEXTOS.ajusteLote.topeSeleccion(r.items.length, r.total) : TEXTOS.ajusteLote.seleccionadosTodos(r.total))
+    } catch (err) {
+      setErrorSeleccion(err instanceof ErrorApi ? err.message : TEXTOS.ajusteLote.errorIds)
+    } finally {
+      setBuscandoIds(false)
+    }
+  }
+  const alternar = (id: string, on: boolean) =>
+    setSeleccion((s) => {
+      const n = new Set(s)
+      if (on) n.add(id)
+      else n.delete(id)
+      return n
+    })
+  const limpiarSeleccion = () => {
+    setSeleccion(new Set())
+    setAvisoSeleccion("")
+  }
+
   useEffect(() => {
     let cancelado = false
     void (async () => {
       setCargando(true)
       const p = new URLSearchParams({ start: String(start), limit: String(PAGINA), orden })
-      if (consulta.q) p.set("q", consulta.q)
-      if (consulta.marca) p.set("marca", consulta.marca)
-      if (categoria) p.set("categoria", categoria)
-      if (estado) p.set("estado", estado)
+      filtrosA(p)
       try {
         const r = await api<{ items: FilaGrilla[]; total: number }>(`/api/admin/catalogo/precios-online?${p}`)
         if (!cancelado) {
@@ -171,6 +211,7 @@ function GrillaPrecios({ categorias, listas, estadoInicial }: GrillaProps) {
     return () => {
       cancelado = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consulta, categoria, estado, orden, start])
 
   const listasActivas = useMemo(() => listas.filter((l) => l.activa), [listas])
@@ -181,7 +222,35 @@ function GrillaPrecios({ categorias, listas, estadoInicial }: GrillaProps) {
     return [...m.keys()].sort()
   }, [data])
 
+  const paginaSeleccionada = !!data && data.items.length > 0 && data.items.every((f) => seleccion.has(f.alegraId))
   const columnas: TableColumn<FilaGrilla>[] = [
+    {
+      key: "seleccion",
+      header: (
+        <Checkbox
+          checked={paginaSeleccionada}
+          onCheckedChange={(v) => {
+            setAvisoSeleccion("")
+            setSeleccion((s) => {
+              const n = new Set(s)
+              for (const f of data?.items ?? []) {
+                if (v === true) n.add(f.alegraId)
+                else n.delete(f.alegraId)
+              }
+              return n
+            })
+          }}
+          aria-label={TEXTOS.ajusteLote.seleccionarPagina}
+        />
+      ),
+      render: (f) => (
+        <Checkbox
+          checked={seleccion.has(f.alegraId)}
+          onCheckedChange={(v) => alternar(f.alegraId, v === true)}
+          aria-label={`${TEXTOS.ajusteLote.seleccionarFila}: ${f.nombre}`}
+        />
+      ),
+    },
     {
       key: "producto",
       header: TEXTOS.grilla.producto,
@@ -294,6 +363,24 @@ function GrillaPrecios({ categorias, listas, estadoInicial }: GrillaProps) {
       </label>
 
       {error && <Alert tone="danger">{error}</Alert>}
+      {errorSeleccion && <Alert tone="danger">{errorSeleccion}</Alert>}
+      {(seleccion.size > 0 || total > 0) && (
+        <div className="flex flex-wrap items-center gap-2 text-sm" aria-label="Selección">
+          {seleccion.size > 0 && (
+            <>
+              <Badge tone="info">{TEXTOS.ajusteLote.cantidad(seleccion.size)}</Badge>
+              <Button size="sm" onClick={() => setAjustando(true)}>{TEXTOS.ajusteLote.ajustar}</Button>
+              <Button size="sm" variant="ghost" onClick={limpiarSeleccion}>{TEXTOS.ajusteLote.limpiar}</Button>
+            </>
+          )}
+          {total > (data?.items.length ?? 0) && (
+            <Button size="sm" variant="outline" disabled={buscandoIds} onClick={() => void seleccionarTodos()}>
+              {TEXTOS.ajusteLote.seleccionarTodos(total)}
+            </Button>
+          )}
+          {avisoSeleccion && <span style={{ color: "var(--ink-soft)" }}>{avisoSeleccion}</span>}
+        </div>
+      )}
       {listasActivas.length === 0 && data && <Alert tone="neutral">{TEXTOS.grilla.sinListas}</Alert>}
       {data && data.items.length === 0 ? (
         <EmptyState title={TEXTOS.grilla.sinResultados} />
@@ -313,6 +400,19 @@ function GrillaPrecios({ categorias, listas, estadoInicial }: GrillaProps) {
           </Button>
         </span>
       </div>
+      {ajustando && (
+        <AjusteProductosDialog
+          open
+          onClose={() => setAjustando(false)}
+          alegraIds={[...seleccion]}
+          listas={listas}
+          onAplicado={() => {
+            setAjustando(false)
+            limpiarSeleccion()
+            onCambio()
+          }}
+        />
+      )}
     </section>
   )
 }

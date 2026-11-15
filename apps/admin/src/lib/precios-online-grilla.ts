@@ -67,6 +67,34 @@ export function parsearQueryGrilla(url: URL): ParseGrilla {
   return { ok: true, filtros, start, limit: Math.min(limitRaw, LIMITE_GRILLA_MAX), orden: ordenRaw as OrdenGrilla }
 }
 
+/** Tope de ids que devuelve `modo=ids` (mismo que MAX_PRODUCTOS_LOTE de una asignación masiva). */
+export const LIMITE_IDS = 2000
+
+export interface ProductoId {
+  alegraId: string
+  nombre: string
+  codigo: string | null
+}
+
+/** Ids de TODOS los productos que cumplen el filtro (tope LIMITE_IDS) y el total real. */
+export async function listarIds(
+  tenantId: string,
+  filtros: FiltrosGrilla,
+): Promise<{ items: ProductoId[]; total: number; tope: number }> {
+  const db = getDb()
+  const where = condiciones(tenantId, filtros)
+  const desde = sql`FROM catalog_products p LEFT JOIN catalog_overlay o ON o.tenant_id = p.tenant_id AND o.alegra_id = p.alegra_id`
+  const [{ total }] = (await db.execute(sql`SELECT count(*)::int AS total ${desde} WHERE ${where}`)) as unknown as { total: number }[]
+  const items = (await db.execute(sql`
+    SELECT p.alegra_id AS "alegraId", coalesce(o.nombre, p.name) AS nombre, p.code AS codigo
+    ${desde}
+    WHERE ${where}
+    ORDER BY lower(coalesce(o.nombre, p.name)), p.alegra_id
+    LIMIT ${LIMITE_IDS}
+  `)) as unknown as ProductoId[]
+  return { items, total, tope: LIMITE_IDS }
+}
+
 export interface OrigenCoeficiente {
   tipo: "general" | "producto" | "marca" | "categoria"
   marca?: string

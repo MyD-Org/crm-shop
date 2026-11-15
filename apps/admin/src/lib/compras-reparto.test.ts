@@ -136,7 +136,7 @@ describe("construirLineasRecepcion", () => {
         // tránsito por alícuota: nunca negativo y no creciente
         const tr = new Map<string, bigint>()
         for (const x of l.filter((y) => y.tipo === "cat")) tr.set(x.taxIds[0], neto([x]))
-        for (const [k, v] of tr) expect(v > BigInt(0)).toBe(true)
+        for (const v of tr.values()) expect(v > BigInt(0)).toBe(true)
         if (netoTransitoPrevio) {
           for (const [k, v] of tr) expect(v <= (netoTransitoPrevio.get(k) ?? BigInt(0))).toBe(true)
         }

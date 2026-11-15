@@ -1,4 +1,5 @@
 import { getGuardedAdminSession } from "@/lib/admin-session"
+import { comprasHabilitado } from "@/lib/compras-flag"
 import { esRolCompras, isKnownAdminRole, roleRank } from "@/lib/roles"
 
 // Guards de las rutas /api/admin/* nuevas. Hay dos niveles:
@@ -83,10 +84,10 @@ export async function requireOperatorPlus(req: Request): Promise<AdminGuardResul
 }
 
 /**
- * Hook del flag del módulo Compras. En S2 el flag todavía no existe: por defecto está
- * habilitado. S3 lo conecta a `comprasHabilitado()` (Vercel Flags) con `configurarFlagCompras`.
+ * Flag del módulo Compras: por defecto es `comprasHabilitado()` (Vercel Flags `compras-en-transito`,
+ * falla cerrado). `configurarFlagCompras` queda para que los tests lo reemplacen.
  */
-let flagCompras: () => Promise<boolean> = async () => true
+let flagCompras: () => Promise<boolean> = comprasHabilitado
 
 export function configurarFlagCompras(fn: () => Promise<boolean>): void {
   flagCompras = fn

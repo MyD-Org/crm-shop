@@ -96,11 +96,11 @@ describe("actualizarPreciosItem (HTTP)", () => {
     expect(Object.keys(llamada(f, 0).body)).toEqual(["price"])
   })
 
-  it("manda negativeSale sólo si se lo piden", async () => {
+  it("nunca manda negativeSale (omitirlo lo conserva en Alegra, ver el sondeo)", async () => {
     const f = responde(Response.json(respuestaOk), Response.json(respuestaOk))
     await actualizarPreciosItem(real, "55", { price, inventory: { unit: "unit", unitCost: 1, negativeSale: true } })
     await actualizarPreciosItem(real, "55", { price, inventory: { unit: "unit", unitCost: 1 } })
-    expect(llamada(f, 0).body.inventory.negativeSale).toBe(true)
+    expect("negativeSale" in llamada(f, 0).body.inventory).toBe(false)
     expect("negativeSale" in llamada(f, 1).body.inventory).toBe(false)
   })
 

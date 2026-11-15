@@ -1029,13 +1029,19 @@ export async function getItemParaEspejo(
 // ── Escritura de precios de lista (change `listas-alegra-desde-costo`, R1) ──
 
 /**
- * ¿El PUT de precios lleva `inventory` ({unit, unitCost})? `true` hasta que el sondeo
- * (`scripts/sondear-put-precio.ts`) demuestre que Alegra acepta `price[]` solo SIN pisar el costo:
- * entonces pasa a `false` y desaparece la carrera con el `unitCost` (compras, sync).
+ * ¿El PUT de precios lleva `inventory` ({unit, unitCost})? Sí, obligatorio: el sondeo
+ * (`scripts/sondear-put-precio.ts`, 2026-11-15, en las dos cuentas) mostró que sin `inventory.unit`
+ * Alegra responde 400 (code 3140, "La unidad de medida es un campo obligatorio"). Con
+ * `{unit, unitCost}` copiados del GET previo el costo se conserva; queda la carrera GET→PUT.
+ * Además: guarda 2 decimales tal cual, y un `price[]` parcial BORRA las listas omitidas
+ * (siempre mandar el merge completo).
  */
 export const PUT_INCLUYE_INVENTARIO = true
-/** ¿Se manda `inventory.negativeSale` cuando quien llama lo indica? Ver el sondeo (el GET no lo devuelve). */
-export const PUT_ENVIA_NEGATIVESALE = true
+/**
+ * ¿Se manda `inventory.negativeSale`? No: el sondeo mostró que omitirlo lo conserva (la respuesta
+ * del PUT sigue trayendo `negativeSale: true`), así que no hace falta conocerlo (el GET no lo devuelve).
+ */
+export const PUT_ENVIA_NEGATIVESALE = false
 
 /** El PUT contestó OK pero el ítem que devuelve no tiene el precio que se mandó. */
 export class AlegraPrecioNoPersistioError extends Error {

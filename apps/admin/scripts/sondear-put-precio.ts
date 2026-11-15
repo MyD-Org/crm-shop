@@ -130,6 +130,10 @@ async function api(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body
   } catch {
     json = null
   }
+  if (res.status >= 400) {
+    const e = (json ?? {}) as Record<string, unknown>
+    console.log(`   ${method} ${path.split("?")[0]} -> ${res.status}: ${JSON.stringify({ code: e.code ?? null, message: e.message ?? texto.slice(0, 300) })}`)
+  }
   await new Promise((r) => setTimeout(r, 700)) // ritmo bajo: ~85 req/min, muy por debajo del tope (150)
   return { status: res.status, json }
 }
@@ -193,11 +197,13 @@ async function main(): Promise<number> {
     mostrar("   GET después", resumen(g0))
     resultados.preparacion = { http: prep.status, respuesta: resumen(prep.json), get: resumen(g0) }
 
-    // A / B. PUT sólo con price[] (merge completo), sin inventory
+    // Alegra exige inventory.unit en el PUT (code 3140): se manda unit + unitCost SIN negativeSale.
+    const INV = { unit: "unit", unitCost: 123.45 }
+    // A / B. PUT con price[] (merge completo), sin inventory
     const antes = await pedir()
     const actuales = ((antes as Json).price as Json[]).map((p) => ({ idPriceList: p.idPriceList as string | number, price: Number(p.price) }))
     const mergeA = mergearPrecios(actuales, [{ id: general.id, price: 160.01 }])
-    const a = await api("PUT", `/items/${id}`, { price: mergeA })
+    const a = await api("PUT", `/items/${id}`, { price: mergeA, inventory: INV })
     const despuesA = await pedir()
     const costoConservado = Number(inv(despuesA).unitCost) === 123.45
     mostrar("A. PUT sólo price[]: HTTP", a.status)
@@ -210,12 +216,12 @@ async function main(): Promise<number> {
 
     // C. Decimales (una lista distinta por valor, merge completo)
     const valores = [160.01, 33.33, 0.99]
-    const c1 = await api("PUT", `/items/${id}`, { price: completo(valores) })
+    const c1 = await api("PUT", `/items/${id}`, { price: completo(valores), inventory: INV })
     const gc1 = precios(await pedir())
     const dec2 = elegidas.map((l, i) => ({ lista: l.name, enviado: valores[i] ?? valores[0], guardado: gc1.find((p) => p.id === l.id)?.price ?? null }))
     mostrar("C. 2 decimales: HTTP", c1.status)
     mostrar("   por lista", dec2)
-    const c2 = await api("PUT", `/items/${id}`, { price: completo([160.005, 160.005, 160.005]) })
+    const c2 = await api("PUT", `/items/${id}`, { price: completo([160.005, 160.005, 160.005]), inventory: INV })
     const gc2 = precios(await pedir())
     const dec3 = elegidas.map((l) => ({ lista: l.name, enviado: 160.005, guardado: gc2.find((p) => p.id === l.id)?.price ?? null }))
     mostrar("   3 decimales (160.005): HTTP", c2.status)
@@ -223,8 +229,8 @@ async function main(): Promise<number> {
     resultados.C_decimales = { dos: dec2, tres: dec3 }
 
     // D. price[] parcial
-    await api("PUT", `/items/${id}`, { price: completo([111.11, 222.22, 333.33]) })
-    const d = await api("PUT", `/items/${id}`, { price: [{ idPriceList: numId(general.id), price: 170 }] })
+    await api("PUT", `/items/${id}`, { price: completo([111.11, 222.22, 333.33]), inventory: INV })
+    const d = await api("PUT", `/items/${id}`, { price: [{ idPriceList: numId(general.id), price: 170 }], inventory: INV })
     const gd = precios(await pedir())
     mostrar("D. price[] de UNA lista: HTTP", d.status)
     mostrar("   listas que quedan en el ítem", gd)
@@ -233,7 +239,7 @@ async function main(): Promise<number> {
     resultados.D_parcial = { http: d.status, otrasListasConservadas: otrasConservadas, quedan: gd }
 
     // E. Wrapper del repo
-    await api("PUT", `/items/${id}`, { price: completo([111.11, 222.22, 333.33]) })
+    await api("PUT", `/items/${id}`, { price: completo([111.11, 222.22, 333.33]), inventory: INV })
     const vivo = await getItemParaPrecios(cfg, id)
     if (!vivo) throw new Error("getItemParaPrecios no encontró el ítem descartable.")
     const merge = mergearPrecios(vivo.price, [{ id: general.id, price: 177.77 }])
@@ -247,7 +253,7 @@ async function main(): Promise<number> {
     mostrar("E1. wrapper CON inventory: precio General devuelto", conInv.prices.find((p) => p.idPriceList === general.id)?.price ?? null)
     mostrar("    GET después: unitCost", tras1?.unitCost ?? null)
     const merge2 = mergearPrecios(tras1?.price ?? [], [{ id: general.id, price: 188.88 }])
-    const sinInv = await actualizarPreciosItem(cfg, id, { price: merge2, verificarListas: [general.id] }, { reintentos429: 1 })
+    const sinInv = await actualizarPreciosItem(cfg, id, { price: merge2, inventory: { unit: "unit", unitCost: 123.45 }, verificarListas: [general.id] }, { reintentos429: 1 })
     const tras2 = await getItemParaPrecios(cfg, id)
     mostrar("E2. wrapper SIN inventory: precio General devuelto", sinInv.prices.find((p) => p.idPriceList === general.id)?.price ?? null)
     mostrar("    GET después: unitCost", tras2?.unitCost ?? null)

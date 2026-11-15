@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto"
-import { and, asc, desc, eq, sql } from "drizzle-orm"
+import { createHash, randomUUID } from "node:crypto"
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
 import {
   alegraContacts,
@@ -160,6 +160,41 @@ const snapOverride = (o: OverrideRow) => ({
   alegraId: o.alegraId,
   coeficiente: o.coeficiente,
 })
+
+/**
+ * Escribe overrides de producto en bloque: coeficiente con valor = upsert, null = borrado. Una
+ * consulta por (lista, coeficiente), no una por producto.
+ */
+async function escribirAjustes(
+  tx: Tx,
+  tenantId: string,
+  grupos: { listaId: string; alegraIds: string[]; coeficiente: string | null }[],
+): Promise<void> {
+  for (const g of grupos) {
+    if (g.alegraIds.length === 0) continue
+    if (g.coeficiente === null) {
+      await tx
+        .delete(listaPrecioOverrides)
+        .where(
+          and(
+            eq(listaPrecioOverrides.tenantId, tenantId),
+            eq(listaPrecioOverrides.listaId, g.listaId),
+            eq(listaPrecioOverrides.tipo, "producto"),
+            inArray(listaPrecioOverrides.alegraId, g.alegraIds),
+          ),
+        )
+      continue
+    }
+    await tx.execute(sql`
+      INSERT INTO lista_precio_overrides (tenant_id, lista_id, tipo, alegra_id, coeficiente)
+      SELECT ${tenantId}, ${g.listaId}::uuid, 'producto', x, ${g.coeficiente}::numeric
+      FROM unnest(${idsSql(g.alegraIds)}) AS x
+      ON CONFLICT (lista_id, alegra_id) WHERE tipo = 'producto'
+      DO UPDATE SET coeficiente = excluded.coeficiente, updated_at = now()
+      WHERE lista_precio_overrides.coeficiente IS DISTINCT FROM excluded.coeficiente
+    `)
+  }
+}
 
 async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<EntradaHistorial[]> {
   switch (c.op) {
@@ -356,6 +391,81 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
       const nombre = o.tipo === "producto" && o.alegraId ? await nombreProducto(tx, tenantId, o.alegraId) : null
       const antes = nombre ? { ...snapOverride(o), productoNombre: nombre } : snapOverride(o)
       return [{ tipo: "override_baja", objeto: `override:${o.id}`, listaId: o.listaId, antes, despues: null }]
+    }
+    case "ajusteProductos": {
+      const ids = c.alegraIds
+      for (const a of c.ajustes) await cargarLista(tx, tenantId, a.listaId)
+      const existentes = (await tx.execute(sql`
+        SELECT alegra_id FROM catalog_products WHERE tenant_id = ${tenantId} AND alegra_id = ANY (${idsSql(ids)})
+      `)) as unknown as { alegra_id: string }[]
+      if (existentes.length !== ids.length) {
+        throw new PreciosOnlineError(404, "producto_no_existe", "Algún producto de la selección no existe.")
+      }
+      const listaIds = c.ajustes.map((a) => a.listaId)
+      const previosRows = await tx
+        .select({ listaId: listaPrecioOverrides.listaId, alegraId: listaPrecioOverrides.alegraId, coeficiente: listaPrecioOverrides.coeficiente })
+        .from(listaPrecioOverrides)
+        .where(
+          and(
+            eq(listaPrecioOverrides.tenantId, tenantId),
+            eq(listaPrecioOverrides.tipo, "producto"),
+            inArray(listaPrecioOverrides.listaId, listaIds),
+            inArray(listaPrecioOverrides.alegraId, ids),
+          ),
+        )
+      const previoDe = new Map(previosRows.map((r) => [`${r.listaId}|${r.alegraId}`, r.coeficiente]))
+      const previos: { listaId: string; alegraId: string; coeficiente: string | null }[] = []
+      let cambian = 0
+      for (const a of c.ajustes) {
+        for (const id of ids) {
+          const antes = previoDe.get(`${a.listaId}|${id}`) ?? null
+          previos.push({ listaId: a.listaId, alegraId: id, coeficiente: antes })
+          if (a.coeficiente === null ? antes !== null : antes === null || Number(antes) !== Number(a.coeficiente)) cambian++
+        }
+      }
+      if (cambian === 0) throw new PreciosOnlineError(422, "sin_cambios", "La selección ya tiene esos coeficientes.")
+      await escribirAjustes(
+        tx,
+        tenantId,
+        c.ajustes.map((a) => ({ listaId: a.listaId, alegraIds: ids, coeficiente: a.coeficiente })),
+      )
+      const lote = randomUUID()
+      return [
+        {
+          tipo: "ajuste_lote",
+          objeto: `lote:${lote}`,
+          listaId: null,
+          antes: { lote, previos },
+          despues: { lote, productos: ids.length, ajustes: c.ajustes },
+        },
+      ]
+    }
+    case "restaurarAjustes": {
+      const porLista = new Map<string, { porCoef: Map<string, string[]> }>()
+      for (const p of c.previos) {
+        const g = porLista.get(p.listaId) ?? { porCoef: new Map<string, string[]>() }
+        const k = p.coeficiente ?? ""
+        g.porCoef.set(k, [...(g.porCoef.get(k) ?? []), p.alegraId])
+        porLista.set(p.listaId, g)
+      }
+      const listasVivas = new Set(
+        (await tx.select({ id: listasPrecioOnline.id }).from(listasPrecioOnline).where(eq(listasPrecioOnline.tenantId, tenantId))).map((l) => l.id),
+      )
+      const grupos: { listaId: string; alegraIds: string[]; coeficiente: string | null }[] = []
+      for (const [listaId, g] of porLista) {
+        if (!listasVivas.has(listaId)) continue // la lista se borró después: no hay nada que restaurar
+        for (const [coef, aIds] of g.porCoef) grupos.push({ listaId, alegraIds: aIds, coeficiente: coef === "" ? null : coef })
+      }
+      await escribirAjustes(tx, tenantId, grupos)
+      return [
+        {
+          tipo: "ajuste_lote",
+          objeto: `lote:${c.lote}`,
+          listaId: null,
+          antes: null,
+          despues: { lote: c.lote, restaurados: c.previos.length },
+        },
+      ]
     }
     case "setUmbrales": {
       const previo = await asegurarConfig(tx, tenantId)
@@ -897,6 +1007,48 @@ type CambioRow = typeof preciosOnlineCambios.$inferSelect
 
 const IRREVERTIBLES = new Set(["revertir", "costo_aprobado", "costo_rechazado"])
 
+/**
+ * Un lote se revierte sólo si cada override que tocó sigue como lo dejó: si alguno cambió después
+ * (editado, borrado o creado a mano), restaurar pisaría ese cambio.
+ */
+async function verificarChoqueLote(
+  tx: Tx | Db,
+  tenantId: string,
+  entrada: CambioRow,
+  previos: { listaId: string; alegraId: string; coeficiente: string | null }[],
+  ajustes: { listaId: string; coeficiente: string | null }[],
+): Promise<void> {
+  const esperado = new Map(ajustes.map((x) => [x.listaId, x.coeficiente]))
+  const listaIds = [...new Set(previos.map((p) => p.listaId))].filter((l) => esperado.has(l))
+  if (listaIds.length === 0) return
+  const ids = [...new Set(previos.map((p) => p.alegraId))]
+  const filas = (await tx.execute(sql`
+    SELECT lista_id::text AS "listaId", alegra_id AS "alegraId", coeficiente::text AS coeficiente,
+           (updated_at > (SELECT c.creado_at FROM precios_online_cambios c WHERE c.id = ${entrada.id})) AS posterior
+    FROM lista_precio_overrides
+    WHERE tenant_id = ${tenantId} AND tipo = 'producto'
+      AND lista_id = ANY (ARRAY[${sql.join(listaIds.map((l) => sql`${l}`), sql`, `)}]::uuid[])
+      AND alegra_id = ANY (${idsSql(ids)})
+  `)) as unknown as { listaId: string; alegraId: string; coeficiente: string; posterior: boolean }[]
+  const vivo = new Map(filas.map((f) => [`${f.listaId}|${f.alegraId}`, f]))
+  const choques: { listaId: string; alegraId: string }[] = []
+  for (const p of previos) {
+    if (!esperado.has(p.listaId)) continue
+    const esp = esperado.get(p.listaId) ?? null
+    const f = vivo.get(`${p.listaId}|${p.alegraId}`)
+    const igual = esp === null ? f === undefined : f !== undefined && Number(f.coeficiente) === Number(esp)
+    if (!igual || f?.posterior) choques.push({ listaId: p.listaId, alegraId: p.alegraId })
+  }
+  if (choques.length > 0) {
+    throw new PreciosOnlineError(
+      409,
+      "choque",
+      `${choques.length} ajustes de este lote se modificaron después. Revíselos antes de revertir.`,
+      { choques: choques.slice(0, 50), total: choques.length },
+    )
+  }
+}
+
 async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Promise<{ cambios: CambioPrecios[]; entrada: CambioRow }> {
   const [e] = await tx
     .select()
@@ -1031,6 +1183,17 @@ async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Pro
         },
       ]
       break
+    case "ajuste_lote": {
+      const previos = ((a.previos as Record<string, unknown>[] | undefined) ?? []).map((p) => ({
+        listaId: String(p.listaId),
+        alegraId: String(p.alegraId),
+        coeficiente: p.coeficiente === null || p.coeficiente === undefined ? null : String(p.coeficiente),
+      }))
+      if (previos.length === 0) throw new PreciosOnlineError(422, "irreversible", "Este cambio no puede revertirse.")
+      await verificarChoqueLote(tx, tenantId, e, previos, (d.ajustes as { listaId: string; coeficiente: string | null }[] | undefined) ?? [])
+      cambios = [{ op: "restaurarAjustes", lote: String(a.lote ?? d.lote), previos }]
+      break
+    }
     case "umbral":
       cambios = [{ op: "setUmbrales", confirmacionPct: String(a.confirmacionPct), retencionPct: String(a.retencionPct) }]
       break

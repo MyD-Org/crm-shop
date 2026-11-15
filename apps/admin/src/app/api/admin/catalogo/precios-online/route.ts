@@ -1,11 +1,12 @@
 import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { invalidResponse } from "@/lib/catalogo-admin"
-import { listarGrilla, parsearQueryGrilla } from "@/lib/precios-online-grilla"
+import { listarGrilla, listarIds, parsearQueryGrilla } from "@/lib/precios-online-grilla"
 import { NO_STORE } from "@/lib/precios-online-http"
 
 // GET /api/admin/catalogo/precios-online — grilla de precios online.
 //   ?q= &marca= &categoria=(uuid|sin) &estado=(ok|sin-costo|sin-precio|retenido|nuevo) &lista=uuid
 //   &orden=(nombre|precio|costo) &start= &limit= (máx. 100)
+//   &modo=ids -> {items:[{alegraId,nombre,codigo}], total, tope}: todos los resultados del filtro (tope 2000).
 //
 // Filtrado, conteo, orden y paginado se resuelven en Postgres: el navegador recibe una página. Para
 // los ids de la página trae el coeficiente efectivo y su origen por lista, y los precios de las
@@ -17,6 +18,11 @@ export async function GET(req: Request) {
   if (!guard.ok) return guard.response
   const parsed = parsearQueryGrilla(new URL(req.url))
   if (!parsed.ok) return invalidResponse(parsed.error)
+  // modo=ids: los ids de TODOS los resultados del filtro (tope 2000) para la selección masiva.
+  if (new URL(req.url).searchParams.get("modo") === "ids") {
+    const r = await listarIds(guard.tenantId, parsed.filtros)
+    return Response.json(r, { headers: NO_STORE })
+  }
   const { items, total } = await listarGrilla(guard.tenantId, parsed.filtros, {
     start: parsed.start,
     limit: parsed.limit,

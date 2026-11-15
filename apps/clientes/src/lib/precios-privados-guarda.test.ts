@@ -39,6 +39,8 @@ const LISTA_BLANCA = new Set([
   "app/api/chat-ia/productos/route.ts",
   // Sólo "¿tiene lista privada?", por sesión (página dinámica): decide si el carrito rotula transferencia.
   "app/carrito/page.tsx",
+  // La misma pregunta, compartida por /carrito y la hoja del carrito del celular (ruta por sesión, sin caché).
+  "lib/pago-transferencia-servidor.ts",
 ]);
 
 const todos = archivos(SRC).map((p) => ({ ruta: relative(SRC, p), texto: readFileSync(p, "utf8") }));

@@ -33,10 +33,10 @@ export async function UbicacionHeader({ enLinea = false }: { enLinea?: boolean }
   // Lee cookie e identidad: hueco por request.
   await connection();
   const { ubicacion, origen, eleccion, nombrePila } = await ubicacionDelVisitante();
-  // Envío a una localidad de Georef (sin dirección guardada): el modal la ofrece precargada.
+  // Envío sin dirección guardada (localidad o calle exacta): el modal la ofrece marcada como "Actual".
   const localidadActual =
-    eleccion.tipo === "envio" && !eleccion.direccion && ubicacion?.id
-      ? { id: ubicacion.id, etiqueta: ubicacion.localidad, cp: ubicacion.cp }
+    eleccion.tipo === "envio" && !eleccion.direccion
+      ? { localidad: ubicacion?.localidad ?? eleccion.localidad, ...(eleccion.exacta ? { calle: eleccion.exacta.calle } : {}) }
       : undefined;
   return (
     <SelectorUbicacion

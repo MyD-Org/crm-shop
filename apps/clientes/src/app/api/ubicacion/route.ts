@@ -26,6 +26,8 @@ import { retiroValido } from "@/lib/ubicacion-retiro";
  *    (no confía en la provincia que mande el cliente). El código postal es opcional (el
  *    Shop ya no lo pide; si llega, se valida y se guarda). Con el envío por zona, `calle` + `geoToken`
  *    (una sugerencia de `/api/geocode`) suman el punto exacto: se verifica el token contra la calle.
+ *  - `{ calle, geoToken }`: una dirección elegida en el buscador del modal (sugerencia de `/api/geocode`, con
+ *    el envío por zona). Localidad y provincia salen del token verificado, no del cliente.
  *  - `{ direccionId }`: una dirección guardada. Exige sesión y que sea del usuario.
  *  - `{ tipo: "retiro", sucursal? }`: retiro en un local (sin `sucursal` sólo con el flag
  *    `sucursales` apagado: local único).
@@ -46,14 +48,16 @@ export async function POST(req: Request) {
   const conId = b.id !== undefined;
   const conDireccion = b.direccionId !== undefined;
   const conTipo = b.tipo !== undefined;
+  const soloCalle = !conId && b.calle !== undefined;
   // Un solo payload por pedido: mezclar ramas es un pedido inválido.
-  if ([conId, conDireccion, conTipo].filter(Boolean).length !== 1) return invalida();
+  if ([conId || soloCalle, conDireccion, conTipo].filter(Boolean).length !== 1) return invalida();
   if (conTipo && (b.tipo !== "retiro" || b.id !== undefined || b.cp !== undefined)) return invalida();
   if (conDireccion && b.cp !== undefined) return invalida();
-  // La calle exacta sólo acompaña a una localidad, y siempre con su token.
-  if ((b.calle !== undefined || b.geoToken !== undefined) && (!conId || b.calle === undefined || b.geoToken === undefined)) {
+  // La calle exacta va sola o con una localidad, y siempre con su token.
+  if ((b.calle !== undefined || b.geoToken !== undefined) && (conDireccion || conTipo || b.calle === undefined || b.geoToken === undefined)) {
     return invalida();
   }
+  if (soloCalle) return elegirCalle(b.calle, b.geoToken, b.cp);
 
   if (conTipo) return elegirRetiro(b.sucursal);
   if (conDireccion) return elegirDireccion(b.direccionId);
@@ -120,6 +124,18 @@ async function elegirLocalidad(id: unknown, cpEntrada: unknown, calle?: unknown,
     console.error("[ubicacion] Georef no respondió (id):", err instanceof GeorefError ? err.motivo : "error");
     return errorUbicacion(TEXTOS_UBICACION.errorBusqueda, 502);
   }
+}
+
+async function elegirCalle(calle: unknown, geoToken: unknown, cp: unknown): Promise<NextResponse> {
+  if (cp !== undefined) return invalida();
+  if (typeof calle !== "string" || typeof geoToken !== "string") return invalida();
+  const g = verificarGeo(geoToken, { calle });
+  const ubicacion = g && armarUbicacion({ localidad: g.ciudad, provincia: claveProvincia(g.provincia) });
+  if (!ubicacion) return errorUbicacion(TEXTOS_UBICACION.direccionSinVerificar, 400);
+  const exacta = await puntoExacto(calle, geoToken, ubicacion.provincia, ubicacion.localidad);
+  const eleccion = exacta && armarEleccion({ tipo: "envio", ...ubicacion, ...exacta });
+  if (!eleccion) return errorUbicacion(TEXTOS_UBICACION.direccionSinVerificar, 400);
+  return respuestaConEleccion(eleccion);
 }
 
 /**

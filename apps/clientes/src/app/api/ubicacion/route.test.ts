@@ -253,11 +253,29 @@ describe("POST /api/ubicacion: localidad + calle exacta (envío por zona)", () =
     for (const body of [
       { id: "06518010", calle: "Rivadavia 100" },
       { id: "06518010", geoToken: token("Rivadavia 100") },
+      { calle: "Rivadavia 100" },
+      { geoToken: token("Rivadavia 100") },
       { tipo: "retiro", calle: "Rivadavia 100", geoToken: token("Rivadavia 100") },
     ]) {
       expect((await post(body)).status).toBe(400);
     }
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sólo calle y token (buscador del modal): localidad y provincia salen del token", async () => {
+    const geoToken = token("Rivadavia 100");
+    const res = await post({ calle: "Rivadavia 100", geoToken });
+    expect(res.status).toBe(200);
+    expect(cookieGuardada(res).valor).toMatchObject({
+      localidad: "Coronel Vidal",
+      provincia: claveProvincia("Buenos Aires"),
+      calle: "Rivadavia 100",
+      geoToken,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    const mala = await post({ calle: "Otra 1", geoToken });
+    expect(mala.status).toBe(400);
+    sinCookie(mala);
   });
 
   it("flag apagado: no acepta la calle (400)", async () => {

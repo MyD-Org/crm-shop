@@ -4,7 +4,7 @@ import {
   cargarDirecciones,
   cargarLocales,
   cuerpoDeOpcion,
-  cuerpoLocalidad,
+  cuerpoSeleccion,
   guardarEleccion,
   idNuevo,
   lineasEnviarA,
@@ -179,15 +179,17 @@ describe("opciones del modal", () => {
   });
 });
 
-describe("cuerpoLocalidad (sin sesión: sólo la localidad, sin CP)", () => {
-  it("exige localidad elegida de la lista", () => {
-    expect(cuerpoLocalidad(null)).toEqual({ ok: false, error: TEXTOS_UBICACION.elegirLocalidad });
+describe("cuerpoSeleccion (sin dirección guardada)", () => {
+  it("sin nada marcado: pide buscar", () => {
+    expect(cuerpoSeleccion(null)).toEqual({ ok: false, error: TEXTOS_UBICACION.elegirLocalidad });
   });
-  it("con localidad manda sólo el id", () => {
-    expect(cuerpoLocalidad("123")).toEqual({ ok: true, cuerpo: { id: "123" } });
+  it("localidad: sólo el id; calle: calle y token; vigente o detectada: nada que guardar", () => {
+    expect(cuerpoSeleccion({ tipo: "localidad", id: "123" })).toEqual({ ok: true, cuerpo: { id: "123" } });
+    expect(cuerpoSeleccion({ tipo: "calle", calle: "Colón 1", geoToken: "a.b" })).toEqual({ ok: true, cuerpo: { calle: "Colón 1", geoToken: "a.b" } });
+    expect(cuerpoSeleccion({ tipo: "actual" })).toEqual({ ok: true, cuerpo: null });
+    expect(cuerpoSeleccion({ tipo: "detectada" })).toEqual({ ok: true, cuerpo: null });
   });
 });
-
 describe("cargas y guardado (fetch inyectado)", () => {
   it("cargarDirecciones: 200 → lista; 401 → sin sesión; otro → error", async () => {
     const d = dir();
@@ -212,11 +214,6 @@ describe("cargas y guardado (fetch inyectado)", () => {
       throw Object.assign(new Error("abort"), { name: "AbortError" });
     });
     expect(await cargarDirecciones(f as unknown as typeof fetch, ctrl.signal)).toBeNull();
-  });
-
-  it("cuerpoLocalidad: con calle elegida manda calle y token; sin calle, sólo el id", () => {
-    expect(cuerpoLocalidad("1", { calle: "Colón 1", geoToken: "a.b" })).toEqual({ ok: true, cuerpo: { id: "1", calle: "Colón 1", geoToken: "a.b" } });
-    expect(cuerpoLocalidad("1")).toEqual({ ok: true, cuerpo: { id: "1" } });
   });
 
   it("cargarLocales: lee {locales, unico}; error → null", async () => {

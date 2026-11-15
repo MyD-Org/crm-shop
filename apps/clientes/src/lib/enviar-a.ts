@@ -56,16 +56,17 @@ export function opcionVigente(eleccion: EleccionUbicacion): string | undefined {
   return undefined;
 }
 
+/** La ubicación vigente sin dirección guardada (localidad, o calle exacta): opción "Actual" del modal. */
+export interface UbicacionActual {
+  localidad: string;
+  calle?: string;
+}
+
 export type CuerpoEleccion =
   | { direccionId: string }
   | { tipo: "retiro"; sucursal?: string }
-  | { id: string; calle?: string; geoToken?: string };
-
-/** Calle elegida de una sugerencia de `/api/geocode` (con el token firmado por el servidor). */
-export interface CalleElegida {
-  calle: string;
-  geoToken: string;
-}
+  | { id: string }
+  | { calle: string; geoToken: string };
 
 export function cuerpoDeOpcion(valor: string): CuerpoEleccion | null {
   if (valor.startsWith(PREFIJO_DIR)) {
@@ -132,12 +133,21 @@ export function idNuevo(antes: DireccionEnvio[], despues: DireccionEnvio[]): str
 }
 
 /** Sin sesión: la localidad de Georef (sin código postal: la zona sale de la provincia). */
-export function cuerpoLocalidad(
-  id: string | null,
-  calle: CalleElegida | null = null,
-): { ok: true; cuerpo: { id: string; calle?: string; geoToken?: string } } | { ok: false; error: string } {
-  if (!id) return { ok: false, error: TEXTOS_UBICACION.elegirLocalidad };
-  return { ok: true, cuerpo: calle ? { id, calle: calle.calle, geoToken: calle.geoToken } : { id } };
+/**
+ * Cuerpo del POST para lo marcado en "Enviar a" sin dirección guardada. `null` = ya está guardado (la
+ * ubicación vigente o la detectada): confirmar sólo cierra.
+ */
+export function cuerpoSeleccion(
+  s:
+    | { tipo: "actual" | "detectada" }
+    | { tipo: "localidad"; id: string }
+    | { tipo: "calle"; calle: string; geoToken: string }
+    | null,
+): { ok: true; cuerpo: CuerpoEleccion | null } | { ok: false; error: string } {
+  if (!s) return { ok: false, error: TEXTOS_UBICACION.elegirLocalidad };
+  if (s.tipo === "localidad") return { ok: true, cuerpo: { id: s.id } };
+  if (s.tipo === "calle") return { ok: true, cuerpo: { calle: s.calle, geoToken: s.geoToken } };
+  return { ok: true, cuerpo: null };
 }
 
 const esAbort = (err: unknown, signal: AbortSignal) => signal.aborted || (err as Error)?.name === "AbortError";

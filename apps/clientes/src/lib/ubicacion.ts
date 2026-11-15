@@ -287,7 +287,17 @@ export const TEXTOS_UBICACION = {
   errorGuardar: "No pudimos guardar su elección. Inténtelo nuevamente.",
   elegirOpcion: "Seleccione una opción.",
   legendLocalidad: "Enviar a una localidad",
-  elegirLocalidad: "Seleccione su localidad de la lista.",
+  elegirLocalidad: "Busque su dirección o localidad y elíjala de la lista.",
+  // "Enviar a" sin dirección guardada: opción marcada + un buscador (calle exacta con el envío por zona).
+  legendEnviarA: "Enviar a",
+  buscarDireccion: "Buscar dirección: calle, altura y localidad",
+  buscarOtraDireccion: "Buscar otra dirección: calle, altura y localidad",
+  buscarLocalidad: "Buscar su localidad",
+  buscarOtraLocalidad: "Buscar otra localidad",
+  sinDirecciones: "No encontramos esa dirección. Revise la calle y la altura, o agregue la localidad.",
+  usarMiUbicacionActual: "Usar mi ubicación actual",
+  detectada: "Detectada",
+  direccionSinVerificar: "No pudimos ubicar esa dirección. Búsquela de nuevo e inténtelo otra vez.",
   // Ficha (PR3): retiro en el local elegido.
   retiroGratisEn: (local: string) => `Retiro gratis en ${local}`,
   envioA: (destino: string) => `Envío a ${destino}`,

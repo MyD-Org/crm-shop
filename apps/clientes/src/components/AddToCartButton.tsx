@@ -2,7 +2,7 @@
 
 import { useState, type MouseEvent } from "react";
 import { Button, QuantityStepper } from "@myd-org/ui";
-import { CartIcon } from "@/components/catalogo/iconos";
+import { CartIcon, PlusIcon } from "@/components/catalogo/iconos";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { CANTIDAD_MAXIMA } from "@/lib/catalogo-vista";
 import { nombreDeLinea } from "@/lib/nombre-linea";
@@ -13,6 +13,11 @@ interface AddToCartButtonProps {
   /** Unidades disponibles: el stepper no deja pasar de acá. */
   max?: number;
   product?: Omit<CartItem, "qty">;
+  /**
+   * Para ir sobre la foto (card `market` del catálogo): un "+" redondo y, con el producto en el
+   * carrito, el contador compacto en píldora. Sin esto, "Agregar" a todo el ancho.
+   */
+  compacto?: boolean;
 }
 
 /**
@@ -31,7 +36,7 @@ export function sinNavegar(e: MouseEvent) {
  * del mismo alto y el mismo fondo (nada salta al agregar). Con 1 unidad el "−"
  * es un tacho: ese toque lo saca del carrito.
  */
-export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: AddToCartButtonProps) {
+export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product, compacto = false }: AddToCartButtonProps) {
   const { items, addItem, removeItem, updateQty } = useCart();
 
   // Sin precio no hay venta posible: mismo criterio que el filtro de los
@@ -48,6 +53,26 @@ export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: Ad
   const hidratado = useHidratado();
   const inCart = hidratado && product ? items.find((i) => i.id === product.id) : null;
   const qty = inCart?.qty ?? 0;
+
+  if ((!inCart || !product) && compacto) {
+    return (
+      <Button
+        size="icon-lg"
+        shape="round"
+        className="shadow-1"
+        aria-label="Agregar al carrito"
+        disabled={deshabilitado}
+        onClick={(e) => {
+          sinNavegar(e);
+          if (!product) return;
+          setAnimarEntrada(true);
+          addItem({ ...product, name: nombreDeLinea(product) });
+        }}
+      >
+        <PlusIcon />
+      </Button>
+    );
+  }
 
   if (!inCart || !product) {
     return (
@@ -77,7 +102,9 @@ export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: Ad
     <span
       onClick={sinNavegar}
       className={
-        animarEntrada
+        compacto
+          ? "flex"
+          : animarEntrada
           ? "flex w-full transition-opacity duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] starting:opacity-0"
           : "flex w-full"
       }
@@ -94,9 +121,9 @@ export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: Ad
         decrementLabel="Quitar uno"
         incrementLabel="Agregar uno más"
         removeLabel="Quitar del carrito"
-        tone="soft"
-        size="md"
-        fullWidth
+        tone={compacto ? "solid" : "soft"}
+        size={compacto ? "sm" : "md"}
+        fullWidth={!compacto}
       />
     </span>
   );

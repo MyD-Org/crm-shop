@@ -5,6 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
+import { MetasCarrito } from "@/components/carrito/MetasCarrito";
+import { metaCuotas } from "@/lib/metas-carrito";
+import type { PagoTransferencia } from "@/lib/pago-transferencia-servidor";
 import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
 import { fmtPrecio } from "@/lib/format";
 import { nombreConMarca } from "@/lib/formato-nombre";
@@ -149,11 +152,42 @@ function HojaCarrito({
 }) {
   const carrito = useCart();
   const { items } = carrito;
-  const { cotizacion, estado, ultimasLineas } = useCotizacion({ entregaTipo: "retiro" });
+  // Precio con transferencia (como /carrito): se pregunta al servidor con qué lista cotizar, porque
+  // depende de quien mira. `undefined` = todavía no se sabe; null = sin precio con transferencia.
+  const [pago, setPago] = useState<PagoTransferencia | undefined>(undefined);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/carrito/pago-transferencia", { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : { pago: null }))
+      .then((d: { pago?: PagoTransferencia }) => setPago(d.pago ?? null))
+      .catch(() => {
+        if (!controller.signal.aborted) setPago(null);
+      });
+    return () => controller.abort();
+  }, []);
+  const { cotizacion, estado, ultimasLineas, ultimoProgresoCuotas } = useCotizacion({
+    entregaTipo: "retiro",
+    conProgresoCuotas: true,
+    activo: pago !== undefined,
+    ...(pago ?? {}),
+  });
+  // Total con los demás medios (precio general), sólo si hay precio con transferencia.
+  const { cotizacion: cotizacionGeneral, estado: estadoGeneral } = useCotizacion({
+    entregaTipo: "retiro",
+    activo: Boolean(pago),
+  });
+  // Cuotas sin interés, igual que en /carrito: «Ya tiene 3 cuotas de $X» y cuánto falta para el
+  // próximo escalón. Sin cuotas configuradas, nada.
+  const metaDeCuotas = metaCuotas(ultimoProgresoCuotas);
   const lineaVigente = (id: string) => cotizacion?.lineas.find((l) => l.id === id);
   const lineaUltima = (id: string) => ultimasLineas?.find((l) => l.id === id);
   const total = cotizacion ? cotizacion.total : (totalesEstimados(items, ultimasLineas)?.total ?? null);
-  const textoTotal = total !== null ? fmtPrecio(total) : estado === "cargando" ? "Calculando…" : "A confirmar";
+  const textoTotal =
+    total !== null ? fmtPrecio(total) : estado === "cargando" || pago === undefined ? "Calculando…" : "A confirmar";
+  const totalOtrosMedios =
+    pago && estadoGeneral === "ok" && cotizacionGeneral && total !== null && cotizacionGeneral.total > total
+      ? cotizacionGeneral.total
+      : null;
   const conProblemas = !!cotizacion?.hayProblemas;
 
   return (
@@ -245,12 +279,22 @@ function HojaCarrito({
           })}
         </ul>
 
+        {metaDeCuotas && (
+          <div className="px-4 pt-3">
+            <MetasCarrito metas={[metaDeCuotas]} compacta />
+          </div>
+        )}
+
         <div className="flex flex-col gap-3 px-4 pt-4">
           <div className="flex items-baseline justify-between">
-            <span className="text-base font-semibold text-text">Total</span>
+            <span className="text-base font-semibold text-text">{pago ? "Total con transferencia" : "Total"}</span>
             <span className="text-[22px] font-bold tabular-nums text-text">{textoTotal}</span>
           </div>
-          <p className="-mt-2 text-right text-xs text-muted">El envío se calcula en el siguiente paso.</p>
+          {totalOtrosMedios !== null && (
+            <p className="-mt-2 text-right text-sm text-muted">
+              Con otros medios de pago: <span className="tabular-nums">{fmtPrecio(totalOtrosMedios)}</span>
+            </p>
+          )}
           {/* Con algún producto con problema (sin stock, ya no está) se revisa en
               el carrito, que explica qué pasa con cada uno. */}
           <Link

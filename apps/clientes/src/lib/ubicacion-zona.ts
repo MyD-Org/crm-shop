@@ -1,4 +1,4 @@
-import type { MetodoEnvio } from "./envio-zona";
+import { cotizarMetodo, type MetodoEnvio } from "./envio-zona";
 
 /**
  * «Usar mi ubicación» con el envío por zona: Georef (`/ubicacion`) no devuelve localidades, sólo el
@@ -25,4 +25,26 @@ export function localidadAtendidaEn(
     }
   }
   return mejor && { localidad: mejor.localidad, id: mejor.id };
+}
+
+/** Nombre de la zona que resuelve el punto con las mismas reglas que el pedido; null = ninguna. Puro. */
+export function zonaDelPunto(
+  metodos: MetodoEnvio[],
+  provinciaClave: string,
+  localidad: string,
+  cp: string,
+  lat: number,
+  lon: number,
+  precision: "altura" | "calle",
+): string | null {
+  const ordenados = [...metodos].filter((m) => m.activo).sort((a, b) => a.orden - b.orden);
+  for (const m of ordenados) {
+    const r = cotizarMetodo(
+      m,
+      { provinciaClave, localidad, cp: cp || null, punto: { lat, lon, precision } },
+      { origen: null, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false },
+    );
+    if (r) return r.zona;
+  }
+  return null;
 }

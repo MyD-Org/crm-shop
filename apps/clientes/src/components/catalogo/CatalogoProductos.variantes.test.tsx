@@ -79,7 +79,8 @@ describe("CatalogoProductos con modelos de variantes", () => {
 
   it("el botón del modelo dice «Agregar», es un botón (no un enlace) y ya no ofrece «Elegir opción»", () => {
     const out = html([prod("1", { variantes: { cantidad: 2 } })]);
-    expect(out).toMatch(/<button[^>]*aria-haspopup="dialog"[^>]*>[\s\S]*Agregar<\/button>/);
+    // En la grilla (card `market`) es el "+" redondo sobre la foto: el texto va en el aria-label.
+    expect(out).toMatch(/<button(?=[^>]*aria-haspopup="dialog")(?=[^>]*aria-label="Agregar")[^>]*>/);
     expect(out).not.toContain("Elegir opción");
   });
 });

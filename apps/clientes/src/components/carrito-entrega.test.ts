@@ -26,9 +26,12 @@ describe("carrito según la elección", () => {
     expect(cliente).toContain('pagoTransferencia ? "Total con transferencia" : "Total"');
     expect(cliente).toMatch(/activo: Boolean\(pagoTransferencia\)/);
     expect(cliente).toContain("con otros medios");
+    // La regla vive en lib/pago-transferencia-servidor.ts: la comparten la página y la hoja del carrito.
     const page = leer("app", "carrito", "page.tsx");
-    expect(page).toContain("m.slug === SLUG_TRANSFERENCIA && m.activo");
-    expect(page).toContain("esCompradorCuentaCorriente(cliente) || (cliente ? Boolean(await listaPrivadaDelComprador()");
+    expect(page).toContain("pagoTransferenciaDelVisitante(cliente, entregaTipo)");
+    const regla = leer("lib", "pago-transferencia-servidor.ts");
+    expect(regla).toContain("m.slug === SLUG_TRANSFERENCIA && m.activo");
+    expect(regla).toContain("esCompradorCuentaCorriente(cliente) || (cliente ? Boolean(await listaPrivadaDelComprador()");
   });
 
   it("la barra de envío gratis usa la provincia recibida (null con retiro)", () => {

@@ -15,15 +15,16 @@ import {
   cargarDirecciones,
   cargarLocales,
   cuerpoDeOpcion,
-  cuerpoLocalidad,
+  cuerpoSeleccion,
   guardarEleccion,
   idNuevo,
   type CargaDirecciones,
   type CuerpoEleccion,
   type OpcionesRetiro,
+  type UbicacionActual,
 } from "@/lib/enviar-a";
 import { TEXTOS_UBICACION as T } from "@/lib/ubicacion";
-import { FormularioLocalidad, type LocalidadElegida } from "./FormularioLocalidad";
+import { FormularioLocalidad, type SeleccionEnvio } from "./FormularioLocalidad";
 import { VistaEnviarA } from "./VistaEnviarA";
 
 /**
@@ -52,7 +53,7 @@ export default function ModalEnviarA({
   abierto: boolean;
   onOpenChange: (abierto: boolean) => void;
   vigente: string | undefined;
-  localidadActual?: LocalidadElegida & { cp?: string };
+  localidadActual?: UbicacionActual;
   conUbicacion: boolean;
 }) {
   const router = useRouter();
@@ -63,8 +64,12 @@ export default function ModalEnviarA({
   // La localidad vigente (si vino de Georef) arranca cargada y marcada: así figura como opción
   // aunque no haya direcciones guardadas, como "Ubicación actual" en otras tiendas.
   const [valor, setValor] = useState(vigente ?? (localidadActual ? LOCALIDAD : ""));
-  const [localidad, setLocalidad] = useState<LocalidadElegida | null>(
-    localidadActual ? { id: localidadActual.id, etiqueta: localidadActual.etiqueta } : null,
+  const [seleccion, setSeleccion] = useState<SeleccionEnvio | null>(
+    localidadActual
+      ? localidadActual.calle
+        ? { tipo: "actual", titulo: localidadActual.calle, detalle: localidadActual.localidad }
+        : { tipo: "actual", titulo: localidadActual.localidad }
+      : null,
   );
   const [errorLocalidad, setErrorLocalidad] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,9 +113,15 @@ export default function ModalEnviarA({
 
   async function confirmar() {
     if (valor === LOCALIDAD) {
-      const c = cuerpoLocalidad(localidad?.id ?? null);
+      const c = cuerpoSeleccion(seleccion);
       setErrorLocalidad(c.ok ? null : c.error);
       if (!c.ok) return;
+      // La vigente o la detectada ya están guardadas: sólo cerrar.
+      if (!c.cuerpo) {
+        onOpenChange(false);
+        router.refresh();
+        return;
+      }
       await aplicar(c.cuerpo);
       return;
     }
@@ -215,15 +226,25 @@ export default function ModalEnviarA({
           }}
           formularioLocalidad={
             <FormularioLocalidad
-              elegida={localidad}
-              onElegir={(l) => {
-                setLocalidad(l);
+              seleccion={seleccion}
+              onSeleccion={(sel) => {
+                setSeleccion(sel);
+                setErrorLocalidad(null);
                 elegirValor(LOCALIDAD);
+              }}
+              valor={valor}
+              opcion={LOCALIDAD}
+              onValor={(v) => {
+                elegirValor(v);
                 setErrorLocalidad(null);
               }}
               errorLocalidad={errorLocalidad}
-              onGeolocalizada={() => {
-                onOpenChange(false);
+              conCalle={Boolean(locales?.direccionExacta)}
+              onGeolocalizada={(sel) => {
+                setSeleccion(sel);
+                setErrorLocalidad(null);
+                elegirValor(LOCALIDAD);
+                // El header y la ficha ya muestran lo detectado detrás del modal.
                 router.refresh();
               }}
               deshabilitado={enviando}

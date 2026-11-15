@@ -4,7 +4,7 @@ import {
   cargarDirecciones,
   cargarLocales,
   cuerpoDeOpcion,
-  cuerpoLocalidad,
+  cuerpoSeleccion,
   guardarEleccion,
   idNuevo,
   lineasEnviarA,
@@ -33,6 +33,14 @@ const respuesta = (status: number, cuerpo: unknown) =>
   ({ ok: status >= 200 && status < 300, status, json: async () => cuerpo }) as Response;
 
 describe("lineasEnviarA (header de dos líneas)", () => {
+  it("con calle exacta muestra la calle detectada, no sólo la localidad", () => {
+    const l = lineasEnviarA(
+      { tipo: "envio", localidad: "Mar del Plata", provincia: "buenosaires", exacta: { calle: "Avenida Colón 2500", geoToken: "a.b" } },
+      null,
+    );
+    expect(l.valor).toBe("Avenida Colón 2500");
+  });
+
   it("con sesión y dirección guardada: Enviar a {nombre} / {calle altura}", () => {
     const l = lineasEnviarA(
       {
@@ -171,15 +179,17 @@ describe("opciones del modal", () => {
   });
 });
 
-describe("cuerpoLocalidad (sin sesión: sólo la localidad, sin CP)", () => {
-  it("exige localidad elegida de la lista", () => {
-    expect(cuerpoLocalidad(null)).toEqual({ ok: false, error: TEXTOS_UBICACION.elegirLocalidad });
+describe("cuerpoSeleccion (sin dirección guardada)", () => {
+  it("sin nada marcado: pide buscar", () => {
+    expect(cuerpoSeleccion(null)).toEqual({ ok: false, error: TEXTOS_UBICACION.elegirLocalidad });
   });
-  it("con localidad manda sólo el id", () => {
-    expect(cuerpoLocalidad("123")).toEqual({ ok: true, cuerpo: { id: "123" } });
+  it("localidad: sólo el id; calle: calle y token; vigente o detectada: nada que guardar", () => {
+    expect(cuerpoSeleccion({ tipo: "localidad", id: "123" })).toEqual({ ok: true, cuerpo: { id: "123" } });
+    expect(cuerpoSeleccion({ tipo: "calle", calle: "Colón 1", geoToken: "a.b" })).toEqual({ ok: true, cuerpo: { calle: "Colón 1", geoToken: "a.b" } });
+    expect(cuerpoSeleccion({ tipo: "actual" })).toEqual({ ok: true, cuerpo: null });
+    expect(cuerpoSeleccion({ tipo: "detectada" })).toEqual({ ok: true, cuerpo: null });
   });
 });
-
 describe("cargas y guardado (fetch inyectado)", () => {
   it("cargarDirecciones: 200 → lista; 401 → sin sesión; otro → error", async () => {
     const d = dir();
@@ -212,6 +222,7 @@ describe("cargas y guardado (fetch inyectado)", () => {
     expect(await cargarLocales(ok as unknown as typeof fetch, ctrl.signal)).toEqual({
       locales: [{ slug: "a", nombre: "A", direccion: "", horario: "" }],
       unico: false,
+      direccionExacta: false,
     });
     expect(ok).toHaveBeenCalledWith("/api/ubicacion/opciones", { signal: ctrl.signal });
     const mal = vi.fn(async () => respuesta(500, {}));

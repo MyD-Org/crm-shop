@@ -45,7 +45,14 @@ export function respuestaConEleccion(c: CookieUbicacion): NextResponse {
   const cuerpo =
     c.tipo === "retiro"
       ? { tipo: "retiro" as const, ...(c.sucursal ? { sucursal: c.sucursal } : {}) }
-      : { tipo: "envio" as const, localidad: c.localidad, provincia: c.provincia };
+      : {
+          tipo: "envio" as const,
+          localidad: c.localidad,
+          provincia: c.provincia,
+          ...(c.id ? { id: c.id } : {}),
+          // Sólo la calle mostrable (para avisar qué se detectó): ni el token ni coordenadas.
+          ...(c.calle && c.geoToken ? { calle: c.calle } : {}),
+        };
   const res = NextResponse.json(cuerpo);
   res.cookies.set(COOKIE_UBICACION, armarCookie(c), OPCIONES_COOKIE());
   return res;

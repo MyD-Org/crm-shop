@@ -9,12 +9,8 @@ import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
 import { getDecoracion } from "@/lib/home-datos";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { opcionesCheckoutDelVisitante } from "@/lib/zona-servidor";
-import { mediosOfrecibles } from "@/lib/medios-pago-datos";
-import { esCompradorCuentaCorriente } from "@/lib/medios-pago";
-import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
-import { pagoParaCotizar } from "@/lib/lista-medio";
-import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { compraInvitadoHabilitada } from "@/lib/compra-invitado-flag";
+import { pagoTransferenciaDelVisitante } from "@/lib/pago-transferencia-servidor";
 
 export default async function CarritoPage() {
   const [{ clerkUserId, cliente }, reglas, { piedra }] = await Promise.all([
@@ -35,12 +31,7 @@ export default async function CarritoPage() {
     entregaTipo === "retiro" ? ((await opcionesCheckoutDelVisitante().catch(() => null))?.localInicial ?? null) : null;
   // Precio con transferencia: el carrito cotiza con la lista de ese medio (si está activo, aplica a la
   // modalidad y tiene lista propia). Cuenta corriente o lista privada no: su precio no depende del medio.
-  const precioPropio =
-    esCompradorCuentaCorriente(cliente) || (cliente ? Boolean(await listaPrivadaDelComprador().catch(() => null)) : false);
-  const medios = precioPropio ? [] : await mediosOfrecibles().catch(() => []);
-  const transferencia = medios.find((m) => m.slug === SLUG_TRANSFERENCIA && m.activo) ?? null;
-  const pago = transferencia ? pagoParaCotizar(medios, entregaTipo, transferencia) : null;
-  const pagoTransferencia = pago?.pagoMetodo ? { listaKey: pago.listaKey, pagoMetodo: pago.pagoMetodo } : null;
+  const pagoTransferencia = await pagoTransferenciaDelVisitante(cliente, entregaTipo);
   const configEnvio = reglas.envio ?? CONFIG_ENVIO_DEFAULT;
   // Envío por zona: sólo con métodos cargados se manda la localidad para anticipar la tarifa.
   // Con «Usar mi ubicación» y un punto firmado vigente viaja también el token con su calle: el servidor lo

@@ -34,6 +34,8 @@ export function lineasEnviarA(eleccion: EleccionUbicacion, nombrePila: string | 
   const nombre = nombrePila?.trim();
   const etiqueta = nombre ? `${TEXTOS_UBICACION.enviarA} ${nombre}` : TEXTOS_UBICACION.enviarA;
   if (eleccion.direccion) return { retiro: false, etiqueta, valor: eleccion.direccion.calle };
+  // Calle exacta («Usar mi ubicación» o elegida en el modal): se muestra la que se detectó.
+  if (eleccion.exacta) return { retiro: false, etiqueta, valor: eleccion.exacta.calle };
   return {
     retiro: false,
     etiqueta,
@@ -54,7 +56,17 @@ export function opcionVigente(eleccion: EleccionUbicacion): string | undefined {
   return undefined;
 }
 
-export type CuerpoEleccion = { direccionId: string } | { tipo: "retiro"; sucursal?: string } | { id: string };
+/** La ubicación vigente sin dirección guardada (localidad, o calle exacta): opción "Actual" del modal. */
+export interface UbicacionActual {
+  localidad: string;
+  calle?: string;
+}
+
+export type CuerpoEleccion =
+  | { direccionId: string }
+  | { tipo: "retiro"; sucursal?: string }
+  | { id: string }
+  | { calle: string; geoToken: string };
 
 export function cuerpoDeOpcion(valor: string): CuerpoEleccion | null {
   if (valor.startsWith(PREFIJO_DIR)) {
@@ -100,6 +112,8 @@ export interface OpcionesRetiro {
   locales: LocalRetiro[];
   /** Flag `sucursales` apagado: un único "Retirar en el local", sin dirección ni horario. */
   unico: boolean;
+  /** Envío por zona: el modal ofrece la calle y altura después de la localidad. */
+  direccionExacta?: boolean;
 }
 
 export function opcionesLocales(o: OpcionesRetiro): RadioOption[] {
@@ -119,11 +133,21 @@ export function idNuevo(antes: DireccionEnvio[], despues: DireccionEnvio[]): str
 }
 
 /** Sin sesión: la localidad de Georef (sin código postal: la zona sale de la provincia). */
-export function cuerpoLocalidad(
-  id: string | null,
-): { ok: true; cuerpo: { id: string } } | { ok: false; error: string } {
-  if (!id) return { ok: false, error: TEXTOS_UBICACION.elegirLocalidad };
-  return { ok: true, cuerpo: { id } };
+/**
+ * Cuerpo del POST para lo marcado en "Enviar a" sin dirección guardada. `null` = ya está guardado (la
+ * ubicación vigente o la detectada): confirmar sólo cierra.
+ */
+export function cuerpoSeleccion(
+  s:
+    | { tipo: "actual" | "detectada" }
+    | { tipo: "localidad"; id: string }
+    | { tipo: "calle"; calle: string; geoToken: string }
+    | null,
+): { ok: true; cuerpo: CuerpoEleccion | null } | { ok: false; error: string } {
+  if (!s) return { ok: false, error: TEXTOS_UBICACION.elegirLocalidad };
+  if (s.tipo === "localidad") return { ok: true, cuerpo: { id: s.id } };
+  if (s.tipo === "calle") return { ok: true, cuerpo: { calle: s.calle, geoToken: s.geoToken } };
+  return { ok: true, cuerpo: null };
 }
 
 const esAbort = (err: unknown, signal: AbortSignal) => signal.aborted || (err as Error)?.name === "AbortError";
@@ -149,7 +173,7 @@ export async function cargarLocales(f: typeof fetch, signal: AbortSignal): Promi
     const res = await f("/api/ubicacion/opciones", { signal });
     const data = (await res.json().catch(() => null)) as Partial<OpcionesRetiro> | null;
     if (!res.ok || !data || !Array.isArray(data.locales)) return null;
-    return { locales: data.locales, unico: Boolean(data.unico) };
+    return { locales: data.locales, unico: Boolean(data.unico), direccionExacta: data.direccionExacta === true };
   } catch {
     return null;
   }

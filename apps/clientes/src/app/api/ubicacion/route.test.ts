@@ -3,6 +3,7 @@ import fixtures from "@/lib/__fixtures__/georef-respuestas.json";
 import { claveProvincia } from "@/lib/sucursales";
 import { COOKIE_UBICACION, validarCookieUbicacion } from "@/lib/ubicacion";
 import { estadoFlags } from "@/test/flags";
+import { firmarGeo } from "@/lib/geo-token";
 
 let userId: string | null = null;
 let direcciones: Record<string, unknown>[] = [];
@@ -12,6 +13,10 @@ const listarDirecciones = vi.fn<(...a: unknown[]) => Promise<typeof direcciones>
 vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId }) }));
 vi.mock("@/lib/direcciones-envio-db", () => ({ listarDirecciones: (...a: unknown[]) => listarDirecciones(...a) }));
 vi.mock("@/lib/sucursales-datos", () => ({ sucursalesCacheadas: async () => ({ sucursales, zonas: [] }) }));
+vi.mock("@/lib/sucursales-repo", async (orig) => ({
+  ...(await orig<typeof import("@/lib/sucursales-repo")>()),
+  leerConfigEnvio: async () => ({ metodos: [] }),
+}));
 
 import { POST as coordenadas } from "./coordenadas/route";
 import { GET as localidades } from "./localidades/route";
@@ -209,6 +214,79 @@ describe("POST /api/ubicacion (elegir una localidad)", () => {
   });
 });
 
+describe("POST /api/ubicacion: localidad + calle exacta (envío por zona)", () => {
+  const SECRETO = "s3cr3t-placeholder-para-tests-pedidos-0123456789";
+  const token = (calle: string) =>
+    firmarGeo({ lat: -37.4, lon: -57.7, calle, ciudad: "Coronel Vidal", provincia: "Buenos Aires", cp: "7174", precision: "altura" });
+
+  beforeEach(() => {
+    vi.stubEnv("GEOCODE_FIRMA_SECRET", SECRETO);
+    estadoFlags()["envio-por-zona"] = true;
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("token vigente de esa calle: la cookie suma calle, CP y token; la respuesta sólo la calle", async () => {
+    georefOk(fixtures.localidades);
+    const geoToken = token("Rivadavia 100");
+    const res = await post({ id: "06518010", calle: "Rivadavia 100", geoToken });
+    expect(res.status).toBe(200);
+    const cuerpo = await res.json();
+    expect(cuerpo.calle).toBe("Rivadavia 100");
+    expect(JSON.stringify(cuerpo)).not.toContain(geoToken);
+    expect(cookieGuardada(res).valor).toMatchObject({ localidad: "Coronel Vidal", id: "06518010", calle: "Rivadavia 100", cp: "7174", geoToken });
+  });
+
+  it("token de otra calle o adulterado: 400 y sin cookie", async () => {
+    // Una respuesta nueva por llamada: el cuerpo de un Response se lee una sola vez.
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify(fixtures.localidades), { status: 200 }));
+    for (const body of [
+      { id: "06518010", calle: "Otra 1", geoToken: token("Rivadavia 100") },
+      { id: "06518010", calle: "Rivadavia 100", geoToken: `${token("Rivadavia 100")}x` },
+    ]) {
+      const res = await post(body);
+      expect(res.status).toBe(400);
+      sinCookie(res);
+    }
+  });
+
+  it("calle sin token, token sin calle o calle con otra rama: 400 sin llamar a Georef", async () => {
+    for (const body of [
+      { id: "06518010", calle: "Rivadavia 100" },
+      { id: "06518010", geoToken: token("Rivadavia 100") },
+      { calle: "Rivadavia 100" },
+      { geoToken: token("Rivadavia 100") },
+      { tipo: "retiro", calle: "Rivadavia 100", geoToken: token("Rivadavia 100") },
+    ]) {
+      expect((await post(body)).status).toBe(400);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sólo calle y token (buscador del modal): localidad y provincia salen del token", async () => {
+    const geoToken = token("Rivadavia 100");
+    const res = await post({ calle: "Rivadavia 100", geoToken });
+    expect(res.status).toBe(200);
+    expect(cookieGuardada(res).valor).toMatchObject({
+      localidad: "Coronel Vidal",
+      provincia: claveProvincia("Buenos Aires"),
+      calle: "Rivadavia 100",
+      geoToken,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    const mala = await post({ calle: "Otra 1", geoToken });
+    expect(mala.status).toBe(400);
+    sinCookie(mala);
+  });
+
+  it("flag apagado: no acepta la calle (400)", async () => {
+    estadoFlags()["envio-por-zona"] = false;
+    georefOk(fixtures.localidades);
+    const res = await post({ id: "06518010", calle: "Rivadavia 100", geoToken: token("Rivadavia 100") });
+    expect(res.status).toBe(400);
+    sinCookie(res);
+  });
+});
+
 describe("DELETE /api/ubicacion", () => {
   it("borra la cookie", async () => {
     const res = await DELETE();
@@ -388,6 +466,7 @@ describe("GET /api/ubicacion/opciones", () => {
         { slug: "sucursal-b", nombre: "Local sucursal-b", direccion: "Calle 1", horario: "Lunes a viernes de 9 a 18" },
       ],
       unico: false,
+      direccionExacta: false,
     });
     expect(res.headers.get("cache-control")).toMatch(/max-age/);
   });
@@ -396,7 +475,7 @@ describe("GET /api/ubicacion/opciones", () => {
     const { GET } = await import("./opciones/route");
     estadoFlags().sucursales = false;
     const res = await GET();
-    expect(await res.json()).toEqual({ locales: [], unico: true });
+    expect(await res.json()).toEqual({ locales: [], unico: true, direccionExacta: false });
   });
 });
 

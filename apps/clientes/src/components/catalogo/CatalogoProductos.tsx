@@ -8,6 +8,8 @@ import { BotonFavorito } from "@/components/BotonFavorito";
 import { BotonCompartir } from "@/components/BotonCompartir";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
+import { fmtPrecio } from "@/lib/format";
+import { rotuloMedio } from "@/lib/precio-medio-texto";
 import type { Product } from "@/data/products";
 import { agotadoSinModalidad } from "@/lib/venta-sin-stock";
 import type { VistaCatalogo } from "@/lib/catalogo-url";
@@ -51,6 +53,9 @@ export function CatalogoProductos({
   const reservarMedio = productos.some((p) => p.precioMedio);
   // Badge de la promo de la home (vigencia en el cliente, sin mismatch: ver PromoProvider).
   const promoDe = useInfoPromo();
+  // Grilla: card `market` (la foto manda, el "+" va sobre la foto y el precio con medio, p. ej.
+  // transferencia, va primero). La lista sigue con `soft`.
+  const market = vista !== "lista";
   return (
     <div
       // 2/3/4 columnas: 24 productos por página entran justo en las tres
@@ -111,11 +116,15 @@ export function CatalogoProductos({
         // cantidad de opciones. El botón «Agregar» abre el panel para elegir la opción.
         const vv = vistaCardVariantes(p);
         const medio = vv.esDesde ? undefined : p.precioMedio;
+        // En `market` el precio con el medio (transferencia) pasa adelante y el general queda abajo.
+        const medioPrimero = market && medio != null;
         return (
         <ProductCard
           key={p.id}
-          variant="soft"
-          priceSize={medio ? "sm" : "md"}
+          variant={market ? "market" : "soft"}
+          priceSize={medio && !market ? "sm" : "md"}
+          priceTone={medioPrimero ? "accent" : "default"}
+          priceCaption={medioPrimero ? rotuloMedio(medio) : undefined}
           layout={vista === "lista" ? "list" : "grid"}
           className="h-full"
           // Gancho de las páginas de marca (globals.css, `[data-fotos-con-aire]`).
@@ -130,7 +139,7 @@ export function CatalogoProductos({
           stockLabel={etiquetaStock(p)}
           showStock={mostrarStockEnCard(p)}
           // Final con IVA si se conoce; si no, el de siempre.
-          price={vv.precio}
+          price={medioPrimero ? (medio.precioFinal ?? medio.price) : vv.precio}
           priceNote={vv.nota}
           oldPrice={vv.esDesde ? undefined : p.oldPrice}
           badge={p.campania ? badgeCampania(p.campania) : (badgePromo(promoDe(p.sku), p) ?? badgeProducto(p))}
@@ -158,13 +167,22 @@ export function CatalogoProductos({
                     alt={i === 0 ? (f.alt ?? nombreParaMostrar) : (f.alt ?? "")}
                     fill
                     sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw"
-                    className="object-contain p-4"
+                    className={market ? "object-contain p-2" : "object-contain p-4"}
                   />
                 ))
               : [<LightbulbIcon key="sin-foto" className="h-12 w-12 text-muted/40" />]
           }
           installments={
-            reservarCuotas || reservarMedio ? (
+            market ? (
+              <>
+                {medioPrimero && <span className="block">{fmtPrecio(vv.precio)} con otros medios</span>}
+                {reservarCuotas && (
+                  <span className="block min-h-4.5">
+                    <CuotasCard opcion={vv.esDesde ? null : (cuotasPorProducto.get(p.id) ?? null)} />
+                  </span>
+                )}
+              </>
+            ) : reservarCuotas || reservarMedio ? (
               <>
                 {reservarMedio && (
                   <span className="block min-h-4">
@@ -181,9 +199,10 @@ export function CatalogoProductos({
           }
           action={
             vv.multiple ? (
-              <AccionOpciones producto={p} titulo={nombreParaMostrar} />
+              <AccionOpciones producto={p} titulo={nombreParaMostrar} compacto={market} />
             ) : (
               <AddToCartButton
+                compacto={market}
                 disabled={agotadoSinModalidad(p)}
                 max={maxCantidad(p)}
                 product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url, ...(p.campania ? { precioHasta: p.campania.fin } : {}) }}

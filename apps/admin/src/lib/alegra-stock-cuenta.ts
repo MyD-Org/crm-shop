@@ -13,6 +13,7 @@ import {
 import { escribirStock } from "./alegra-sync-cuenta"
 import { upsertProductosSecundaria } from "./catalog-products-repo"
 import { absorberSoloSecundaria, claveEfectivaSql, copiarOverlaySiFalta, listasDeLaPrincipal, normCodigoSql } from "./catalogo-union-repo"
+import { espejarItemDeCuenta } from "./catalog-precios-cuenta-repo"
 import { configParaCuenta } from "./sucursales-cuenta"
 import type { TenantConfig } from "./tenants"
 import type { TipoItem } from "./variantes-puras"
@@ -87,6 +88,15 @@ export async function refrescarItemDeCuenta(
   const cfg = configParaCuenta(base, cuenta)
   const item = await deps.getItem(cfg, idEnCuenta, opts)
   const sintetico = idCola
+
+  // Espejo de precios y costo (0104): se refresca con CUALQUIER aviso del ítem, sea cual sea su
+  // clasificación (pareado, propio, desconocido, baja), para ver rápido las ediciones manuales.
+  // Best-effort: no tira el refresco de stock.
+  try {
+    await espejarItemDeCuenta(tenantId, cuenta.id, idEnCuenta, item, leidoAt)
+  } catch (err) {
+    console.warn(`[alegra-stock-cuenta] tenant=${tenantId} cuenta=${cuenta.slug} espejo de precios falló: ${err instanceof Error ? err.name : "error"}`)
+  }
 
   // ¿Qué producto del catálogo es este ítem?
   const [enStock] = await db

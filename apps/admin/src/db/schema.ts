@@ -1431,6 +1431,35 @@ export const catalogStockSucursal = pgTable(
   ],
 )
 
+// ── Espejo de precios y costo de las cuentas SECUNDARIAS (change `listas-alegra-desde-costo`, R1, 0104) ──
+//
+// Una fila por ítem de la cuenta. `itemId` = id del ítem EN ESA CUENTA. `precios` = [{idPriceList,
+// name, price}]; `costo` = inventory.unitCost sin IVA (null = sin costo). SIN GRANT a shop_app y sin
+// vistas: el Shop no lo lee (el costo nunca viaja al Shop). La principal no tiene tabla: usa
+// `catalog_products.precios_alegra`.
+export const catalogPreciosCuenta = pgTable(
+  "catalog_precios_cuenta",
+  {
+    tenantId: text("tenant_id").notNull(),
+    cuentaId: uuid("cuenta_id").notNull(),
+    itemId: text("item_id").notNull(),
+    tipo: text("tipo").notNull().default("simple"),
+    estado: text("estado").notNull().default("active"),
+    precios: jsonb("precios").notNull().default(sql`'[]'::jsonb`),
+    costo: numeric("costo", { precision: 14, scale: 4 }),
+    leidoAt: timestamp("leido_at", { withTimezone: true }),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "catalog_precios_cuenta_pk", columns: [t.tenantId, t.cuentaId, t.itemId] }),
+    foreignKey({
+      name: "catalog_precios_cuenta_cuenta_fk",
+      columns: [t.tenantId, t.cuentaId],
+      foreignColumns: [alegraCuentas.tenantId, alegraCuentas.id],
+    }).onDelete("cascade"),
+  ],
+)
+
 // ── Cuenta de Alegra que factura cada pedido (change `sucursales-igz-mdp`, rebanada D, lote 3) ──
 //
 // Una fila por pedido cuando el operador eligió otra cuenta o cuando se emitió una factura. El

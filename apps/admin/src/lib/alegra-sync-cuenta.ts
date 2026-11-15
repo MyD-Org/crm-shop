@@ -22,6 +22,7 @@ import {
   listasDeLaPrincipal,
 } from "./catalogo-union-repo"
 import { avisarShop } from "./aviso-shop"
+import { borrarPreciosNoVistos, upsertPreciosCuenta } from "./catalog-precios-cuenta-repo"
 import { recalcularGruposTrasSync } from "./catalogo-variantes-repo"
 
 // Sync de una cuenta de Alegra SECUNDARIA (change `sucursales-igz-mdp`, rebanada D, design D3).
@@ -318,6 +319,16 @@ export async function syncCuentaSecundaria(
       runStart,
     )
 
+    // ── Espejo de precios y costo de la cuenta (0104): TODOS los ítems leídos, sin requests extra ──
+    // Best-effort: si falla (p. ej. migración sin aplicar) no se tira la sync del catálogo ni del stock.
+    let espejoOk = true
+    try {
+      await upsertPreciosCuenta(tenantId, cuenta.id, items, runStart)
+    } catch (err) {
+      espejoOk = false
+      console.warn(`[alegra-sync-cuenta] tenant=${tenantId} cuenta=${cuenta.slug} espejo de precios falló: ${err instanceof Error ? err.name : "error"}`)
+    }
+
     // ── Guarda de corrida incompleta (base propia de esta cuenta) ──
     const guarda = evaluarCorrida({ items: items.length, categorias: categorias.length }, baseCorrida, opts)
     if (guarda.parcial) {
@@ -348,6 +359,14 @@ export async function syncCuentaSecundaria(
           AND synced_at < ${runStart.toISOString()}::timestamptz
       `)
       await empujarNoVendiblesDeCuenta(tenantId, cuenta.id)
+      // Espejo de precios: lo que la lectura completa no vio se borra (sólo con lectura no parcial).
+      if (espejoOk) {
+        try {
+          await borrarPreciosNoVistos(tenantId, cuenta.id, runStart)
+        } catch (err) {
+          console.warn(`[alegra-sync-cuenta] tenant=${tenantId} cuenta=${cuenta.slug} limpieza del espejo de precios falló: ${err instanceof Error ? err.name : "error"}`)
+        }
+      }
     }
 
     // ── Resumen ──

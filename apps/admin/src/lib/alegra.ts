@@ -23,7 +23,11 @@ import {
   mockCreateRemission,
   mockBuscarItemsPorCodigo,
   mockCreateItem,
+  mockUpdateItemPrecios,
 } from "./mock-alegra"
+import { aCentavos, type PrecioItemInput } from "./alegra-precios-motor"
+
+export type { PrecioItemInput } from "./alegra-precios-motor"
 
 // Cliente de Alegra (productos, contactos, cotizaciones, listas de precio, formas de pago).
 // Auth HTTP Basic (email:token). Espejo del patrón de lib/flexxus.ts. Modo mock (alegraMock)
@@ -1020,6 +1024,143 @@ export async function getItemParaEspejo(
     if (err instanceof AlegraHttpError && err.status === 404) return null
     throw err
   }
+}
+
+// ── Escritura de precios de lista (change `listas-alegra-desde-costo`, R1) ──
+
+/**
+ * ¿El PUT de precios lleva `inventory` ({unit, unitCost})? `true` hasta que el sondeo
+ * (`scripts/sondear-put-precio.ts`) demuestre que Alegra acepta `price[]` solo SIN pisar el costo:
+ * entonces pasa a `false` y desaparece la carrera con el `unitCost` (compras, sync).
+ */
+export const PUT_INCLUYE_INVENTARIO = true
+/** ¿Se manda `inventory.negativeSale` cuando quien llama lo indica? Ver el sondeo (el GET no lo devuelve). */
+export const PUT_ENVIA_NEGATIVESALE = true
+
+/** El PUT contestó OK pero el ítem que devuelve no tiene el precio que se mandó. */
+export class AlegraPrecioNoPersistioError extends Error {
+  constructor(
+    readonly alegraId: string,
+    readonly idPriceList: string,
+    readonly enviado: number,
+    readonly recibido: number | null,
+  ) {
+    super(`Alegra no persistió el precio de la lista ${idPriceList} del ítem ${alegraId} (enviado ${enviado}, recibido ${recibido ?? "ninguno"}).`)
+    this.name = "AlegraPrecioNoPersistioError"
+  }
+}
+
+export interface ItemParaPrecios {
+  /** El ítem crudo tal cual vino del GET. */
+  raw: Record<string, unknown>
+  /** Precios actuales por lista, con el `idPriceList` en el tipo que usa Alegra (texto o número). */
+  price: PrecioItemInput[]
+  unit: string | null
+  /** inventory.unitCost tal cual (0 es 0); null si no viene. */
+  unitCost: number | null
+  tipo: TipoItem
+  status: string
+  item: AlegraProduct
+}
+
+function numeroODefault(v: unknown): number | null {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN
+  return Number.isFinite(n) ? n : null
+}
+
+/**
+ * GET inmediato previo a un PUT de precios: el ítem con lo que hace falta para armar el body
+ * (precios actuales, unidad y costo). Reusa `getItemParaEspejo`: 404 -> null, 429 ->
+ * AlegraRateLimitError, otro error -> AlegraHttpError.
+ */
+export async function getItemParaPrecios(
+  config: TenantConfig,
+  alegraId: string,
+  opts: { reintentos429?: number; onRequest?: () => void } = {},
+): Promise<ItemParaPrecios | null> {
+  const item = await getItemParaEspejo(config, alegraId, opts)
+  if (!item) return null
+  const raw = item.raw
+  const crudos = Array.isArray(raw.price) ? (raw.price as Record<string, unknown>[]) : null
+  const price: PrecioItemInput[] = crudos
+    ? crudos.map((p) => ({
+        idPriceList: (p.idPriceList ?? p.id) as string | number,
+        price: numeroODefault(p.price) ?? 0,
+      }))
+    : item.prices.map((p) => ({ idPriceList: p.idPriceList, price: p.price }))
+  const inv = raw.inventory as { unit?: unknown; unitCost?: unknown } | null | undefined
+  return {
+    raw,
+    price,
+    unit: inv && typeof inv.unit === "string" && inv.unit !== "" ? inv.unit : null,
+    unitCost: numeroODefault(inv?.unitCost),
+    tipo: item.tipo ?? "simple",
+    status: item.status,
+    item,
+  }
+}
+
+/**
+ * PUT /items/{id} con la lista de precios. `input.price` es el arreglo COMPLETO (ver
+ * `mergearPrecios`), en neto y con 2 decimales. Si `PUT_INCLUYE_INVENTARIO`, lleva `inventory` con
+ * `{unit, unitCost}` copiados del GET previo (más `negativeSale` si se pide y `PUT_ENVIA_NEGATIVESALE`).
+ *
+ *  - Una escritura NO se reintenta ante 5xx ni corte de red (puede haberse aplicado): lanza.
+ *    Sólo se reintenta el 429 (no procesa nada), `reintentos429` veces (default 1).
+ *  - Verifica la respuesta: cada lista enviada (o sólo `verificarListas`) tiene que volver con el
+ *    mismo precio en centavos; si no, `AlegraPrecioNoPersistioError`.
+ *  - Ítem inexistente: AlegraHttpError 404.
+ * Devuelve el ítem tal como quedó.
+ */
+export async function actualizarPreciosItem(
+  config: TenantConfig,
+  alegraId: string,
+  input: {
+    price: PrecioItemInput[]
+    inventory?: { unit: string; unitCost: number; negativeSale?: boolean }
+    /** `idPriceList` a verificar en la respuesta; por defecto, todos los enviados. */
+    verificarListas?: string[]
+  },
+  opts: { reintentos429?: number; onRequest?: () => void } = {},
+): Promise<AlegraProduct> {
+  const price = input.price.map((p) => {
+    const c = aCentavos(p.price)
+    if (c === null || c < 0) throw new Error(`Precio inválido para la lista ${String(p.idPriceList)}`)
+    return { idPriceList: p.idPriceList, price: c / 100 }
+  })
+  const inv = PUT_INCLUYE_INVENTARIO ? input.inventory : undefined
+  const body: Record<string, unknown> = { price }
+  if (inv) {
+    body.inventory = {
+      unit: inv.unit,
+      unitCost: inv.unitCost,
+      ...(PUT_ENVIA_NEGATIVESALE && inv.negativeSale !== undefined ? { negativeSale: inv.negativeSale } : {}),
+    }
+  }
+
+  let item: AlegraProduct
+  if (config.alegraMock) {
+    const r = mockUpdateItemPrecios(alegraId, { price, inventory: body.inventory })
+    if (r === "429") throw new AlegraRateLimitError(`/items/${alegraId}`, "mock")
+    if (!r) throw new AlegraHttpError(404, `/items/${alegraId}`, "mock")
+    item = r
+  } else {
+    const raw = (await alegraFetch(config, `/items/${encodeURIComponent(alegraId)}`, undefined, { method: "PUT", body }, {
+      reintentos429: opts.reintentos429 ?? 1,
+      onRequest: opts.onRequest,
+    })) as Record<string, unknown>
+    item = mapRawItem(raw)
+  }
+
+  const devueltos = new Map(item.prices.map((p) => [String(p.idPriceList), aCentavos(p.price)]))
+  const verificar = (input.verificarListas ?? price.map((p) => String(p.idPriceList))).map(String)
+  for (const id of verificar) {
+    const enviado = price.find((p) => String(p.idPriceList) === id)
+    if (!enviado) continue
+    const recibido = devueltos.get(id) ?? null
+    if (recibido !== aCentavos(enviado.price)) throw new AlegraPrecioNoPersistioError(alegraId, id, enviado.price, recibido === null ? null : recibido / 100)
+  }
+  return item
 }
 
 // ── Alta de ítems al facturar por otra cuenta (change `sucursales-igz-mdp`, D6) ──

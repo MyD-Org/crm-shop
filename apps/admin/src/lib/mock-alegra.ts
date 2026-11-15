@@ -295,3 +295,48 @@ export function mockCreateItem(input: AlegraItemCreateInput): AlegraProduct {
   itemsCreados.push(creado)
   return creado
 }
+
+// ── PUT de precios de un ítem (change `listas-alegra-desde-costo`, R1) ──
+// En memoria del proceso (como los ítems creados): sobre el "vivo" del ítem (`getMockItemLive`).
+// `__setMockPutModo` simula los dos fallos que importan: el límite de requests y el PUT que Alegra
+// acepta pero no persiste.
+export type MockPutModo = "ok" | "429" | "no_persiste"
+type BodyPut = { price: { idPriceList: string | number; price: number }[]; inventory?: unknown }
+let mockPutModo: MockPutModo = "ok"
+const putsRecibidos: { alegraId: string; body: BodyPut }[] = []
+
+export function __setMockPutModo(modo: MockPutModo) {
+  mockPutModo = modo
+}
+/** Vuelve el mock del PUT a su estado inicial (modo "ok", sin PUTs registrados, sin precios pisados). */
+export function __resetMockPut() {
+  mockPutModo = "ok"
+  putsRecibidos.length = 0
+  for (const it of mockItems) {
+    const patch = liveOverrides.get(it.alegraId)
+    if (patch) delete patch.prices
+  }
+}
+export function __mockPutsRecibidos() {
+  return putsRecibidos
+}
+
+/**
+ * `"429"` si el modo simula el límite; `null` si el ítem no existe; si no, el ítem tal como queda
+ * (con los precios nuevos, o sin cambios si el modo es `no_persiste`).
+ */
+export function mockUpdateItemPrecios(alegraId: string, body: BodyPut): AlegraProduct | null | "429" {
+  if (mockPutModo === "429") return "429"
+  const actual = getMockItemLive(alegraId)
+  if (!actual) return null
+  putsRecibidos.push({ alegraId, body })
+  if (mockPutModo === "no_persiste") return actual
+  const nombres = new Map(actual.prices.map((p) => [String(p.idPriceList), p.name]))
+  const prices = body.price.map((p) => ({
+    idPriceList: String(p.idPriceList),
+    name: nombres.get(String(p.idPriceList)) ?? "",
+    price: p.price,
+  }))
+  __setMockLiveOverride(alegraId, { ...(liveOverrides.get(alegraId) ?? {}), prices })
+  return getMockItemLive(alegraId)
+}

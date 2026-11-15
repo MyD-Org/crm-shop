@@ -437,6 +437,34 @@ reintentar más tarde o pasar por Actions.
 
 ---
 
+## Escritura de precios en Alegra y espejo de precios de la cuenta secundaria
+
+Cimientos del change `listas-alegra-desde-costo` (rebanada R1). Todavía **no hay UI ni nada que
+escriba precios solo**: sólo las piezas que usarán las rebanadas siguientes.
+
+- **PUT de precios** (`lib/alegra.ts`): `getItemParaPrecios` (GET previo: precios con su tipo de
+  `idPriceList`, unidad y costo) y `actualizarPreciosItem` (PUT `/items/{id}` con el arreglo `price`
+  completo, en neto y con 2 decimales; `inventory {unit, unitCost}` según `PUT_INCLUYE_INVENTARIO`).
+  Una escritura **no se reintenta** ante 5xx o corte de red; sólo el 429 (una vez). Verifica la
+  respuesta: si un precio enviado no vuelve igual, lanza `AlegraPrecioNoPersistioError`.
+  `mergearPrecios` y `aCentavos` (`lib/alegra-precios-motor.ts`) arman el arreglo completo
+  conservando las listas ajenas y comparan en centavos. El mock (`alegraMock`) soporta el PUT.
+- **Sondeo** (`scripts/sondear-put-precio.ts`): no hay cuenta de Alegra de prueba, así que crea un
+  ítem descartable `PRUEBA-SONDEO` en la cuenta indicada, prueba sobre él y lo elimina. Responde si el
+  PUT acepta sólo `price[]` sin pisar el costo, si conserva la venta en negativo, los decimales y si
+  un `price[]` parcial borra las otras listas. `--ensayo` (por defecto) no usa red ni base;
+  `--ejecutar` escribe en la cuenta real. Cuenta: `--cuenta principal|mdp`. Con el resultado se fijan
+  `PUT_INCLUYE_INVENTARIO` y `PUT_ENVIA_NEGATIVESALE`.
+- **Espejo de precios de la cuenta secundaria** (`catalog_precios_cuenta`, migración 0104): precios
+  por lista y costo de **todos** los ítems de la cuenta, con `leido_at`. Lo llena
+  `syncCuentaSecundaria` con los ítems que ya lee (cero requests de más) y lo refresca el webhook de
+  la cuenta (`refrescarItemDeCuenta`). Guarda de frescura: una lectura vieja no pisa una nueva; los
+  ítems no vistos se borran sólo si la lectura no fue parcial. Es **sólo del CRM** (sin GRANT a
+  `shop_app`). Si escribir el espejo falla, la sync del catálogo y del stock sigue. La cuenta
+  principal no tiene tabla: sus precios están en `catalog_products.precios_alegra`.
+
+---
+
 ## Espejo de contactos de Alegra
 
 Copia del padrón de contactos de cada cuenta de Alegra en la base del CRM, para que nada

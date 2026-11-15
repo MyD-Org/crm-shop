@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Alegra: columnas de ítems",
+  "version": "0.2.0",
+  "description": "Personaliza la grilla de productos de presupuestos y remitos de Alegra: columnas con IVA, ocultar y reordenar.",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "Columnas de Alegra",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://app.alegra.com/*"],
+      "js": ["config.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

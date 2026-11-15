@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { esIdDireccion } from "@/lib/direcciones-envio";
-import { listarDirecciones } from "@/lib/direcciones-envio-db";
+import { esIdDireccion, validarDireccion } from "@/lib/direcciones-envio";
+import { crearDireccion, DireccionesLlenasError, listarDirecciones } from "@/lib/direcciones-envio-db";
+import { claveTexto } from "@/lib/texto-clave";
 import { GeorefError, localidadPorId } from "@/lib/georef";
 import { verificarGeo } from "@/lib/geo-token";
 import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
@@ -115,6 +116,8 @@ async function elegirLocalidad(id: unknown, cpEntrada: unknown, calle?: unknown,
     if (calle !== undefined) {
       const exacta = await puntoExacto(calle, geoToken, ubicacion.provincia, ubicacion.localidad);
       if (!exacta) return errorUbicacion(TEXTOS_UBICACION.direccionSinVerificar, 400);
+      const guardada = await guardarEnSusDirecciones(exacta.calle, exacta.geoToken);
+      if (guardada) return guardada;
       const eleccion = armarEleccion({ tipo: "envio", ...ubicacion, ...exacta });
       if (!eleccion) return errorUbicacion(TEXTOS_UBICACION.direccionSinVerificar, 400);
       return respuestaConEleccion(eleccion);
@@ -133,9 +136,45 @@ async function elegirCalle(calle: unknown, geoToken: unknown, cp: unknown): Prom
   const ubicacion = g && armarUbicacion({ localidad: g.ciudad, provincia: claveProvincia(g.provincia) });
   if (!ubicacion) return errorUbicacion(TEXTOS_UBICACION.direccionSinVerificar, 400);
   const exacta = await puntoExacto(calle, geoToken, ubicacion.provincia, ubicacion.localidad);
-  const eleccion = exacta && armarEleccion({ tipo: "envio", ...ubicacion, ...exacta });
+  if (!exacta) return errorUbicacion(TEXTOS_UBICACION.direccionSinVerificar, 400);
+  const guardada = await guardarEnSusDirecciones(exacta.calle, exacta.geoToken);
+  if (guardada) return guardada;
+  const eleccion = armarEleccion({ tipo: "envio", ...ubicacion, ...exacta });
   if (!eleccion) return errorUbicacion(TEXTOS_UBICACION.direccionSinVerificar, 400);
   return respuestaConEleccion(eleccion);
+}
+
+/**
+ * Con sesión, la calle elegida (ya verificada) queda en «Mis direcciones» y la elección pasa a ser esa
+ * dirección guardada: así el checkout la ofrece como cualquier otra, sin vencer a las 24 h. Si ya tiene una
+ * con la misma calle y ciudad se reusa. Sin sesión, sin CP válido o con el tope de direcciones: null, y queda
+ * la calle exacta en la cookie como antes. Nunca rompe la elección: un error al guardar se loguea y sigue.
+ */
+async function guardarEnSusDirecciones(calle: string, geoToken: string): Promise<NextResponse | null> {
+  const { userId } = await auth();
+  if (!userId) return null;
+  const g = verificarGeo(geoToken, { calle });
+  if (!g) return null;
+  const v = validarDireccion({ calle, ciudad: g.ciudad, provincia: g.provincia, cp: g.cp });
+  if (!v.ok) return null;
+  try {
+    const existentes = await listarDirecciones(userId);
+    const misma = existentes.find((d) => claveTexto(d.calle) === claveTexto(calle) && claveTexto(d.ciudad) === claveTexto(g.ciudad));
+    const d = misma ?? (await crearDireccion(userId, v.datos, { lat: g.lat, lon: g.lon }));
+    const eleccion = armarEleccion({
+      tipo: "envio",
+      localidad: d.ciudad,
+      provincia: claveProvincia(d.provincia),
+      cp: d.cp,
+      direccionId: d.id,
+    });
+    return eleccion ? respuestaConEleccion(eleccion) : null;
+  } catch (err) {
+    if (!(err instanceof DireccionesLlenasError)) {
+      console.error("[ubicacion] no se pudo guardar la dirección:", err instanceof Error ? err.message : "error");
+    }
+    return null;
+  }
 }
 
 /**

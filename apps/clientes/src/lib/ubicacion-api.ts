@@ -41,7 +41,7 @@ const OPCIONES_COOKIE = () =>
  * Respuesta con la elección y la cookie puesta. El cuerpo es aditivo: `tipo` siempre; en envío
  * `localidad`/`provincia`; en retiro `sucursal` (slug) si la hay.
  */
-export function respuestaConEleccion(c: CookieUbicacion): NextResponse {
+export function respuestaConEleccion(c: CookieUbicacion, extra?: Record<string, string>): NextResponse {
   const cuerpo =
     c.tipo === "retiro"
       ? { tipo: "retiro" as const, ...(c.sucursal ? { sucursal: c.sucursal } : {}) }
@@ -53,7 +53,7 @@ export function respuestaConEleccion(c: CookieUbicacion): NextResponse {
           // Sólo la calle mostrable (para avisar qué se detectó): ni el token ni coordenadas.
           ...(c.calle && c.geoToken ? { calle: c.calle } : {}),
         };
-  const res = NextResponse.json(cuerpo);
+  const res = NextResponse.json(extra ? { ...cuerpo, ...extra } : cuerpo);
   res.cookies.set(COOKIE_UBICACION, armarCookie(c), OPCIONES_COOKIE());
   return res;
 }

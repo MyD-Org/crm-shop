@@ -11,7 +11,12 @@ let sucursales: Record<string, unknown>[] = [];
 const listarDirecciones = vi.fn<(...a: unknown[]) => Promise<typeof direcciones>>(async () => direcciones);
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId }) }));
-vi.mock("@/lib/direcciones-envio-db", () => ({ listarDirecciones: (...a: unknown[]) => listarDirecciones(...a) }));
+const crearDireccion = vi.fn<(...a: unknown[]) => Promise<Record<string, unknown>>>();
+vi.mock("@/lib/direcciones-envio-db", () => ({
+  listarDirecciones: (...a: unknown[]) => listarDirecciones(...a),
+  crearDireccion: (...a: unknown[]) => crearDireccion(...a),
+  DireccionesLlenasError: class DireccionesLlenasError extends Error {},
+}));
 vi.mock("@/lib/sucursales-datos", () => ({ sucursalesCacheadas: async () => ({ sucursales, zonas: [] }) }));
 vi.mock("@/lib/sucursales-repo", async (orig) => ({
   ...(await orig<typeof import("@/lib/sucursales-repo")>()),
@@ -276,6 +281,33 @@ describe("POST /api/ubicacion: localidad + calle exacta (envío por zona)", () =
     const mala = await post({ calle: "Otra 1", geoToken });
     expect(mala.status).toBe(400);
     sinCookie(mala);
+  });
+
+  it("con sesión: la calle queda en sus direcciones (con las coordenadas del token) y se elige esa", async () => {
+    userId = "user_1";
+    direcciones = [];
+    crearDireccion.mockImplementation(async (_u, datos) => ({ id: DIR_ID, etiqueta: null, referencias: null, predeterminada: true, ...(datos as object) }));
+    const geoToken = token("Rivadavia 100");
+    const res = await post({ calle: "Rivadavia 100", geoToken });
+    expect(res.status).toBe(200);
+    expect(crearDireccion).toHaveBeenCalledWith(
+      "user_1",
+      expect.objectContaining({ calle: "Rivadavia 100", ciudad: "Coronel Vidal", cp: "7174" }),
+      { lat: -37.4, lon: -57.7 },
+    );
+    expect(cookieGuardada(res).valor).toMatchObject({ direccionId: DIR_ID });
+    userId = null;
+  });
+
+  it("con sesión y la misma calle ya guardada: la reusa sin crear otra", async () => {
+    userId = "user_1";
+    direcciones = [{ ...guardada, calle: "Rivadavia 100", ciudad: "Coronel Vidal", provincia: "Buenos Aires", cp: "7174" }];
+    crearDireccion.mockClear();
+    const res = await post({ calle: "Rivadavia 100", geoToken: token("Rivadavia 100") });
+    expect(res.status).toBe(200);
+    expect(crearDireccion).not.toHaveBeenCalled();
+    expect(cookieGuardada(res).valor).toMatchObject({ direccionId: DIR_ID });
+    userId = null;
   });
 
   it("flag apagado: no acepta la calle (400)", async () => {

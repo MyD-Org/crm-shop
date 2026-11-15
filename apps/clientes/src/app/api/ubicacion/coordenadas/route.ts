@@ -4,11 +4,11 @@ import { permitirAsync } from "@/lib/rate-limit";
 import { TEXTOS_UBICACION, armarEleccion, armarUbicacion } from "@/lib/ubicacion";
 import { envioPorZonaHabilitado } from "@/lib/envio-zona-flag";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
-import { localidadAtendidaEn } from "@/lib/ubicacion-zona";
+import { localidadAtendidaEn, zonaDelPunto } from "@/lib/ubicacion-zona";
 import { demasiadasConsultas, errorUbicacion, ipDe, respuestaConEleccion } from "@/lib/ubicacion-api";
 import { calleDelPunto } from "@/lib/reverse-geocode";
 import { firmarGeo, geoFirmaConfigurada } from "@/lib/geo-token";
-import { cotizarMetodo, type MetodoEnvio } from "@/lib/envio-zona";
+import type { MetodoEnvio } from "@/lib/envio-zona";
 import { nombreProvincia } from "@/lib/envio";
 
 /**
@@ -24,28 +24,6 @@ import { nombreProvincia } from "@/lib/envio";
 const MAX_POR_MINUTO = 10;
 /** Techo global de reverse por minuto (todos los visitantes): la política de Nominatim pide ≤ 1 por segundo. */
 const REVERSE_POR_MINUTO_GLOBAL = 30;
-
-/** Nombre de la zona que resuelve el punto con las mismas reglas que el pedido; null = ninguna. */
-function zonaDelPunto(
-  metodos: MetodoEnvio[],
-  provinciaClave: string,
-  localidad: string,
-  cp: string,
-  lat: number,
-  lon: number,
-  precision: "altura" | "calle",
-): string | null {
-  const ordenados = [...metodos].filter((m) => m.activo).sort((a, b) => a.orden - b.orden);
-  for (const m of ordenados) {
-    const r = cotizarMetodo(
-      m,
-      { provinciaClave, localidad, cp: cp || null, punto: { lat, lon, precision } },
-      { origen: null, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false },
-    );
-    if (r) return r.zona;
-  }
-  return null;
-}
 
 export async function POST(req: Request) {
   if (!await permitirAsync(`ubicacion-coord:${ipDe(req)}`, MAX_POR_MINUTO, 60_000)) return demasiadasConsultas();

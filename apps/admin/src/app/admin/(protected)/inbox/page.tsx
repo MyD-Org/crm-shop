@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation"
 import { cookies } from "next/headers"
 import { getIronSession } from "iron-session"
 import { eq } from "drizzle-orm"
@@ -10,7 +11,7 @@ import { listEnrichedContacts } from "@/lib/inbox-contacts"
 import { listarNombres } from "@/lib/inbox-canales-repo"
 import { filtrarNombres, filtrarNumerosRaw, type ActorCanales } from "@/lib/canal-acceso"
 import { parseWhatsappNumbers } from "@/lib/inbox-canales"
-import { roleRank } from "@/lib/roles"
+import { isKnownAdminRole, roleRank } from "@/lib/roles"
 import { casillasAccesibles } from "@/lib/correo-acceso"
 import { correoHabilitado } from "@/lib/correo-flag"
 import { contarNoLeidosPorCasilla } from "@/lib/correo-repo"
@@ -34,6 +35,8 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   // Política de canales con la fila FRESCA del usuario (no la cookie). Si no se puede resolver
   // se asume restringido sin canales (fail-closed): el layout protegido ya cubre el caso sin sesión.
   const guardedUser = await getGuardedAdminSession().catch(() => null)
+  // Allow-list: el rol «compras» no entra al inbox (la fila fresca manda, no la cookie).
+  if (guardedUser?.ok === true && !isKnownAdminRole(guardedUser.user.role)) notFound()
   const actor: ActorCanales =
     guardedUser?.ok === true
       ? guardedUser.user

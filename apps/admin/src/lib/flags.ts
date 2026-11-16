@@ -44,3 +44,20 @@ export const correoFlag = flagVercel<boolean>({
   defaultValue: false,
   adapter: vercelAdapter,
 })
+
+// Compras en tránsito (change `compras-en-transito`). Dos flags en Vercel Flags, apagados por
+// default; se crean con `vercel flags create <key>` y se prenden primero en Preview/staging.
+// Nadie los llama directo: ver lib/compras-flag.ts.
+export const comprasEnTransitoFlag = flagVercel<boolean>({
+  key: "compras-en-transito",
+  description: "Compras en tránsito: menú, páginas y APIs del módulo Compras del admin",
+  defaultValue: false,
+  adapter: vercelAdapter,
+})
+
+export const comprasRecepcionFlag = flagVercel<boolean>({
+  key: "compras-recepcion",
+  description: "Compras: Recibir, Cerrar con faltante y Editar (sólo con compras-en-transito prendido)",
+  defaultValue: false,
+  adapter: vercelAdapter,
+})

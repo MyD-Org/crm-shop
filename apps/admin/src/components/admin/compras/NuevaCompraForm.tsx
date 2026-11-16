@@ -7,6 +7,7 @@ import { ivaBpDePorcentaje, totalDeLineasCentavos } from "@/lib/compras-dinero"
 import { IVA_SOPORTADOS, validarEntradaCompra } from "@/lib/compras-entrada"
 import { AVISO_COSTO_PROMEDIO, formatoPesos } from "@/lib/compras-formato"
 import { ConfigCuentaDialog } from "./ConfigCuentaDialog"
+import { LectorFacturaPdf, type LecturaFactura } from "./LectorFacturaPdf"
 import { ProductoAltaDialog, type ModoAlta } from "./ProductoAltaDialog"
 
 // «Nueva compra» (y edición de ítems/percepciones de una compra pendiente). Toda escritura en Alegra
@@ -97,6 +98,7 @@ export function NuevaCompraForm({ cuentas, percepcionesPorCuenta, esAdmin, inici
   const [error, setError] = useState<{ mensaje: string; codigo?: string } | null>(null)
   const [aviso, setAviso] = useState<{ mensaje: string; compraId: string } | null>(null)
   const [configAbierta, setConfigAbierta] = useState(false)
+  const [lectura, setLectura] = useState<LecturaFactura | null>(null)
   const enviandoRef = useRef(false)
 
   const nombreCuenta = cuentas.find((c) => c.slug === cuenta)?.nombre ?? cuenta
@@ -110,6 +112,26 @@ export function NuevaCompraForm({ cuentas, percepcionesPorCuenta, esAdmin, inici
     setItems([])
     setPercepciones([])
     setError(null)
+  }
+
+  // Lectura del PDF: completa el formulario (reemplaza lo cargado); el usuario revisa antes de registrar.
+  function aplicarLectura(l: LecturaFactura) {
+    setLectura(l)
+    setError(null)
+    if (l.proveedor) setProveedor(l.proveedor)
+    setNumero(l.numeroFactura ?? "")
+    if (l.fecha) setFecha(l.fecha)
+    setVencimiento(l.vencimiento ?? l.fecha ?? vencimiento)
+    setItems(
+      l.items.map((i) => ({
+        alegraId: i.alegraId,
+        nombre: i.nombre,
+        codigo: i.codigo,
+        cantidad: String(i.cantidad),
+        costo: i.costo.toFixed(2),
+        iva: ivaInicial(i.ivaPct),
+      })),
+    )
   }
 
   // ── Armado y validación (la misma función pura que usa el servidor) ──
@@ -208,6 +230,8 @@ export function NuevaCompraForm({ cuentas, percepcionesPorCuenta, esAdmin, inici
           )}
         </Alert>
       )}
+
+      {!edicion && <LectorFacturaPdf cuenta={cuenta} lectura={lectura} netoFormulario={totales?.neto ?? null} onLeida={aplicarLectura} />}
 
       <Card title="Factura del proveedor">
         <div className="grid gap-4 md:grid-cols-2">

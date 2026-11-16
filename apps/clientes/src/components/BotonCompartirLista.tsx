@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { Button, DropdownMenu, useToast } from "@myd-org/ui";
+import { Button, DropdownMenu, cn, useToast } from "@myd-org/ui";
 import { hrefWhatsApp, mensajeCompartido } from "@/lib/carrito-compartido";
 
 function IconoCompartir() {
@@ -47,14 +47,16 @@ export interface TextosToastCompartir {
 }
 
 /**
- * Compartir una lista (carrito, pedido, favoritos) con un menú propio:
+ * Compartir (ficha, carrito, pedido, favoritos) con un menú propio, el mismo en
+ * todo el Shop:
  * WhatsApp (el canal de casi todos), copiar el enlace y, sólo donde existe
  * `navigator.share`, "Más opciones" para abrir la hoja del sistema a pedido. No
  * se abre la hoja nativa de entrada: en escritorio ofrece AirDrop, Notas o
  * Recordatorios y no WhatsApp.
  *
  * `href` es la ruta relativa a compartir (ver src/lib/carrito-compartido.ts):
- * quien la abre ve los precios de SU lista. `mensaje` es el encabezado del
+ * quien la abre ve los precios de SU lista. Sin `href` se comparte la dirección
+ * actual tal cual (la ficha: refleja la opción elegida sin recargar). `mensaje` es el encabezado del
  * texto que se manda a un tercero; vive en lib.
  */
 export function BotonCompartirLista({
@@ -65,8 +67,10 @@ export function BotonCompartirLista({
   aviso,
   disabled = false,
   size = "sm",
+  soloIcono = false,
+  className,
 }: {
-  href: string;
+  href?: string;
   label: string;
   mensaje: string;
   toast: TextosToastCompartir;
@@ -75,6 +79,10 @@ export function BotonCompartirLista({
   disabled?: boolean;
   /** Igual que el resto de la fila de acciones donde se lo pone. */
   size?: "sm" | "md";
+  /** Botón redondo sólo con el ícono; `label` queda como nombre accesible. */
+  soloIcono?: boolean;
+  /** Clases del botón (p. ej. el color del ícono en la card). */
+  className?: string;
 }) {
   const { toast } = useToast();
   // false en el servidor: el ítem aparece recién en el navegador que la tenga.
@@ -84,7 +92,7 @@ export function BotonCompartirLista({
     () => false,
   );
 
-  const urlCompartida = () => `${window.location.origin}${href}`;
+  const urlCompartida = () => (href ? `${window.location.origin}${href}` : window.location.href);
 
   function porWhatsApp() {
     window.open(hrefWhatsApp(urlCompartida(), mensaje), "_blank", "noopener,noreferrer");
@@ -129,10 +137,24 @@ export function BotonCompartirLista({
           : []),
       ]}
     >
-      <Button type="button" variant="outline" size={size} disabled={disabled}>
-        <IconoCompartir />
-        {label}
-      </Button>
+      {soloIcono ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          shape="round"
+          aria-label={label}
+          disabled={disabled}
+          className={cn(className)}
+        >
+          <IconoCompartir />
+        </Button>
+      ) : (
+        <Button type="button" variant="outline" size={size} disabled={disabled} className={cn(className)}>
+          <IconoCompartir />
+          {label}
+        </Button>
+      )}
     </DropdownMenu>
   );
 }

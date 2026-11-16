@@ -149,7 +149,6 @@ export function CatalogoProductos({
             <div className="flex flex-col gap-1.5">
               <BotonFavorito productId={p.id} />
               <BotonCompartir
-                titulo={nombreParaMostrar}
                 href={`/producto/${p.id}`}
                 className="text-muted hover:text-text"
               />

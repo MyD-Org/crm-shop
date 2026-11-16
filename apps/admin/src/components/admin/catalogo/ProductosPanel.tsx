@@ -624,6 +624,7 @@ export function ProductosPanel({ categorias, tags, modalidades, cuentas, sucursa
             { value: TODOS, label: "Tienda: todos" },
             { value: "visible", label: "Tienda: publicados" },
             { value: "oculto", label: "Tienda: ocultos" },
+            { value: "sin-publicar", label: "Tienda: sin publicar" },
           ]}
         />
         <Select

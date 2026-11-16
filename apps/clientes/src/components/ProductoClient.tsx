@@ -307,27 +307,17 @@ export function ProductoClient({
 
   const detalle = (
     <>
-      {(producto.description || producto.fichaTecnicaUrl) && (
-        <section aria-labelledby={producto.description ? "descripcion-titulo" : undefined}>
-          {producto.description && (
-            <>
-              <h2 id="descripcion-titulo" className="mb-3 font-display text-lg font-semibold text-text">
-                Descripción
-              </h2>
-              <p className="max-w-prose whitespace-pre-line text-[15px] leading-relaxed text-text">
-                {formatDescripcionProducto(
-                  producto.description,
-                  producto.brand ? formatMarca(producto.brand) : undefined
-                )}
-              </p>
-            </>
-          )}
-          {/* Ficha técnica: sólo si el CRM cargó un PDF para este producto. */}
-          {producto.fichaTecnicaUrl && (
-            <div className={producto.description ? "mt-4" : undefined}>
-              <FichaTecnicaModal url={producto.fichaTecnicaUrl} nombreProducto={nombreParaMostrar} />
-            </div>
-          )}
+      {producto.description && (
+        <section aria-labelledby="descripcion-titulo">
+          <h2 id="descripcion-titulo" className="mb-3 font-display text-lg font-semibold text-text">
+            Descripción
+          </h2>
+          <p className="max-w-prose whitespace-pre-line text-[15px] leading-relaxed text-text">
+            {formatDescripcionProducto(
+              producto.description,
+              producto.brand ? formatMarca(producto.brand) : undefined
+            )}
+          </p>
         </section>
       )}
       <EspecificacionesProducto filas={producto.especificaciones} />
@@ -368,7 +358,7 @@ export function ProductoClient({
               nombre={nombreParaMostrar}
               acciones={
                 <>
-                  <BotonCompartir titulo={nombreParaMostrar} />
+                  <BotonCompartir />
                   {/* En desktop el favorito va junto al botón de compra. */}
                   <span className="lg:hidden">
                     <BotonFavorito productId={producto.id} />
@@ -494,6 +484,11 @@ export function ProductoClient({
               </p>
             )}
             {ofreceAviso && <AvisoReingresoForm key={producto.id} alegraId={producto.id} />}
+
+            {/* Ficha técnica: sólo si el CRM cargó un PDF. En la columna de compra para que se vea sin bajar. */}
+            {producto.fichaTecnicaUrl && (
+              <FichaTecnicaModal url={producto.fichaTecnicaUrl} nombreProducto={nombreParaMostrar} />
+            )}
 
             <EntregaProducto
               configEnvio={configEnvio}

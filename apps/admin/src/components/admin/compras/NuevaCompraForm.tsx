@@ -111,6 +111,7 @@ export function NuevaCompraForm({ cuentas, percepcionesPorCuenta, esAdmin, inici
     setProveedor(null)
     setItems([])
     setPercepciones([])
+    setLectura(null)
     setError(null)
   }
 
@@ -200,6 +201,19 @@ export function NuevaCompraForm({ cuentas, percepcionesPorCuenta, esAdmin, inici
     }
   }
 
+  // La cuenta se elige ANTES de leer el PDF: el lector busca proveedor y productos en esa cuenta.
+  const selectorCuenta = (
+    <Field label="Cuenta de Alegra" hint="La factura se registra en esta cuenta.">
+      <Select
+        value={cuenta}
+        onValueChange={cambiarCuenta}
+        disabled={edicion}
+        options={cuentas.map((c) => ({ label: c.nombre, value: c.slug }))}
+        aria-label="Cuenta de Alegra"
+      />
+    </Field>
+  )
+
   if (aviso) {
     return (
       <Alert tone="warning" title="Compra pendiente de verificación">
@@ -231,19 +245,25 @@ export function NuevaCompraForm({ cuentas, percepcionesPorCuenta, esAdmin, inici
         </Alert>
       )}
 
-      {!edicion && <LectorFacturaPdf cuenta={cuenta} lectura={lectura} netoFormulario={totales?.neto ?? null} onLeida={aplicarLectura} />}
+      {!edicion && (
+        <LectorFacturaPdf
+          cuenta={cuenta}
+          lectura={lectura}
+          netoFormulario={totales?.neto ?? null}
+          onLeida={aplicarLectura}
+          selectorCuenta={selectorCuenta}
+        />
+      )}
 
       <Card title="Factura del proveedor">
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Cuenta de Alegra" hint="La factura se registra en esta cuenta.">
-            <Select
-              value={cuenta}
-              onValueChange={cambiarCuenta}
-              disabled={edicion}
-              options={cuentas.map((c) => ({ label: c.nombre, value: c.slug }))}
-              aria-label="Cuenta de Alegra"
-            />
-          </Field>
+          {edicion ? (
+            selectorCuenta
+          ) : (
+            <Field label="Cuenta de Alegra" hint="Se elige arriba, antes de subir el PDF.">
+              <p className="py-2 text-sm" style={{ color: "var(--ink)" }}>{nombreCuenta}</p>
+            </Field>
+          )}
           <ProveedorBuscador cuenta={cuenta} proveedor={proveedor} onChange={setProveedor} deshabilitado={edicion} />
           <Field label="Número de factura">
             <Input value={numero} onChange={(e) => setNumero(e.target.value)} disabled={edicion} placeholder="0001-00000123" />

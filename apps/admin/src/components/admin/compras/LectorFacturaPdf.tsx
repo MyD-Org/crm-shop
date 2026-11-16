@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import { Alert, Button, Card } from "@myd-org/ui"
 import { formatoPesos } from "@/lib/compras-formato"
 
@@ -29,8 +29,11 @@ export function LectorFacturaPdf({
   lectura,
   netoFormulario,
   onLeida,
+  selectorCuenta,
 }: {
   cuenta: string
+  /** Selector de la cuenta de Alegra: va primero, porque el PDF se lee contra esa cuenta. */
+  selectorCuenta: ReactNode
   lectura: LecturaFactura | null
   /** Neto actual del formulario, en centavos (null si el formulario todavía no valida). */
   netoFormulario: number | null
@@ -70,8 +73,9 @@ export function LectorFacturaPdf({
   return (
     <Card
       title="Leer factura (PDF)"
-      description="Suba el PDF del proveedor para completar el formulario. Revise los datos antes de registrar la compra."
+      description="1. Elija la cuenta de Alegra. 2. Suba el PDF del proveedor para completar el formulario. Revise los datos antes de registrar la compra."
     >
+      <div className="mb-4 max-w-md">{selectorCuenta}</div>
       <input
         ref={input}
         type="file"

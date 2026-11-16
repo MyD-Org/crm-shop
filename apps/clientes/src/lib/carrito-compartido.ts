@@ -95,6 +95,7 @@ export function separarDisponibles(items: CartItem[]): {
 export const MENSAJE_CARRITO = "Te comparto mi carrito";
 export const MENSAJE_PEDIDO = "Te comparto mi pedido";
 export const MENSAJE_FAVORITOS = "Te comparto mi lista de favoritos";
+export const MENSAJE_PRODUCTO = "Te comparto este producto";
 
 export function mensajeCompartido(url: string, texto: string = MENSAJE_CARRITO): string {
   return `${texto}: ${url}`;

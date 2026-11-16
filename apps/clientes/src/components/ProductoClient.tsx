@@ -358,7 +358,7 @@ export function ProductoClient({
               nombre={nombreParaMostrar}
               acciones={
                 <>
-                  <BotonCompartir titulo={nombreParaMostrar} />
+                  <BotonCompartir />
                   {/* En desktop el favorito va junto al botón de compra. */}
                   <span className="lg:hidden">
                     <BotonFavorito productId={producto.id} />

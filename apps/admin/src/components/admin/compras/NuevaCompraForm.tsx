@@ -7,6 +7,7 @@ import { ivaBpDePorcentaje, totalDeLineasCentavos } from "@/lib/compras-dinero"
 import { IVA_SOPORTADOS, validarEntradaCompra } from "@/lib/compras-entrada"
 import { AVISO_COSTO_PROMEDIO, formatoPesos } from "@/lib/compras-formato"
 import { ConfigCuentaDialog } from "./ConfigCuentaDialog"
+import { ProductoAltaDialog, type ModoAlta } from "./ProductoAltaDialog"
 
 // «Nueva compra» (y edición de ítems/percepciones de una compra pendiente). Toda escritura en Alegra
 // pasa por una confirmación previa; la clave de idempotencia se genera al abrir el formulario, así
@@ -247,6 +248,7 @@ export function NuevaCompraForm({ cuentas, percepcionesPorCuenta, esAdmin, inici
       <Card title="Productos" description="Cantidad y costo unitario NETO (sin IVA) según la factura.">
         <ProductoBuscador
           cuenta={cuenta}
+          nombreCuenta={nombreCuenta}
           yaAgregados={new Set(items.map((i) => i.alegraId))}
           onAgregar={(p) =>
             setItems((l) => [
@@ -510,10 +512,12 @@ function ProveedorBuscador({
 
 function ProductoBuscador({
   cuenta,
+  nombreCuenta,
   yaAgregados,
   onAgregar,
 }: {
   cuenta: string
+  nombreCuenta: string
   yaAgregados: Set<string>
   onAgregar: (p: ProductoResultado) => void
 }) {
@@ -523,6 +527,7 @@ function ProductoBuscador({
   const [listoPara, setListoPara] = useState("")
   const [mensaje, setMensaje] = useState<string | null>(null)
   const [buscandoId, setBuscandoId] = useState<string | null>(null)
+  const [alta, setAlta] = useState<ModoAlta | null>(null)
   const busca = dq.trim().length >= 2 && Boolean(cuenta)
   const cargando = busca && listoPara !== dq
   const resultados = busca ? encontrados : []
@@ -578,9 +583,14 @@ function ProductoBuscador({
               <div className="flex shrink-0 items-center gap-2">
                 {p.sinItemEnCuenta && <Badge tone="warning">Sin ítem en la cuenta</Badge>}
                 {p.sinItemEnCuenta ? (
-                  <Button variant="secondary" loading={buscandoId === p.alegraId} onClick={() => buscarEnAlegra(p)}>
-                    Buscar en Alegra
-                  </Button>
+                  <>
+                    <Button variant="secondary" loading={buscandoId === p.alegraId} onClick={() => buscarEnAlegra(p)}>
+                      Buscar en Alegra
+                    </Button>
+                    <Button variant="secondary" onClick={() => setAlta({ tipo: "copiar", producto: p })}>
+                      Copiar a {nombreCuenta}
+                    </Button>
+                  </>
                 ) : (
                   <Button variant="secondary" disabled={yaAgregados.has(p.alegraId)} onClick={() => onAgregar(p)}>
                     {yaAgregados.has(p.alegraId) ? "Agregado" : "Agregar"}
@@ -593,6 +603,28 @@ function ProductoBuscador({
       )}
       {!cargando && dq.trim().length >= 2 && resultados.length === 0 && (
         <p className="mt-1 text-xs" style={{ color: "var(--ink-soft)" }}>No se encontraron productos.</p>
+      )}
+      {Boolean(cuenta) && (
+        <div className="mt-2">
+          <Button variant="secondary" onClick={() => setAlta({ tipo: "crear", nombreInicial: q.trim() })}>
+            Crear producto
+          </Button>
+        </div>
+      )}
+      {alta && (
+        <ProductoAltaDialog
+          key={alta.tipo === "copiar" ? `copiar-${alta.producto.alegraId}` : "crear"}
+          modo={alta}
+          cuenta={cuenta}
+          nombreCuenta={nombreCuenta}
+          open
+          onOpenChange={(abierto) => !abierto && setAlta(null)}
+          onListo={(p, itemIdCuenta) => {
+            const nuevo: ProductoResultado = { ...p, itemIdCuenta, sinItemEnCuenta: false }
+            setResultados((l) => (l.some((x) => x.alegraId === nuevo.alegraId) ? l.map((x) => (x.alegraId === nuevo.alegraId ? nuevo : x)) : [nuevo, ...l]))
+            onAgregar(nuevo)
+          }}
+        />
       )}
     </div>
   )

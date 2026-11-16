@@ -135,7 +135,7 @@ export function LectorFacturaPdf({
           {lectura.sinProducto.length > 0 && (
             <div>
               <p className="text-sm font-medium" style={{ color: "var(--ink)" }}>
-                Renglones sin producto (agréguelos con el buscador o «Crear producto»):
+                Renglones sin producto: búsquelos abajo por código; si no existen en esta cuenta, use «Copiar a» o «Crear producto».
               </p>
               <ul className="mt-1 flex flex-col gap-1 text-sm">
                 {lectura.sinProducto.map((l, i) => (

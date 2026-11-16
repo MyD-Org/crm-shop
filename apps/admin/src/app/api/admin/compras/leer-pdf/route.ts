@@ -1,5 +1,6 @@
 import { requireComprasAccess } from "@/lib/admin-route-guard"
-import { cuentaActivaPorSlug, MSG_CUENTA_NO_EXISTE } from "@/lib/compras-config-repo"
+import { parearItemEnCuentaPorCodigo } from "@/lib/alegra-items-cuenta"
+import { configAlegraDeCuenta, cuentaActivaPorSlug, MSG_CUENTA_NO_EXISTE } from "@/lib/compras-config-repo"
 import { fail, ok, responderError } from "@/lib/compras-http"
 import {
   cuitConGuiones,
@@ -70,6 +71,7 @@ export async function POST(req: Request) {
 
     // Productos por código. Se agrupan las líneas repetidas del mismo producto y costo.
     const items: { producto: ProductoCompraDto; linea: LineaLeida }[] = []
+    let config: Awaited<ReturnType<typeof configAlegraDeCuenta>> | undefined
     const sinProducto: (LineaLeida & { motivo: string })[] = []
     for (const linea of factura.lineas) {
       if (!linea.codigo) {
@@ -82,14 +84,21 @@ export async function POST(req: Request) {
         sinProducto.push({ ...linea, motivo: "No se encontró el producto en el catálogo" })
         continue
       }
+      let producto = p
       if (p.sinItemEnCuenta) {
-        sinProducto.push({ ...linea, motivo: `El producto ${p.codigo ?? ""} no tiene ítem en ${cuenta.nombre}` })
-        continue
+        // Como «Buscar en Alegra»: busca el ítem por código en la cuenta (sólo lectura) y guarda el par.
+        config ??= await configAlegraDeCuenta(guard.tenantId, cuenta)
+        const r = await parearItemEnCuentaPorCodigo(guard.tenantId, config, destino, p.alegraId).catch(() => null)
+        if (!r?.ok) {
+          sinProducto.push({ ...linea, motivo: r?.error ?? `No se pudo buscar ${p.codigo ?? "el producto"} en ${cuenta.nombre}` })
+          continue
+        }
+        producto = { ...p, itemIdCuenta: r.id, sinItemEnCuenta: false }
       }
-      const previo = items.find((x) => x.producto.alegraId === p.alegraId)
+      const previo = items.find((x) => x.producto.alegraId === producto.alegraId)
       if (previo && previo.linea.costo === linea.costo) previo.linea = { ...previo.linea, cantidad: previo.linea.cantidad + linea.cantidad }
       else if (previo) sinProducto.push({ ...linea, motivo: "Producto repetido con otro costo" })
-      else items.push({ producto: p, linea })
+      else items.push({ producto, linea })
     }
 
     return ok({

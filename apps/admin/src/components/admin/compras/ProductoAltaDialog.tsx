@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Alert, Button, Dialog, Field, Input, Select, Spinner } from "@myd-org/ui"
 import { IVA_SOPORTADOS } from "@/lib/compras-entrada"
 import { precioDesdePorcentaje, porcentajeDesdePrecio } from "@/lib/compras-listas-precio"
@@ -49,6 +49,7 @@ export function ProductoAltaDialog({
   modo,
   cuenta,
   nombreCuenta,
+  proveedorId = "",
   open,
   onOpenChange,
   onListo,
@@ -56,6 +57,8 @@ export function ProductoAltaDialog({
   modo: ModoAlta
   cuenta: string
   nombreCuenta: string
+  /** Proveedor de la compra (para sugerir la marca por compras previas). */
+  proveedorId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Producto ya disponible en el catálogo para agregarlo a la compra. */
@@ -75,6 +78,11 @@ export function ProductoAltaDialog({
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
+
+  const [categoriaId, setCategoriaId] = useState<string | null>(null)
+  // Campos que el operador tocó (no se pisan con sugerencias) y campos hoy sugeridos.
+  const tocados = useRef(new Set<string>())
+  const [sugeridos, setSugeridos] = useState<Record<string, string>>({})
 
   const costoNum = copiar ? (modo.producto.costoReferencia ?? NaN) : num(costo)
   const referencia = `${codigo.trim()}-${sufijo.trim().toUpperCase()}`
@@ -119,6 +127,68 @@ export function ProductoAltaDialog({
       vivo = false
     }
   }, [copiar, cuenta, modo])
+
+  async function pedirSugerencias(marcaActual: string) {
+    try {
+      const q = new URLSearchParams({ cuenta, texto: modo.tipo === "crear" ? modo.nombreInicial : "", marca: marcaActual, proveedor: proveedorId })
+      const res = await fetch(`/api/admin/compras/productos/sugerencias?${q}`, { cache: "no-store" })
+      if (!res.ok) return
+      const s = (await res.json()) as {
+        marca: string | null
+        marcaEsSugerida: boolean
+        sufijo: string | null
+        sufijoEsNuevo: boolean
+        categoriaId: string | null
+        ivaPorcentaje: number | null
+        nombre: string
+        nombreSoloCodigo: boolean
+        codigo: string | null
+      }
+      const marcas: Record<string, string> = {}
+      const libre = (c: string) => !tocados.current.has(c)
+      if (libre("marca") && s.marca && s.marcaEsSugerida) {
+        setMarca(s.marca)
+        marcas.marca = "sugerido"
+      }
+      if (libre("sufijo") && s.sufijo) {
+        setSufijo(s.sufijo)
+        marcas.sufijo = s.sufijoEsNuevo ? "nuevo, revíselo" : "sugerido"
+      }
+      if (libre("iva") && s.ivaPorcentaje !== null && (IVA_SOPORTADOS as readonly number[]).includes(s.ivaPorcentaje)) {
+        setIva(String(s.ivaPorcentaje))
+        marcas.iva = "sugerido"
+      }
+      if (libre("codigo") && s.codigo) {
+        setCodigo(s.codigo)
+        marcas.codigo = "sugerido"
+      }
+      if (libre("nombre") && s.nombre) {
+        setNombre(s.nombre)
+        marcas.nombre = s.nombreSoloCodigo ? "sugerido: parece un código, escriba el nombre del producto" : "sugerido"
+      }
+      setCategoriaId(s.categoriaId)
+      setSugeridos((a) => ({ ...a, ...marcas }))
+    } catch {
+      // Las sugerencias son opcionales: sin ellas el formulario se completa a mano.
+    }
+  }
+
+  // «Crear»: al abrir se piden las sugerencias a partir de lo que escribió el operador.
+  useEffect(() => {
+    if (copiar) return
+    const t = setTimeout(() => void pedirSugerencias(""), 0)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function tocar(campo: string) {
+    tocados.current.add(campo)
+    setSugeridos((a) => {
+      const resto = { ...a }
+      delete resto[campo]
+      return resto
+    })
+  }
 
   function validarDatos(): string | null {
     if (!nombre.trim()) return "Indique el nombre del producto."
@@ -183,6 +253,7 @@ export function ProductoAltaDialog({
               marca: marca.trim(),
               sufijoMarca: sufijo.trim().toUpperCase(),
               unidad,
+              categoriaId,
               ivaPorcentaje: Number(iva),
               costo: costoNum,
               precios,
@@ -260,24 +331,24 @@ export function ProductoAltaDialog({
 
         {!aviso && paso === "datos" && (
           <>
-            <Field label="Nombre">
-              <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+            <Field label="Nombre" hint={sugeridos.nombre ? sugeridos.nombre : undefined}>
+              <Input value={nombre} onChange={(e) => { tocar("nombre"); setNombre(e.target.value) }} />
             </Field>
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Código del proveedor">
-                <Input value={codigo} onChange={(e) => setCodigo(e.target.value)} />
+              <Field label="Código del proveedor" hint={sugeridos.codigo ? "sugerido" : undefined}>
+                <Input value={codigo} onChange={(e) => { tocar("codigo"); setCodigo(e.target.value) }} />
               </Field>
-              <Field label="Marca">
-                <Input value={marca} onChange={(e) => setMarca(e.target.value)} />
+              <Field label="Marca" hint={sugeridos.marca ? "sugerido" : undefined}>
+                <Input value={marca} onChange={(e) => { tocar("marca"); setMarca(e.target.value) }} onBlur={() => marca.trim() && void pedirSugerencias(marca.trim())} />
               </Field>
-              <Field label="Sufijo de la marca" hint={`Referencia en Alegra: ${referencia}`}>
-                <Input value={sufijo} onChange={(e) => setSufijo(e.target.value.toUpperCase())} placeholder="Ej.: MCL" />
+              <Field label="Sufijo de la marca" hint={`Referencia en Alegra: ${referencia}${sugeridos.sufijo ? ` (${sugeridos.sufijo})` : ""}`}>
+                <Input value={sufijo} onChange={(e) => { tocar("sufijo"); setSufijo(e.target.value.toUpperCase()) }} placeholder="Ej.: MCL" />
               </Field>
               <Field label="Unidad de medida">
                 <Select value={unidad} onValueChange={setUnidad} options={UNIDADES} aria-label="Unidad de medida" />
               </Field>
-              <Field label="IVA">
-                <Select value={iva} onValueChange={setIva} options={OPCIONES_IVA} aria-label="IVA" />
+              <Field label="IVA" hint={sugeridos.iva ? "sugerido" : undefined}>
+                <Select value={iva} onValueChange={(v) => { tocar("iva"); setIva(v) }} options={OPCIONES_IVA} aria-label="IVA" />
               </Field>
               <Field label="Costo unitario (sin IVA)">
                 <Input inputMode="decimal" value={costo} onChange={(e) => setCosto(e.target.value)} />

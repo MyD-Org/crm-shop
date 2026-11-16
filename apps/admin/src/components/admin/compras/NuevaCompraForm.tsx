@@ -249,6 +249,7 @@ export function NuevaCompraForm({ cuentas, percepcionesPorCuenta, esAdmin, inici
         <ProductoBuscador
           cuenta={cuenta}
           nombreCuenta={nombreCuenta}
+          proveedorId={proveedor?.id ?? ""}
           yaAgregados={new Set(items.map((i) => i.alegraId))}
           onAgregar={(p) =>
             setItems((l) => [
@@ -513,11 +514,13 @@ function ProveedorBuscador({
 function ProductoBuscador({
   cuenta,
   nombreCuenta,
+  proveedorId,
   yaAgregados,
   onAgregar,
 }: {
   cuenta: string
   nombreCuenta: string
+  proveedorId: string
   yaAgregados: Set<string>
   onAgregar: (p: ProductoResultado) => void
 }) {
@@ -617,6 +620,7 @@ function ProductoBuscador({
           modo={alta}
           cuenta={cuenta}
           nombreCuenta={nombreCuenta}
+          proveedorId={proveedorId}
           open
           onOpenChange={(abierto) => !abierto && setAlta(null)}
           onListo={(p, itemIdCuenta) => {

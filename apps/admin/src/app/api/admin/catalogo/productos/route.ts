@@ -3,7 +3,7 @@ import { NO_STORE, parsearQueryListado, conUrlDeFotos, validarStockEn } from "@/
 import { leerAvisoShop, listarProductos, ultimaSyncAlegra } from "@/lib/catalogo-overlay-repo"
 
 // GET /api/admin/catalogo/productos — listado del panel de catálogo.
-//   ?q= &categoria=(uuid|sin) &estado=(visible|oculto) &foto=(con|sin) &nombre=sin
+//   ?q= &categoria=(uuid|sin) &estado=(visible|oculto|sin-publicar) &foto=(con|sin) &nombre=sin
 //   &alegra=(active|inactive) &destacado=si &tag=uuid &stockEn=<slug de sucursal> &start= &limit= &orden=(nombre|nombre-desc|actualizado)
 //
 // Filtrado, conteo, orden y paginado se resuelven en Postgres: el navegador recibe una página,

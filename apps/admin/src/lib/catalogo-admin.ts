@@ -95,7 +95,7 @@ export function parsearQueryListado(url: URL): QueryListado | Response {
 
   const estado = p.get("estado")
   if (estado !== null) {
-    if (estado !== "visible" && estado !== "oculto") return invalidResponse("El estado es inválido", "estado")
+    if (estado !== "visible" && estado !== "oculto" && estado !== "sin-publicar") return invalidResponse("El estado es inválido", "estado")
     filtros.estado = estado
   }
 

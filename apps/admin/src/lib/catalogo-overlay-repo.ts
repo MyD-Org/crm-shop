@@ -356,7 +356,8 @@ export interface FiltrosAdmin {
   q?: string
   /** uuid de categoría (incluye su SUBÁRBOL) o "sin" (sin clasificar, incluye overlay ausente). */
   categoria?: string
-  estado?: "visible" | "oculto"
+  /** "sin-publicar" = no se muestra en la tienda: oculto, inactivo en Alegra o sin precio. */
+  estado?: "visible" | "oculto" | "sin-publicar"
   foto?: "con" | "sin"
   /** "sin" = sin nombre propio cargado. */
   nombre?: "sin"
@@ -401,6 +402,14 @@ const subarbolSql = (tenantId: string, categoriaId: string): SQL => sql`
   )
   SELECT id FROM arbol
 `
+
+/** Tiene algún precio de lista mayor a cero: la misma regla que `tienePrecio()`, en SQL. */
+const conPrecioSql = sql`EXISTS (
+  SELECT 1 FROM jsonb_array_elements(p.prices) e
+  WHERE jsonb_typeof(p.prices) = 'array'
+    AND (e->>'price') ~ '^[0-9]+(\.[0-9]+)?$'
+    AND (e->>'price')::numeric > 0
+)`
 
 /**
  * El MISMO WHERE que usa el listado del admin, para que una masiva "sobre todo lo que coincide
@@ -449,13 +458,16 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
   // filtro y el conteo se resuelven en Postgres. El chequeo de formato antes del cast evita que
   // un precio guardado como texto raro tumbe la query entera.
   if (f.precio === "sin" || f.precio === "con") {
-    const conPrecio = sql`EXISTS (
-      SELECT 1 FROM jsonb_array_elements(p.prices) e
-      WHERE jsonb_typeof(p.prices) = 'array'
-        AND (e->>'price') ~ '^[0-9]+(\.[0-9]+)?$'
-        AND (e->>'price')::numeric > 0
-    )`
-    cond.push(f.precio === "con" ? conPrecio : sql`NOT ${conPrecio}`)
+    cond.push(f.precio === "con" ? conPrecioSql : sql`NOT ${conPrecioSql}`)
+  }
+
+  // "Sin publicar": la negación de `estaPublicado()` (cualquiera de los motivos de no publicado).
+  if (f.estado === "sin-publicar") {
+    cond.push(sql`NOT (
+      coalesce(o.visible, false) = true
+      AND p.status = 'active' AND coalesce(p.alegra_status, 'active') <> 'inactive'
+      AND ${conPrecioSql}
+    )`)
   }
 
   // "Con stock" = en CUALQUIER sucursal: el stock de la cuenta de origen (`p.stock`) o una fila de

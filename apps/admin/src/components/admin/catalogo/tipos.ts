@@ -152,7 +152,7 @@ export interface ListadoDto {
 export interface Filtros {
   q?: string
   categoria?: string
-  estado?: "visible" | "oculto"
+  estado?: "visible" | "oculto" | "sin-publicar"
   foto?: "con" | "sin"
   nombre?: "sin"
   alegra?: "active" | "inactive"

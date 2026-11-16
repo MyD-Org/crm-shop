@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { getGuardedAdminSession } from "@/lib/admin-session"
 import { getTenantByIdFromDb } from "@/lib/tenants"
 import { botUsagePanelEnabled } from "@/lib/flags"
+import { comprasHabilitado } from "@/lib/compras-flag"
 import { AdminShell } from "@/components/admin/AdminShell"
 
 export default async function ProtectedAdminLayout({ children }: { children: React.ReactNode }) {
@@ -21,9 +22,10 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
   const { session, tenantId, user } = guard
 
   // Independientes entre sí: en serie sumaban un round-trip extra a cada navegación.
-  const [tenant, usagePanelEnabled] = await Promise.all([
+  const [tenant, usagePanelEnabled, comprasEnabled] = await Promise.all([
     getTenantByIdFromDb(tenantId),
     botUsagePanelEnabled(),
+    comprasHabilitado(),
   ])
   const availability = user.availability === "available" ? "available" : "away"
 
@@ -44,6 +46,7 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
       availability={availability}
       currentUserId={session.userId}
       usagePanelEnabled={usagePanelEnabled}
+      comprasEnabled={comprasEnabled}
     >
       {children}
     </AdminShell>

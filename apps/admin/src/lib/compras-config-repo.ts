@@ -74,6 +74,17 @@ export async function obtenerConfigCompras(tenantId: string, cuentaId: string): 
   return c ?? null
 }
 
+/** Nombres de percepción configurados por cuenta (slug -> nombres), para el formulario de compra. */
+export async function nombresPercepcionPorCuenta(tenantId: string, cuentas: CuentaCompras[]): Promise<Record<string, string[]>> {
+  const filas = await getDb().select().from(alegraComprasConfig).where(eq(alegraComprasConfig.tenantId, tenantId))
+  const out: Record<string, string[]> = {}
+  for (const c of cuentas) {
+    const f = filas.find((x) => x.cuentaId === c.id)
+    out[c.slug] = Object.keys(f?.percepciones ?? {}).sort()
+  }
+  return out
+}
+
 export interface PatchConfigCompras {
   /** Override de la cuenta contable de tránsito (id en Alegra); null = resolver por nombre. */
   categoriaTransitoId?: string | null

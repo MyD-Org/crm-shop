@@ -28,6 +28,7 @@ const GUARDS = [
   /\brequireOperatorPlus\b/,
   /\brequireSucursalesAccess\b/,
   /\brequireComprasAccess\b/,
+  /\baccesoCompras\b/, // páginas de Compras: misma regla que requireComprasAccess (lib/compras-acceso.ts)
   /\brequireCorreoAdmin\b/,
   /\brequireCorreoLector\b/,
   /\brequireSuperadmin\w*\b/,

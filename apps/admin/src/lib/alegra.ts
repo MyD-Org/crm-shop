@@ -23,6 +23,7 @@ import {
   mockCreateRemission,
   mockBuscarItemsPorCodigo,
   mockCreateItem,
+  mockCrearItemCompra,
 } from "./mock-alegra"
 
 // Cliente de Alegra (productos, contactos, cotizaciones, listas de precio, formas de pago).
@@ -1138,6 +1139,45 @@ export async function createItem(config: TenantConfig, input: AlegraItemCreateIn
     }
     throw err
   }
+}
+
+export interface AlegraItemCompraInput {
+  name: string
+  /** Referencia (código del proveedor + "-" + sufijo de marca). */
+  reference: string
+  taxId: string | null
+  brand?: string | null
+  /** Id de la categoría de ítems de ESA cuenta, o null. */
+  categoryId?: string | null
+  /** Unidad de medida de Alegra (`unit`, `kg`...). */
+  unit: string
+  /** Costo unitario SIN IVA (inventory.unitCost). */
+  unitCost: number
+  /** Precio NETO por lista de precio de la cuenta. */
+  prices: { idPriceList: string; price: number }[]
+}
+
+/**
+ * Alta de un producto NUEVO desde Compras (change `compras-en-transito`, S4b): inventariable con
+ * stock 0, `unit` + `unitCost` (el PUT/POST de Alegra los exige) y venta sin stock (`negativeSale`).
+ * Todas las listas de precio de la cuenta viajan en el mismo POST. NO es idempotente por sí solo:
+ * quien llama busca antes por referencia y serializa (`crearProductoCompra`). Sin reintento como no
+ * inventariable: un rechazo se informa tal cual.
+ */
+export async function crearItemCompra(config: TenantConfig, input: AlegraItemCompraInput): Promise<AlegraProduct> {
+  if (config.alegraMock) return mockCrearItemCompra(input)
+  const customFields = await customFieldsParaAlta(config, { name: input.name, code: input.reference, price: 0, taxId: input.taxId, brand: input.brand })
+  const body: Record<string, unknown> = {
+    name: input.name,
+    reference: input.reference,
+    type: "product",
+    price: input.prices.map((p) => ({ idPriceList: Number(p.idPriceList), price: p.price })),
+    ...(input.taxId ? { tax: [{ id: Number.isNaN(Number(input.taxId)) ? input.taxId : Number(input.taxId) }] } : {}),
+    ...(input.categoryId ? { itemCategory: { id: Number.isNaN(Number(input.categoryId)) ? input.categoryId : Number(input.categoryId) } } : {}),
+    ...(customFields.length > 0 ? { customFields } : {}),
+    inventory: { unit: input.unit, unitCost: input.unitCost, initialQuantity: 0, negativeSale: true },
+  }
+  return mapRawItem((await alegraFetch(config, "/items", undefined, { method: "POST", body })) as Record<string, unknown>)
 }
 
 // ── Contactos (clientes de Alegra) ──

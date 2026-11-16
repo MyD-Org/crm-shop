@@ -165,6 +165,91 @@ export async function crearCompra(
   }
 }
 
+/**
+ * Descarta una compra que quedó en 'creando' sin bill en Alegra (el POST fue rechazado). Sólo borra
+ * filas en 'creando' y sin `alegra_bill_id`; las hijas caen en cascada. Libera la clave de
+ * idempotencia y el proveedor + número para reintentar.
+ */
+export async function descartarCompraCreando(tenantId: string, compraId: string): Promise<boolean> {
+  const borradas = await getDb()
+    .delete(compras)
+    .where(
+      and(
+        eq(compras.tenantId, tenantId),
+        eq(compras.id, compraId),
+        eq(compras.estado, "creando"),
+        sql`${compras.alegraBillId} IS NULL`,
+      ),
+    )
+    .returning({ id: compras.id })
+  return borradas.length > 0
+}
+
+/** La compra del tenant con esa clave de idempotencia (la de la creación), o null. */
+export async function compraPorIdempotencia(tenantId: string, clave: string): Promise<CompraFila | null> {
+  const [c] = await getDb()
+    .select()
+    .from(compras)
+    .where(and(eq(compras.tenantId, tenantId), eq(compras.idempotencyKey, clave)))
+  return c ?? null
+}
+
+export interface DetalleNuevo {
+  netoCentavos: number
+  ivaCentavos: number
+  percepcionesCentavos: number
+  totalCentavos: number
+  items: NuevoItem[]
+  percepciones: NuevaPercepcion[]
+}
+
+/**
+ * Reemplaza los ítems, las percepciones y los totales de una compra SIN recepciones (edición antes
+ * de recibir). Correr dentro de `conLockCompra`.
+ */
+export async function reemplazarDetalle(tx: Tx, tenantId: string, compraId: string, d: DetalleNuevo): Promise<void> {
+  await tx.delete(compraItems).where(and(eq(compraItems.tenantId, tenantId), eq(compraItems.compraId, compraId)))
+  await tx.delete(compraPercepciones).where(and(eq(compraPercepciones.tenantId, tenantId), eq(compraPercepciones.compraId, compraId)))
+  await tx.insert(compraItems).values(
+    d.items.map((it, i) => ({
+      tenantId,
+      compraId,
+      orden: i + 1,
+      alegraId: it.alegraId,
+      itemIdCuenta: it.itemIdCuenta,
+      codigo: it.codigo ?? null,
+      nombre: it.nombre,
+      cantidadPedida: it.cantidadPedida,
+      costoUnitarioCentavos: it.costoUnitarioCentavos,
+      ivaPorcentaje: it.ivaPorcentaje,
+      taxAlegraId: it.taxAlegraId,
+      netoE5: it.netoE5,
+    })),
+  )
+  if (d.percepciones.length > 0) {
+    await tx.insert(compraPercepciones).values(
+      d.percepciones.map((p) => ({
+        tenantId,
+        compraId,
+        alegraPerceptionId: p.alegraPerceptionId,
+        nombre: p.nombre,
+        importeCentavos: p.importeCentavos,
+        numeroCertificado: p.numeroCertificado ?? null,
+      })),
+    )
+  }
+  await tx
+    .update(compras)
+    .set({
+      netoCentavos: d.netoCentavos,
+      ivaCentavos: d.ivaCentavos,
+      percepcionesCentavos: d.percepcionesCentavos,
+      totalCentavos: d.totalCentavos,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(compras.tenantId, tenantId), eq(compras.id, compraId)))
+}
+
 export async function obtenerCompra(tenantId: string, id: string, db: DbOTx = getDb()): Promise<CompraCompleta | null> {
   const [c] = await db.select().from(compras).where(and(eq(compras.tenantId, tenantId), eq(compras.id, id)))
   if (!c) return null

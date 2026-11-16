@@ -13,6 +13,7 @@ import {
   listarCategoriasContables,
   parsearBill,
   reemplazarLineasBill,
+  reemplazarPercepcionesBill,
   resolverCategoriaTransito,
   type CategoriaContable,
 } from "./alegra-compras"
@@ -93,6 +94,34 @@ describe("crearBill", () => {
       lineas: [{ tipo: "cat", id: "5246", precioCentavos: 100, cantidadMilesimas: 1000, taxIds: ["1"] }],
     })
     expect(llamadas[0].init.signal).toBeDefined()
+  })
+})
+
+describe("reemplazarPercepcionesBill", () => {
+  it("PUT /bills/{id}/perceptions con un ARRAY [{id: idPerception, amount en pesos, certificateNumber}]", async () => {
+    const llamadas = stubFetch({ status: 200, body: [] })
+    await reemplazarPercepcionesBill(config, "9002", [
+      { idPerception: "01a0eef5-e2d9-72c0-bc9c-bd3fc4780117", importeCentavos: 3050, certificado: "C-9" },
+      { idPerception: "uuid-2", importeCentavos: 100 },
+    ])
+    expect(llamadas[0].init.method).toBe("PUT")
+    expect(llamadas[0].url).toMatch(/\/bills\/9002\/perceptions$/)
+    expect(cuerpo(llamadas[0])).toEqual([
+      { id: "01a0eef5-e2d9-72c0-bc9c-bd3fc4780117", amount: 30.5, certificateNumber: "C-9" },
+      { id: "uuid-2", amount: 1 },
+    ])
+  })
+
+  it("una lista vacía limpia las percepciones", async () => {
+    const llamadas = stubFetch({ status: 200, body: [] })
+    await reemplazarPercepcionesBill(config, "9002", [])
+    expect(cuerpo(llamadas[0])).toEqual([])
+  })
+
+  it("un 4xx se clasifica como rechazada", async () => {
+    stubFetch({ status: 400, body: { message: "inválida", code: 11414 } })
+    const e = await reemplazarPercepcionesBill(config, "9002", [{ idPerception: "x", importeCentavos: 1 }]).catch((x) => x)
+    expect(clasificarErrorEscritura(e)).toBe("rechazada")
   })
 })
 

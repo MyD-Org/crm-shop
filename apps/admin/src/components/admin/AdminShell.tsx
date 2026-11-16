@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { MessageSquare, Users, LogOut, BarChart3, FileText, Package, Receipt, ShoppingBag, UserRound, Store, CreditCard, Clock, Truck, MessageCircleQuestion, Globe, ShieldCheck } from "lucide-react"
+import { MessageSquare, Users, LogOut, BarChart3, FileText, Package, Receipt, ShoppingBag, UserRound, Store, CreditCard, Clock, Truck, MessageCircleQuestion, Globe, ShieldCheck, PackagePlus } from "lucide-react"
 import { SideNav, ToastProvider } from "@myd-org/ui"
 import { AvailabilityToggle, type Availability } from "./AvailabilityToggle"
 import { NotificationsPrompt } from "./NotificationsPrompt"
@@ -28,6 +28,8 @@ interface AdminShellProps {
   availability: "available" | "away"
   currentUserId: string
   usagePanelEnabled?: boolean
+  /** Flag `compras-en-transito` (evaluado en el servidor): sin él, la entrada «Compras» no se muestra. */
+  comprasEnabled?: boolean
   children: React.ReactNode
 }
 
@@ -177,7 +179,7 @@ interface NavEntry {
   icon: React.ReactNode
   minRole?: "admin" | "superadmin"
   badge?: BadgeSection
-  flag?: "usagePanel"
+  flag?: "usagePanel" | "compras"
   acceso?: "compras"
 }
 
@@ -185,6 +187,7 @@ const NAV: NavEntry[] = [
   { href: "/admin/inbox", label: "Mensajes", group: "Operación", icon: <MessageSquare size={16} strokeWidth={1.6} />, badge: "inbox" as const },
   { href: "/admin/pedidos", label: "Pedidos", group: "Operación", icon: <ShoppingBag size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "pedidos" as const },
   { href: "/admin/comprobantes", label: "Comprobantes", group: "Operación", icon: <Receipt size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "comprobantes" as const },
+  { href: "/admin/compras", label: "Compras", group: "Operación", icon: <PackagePlus size={16} strokeWidth={1.6} />, minRole: "admin" as const, acceso: "compras" as const, flag: "compras" as const },
   { href: "/admin/catalogo", label: "Catálogo", group: "Datos", icon: <Package size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/clientes-tienda", label: "Clientes de la tienda", group: "Datos", icon: <UserRound size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/sucursales", label: "Sucursales", group: "Datos", icon: <Store size={16} strokeWidth={1.6} />, minRole: "admin" as const },
@@ -210,7 +213,7 @@ export function AdminShell(props: AdminShellProps) {
   )
 }
 
-function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, availability: initialAvailability, currentUserId, usagePanelEnabled, children }: AdminShellProps) {
+function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, availability: initialAvailability, currentUserId, usagePanelEnabled, comprasEnabled, children }: AdminShellProps) {
   const pathname = usePathname()
   const router = useRouter()
   const guard = useUnsavedGuardCtx()
@@ -280,6 +283,7 @@ function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, avai
   }
 
   const visibleNav = NAV.filter((item) => {
+    if (item.flag === "compras" && !comprasEnabled) return false
     if (esCompras) return item.acceso === "compras"
     if (item.minRole && roleRank(role) < roleRank(item.minRole)) return false
     if (item.flag === "usagePanel" && !usagePanelEnabled) return false

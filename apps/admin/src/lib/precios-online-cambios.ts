@@ -16,6 +16,10 @@ const SLUG_MEDIO_RE = /^[a-z0-9-]{2,30}$/
 const CUENTA_ALEGRA_RE = /^[A-Za-z0-9_-]{1,60}$/
 const LISTA_ALEGRA_RE = /^[A-Za-z0-9_-]{1,40}$/
 export const MAX_CAMBIOS = 50
+/** Tope de productos en una asignación masiva de porcentajes (op `ajusteProductos`). */
+export const MAX_PRODUCTOS_LOTE = 2000
+/** Tope de listas en una asignación masiva. */
+export const MAX_AJUSTES_LOTE = 12
 export const MAX_NOMBRE_LISTA = 60
 export const MAX_MARCA = 80
 const MAX_ALEGRA_ID = 100
@@ -49,6 +53,11 @@ export type CambioPrecios =
   | { op: "upsertOverride"; listaId: string; tipo: "categoria"; categoriaId: string; coeficiente: string }
   | { op: "upsertOverride"; listaId: string; tipo: "producto"; alegraId: string; coeficiente: string }
   | { op: "borrarOverride"; overrideId: string }
+  /**
+   * Asignación masiva (R5): un coeficiente por lista para varios productos a la vez. `coeficiente`
+   * null quita el ajuste de producto de esa lista (vuelve a regir marca / categoría / general).
+   */
+  | { op: "ajusteProductos"; alegraIds: string[]; ajustes: { listaId: string; coeficiente: string | null }[] }
   | { op: "setUmbrales"; confirmacionPct?: string; retencionPct?: string }
   /**
    * Qué lista rige para un medio de pago (y cantidad de cuotas, desde la rebanada D). `listaId` null
@@ -75,6 +84,13 @@ export type CambioPrecios =
    * `listaId` null quita el enlace; con valor lo crea o lo mueve a esa lista (que debe ser privada).
    */
   | { op: "setMapeo"; alegraAccount: string; alegraPriceListId: string; listaId: string | null }
+  /** SOLO armado por el servidor al revertir un ajuste masivo; nunca se acepta desde el cliente. */
+  | {
+      op: "restaurarAjustes"
+      /** Id del lote que se revierte (objeto `lote:<id>` del historial). */
+      lote: string
+      previos: { listaId: string; alegraId: string; coeficiente: string | null }[]
+    }
   /** SOLO armado por el servidor al revertir una baja; nunca se acepta desde el cliente. */
   | {
       op: "restaurarLista"
@@ -273,6 +289,44 @@ function validarUno(raw: unknown, i: number): { ok: true; cambio: CambioPrecios 
     case "borrarOverride": {
       if (!esUuid(raw.overrideId)) return invalido(`${campo}.overrideId`, MSG_BODY)
       return { ok: true, cambio: { op: "borrarOverride", overrideId: raw.overrideId } }
+    }
+    case "ajusteProductos": {
+      if (!Array.isArray(raw.alegraIds) || raw.alegraIds.length === 0) {
+        return invalido(`${campo}.alegraIds`, "Seleccione al menos un producto.")
+      }
+      if (raw.alegraIds.length > MAX_PRODUCTOS_LOTE) {
+        return invalido(`${campo}.alegraIds`, `No puede ajustar más de ${MAX_PRODUCTOS_LOTE} productos a la vez.`)
+      }
+      const alegraIds: string[] = []
+      for (const v of raw.alegraIds) {
+        const id = typeof v === "string" ? v.trim() : ""
+        if (id === "" || id.length > MAX_ALEGRA_ID) return invalido(`${campo}.alegraIds`, "Los productos indicados no son válidos.")
+        alegraIds.push(id)
+      }
+      if (new Set(alegraIds).size !== alegraIds.length) {
+        return invalido(`${campo}.alegraIds`, "La selección tiene productos repetidos.")
+      }
+      if (!Array.isArray(raw.ajustes) || raw.ajustes.length === 0) {
+        return invalido(`${campo}.ajustes`, "Indique el coeficiente de al menos una lista.")
+      }
+      if (raw.ajustes.length > MAX_AJUSTES_LOTE) {
+        return invalido(`${campo}.ajustes`, `No puede ajustar más de ${MAX_AJUSTES_LOTE} listas a la vez.`)
+      }
+      const ajustes: { listaId: string; coeficiente: string | null }[] = []
+      for (let j = 0; j < raw.ajustes.length; j++) {
+        const a = raw.ajustes[j]
+        const c2 = `${campo}.ajustes[${j}]`
+        if (!esObjeto(a) || !esUuid(a.listaId)) return invalido(`${c2}.listaId`, "Seleccione la lista de precios.")
+        if (ajustes.some((x) => x.listaId === a.listaId)) return invalido(`${c2}.listaId`, "Hay una lista repetida en la asignación.")
+        if (a.coeficiente === null) {
+          ajustes.push({ listaId: a.listaId, coeficiente: null })
+          continue
+        }
+        const c = validarCoef(a.coeficiente, `${c2}.coeficiente`)
+        if (!c.ok) return c
+        ajustes.push({ listaId: a.listaId, coeficiente: c.coef })
+      }
+      return { ok: true, cambio: { op: "ajusteProductos", alegraIds, ajustes } }
     }
     case "setUmbrales": {
       const out: Extract<CambioPrecios, { op: "setUmbrales" }> = { op: "setUmbrales" }

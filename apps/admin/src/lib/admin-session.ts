@@ -11,7 +11,7 @@ export interface AdminSessionData {
   userId: string
   name: string
   email: string
-  role: "operator" | "admin" | "superadmin"
+  role: "operator" | "admin" | "superadmin" | "compras"
   tenantId: string
   /**
    * Epoch ms en que se emitió la cookie (login). Se compara con

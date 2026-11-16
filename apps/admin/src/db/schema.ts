@@ -1996,3 +1996,217 @@ export const metodosEnvioLocalidades = pgTable(
   },
   (t) => [uniqueIndex("metodos_envio_localidades_metodo_georef_uniq").on(t.metodoId, t.georefId)],
 )
+
+// ── Compras en tránsito (change `compras-en-transito`) ───────────────────────────────────────────
+// La factura del proveedor se carga en Alegra como bill con una línea de «Mercadería en tránsito»
+// por alícuota; al recibir, el CRM pasa el neto recibido a los ítems. Las bills se escriben SOLO
+// desde compras-service. Importes en CENTAVOS enteros; cantidades numeric(14,3); `neto_e5` en
+// cienmilésimas de peso (precio_centavos x cantidad_milésimas, exacto: Alegra no redondea por
+// línea). Cero datos reales. Sin GRANT a `shop_app`: el costo no viaja al Shop.
+//
+// Drift que vive SOLO en SQL (0105): los CHECK (moneda, estados, importes y cantidades).
+
+// Configuración por cuenta de Alegra: categoría contable del tránsito, mapa de percepciones
+// (nombre -> idPerception de Alegra; el catálogo no es listable por API) y almacén por defecto.
+export const alegraComprasConfig = pgTable(
+  "alegra_compras_config",
+  {
+    tenantId: text("tenant_id").notNull(),
+    cuentaId: uuid("cuenta_id").notNull(),
+    categoriaTransitoId: text("categoria_transito_id"),
+    // Nombre buscado/forzado de la cuenta contable (override cuando hay más de una coincidencia).
+    categoriaTransitoNombre: text("categoria_transito_nombre"),
+    percepciones: jsonb("percepciones").$type<Record<string, string>>().notNull().default({}),
+    almacenId: text("almacen_id"),
+    updatedBy: uuid("updated_by").references(() => adminUsers.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tenantId, t.cuentaId], name: "alegra_compras_config_pk" }),
+    foreignKey({
+      name: "alegra_compras_config_cuenta_fk",
+      columns: [t.tenantId, t.cuentaId],
+      foreignColumns: [alegraCuentas.tenantId, alegraCuentas.id],
+    }).onDelete("cascade"),
+  ],
+)
+
+export const compras = pgTable(
+  "compras",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    cuentaId: uuid("cuenta_id").notNull(),
+    proveedorAlegraId: text("proveedor_alegra_id").notNull(),
+    proveedorNombre: text("proveedor_nombre").notNull(),
+    proveedorCuit: text("proveedor_cuit"),
+    numeroFactura: text("numero_factura").notNull(),
+    fecha: date("fecha", { mode: "string" }).notNull(),
+    vencimiento: date("vencimiento", { mode: "string" }).notNull(),
+    observaciones: text("observaciones"),
+    moneda: text("moneda").notNull().default("ARS"),
+    almacenId: text("almacen_id").notNull(),
+    // creando | pendiente | parcial | completa | cerrada_faltante | anulada | anulada_en_alegra
+    estado: text("estado").notNull().default("creando"),
+    // Alegra cambió algo que el CRM no sabe explicar: sin acciones hasta «Re-sincronizar».
+    desincronizada: boolean("desincronizada").notNull().default(false),
+    alegraBillId: text("alegra_bill_id"),
+    // Neto, IVA y percepciones ESPERADOS; total = lo que debe dar la bill (IVA exacto, un redondeo).
+    netoCentavos: bigint("neto_centavos", { mode: "number" }).notNull(),
+    ivaCentavos: bigint("iva_centavos", { mode: "number" }).notNull(),
+    percepcionesCentavos: bigint("percepciones_centavos", { mode: "number" }).notNull().default(0),
+    totalCentavos: bigint("total_centavos", { mode: "number" }).notNull(),
+    // Último estado conocido de las líneas de la bill (para detectar ediciones externas).
+    snapshot: jsonb("snapshot"),
+    snapshotHash: text("snapshot_hash"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    creadaPor: uuid("creada_por").references(() => adminUsers.id, { onDelete: "set null" }),
+    // Cierre con faltante (nota de débito del proveedor).
+    cierreEstado: text("cierre_estado"),
+    cierreIdempotencyKey: text("cierre_idempotency_key"),
+    cierreNcNumero: text("cierre_nc_numero"),
+    cierreImporteCentavos: bigint("cierre_importe_centavos", { mode: "number" }),
+    cierreAlegraId: text("cierre_alegra_id"),
+    cierreMotivo: text("cierre_motivo"),
+    cierreAt: timestamp("cierre_at", { withTimezone: true }),
+    anuladaAt: timestamp("anulada_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "compras_cuenta_fk",
+      columns: [t.tenantId, t.cuentaId],
+      foreignColumns: [alegraCuentas.tenantId, alegraCuentas.id],
+    }),
+    // Lo necesitan las FK compuestas de las tablas hijas (el hijo no puede ser de otro tenant).
+    uniqueIndex("compras_tenant_id_uniq").on(t.tenantId, t.id),
+    uniqueIndex("compras_tenant_idempotency_uniq").on(t.tenantId, t.idempotencyKey),
+    // Mismo proveedor + número en la cuenta: una sola compra viva.
+    uniqueIndex("compras_proveedor_numero_uniq")
+      .on(t.tenantId, t.cuentaId, t.proveedorAlegraId, t.numeroFactura)
+      .where(sql`${t.estado} NOT IN ('anulada','anulada_en_alegra')`),
+    uniqueIndex("compras_alegra_bill_uniq")
+      .on(t.tenantId, t.cuentaId, t.alegraBillId)
+      .where(sql`${t.alegraBillId} IS NOT NULL`),
+    index("compras_tenant_estado_idx").on(t.tenantId, t.estado, t.createdAt.desc()),
+  ],
+)
+
+export const compraItems = pgTable(
+  "compra_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    compraId: uuid("compra_id").notNull(),
+    orden: integer("orden").notNull(),
+    // catalog_products.alegra_id (real o sintético `<slug>:<id>`) e id real del ítem en la cuenta.
+    alegraId: text("alegra_id").notNull(),
+    itemIdCuenta: text("item_id_cuenta").notNull(),
+    codigo: text("codigo"),
+    nombre: text("nombre").notNull(),
+    cantidadPedida: numeric("cantidad_pedida", { precision: 14, scale: 3 }).notNull(),
+    cantidadRecibida: numeric("cantidad_recibida", { precision: 14, scale: 3 }).notNull().default("0"),
+    // Costo unitario NETO (sin IVA ni percepciones), en centavos.
+    costoUnitarioCentavos: bigint("costo_unitario_centavos", { mode: "number" }).notNull(),
+    ivaPorcentaje: numeric("iva_porcentaje", { precision: 5, scale: 2 }).notNull(),
+    taxAlegraId: text("tax_alegra_id").notNull(),
+    // Subtotal exacto (costo x cantidad pedida) en cienmilésimas de peso, fijado al crear.
+    netoE5: bigint("neto_e5", { mode: "number" }).notNull(),
+  },
+  (t) => [
+    foreignKey({
+      name: "compra_items_compra_fk",
+      columns: [t.tenantId, t.compraId],
+      foreignColumns: [compras.tenantId, compras.id],
+    }).onDelete("cascade"),
+    uniqueIndex("compra_items_tenant_id_uniq").on(t.tenantId, t.id),
+    uniqueIndex("compra_items_compra_orden_uniq").on(t.compraId, t.orden),
+  ],
+)
+
+// Percepciones: NO son líneas de la bill; se aplican con PUT /bills/{id}/perceptions (reemplaza la
+// lista completa) y sobreviven al PUT de purchases. `alegraPerceptionId` = idPerception (uuid).
+export const compraPercepciones = pgTable(
+  "compra_percepciones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    compraId: uuid("compra_id").notNull(),
+    alegraPerceptionId: text("alegra_perception_id").notNull(),
+    nombre: text("nombre").notNull(),
+    importeCentavos: bigint("importe_centavos", { mode: "number" }).notNull(),
+    numeroCertificado: text("numero_certificado"),
+  },
+  (t) => [
+    foreignKey({
+      name: "compra_percepciones_compra_fk",
+      columns: [t.tenantId, t.compraId],
+      foreignColumns: [compras.tenantId, compras.id],
+    }).onDelete("cascade"),
+    index("compra_percepciones_compra_idx").on(t.compraId),
+  ],
+)
+
+export const compraRecepciones = pgTable(
+  "compra_recepciones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    compraId: uuid("compra_id").notNull(),
+    secuencia: integer("secuencia").notNull(),
+    // pendiente | aplicada | fallida | incierta
+    estado: text("estado").notNull().default("pendiente"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    remito: text("remito"),
+    fecha: date("fecha", { mode: "string" }).notNull(),
+    notas: text("notas"),
+    lineasAntesHash: text("lineas_antes_hash").notNull(),
+    lineasEsperadasHash: text("lineas_esperadas_hash").notNull(),
+    totalAntesCentavos: bigint("total_antes_centavos", { mode: "number" }).notNull(),
+    totalDespuesCentavos: bigint("total_despues_centavos", { mode: "number" }),
+    motivoFallo: text("motivo_fallo"),
+    creadaPor: uuid("creada_por").references(() => adminUsers.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    aplicadaAt: timestamp("aplicada_at", { withTimezone: true }),
+  },
+  (t) => [
+    foreignKey({
+      name: "compra_recepciones_compra_fk",
+      columns: [t.tenantId, t.compraId],
+      foreignColumns: [compras.tenantId, compras.id],
+    }).onDelete("cascade"),
+    uniqueIndex("compra_recepciones_tenant_id_uniq").on(t.tenantId, t.id),
+    uniqueIndex("compra_recepciones_compra_secuencia_uniq").on(t.compraId, t.secuencia),
+    uniqueIndex("compra_recepciones_compra_idempotency_uniq").on(t.compraId, t.idempotencyKey),
+    // A lo sumo UNA recepción en vuelo por compra: es el lock lógico mientras se llama a Alegra.
+    uniqueIndex("compra_recepciones_en_vuelo_uniq")
+      .on(t.compraId)
+      .where(sql`${t.estado} IN ('pendiente','incierta')`),
+  ],
+)
+
+export const compraRecepcionItems = pgTable(
+  "compra_recepcion_items",
+  {
+    tenantId: text("tenant_id").notNull(),
+    recepcionId: uuid("recepcion_id").notNull(),
+    compraItemId: uuid("compra_item_id").notNull(),
+    cantidad: numeric("cantidad", { precision: 14, scale: 3 }).notNull(),
+    // Neto exacto movido a este ítem en la recepción (E5).
+    montoNetoE5: bigint("monto_neto_e5", { mode: "number" }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.recepcionId, t.compraItemId], name: "compra_recepcion_items_pk" }),
+    foreignKey({
+      name: "compra_recepcion_items_recepcion_fk",
+      columns: [t.tenantId, t.recepcionId],
+      foreignColumns: [compraRecepciones.tenantId, compraRecepciones.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "compra_recepcion_items_item_fk",
+      columns: [t.tenantId, t.compraItemId],
+      foreignColumns: [compraItems.tenantId, compraItems.id],
+    }).onDelete("cascade"),
+  ],
+)

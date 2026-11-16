@@ -1,5 +1,6 @@
 import type {
   AlegraCategory,
+  AlegraItemCompraInput,
   AlegraProduct,
   AlegraContact,
   AlegraPriceList,
@@ -290,6 +291,34 @@ export function mockCreateItem(input: AlegraItemCreateInput): AlegraProduct {
     images: [],
     brand: null,
     ivaPorcentaje: null,
+    raw: {},
+  }
+  itemsCreados.push(creado)
+  return creado
+}
+
+// ── Alta de producto desde Compras (S4b): el mock guarda lo que se le mandó para poder verificarlo ──
+export const altasCompraMock: AlegraItemCompraInput[] = []
+
+export function __mockAltasCompraReset(): void {
+  altasCompraMock.length = 0
+}
+
+export function mockCrearItemCompra(input: AlegraItemCompraInput): AlegraProduct {
+  altasCompraMock.push(input)
+  const creado: AlegraProduct = {
+    alegraId: `it-${nextItemId++}`,
+    code: input.reference,
+    name: input.name,
+    description: null,
+    categoryAlegraId: input.categoryId ?? null,
+    prices: input.prices.map((p) => ({ idPriceList: p.idPriceList, name: p.idPriceList, price: p.price })),
+    stock: 0,
+    status: "active",
+    images: [],
+    brand: input.brand ?? null,
+    ivaPorcentaje: null,
+    costo: input.unitCost,
     raw: {},
   }
   itemsCreados.push(creado)

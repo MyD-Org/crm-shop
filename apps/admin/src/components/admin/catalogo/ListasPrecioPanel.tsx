@@ -439,7 +439,7 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
               />
             </Field>
             {ajuste.tipo === "producto" ? (
-              <Field label="Producto">
+              <Field label="Producto" hint={TEXTOS.ajusteLote.remiteListas}>
                 <BuscadorProducto elegidos={ajuste.productos} onCambiar={(p) => setAjuste({ ...ajuste, productos: p })} />
               </Field>
             ) : ajuste.tipo === "marca" ? (

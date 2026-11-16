@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm"
 import { notFound } from "next/navigation"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
+import { isKnownAdminRole } from "@/lib/roles"
 import { adminSessionOptions, getGuardedAdminSession, type AdminSessionData } from "@/lib/admin-session"
 import { canalKey } from "@/lib/inbox-canales"
 import { puedeVerCanal } from "@/lib/canal-acceso"
@@ -64,7 +65,7 @@ export default async function ContactThreadPage({ params, searchParams }: {
   // contacto DEVUELTO por ai-api, no el ?cuenta= de la URL. Sin acceso: el mismo notFound().
   // Sin guard válido el layout protegido ya habría redirigido; por las dudas, también 404.
   const guarded = await guardedP
-  if (!guarded?.ok || !puedeVerCanal(guarded.user, canalKey(contact))) notFound()
+  if (!guarded?.ok || !isKnownAdminRole(guarded.user.role) || !puedeVerCanal(guarded.user, canalKey(contact))) notFound()
 
   // Operador (fuente de verdad: CRM) + departamento (de ai-api).
   const [enrichedContact, botEnabled] = await Promise.all([

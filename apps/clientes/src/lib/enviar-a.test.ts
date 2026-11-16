@@ -188,6 +188,8 @@ describe("cuerpoSeleccion (sin dirección guardada)", () => {
     expect(cuerpoSeleccion({ tipo: "calle", calle: "Colón 1", geoToken: "a.b" })).toEqual({ ok: true, cuerpo: { calle: "Colón 1", geoToken: "a.b" } });
     expect(cuerpoSeleccion({ tipo: "actual" })).toEqual({ ok: true, cuerpo: null });
     expect(cuerpoSeleccion({ tipo: "detectada" })).toEqual({ ok: true, cuerpo: null });
+    // Detectada con calle: se reenvía para que, con sesión, quede en sus direcciones.
+    expect(cuerpoSeleccion({ tipo: "detectada", calle: "Colón 1", geoToken: "a.b" })).toEqual({ ok: true, cuerpo: { calle: "Colón 1", geoToken: "a.b" } });
   });
 });
 describe("cargas y guardado (fetch inyectado)", () => {

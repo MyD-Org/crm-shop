@@ -139,7 +139,8 @@ export function idNuevo(antes: DireccionEnvio[], despues: DireccionEnvio[]): str
  */
 export function cuerpoSeleccion(
   s:
-    | { tipo: "actual" | "detectada" }
+    | { tipo: "actual" }
+    | { tipo: "detectada"; calle?: string; geoToken?: string }
     | { tipo: "localidad"; id: string }
     | { tipo: "calle"; calle: string; geoToken: string }
     | null,
@@ -147,6 +148,8 @@ export function cuerpoSeleccion(
   if (!s) return { ok: false, error: TEXTOS_UBICACION.elegirLocalidad };
   if (s.tipo === "localidad") return { ok: true, cuerpo: { id: s.id } };
   if (s.tipo === "calle") return { ok: true, cuerpo: { calle: s.calle, geoToken: s.geoToken } };
+  // La detectada ya está en la cookie; con calle se reenvía para que, con sesión, quede en sus direcciones.
+  if (s.tipo === "detectada" && s.calle && s.geoToken) return { ok: true, cuerpo: { calle: s.calle, geoToken: s.geoToken } };
   return { ok: true, cuerpo: null };
 }
 

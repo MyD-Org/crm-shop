@@ -37,4 +37,34 @@ describe("AdminShell: menú por grupos", () => {
     expect(sinRol[0]).toContain('"/admin/inbox"')
     expect(sinRol[1]).toContain('"/admin/seguridad"')
   })
+
+  it("el rol «compras» ve SÓLO las entradas con acceso «compras» (allow-list, sin importar minRole)", () => {
+    expect(fuente).toContain('if (esCompras) return item.acceso === "compras"')
+    // Esa línea tiene que ser lo primero que decide el filtro: antes de minRole y de flag.
+    const filtro = fuente.slice(fuente.indexOf("const visibleNav"))
+    expect(filtro.indexOf("esCompras")).toBeLessThan(filtro.indexOf("minRole"))
+    // Ninguna entrada que no sea de Compras puede abrirse a ese rol.
+    const conAcceso = entradas.filter((l) => l.includes("acceso:"))
+    for (const l of conAcceso) expect(l).toContain('"/admin/compras"')
+  })
+
+  it("«Compras» está en Operación, para admin+ y para el rol compras, detrás del flag", () => {
+    const entrada = entradas.filter((l) => l.includes('href: "/admin/compras"'))
+    expect(entrada).toHaveLength(1)
+    expect(grupoDe(entrada[0])).toBe("Operación")
+    expect(entrada[0]).toContain('minRole: "admin"') // el operador no la ve
+    expect(entrada[0]).toContain('acceso: "compras"') // el rol compras sí
+    expect(entrada[0]).toContain('flag: "compras"')
+  })
+
+  it("con el flag apagado «Compras» se oculta también para el rol compras (el flag se evalúa antes que el rol)", () => {
+    expect(fuente).toContain('if (item.flag === "compras" && !comprasEnabled) return false')
+    const filtro = fuente.slice(fuente.indexOf("const visibleNav"))
+    expect(filtro.indexOf('item.flag === "compras"')).toBeLessThan(filtro.indexOf("if (esCompras)"))
+  })
+
+  it("el rol «compras» no consulta contadores ni conversaciones pendientes", () => {
+    expect(fuente).toContain("usePendingCounts(!esCompras)")
+    expect(fuente).toMatch(/if \(esCompras\) return true/)
+  })
 })

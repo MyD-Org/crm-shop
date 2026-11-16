@@ -1,0 +1,37 @@
+{
+  "id": "9003",
+  "date": "2026-11-15",
+  "dueDate": "2026-11-15",
+  "observations": "Prueba de API: borrar.",
+  "status": "open",
+  "provider": { "id": "900", "name": "Proveedor Ejemplo" },
+  "numberTemplate": { "number": "PRUEBA-API-00003", "fullNumber": "PRUEBA-API-00003" },
+  "total": 126,
+  "totalPaid": 0,
+  "balance": 126,
+  "warehouse": { "id": "wh-ejemplo-1", "name": "Principal" },
+  "payments": [],
+  "purchases": {
+    "categories": [
+      {
+        "id": "5246",
+        "name": "Mercadería en tránsito",
+        "price": 100,
+        "quantity": 1,
+        "subtotal": 100,
+        "total": 121,
+        "tax": [{ "id": "1", "name": "IVA", "percentage": "21.00", "type": "IVA", "amount": 21 }]
+      },
+      {
+        "id": "5233",
+        "name": "Cuenta de gasto sin impuesto (representa una percepción)",
+        "price": 5,
+        "quantity": 1,
+        "subtotal": 5,
+        "total": 5,
+        "tax": []
+      }
+    ]
+  },
+  "retentions": []
+}

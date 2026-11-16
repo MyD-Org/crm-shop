@@ -8,7 +8,7 @@ import { contarNoLeidos } from "@/lib/correo-repo"
 import { listConversations, type InboxConversation } from "@/lib/inbox-api"
 import { listPendingSubmittedAt } from "@/lib/payment-receipts"
 import { listPendientesCreatedAt } from "@/lib/pedidos-repo"
-import { roleRank } from "@/lib/roles"
+import { isKnownAdminRole, roleRank } from "@/lib/roles"
 
 // GET /api/admin/pending-counts — contadores para los badges de "novedades" del sidebar del
 // backoffice. El badge NO es "todo lo pendiente" sino "lo nuevo desde mi última visita a la
@@ -78,6 +78,14 @@ export async function GET(req: Request) {
   const guarded = await getGuardedAdminSession(req)
   if (!guarded.ok) {
     return Response.json({ error: "No autorizado", code: "unauthorized" }, { status: 401 })
+  }
+
+  // Rol fuera de los tres jerárquicos («compras»): no tiene secciones con contadores.
+  if (!isKnownAdminRole(guarded.user.role)) {
+    return Response.json(
+      { inbox: 0, comprobantes: null, pedidos: null, correo: 0 },
+      { headers: { "Cache-Control": "private, no-store" } },
+    )
   }
 
   const url = new URL(req.url)

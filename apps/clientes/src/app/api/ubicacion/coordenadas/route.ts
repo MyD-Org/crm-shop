@@ -81,7 +81,9 @@ export async function POST(req: Request) {
       ...(exacta ?? {}),
     });
     if (!eleccion) return errorUbicacion(TEXTOS_UBICACION.errorUbicacion, 404);
-    return respuestaConEleccion(eleccion);
+    // El token va en la respuesta (como en las sugerencias de /api/geocode): al confirmar, el modal lo reenvía
+    // y, con sesión, la calle detectada queda en «Mis direcciones». Las coordenadas siguen sólo dentro del token.
+    return respuestaConEleccion(eleccion, exacta ? { geoToken: exacta.geoToken } : undefined);
   } catch (err) {
     // Georef caído o lento: sin ubicación, el visitante puede escribir su localidad. Sin coordenadas en el log.
     console.error("[ubicacion] Georef no respondió:", err instanceof GeorefError ? err.motivo : "error");

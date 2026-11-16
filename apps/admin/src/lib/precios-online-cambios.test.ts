@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { decimalCanonico, validarCambios, MSG_COEF, MSG_MARCAS_VACIAS, MSG_NOMBRE, MSG_SIN_CAMBIOS, MAX_CAMBIOS } from "./precios-online-cambios"
+import { decimalCanonico, validarCambios, MSG_COEF, MSG_MARCAS_VACIAS, MSG_NOMBRE, MSG_SIN_CAMBIOS, MAX_CAMBIOS, MAX_PRODUCTOS_LOTE } from "./precios-online-cambios"
 
 // B.8: validación de los cambios de precios online. Datos inventados.
 
@@ -265,5 +265,50 @@ describe("validarCambios: setCondicion por forma de pago (0076)", () => {
     })
     const r = validarCambios(cond({}))
     expect(r.ok && "forma" in r.cambios[0]).toBe(false)
+  })
+})
+
+describe("validarCambios: ajusteProductos (asignación masiva)", () => {
+  const L1 = "11111111-1111-4111-8111-111111111111"
+  const L2 = "22222222-2222-4222-8222-222222222222"
+  const lote = (o: Record<string, unknown> = {}) => [
+    { op: "ajusteProductos", alegraIds: ["a1", "a2"], ajustes: [{ listaId: L1, coeficiente: "1.85" }], ...o },
+  ]
+  it("acepta ids y ajustes válidos y canoniza el coeficiente", () => {
+    expect(validarCambios(lote())).toEqual({
+      ok: true,
+      cambios: [{ op: "ajusteProductos", alegraIds: ["a1", "a2"], ajustes: [{ listaId: L1, coeficiente: "1.8500" }] }],
+    })
+  })
+  it("acepta coeficiente null (quitar) y varias listas", () => {
+    const r = validarCambios(lote({ ajustes: [{ listaId: L1, coeficiente: "1.85" }, { listaId: L2, coeficiente: null }] }))
+    expect(r).toMatchObject({ ok: true })
+  })
+  it("rechaza ids vacíos o repetidos", () => {
+    expect(validarCambios(lote({ alegraIds: [] }))).toMatchObject({ ok: false, campo: "cambios[0].alegraIds" })
+    expect(validarCambios(lote({ alegraIds: ["a1", "a1"] }))).toMatchObject({ ok: false, campo: "cambios[0].alegraIds" })
+  })
+  it("rechaza más de 2000 productos", () => {
+    const ids = Array.from({ length: MAX_PRODUCTOS_LOTE + 1 }, (_, i) => `p${i}`)
+    expect(validarCambios(lote({ alegraIds: ids }))).toMatchObject({ ok: false, campo: "cambios[0].alegraIds" })
+    expect(validarCambios(lote({ alegraIds: ids.slice(0, MAX_PRODUCTOS_LOTE) }))).toMatchObject({ ok: true })
+  })
+  it("rechaza más de 12 ajustes y listas repetidas", () => {
+    const muchos = Array.from({ length: 13 }, (_, i) => ({ listaId: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, coeficiente: "1.5" }))
+    expect(validarCambios(lote({ ajustes: muchos }))).toMatchObject({ ok: false, campo: "cambios[0].ajustes" })
+    expect(validarCambios(lote({ ajustes: [{ listaId: L1, coeficiente: "1.5" }, { listaId: L1, coeficiente: "1.6" }] }))).toMatchObject({
+      ok: false,
+    })
+  })
+  it("rechaza coeficiente menor a 1 y con más de 4 decimales", () => {
+    expect(validarCambios(lote({ ajustes: [{ listaId: L1, coeficiente: "0.9" }] }))).toEqual({
+      ok: false,
+      campo: "cambios[0].ajustes[0].coeficiente",
+      error: MSG_COEF,
+    })
+    expect(validarCambios(lote({ ajustes: [{ listaId: L1, coeficiente: "1.23456" }] }))).toMatchObject({ ok: false })
+  })
+  it("no acepta restaurarAjustes desde el cliente", () => {
+    expect(validarCambios([{ op: "restaurarAjustes", alegraIds: ["a1"], previos: [] }])).toMatchObject({ ok: false })
   })
 })

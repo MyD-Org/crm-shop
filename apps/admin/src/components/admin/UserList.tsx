@@ -18,6 +18,7 @@ import {
 function roleLabel(role: string): string {
   if (role === "superadmin") return "Superadmin"
   if (role === "admin") return "Admin"
+  if (role === "compras") return "Compras"
   return "Operador"
 }
 function roleTone(role: string): "warning" | "info" | "neutral" {

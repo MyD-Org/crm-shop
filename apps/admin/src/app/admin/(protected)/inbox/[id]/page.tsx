@@ -4,7 +4,8 @@ import { eq } from "drizzle-orm"
 import { notFound } from "next/navigation"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { adminSessionOptions, getGuardedAdminSession, type AdminSessionData } from "@/lib/admin-session"
+import { isKnownAdminRole } from "@/lib/roles"
 import { listConversations, getMessages } from "@/lib/inbox-api"
 import { ThreadView } from "@/components/admin/ThreadView"
 
@@ -12,6 +13,8 @@ export const dynamic = "force-dynamic"
 
 export default async function ThreadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const guard = await getGuardedAdminSession()
+  if (!guard.ok || !isKnownAdminRole(guard.user.role)) notFound()
   const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
   const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, session.tenantId))
 

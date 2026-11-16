@@ -44,6 +44,14 @@ function detalle(h: HistorialDto): string {
       const objeto = o.tipo === "marca" ? `Marca ${o.marca}` : o.tipo === "producto" ? `Producto ${o.productoNombre ?? o.alegraId}` : "Categoría"
       return `${objeto}: ${a.coeficiente ?? "—"} → ${d.coeficiente ?? "—"}`
     }
+    case "ajuste_lote": {
+      const o = (h.despues ?? {}) as Record<string, unknown>
+      if (typeof o.productos === "number") {
+        const n = (o.ajustes as unknown[] | undefined)?.length ?? 0
+        return `${o.productos} producto${o.productos === 1 ? "" : "s"} en ${n} lista${n === 1 ? "" : "s"}`
+      }
+      return `${o.restaurados ?? 0} ajustes restaurados`
+    }
     case "condicion": {
       const o = (h.despues ?? h.antes ?? {}) as Record<string, unknown>
       const estado = (x: Record<string, unknown>) => (x.listaId ? "con lista" : "sin lista")

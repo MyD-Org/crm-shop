@@ -6,6 +6,7 @@ import {
   crearBill,
   leerBill,
   reemplazarLineasBill,
+  reemplazarPercepcionesBill,
   type BillCrearInput,
   type BillLineaEscritura,
 } from "./alegra-compras"
@@ -112,6 +113,21 @@ describe("inyección de fallos", () => {
     __mockBillsFallar({ tras: "delete", modo: "corte" })
     await borrarBill(config, b.id).catch(() => undefined)
     await expect(leerBill(config, b.id)).resolves.toBeNull()
+  })
+
+  it("las percepciones suman al total, sobreviven al PUT de purchases y admiten fallos inyectados", async () => {
+    const b = await crearBill(config, input([cat(100_000)]))
+    expect(b.totalCentavos).toBe(121_000)
+    await reemplazarPercepcionesBill(config, b.id, [{ idPerception: "uuid-1", importeCentavos: 3_000 }])
+    expect((await leerBill(config, b.id))!.totalCentavos).toBe(124_000)
+    const tras = await reemplazarLineasBill(config, b.id, [item(50_000, 1000), cat(50_000)])
+    expect(tras.totalCentavos).toBe(124_000)
+    await reemplazarPercepcionesBill(config, b.id, [])
+    expect((await leerBill(config, b.id))!.totalCentavos).toBe(121_000)
+    __mockBillsFallar({ tras: "percepciones", modo: "5xx" })
+    await expect(reemplazarPercepcionesBill(config, b.id, [{ idPerception: "u", importeCentavos: 1 }])).rejects.toThrow()
+    // 5xx = aplicó y después falló: el resultado es incierto, como en Alegra real.
+    expect((await leerBill(config, b.id))!.totalCentavos).toBe(121_001)
   })
 
   it("el fallo es de una sola vez", async () => {

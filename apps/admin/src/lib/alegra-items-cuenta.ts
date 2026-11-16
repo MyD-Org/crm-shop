@@ -293,3 +293,67 @@ export async function asegurarItemsEnCuenta(
   }
   return { ok: true, ids: resueltos, creados }
 }
+
+// ── Compras (change `compras-en-transito`, S4): resolver SIN crear ───────────────────────────────
+//
+// Una compra jamás da de alta ítems en Alegra: si el producto no está en la cuenta destino se
+// informa para que se lo cargue a mano. `createItem` NO se invoca en ninguna de estas funciones.
+
+export interface ResolucionSinCrear {
+  /** `alegraId` del catálogo -> id real del ítem en la cuenta. */
+  ids: Map<string, string>
+  /** ids del catálogo que no se pudieron resolver sin hablar con Alegra. */
+  faltantes: string[]
+}
+
+/** Sólo lectura de la base (pasos 1 y 2 de la resolución): no llama a Alegra ni crea nada. */
+export async function resolverIdsEnCuentaSinCrear(
+  tenantId: string,
+  cuenta: CuentaDestino,
+  alegraIds: string[],
+): Promise<ResolucionSinCrear> {
+  const ids = [...new Set(alegraIds)]
+  const [filas, slugs] = await Promise.all([filasCatalogo(tenantId, ids), slugsDeCuenta(tenantId, cuenta.id)])
+  const pareo = await pareoDeCuenta(tenantId, slugs, ids)
+  const resueltos = new Map<string, string>()
+  const faltantes: string[] = []
+  for (const id of ids) {
+    const local = idLocal(cuenta, filas.get(id), id, pareo)
+    if (local) resueltos.set(id, local)
+    else faltantes.push(id)
+  }
+  return { ids: resueltos, faltantes }
+}
+
+export const msgProductoSinItemEnCuenta = (nombre: string, cuenta: CuentaDestino) =>
+  `El producto "${nombre}" no existe en la cuenta de Alegra de ${cuenta.nombre}. Créelo en Alegra antes de continuar.`
+
+/**
+ * Acción «Buscar en Alegra»: lectura por código en la cuenta; si hay UNA coincidencia del tipo
+ * correcto guarda el pareo y devuelve su id. Con 0 o más de 1 no hace nada y explica por qué.
+ */
+export async function parearItemEnCuentaPorCodigo(
+  tenantId: string,
+  config: TenantConfig,
+  cuenta: CuentaDestino,
+  alegraId: string,
+  buscarPorCodigo: DepsItemsCuenta["buscarPorCodigo"] = buscarItemsPorCodigo,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const [filas, slugs] = await Promise.all([filasCatalogo(tenantId, [alegraId]), slugsDeCuenta(tenantId, cuenta.id)])
+  const fila = filas.get(alegraId)
+  if (!fila) return { ok: false, error: "El producto ya no está en el catálogo." }
+  const nombre = fila.name
+  const codigo = fila.code?.trim()
+  if (!codigo) return { ok: false, error: `El producto "${nombre}" no tiene código: no se puede buscar en Alegra.` }
+  const esVariante = fila.tipo === "variante"
+  const opcion = fila.varianteClave ?? ""
+  const encontrados = await buscarPorCodigo(config, codigo)
+  const candidatos = esVariante
+    ? encontrados.filter((e) => (e.tipo ?? "simple") === "variante" && (e.varianteClave ?? "") === opcion)
+    : encontrados.filter((e) => (e.tipo ?? "simple") === "simple")
+  if (candidatos.length === 0) return { ok: false, error: msgProductoSinItemEnCuenta(nombre, cuenta) }
+  if (candidatos.length > 1) return { ok: false, error: msgDuplicado(codigo, cuenta) }
+  const itemId = candidatos[0].alegraId
+  await getDb().transaction((tx) => guardarPareo(tx, tenantId, slugs, alegraId, itemId))
+  return { ok: true, id: itemId }
+}

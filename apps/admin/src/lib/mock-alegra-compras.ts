@@ -1,5 +1,5 @@
 import { AlegraHttpError, AlegraRateLimitError } from "./alegra"
-import type { BillCrearInput, BillLeida, BillLinea, BillLineaEscritura, CategoriaContable } from "./alegra-compras"
+import type { BillCrearInput, BillLeida, BillLinea, BillLineaEscritura, CategoriaContable, PercepcionEscritura } from "./alegra-compras"
 
 // Mock en memoria de /bills para tests y modo `alegraMock`. Replica lo verificado contra Alegra
 // real (sondeo MDP 2026-11-15): PUT reemplaza el bloque purchases entero; el IVA se calcula SIN
@@ -36,6 +36,7 @@ interface BillMock {
   lineas: BillLinea[]
   pagos: { id: string; numero: string | null; montoCentavos: number }[]
   retenciones: unknown[]
+  percepciones: PercepcionEscritura[]
 }
 
 const bills = new Map<string, BillMock>()
@@ -44,7 +45,7 @@ let siguientePago = 8001
 let fallo: FalloMock | null = null
 
 export interface FalloMock {
-  tras: "put" | "post" | "delete"
+  tras: "put" | "post" | "delete" | "percepciones"
   modo: "5xx" | "corte" | "429"
 }
 
@@ -98,7 +99,7 @@ function despues(op: FalloMock["tras"]): void {
 }
 
 function aLeida(b: BillMock): BillLeida {
-  const total = calcularTotalBillCentavos(b.lineas)
+  const total = calcularTotalBillCentavos(b.lineas) + b.percepciones.reduce((a, p) => a + p.importeCentavos, 0)
   const pagado = b.pagos.reduce((a, p) => a + p.montoCentavos, 0)
   return {
     id: b.id,
@@ -137,6 +138,7 @@ export function mockCrearBill(input: BillCrearInput): BillLeida {
     lineas: input.lineas.map(sinNombre),
     pagos: [],
     retenciones: [],
+    percepciones: [],
   }
   bills.set(b.id, b)
   despues("post")
@@ -181,4 +183,13 @@ export function mockCategoriasContables(): CategoriaContable[] {
 
 export function mockListarAlmacenes(): { id: string; nombre: string; porDefecto: boolean }[] {
   return [{ id: "wh-mock-1", nombre: "Principal", porDefecto: true }]
+}
+
+/** El total de la bill incluye las percepciones; el PUT de `purchases` las conserva. */
+export function mockReemplazarPercepcionesBill(id: string, percepciones: PercepcionEscritura[]): void {
+  antes("percepciones")
+  const b = bills.get(id)
+  if (!b) throw new AlegraHttpError(404, `/bills/${id}/perceptions (mock)`, "no existe")
+  b.percepciones = percepciones.map((p) => ({ ...p }))
+  despues("percepciones")
 }

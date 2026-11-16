@@ -8,6 +8,7 @@ import {
   mockLeerBill,
   mockListarAlmacenes,
   mockReemplazarLineasBill,
+  mockReemplazarPercepcionesBill,
 } from "./mock-alegra-compras"
 
 // Cliente Alegra de FACTURAS DE COMPRA (/bills), categorías contables y almacenes, para el change
@@ -79,6 +80,13 @@ export interface CategoriaContable {
   nombre: string
   tipo: string
   uso: string
+}
+
+/** Percepción a aplicar a una bill: `idPerception` es el uuid del catálogo de Alegra (no listable por API). */
+export interface PercepcionEscritura {
+  idPerception: string
+  importeCentavos: number
+  certificado?: string | null
 }
 
 export type ClaseErrorEscritura = "rechazada" | "no_aplicada" | "incierta"
@@ -284,4 +292,19 @@ export async function buscarBills(config: TenantConfig, q: { proveedorId: string
   return (Array.isArray(raw) ? raw : [])
     .map(parsearBill)
     .filter((b) => b.proveedorId === q.proveedorId && b.numero === q.numero)
+}
+
+/**
+ * PUT /bills/{id}/perceptions con un ARRAY [{id: idPerception, amount, certificateNumber?}]
+ * (sondeo MDP). REEMPLAZA la lista completa; las percepciones sobreviven al PUT de `purchases` y
+ * suman al total de la bill. ESCRITURA REAL: sólo desde compras-service.
+ */
+export async function reemplazarPercepcionesBill(config: TenantConfig, id: string, percepciones: PercepcionEscritura[]): Promise<void> {
+  if (config.alegraMock) return mockReemplazarPercepcionesBill(id, percepciones)
+  const body = percepciones.map((p) => ({
+    id: p.idPerception,
+    amount: aPesos(p.importeCentavos),
+    ...(p.certificado ? { certificateNumber: p.certificado } : {}),
+  }))
+  await alegraFetch(config, `/bills/${encodeURIComponent(id)}/perceptions`, undefined, { method: "PUT", body }, ESCRITURA)
 }

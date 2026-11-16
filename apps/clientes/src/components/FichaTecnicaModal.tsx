@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import { Dialog } from "@myd-org/ui";
 
 /**
- * Botón "Ver ficha técnica" + modal con el PDF embebido. Mismo patrón que
+ * Botón "Ver ficha técnica" + modal con el PDF embebido. Va en la columna de compra
+ * con forma de botón (con borde), para que se vea sin bajar la página. Mismo patrón que
  * MediosDePagoModal (Dialog controlado, foco devuelto al botón al cerrar).
  *
  * El iframe se monta recién al abrir: la ficha no baja el PDF si nadie lo mira.
@@ -34,7 +35,7 @@ export function FichaTecnicaModal({ url, nombreProducto }: { url: string; nombre
           e.preventDefault();
           setAbierto(true);
         }}
-        className="inline-flex items-center gap-2 rounded-sm text-sm font-semibold text-accent underline decoration-accent/35 underline-offset-4 transition-colors hover:decoration-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-text transition-colors hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] lg:w-auto"
       >
         <FileIcon />
         {/* Mismo corte que MEDIA_MODAL (md = 768px): en el celular el enlace

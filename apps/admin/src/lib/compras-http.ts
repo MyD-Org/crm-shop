@@ -13,6 +13,9 @@ export const ok = (body: unknown, status = 200) => Response.json(body, { status,
 
 const STATUS_POR_CODIGO: Record<string, number> = {
   validacion: 400,
+  confirmacion_requerida: 400,
+  producto_existente: 409,
+  item_inactivo: 409,
   no_encontrada: 404,
   cuenta_inexistente: 404,
   numero_duplicado: 409,

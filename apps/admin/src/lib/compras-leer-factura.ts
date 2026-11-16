@@ -55,7 +55,7 @@ export const HERRAMIENTA_FACTURA = {
       fecha: textoONull("Fecha de emisión en formato YYYY-MM-DD. Las fechas del documento son día/mes/año."),
       vencimiento: textoONull("Fecha de vencimiento en formato YYYY-MM-DD, o null si no figura."),
       descuento_general_pct: numONull(
-        "Descuento o bonificación GENERAL sobre el subtotal, en porcentaje (p. ej. 40 si el subtotal 1000 tiene un descuento de -400). null si no hay. Un recargo va negativo.",
+        "Descuento o bonificación GENERAL sobre el subtotal (renglones como \"Dto/Rec\", \"Bonificación\", \"Descuento\" entre dos subtotales), en porcentaje: 40 si el subtotal 1000 tiene -400. null si no hay. Un recargo va negativo.",
       ),
       lineas: {
         type: "array",
@@ -162,14 +162,27 @@ const redondear2 = (n: number) => Math.round(n * 100) / 100
 export function normalizarFactura(input: unknown): FacturaLeida {
   const r = (input ?? {}) as Record<string, unknown>
   const tipo = r.tipo_documento === "factura" || r.tipo_documento === "remito" ? r.tipo_documento : "otro"
-  const dto = numero(r.descuento_general_pct)
-  const factor = dto !== null && dto > -100 && dto < 100 ? 1 - dto / 100 : 1
-  const lineas: LineaLeida[] = []
+  const subtotalNeto = numero(r.subtotal_neto)
+  const brutas: { x: Record<string, unknown>; cantidad: number; precio: number }[] = []
   for (const l of Array.isArray(r.lineas) ? r.lineas : []) {
     const x = (l ?? {}) as Record<string, unknown>
     const cantidad = numero(x.cantidad)
     const precio = numero(x.precio_unitario)
     if (cantidad === null || cantidad <= 0 || precio === null || precio < 0) continue
+    brutas.push({ x, cantidad, precio })
+  }
+  let dto = numero(r.descuento_general_pct)
+  if (dto !== null && (dto <= -100 || dto >= 100)) dto = null
+  // El modelo a veces no informa el descuento general aunque el documento lo tenga
+  // ("SubTotal 8.150.576,50 / Dto -3.260.230,60 / SubTotal 4.890.345,90"): si la suma de los
+  // renglones supera al subtotal neto leído, el descuento se deduce de esa proporción.
+  if (dto === null && subtotalNeto !== null && subtotalNeto > 0) {
+    const sumaBruta = brutas.reduce((a, b) => a + b.cantidad * b.precio, 0)
+    if (sumaBruta - subtotalNeto > 1) dto = Math.round((1 - subtotalNeto / sumaBruta) * 1e6) / 1e4
+  }
+  const factor = dto !== null ? 1 - dto / 100 : 1
+  const lineas: LineaLeida[] = []
+  for (const { x, cantidad, precio } of brutas) {
     lineas.push({
       codigo: texto(x.codigo),
       descripcion: texto(x.descripcion) ?? "",
@@ -196,7 +209,7 @@ export function normalizarFactura(input: unknown): FacturaLeida {
     descuentoGeneralPct: dto,
     lineas,
     percepciones,
-    subtotalNetoLeido: numero(r.subtotal_neto),
+    subtotalNetoLeido: subtotalNeto,
     totalLeido: numero(r.total),
   }
 }

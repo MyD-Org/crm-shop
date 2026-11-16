@@ -46,8 +46,25 @@ describe("normalizarFactura", () => {
   })
 
   it("fechas inválidas quedan null y sin descuento el costo no cambia", () => {
-    const f = normalizarFactura({ ...entrada, fecha: "04/11/2026", descuento_general_pct: null })
+    const f = normalizarFactura({ ...entrada, fecha: "04/11/2026", descuento_general_pct: null, subtotal_neto: null })
     expect(f.fecha).toBeNull()
+    expect(f.lineas[0].costo).toBe(39093)
+  })
+
+  it("sin descuento informado, lo deduce del subtotal neto", () => {
+    const f = normalizarFactura({
+      ...entrada,
+      descuento_general_pct: null,
+      lineas: entrada.lineas.slice(0, 2),
+      subtotal_neto: Math.round((15 * 39093 + 25 * 20833.9) * 0.6 * 100) / 100,
+    })
+    expect(f.descuentoGeneralPct).toBe(40)
+    expect(f.lineas.map((l) => l.costo)).toEqual([23455.8, 12500.34])
+  })
+
+  it("subtotal igual a la suma: no inventa descuento", () => {
+    const f = normalizarFactura({ ...entrada, descuento_general_pct: null, lineas: entrada.lineas.slice(0, 1), subtotal_neto: 15 * 39093 })
+    expect(f.descuentoGeneralPct).toBeNull()
     expect(f.lineas[0].costo).toBe(39093)
   })
 

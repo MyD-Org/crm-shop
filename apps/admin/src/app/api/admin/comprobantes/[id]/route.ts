@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { getAdmin, setLoaded, toAdminDtoConPedido } from "@/lib/payment-receipts"
 
 // GET /api/admin/comprobantes/[id] — detalle (solo `pending`/`loaded`; cualquier otro
@@ -15,7 +15,7 @@ const NO_STORE = { "Cache-Control": "private, no-store" }
 type IdParams = { params: Promise<{ id: string }> }
 
 export async function GET(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "comprobantes")
   if (!guard.ok) return guard.response
 
   const { id } = await params
@@ -26,7 +26,7 @@ export async function GET(req: Request, { params }: IdParams) {
 }
 
 export async function PATCH(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "comprobantes")
   if (!guard.ok) return guard.response
 
   const body = await req.json().catch(() => null)

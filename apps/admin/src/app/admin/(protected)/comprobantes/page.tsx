@@ -2,24 +2,23 @@ import { eq } from "drizzle-orm"
 import { notFound } from "next/navigation"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { getGuardedAdminSession } from "@/lib/admin-session"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { ADMIN_LIST_DEFAULT_LIMIT, listAdmin, toAdminDtos } from "@/lib/payment-receipts"
 import { r2Config } from "@/lib/r2"
-import { roleRank } from "@/lib/roles"
 import { ComprobantesShell } from "@/components/admin/comprobantes/ComprobantesShell"
 
 export const dynamic = "force-dynamic"
 
-// Página admin+ (operator → 404, igual que Horarios). El layout protegido ya corrió el
-// guard y redirige si no hay sesión; acá se repite para el rol (operator pasa el guard del
-// layout pero no puede ver la feature) y para poder renderizar la página sola.
+// Sección Comprobantes (`accesoSeccion`; sin ella, 404). El layout protegido ya corrió el guard y
+// redirige si no hay sesión; acá se repite para la sección (la sesión pasa el guard del layout
+// pero no alcanza para ver la feature) y para poder renderizar la página sola.
 export default async function ComprobantesPage({
   searchParams,
 }: {
   searchParams: Promise<{ id?: string }>
 }) {
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok || roleRank(guard.user.role) < 1) notFound()
+  const guard = await accesoSeccion("comprobantes")
+  if (!guard) notFound()
 
   const sp = await searchParams
   const now = new Date()

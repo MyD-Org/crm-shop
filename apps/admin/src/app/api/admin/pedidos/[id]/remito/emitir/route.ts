@@ -1,5 +1,5 @@
 import { AlegraRateLimitError, AlegraHttpError, createRemission } from "@/lib/alegra"
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { armarPreviewRemito, lineasParaAlegra, observacionesRemito, puedeEmitirRemito } from "@/lib/remito"
 import { armarLineasFactura } from "@/lib/factura-emitir"
 import { asegurarItemsEnCuenta } from "@/lib/alegra-items-cuenta"
@@ -23,7 +23,7 @@ import { puedeVerCostos } from "@/lib/secciones"
 
 // "Emitir remito": crea el remito REAL en Alegra desde el pedido, en 0 (papel de depósito, no
 // venta) y lo persiste. A diferencia de "Vincular remito existente" (el remito ya está en
-// Alegra), acá el POST escribe. Sólo admin+ (`requireAdminPlus`).
+// Alegra), acá el POST escribe. Sólo con la sección Pedidos (`requireSeccion`).
 //
 //   GET  → preview (dry-run, sin escritura): líneas, avisos y si se puede emitir.
 //   POST → confirma: crea el remito en Alegra y lo persiste. 200 = detalle completo.
@@ -87,7 +87,7 @@ async function cuentaDelRemito(tenantId: string, pedido: PedidoRow) {
 }
 
 export async function GET(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "pedidos")
   if (!guard.ok) return guard.response
 
   const { id } = await params
@@ -115,7 +115,7 @@ export async function GET(req: Request, { params }: IdParams) {
 }
 
 export async function POST(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "pedidos")
   if (!guard.ok) return guard.response
 
   const { id } = await params

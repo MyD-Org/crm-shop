@@ -5,7 +5,7 @@ import { resolverIdsEnCuentaSinCrear, type CuentaDestino } from "./alegra-items-
 
 // Buscador de productos de Compras (change `compras-en-transito`, S4). Sólo lectura de la base.
 // El costo de referencia viaja ÚNICAMENTE desde la ruta de Compras, ya detrás de
-// `requireComprasAccess` (el rol «compras» ve costos por naturaleza del módulo).
+// `requireSeccion(req, "compras")` (el rol «compras» ve costos por naturaleza del módulo).
 
 export interface ProductoCompraDto {
   alegraId: string

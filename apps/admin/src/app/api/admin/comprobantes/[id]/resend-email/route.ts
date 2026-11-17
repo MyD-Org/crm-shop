@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { deliverReceiptEmail } from "@/lib/receipt-delivery"
 import { getAdmin, toAdminDto } from "@/lib/payment-receipts"
 import { getR2 } from "@/lib/r2"
@@ -17,7 +17,7 @@ const NO_STORE = { "Cache-Control": "private, no-store" }
 type IdParams = { params: Promise<{ id: string }> }
 
 export async function POST(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "comprobantes")
   if (!guard.ok) return guard.response
 
   const { id } = await params

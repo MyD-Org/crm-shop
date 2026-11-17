@@ -1,14 +1,14 @@
-import { requireComprasAccess } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { cuentaActivaPorSlug, MSG_CUENTA_NO_EXISTE } from "@/lib/compras-config-repo"
 import { fail, ok, responderError } from "@/lib/compras-http"
 import { buscarProductosCompra } from "@/lib/compras-productos-repo"
 
 // GET /api/admin/compras/productos?cuenta=<slug>&q= — productos del catálogo con su ítem en la
 // cuenta elegida (`itemIdCuenta`) o `sinItemEnCuenta`. Incluye el costo de referencia: sólo se
-// llega acá tras `requireComprasAccess` (rol «compras», admin o superadmin).
+// llega acá tras `requireSeccion` (rol «compras», admin o superadmin).
 
 export async function GET(req: Request) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
 
   const url = new URL(req.url)

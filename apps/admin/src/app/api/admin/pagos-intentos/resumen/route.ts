@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { DIAS_VENTANA, resumenIntentos } from "@/lib/pagos-intentos-repo"
 
 // GET /api/admin/pagos-intentos/resumen?dias= — resumen de intentos de cobro por proveedor y cuenta
@@ -8,7 +8,7 @@ import { DIAS_VENTANA, resumenIntentos } from "@/lib/pagos-intentos-repo"
 const NO_STORE = { "Cache-Control": "private, no-store" }
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "pedidos")
   if (!guard.ok) return guard.response
 
   const diasParam = new URL(req.url).searchParams.get("dias")

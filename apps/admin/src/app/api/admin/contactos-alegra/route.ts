@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import {
   BUSCAR_CONTACTOS_Q_MAX,
   BUSCAR_CONTACTOS_Q_MIN,
@@ -7,8 +7,8 @@ import {
 
 // GET /api/admin/contactos-alegra?q= — buscador del diálogo "Vincular" de "Clientes de la
 // tienda": clientes activos de la cuenta principal del tenant por razón social, CUIT o email
-// (hasta 10). Sólo admin y superadmin: sirve únicamente a una acción que es de admin+. El
-// tenant sale SÓLO del guard.
+// (hasta 10). Sólo con la sección Clientes de la tienda (`requireSeccion`), que es donde vive el
+// diálogo. El tenant sale SÓLO del guard.
 
 const NO_STORE = { "Cache-Control": "private, no-store" }
 
@@ -16,7 +16,7 @@ const fail = (status: number, code: string, error: string) =>
   Response.json({ error, code }, { status, headers: NO_STORE })
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "clientes-tienda")
   if (!guard.ok) return guard.response
 
   const q = (new URL(req.url).searchParams.get("q") ?? "").trim()

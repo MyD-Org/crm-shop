@@ -1,4 +1,4 @@
-import { requireComprasAccess } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { configAlegraDeCuenta, cuentaActivaPorSlug, MSG_CUENTA_NO_EXISTE } from "@/lib/compras-config-repo"
 import { fail, ok, responderError } from "@/lib/compras-http"
 import { copiarProductoACuenta, validarEntradaCopia } from "@/lib/compras-producto-alta"
@@ -8,7 +8,7 @@ import { copiarProductoACuenta, validarEntradaCopia } from "@/lib/compras-produc
 // regla de copia de la facturación. Sólo con `confirmar: true`. Guard: rol «compras» o admin+.
 
 export async function POST(req: Request) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
   const body = await req.json().catch(() => null)
   try {

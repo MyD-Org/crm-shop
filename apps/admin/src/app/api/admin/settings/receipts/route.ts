@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { parseReceiptsEmail } from "@/lib/receipt-validation"
 
 // GET/PUT /api/admin/settings/receipts — mail destino de los avisos de comprobantes
@@ -12,7 +12,7 @@ import { parseReceiptsEmail } from "@/lib/receipt-validation"
 const NO_STORE = { "Cache-Control": "private, no-store" }
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, ["sucursales", "comprobantes"])
   if (!guard.ok) return guard.response
 
   const [tenant] = await getDb()
@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, ["sucursales", "comprobantes"])
   if (!guard.ok) return guard.response
 
   const body = await req.json().catch(() => null)

@@ -57,7 +57,7 @@ const cargarContextoCuentaFactura = vi.fn()
 const guard = { ok: true, tenantId: TENANT, user: { id: "u1", name: "Operador", email: "op@tienda.example", role: "admin" } }
 
 vi.mock("@/lib/admin-route-guard", () => ({
-  requireAdminPlus: async () => guard,
+  requireSeccion: async () => guard,
   adminNotFoundResponse: () => Response.json({ error: "not found" }, { status: 404 }),
 }))
 vi.mock("@/lib/alegra", async (importOriginal) => ({

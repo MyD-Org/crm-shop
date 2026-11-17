@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireComprasAccess } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { comprasRecepcionHabilitada } from "@/lib/compras-flag"
 import { esUuid, ok, responderError, toCompraDetalleDto } from "@/lib/compras-http"
 import { anularCompra, detalleCompra, editarCompraDesdeBody } from "@/lib/compras-service"
@@ -13,7 +13,7 @@ import { anularCompra, detalleCompra, editarCompraDesdeBody } from "@/lib/compra
 type IdParams = { params: Promise<{ id: string }> }
 
 export async function GET(req: Request, { params }: IdParams) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
   const { id } = await params
   if (!esUuid(id)) return adminNotFoundResponse()
@@ -27,7 +27,7 @@ export async function GET(req: Request, { params }: IdParams) {
 }
 
 export async function PATCH(req: Request, { params }: IdParams) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
   const { id } = await params
   if (!esUuid(id)) return adminNotFoundResponse()
@@ -42,7 +42,7 @@ export async function PATCH(req: Request, { params }: IdParams) {
 }
 
 export async function DELETE(req: Request, { params }: IdParams) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
   const { id } = await params
   if (!esUuid(id)) return adminNotFoundResponse()

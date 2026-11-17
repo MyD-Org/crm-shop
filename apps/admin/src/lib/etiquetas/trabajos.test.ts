@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { CABECERA_100X150, ensamblarTrabajoBitmap, trabajoCodigos, type ItemEtiqueta } from "./trabajos"
+import { CABECERA_100X150, codigoDeBarras, ensamblarTrabajoBitmap, trabajoCodigos, type ItemEtiqueta } from "./trabajos"
 
 const texto = (d: Uint8Array) => new TextDecoder().decode(d)
 const item = (alegraId: string, referencia: string | null, nombre: string, cantidad = 1): ItemEtiqueta => ({
@@ -77,7 +77,7 @@ describe("trabajoCodigos (29x20, 3 por fila)", () => {
         nombre: "Tilde",
         motivo: "La referencia contiene caracteres que no se pueden imprimir en código de barras.",
       },
-      { alegraId: "4", nombre: "Larga", motivo: expect.stringContaining("18 caracteres") },
+      { alegraId: "4", nombre: "Larga", motivo: "El código de barras de la referencia no entra en la etiqueta de 29 mm." },
       { alegraId: "5", nombre: "Cero", motivo: "Ingrese una cantidad entera entre 1 y 999." },
     ])
   })
@@ -88,6 +88,22 @@ describe("trabajoCodigos (29x20, 3 por fila)", () => {
     const r = trabajoCodigos([item("1", "W".repeat(18), "Ancho")])
     expect(r.omitidos[0]?.motivo).toBe("El código de barras de la referencia no entra en la etiqueta de 29 mm.")
     expect(r.trabajos).toHaveLength(0)
+  })
+
+  it("si la referencia no entra, imprime el código sin el sufijo de marca", () => {
+    const r = trabajoCodigos([item("1", "VOLKAN-BLACK-40-GRS", "Volkan")])
+    expect(r.omitidos).toEqual([])
+    expect(r.etiquetas).toBe(1)
+    const s = texto(r.trabajos[0].datos)
+    expect(s).toContain('"VOLKAN-BLACK-40"')
+    expect(s).not.toContain("VOLKAN-BLACK-40-GRS")
+  })
+
+  it("si tampoco entra sin el sufijo, la omite con motivo", () => {
+    const r = trabajoCodigos([item("1", "W".repeat(17) + "-GRS", "Ancho")])
+    expect(r.omitidos[0]?.motivo).toBe(
+      "El código de barras de la referencia no entra en la etiqueta de 29 mm, ni siquiera sin el sufijo.",
+    )
   })
 
   it("trunca el nombre a 18 caracteres", () => {
@@ -109,5 +125,18 @@ describe("ensamblarTrabajoBitmap", () => {
     expect(s.split("SIZE").length - 1).toBe(1)
     expect(s.split("BITMAP 0,0,1,2,0,").length - 1).toBe(2)
     expect(s.split("PRINT 1,1").length - 1).toBe(2)
+  })
+})
+
+describe("codigoDeBarras", () => {
+  it("usa la referencia completa cuando entra", () => {
+    expect(codigoDeBarras("ARDA-55-GRS")).toMatchObject({ ok: true, codigo: "ARDA-55-GRS", sinSufijo: false })
+  })
+  it("saca el sufijo cuando la completa no entra", () => {
+    expect(codigoDeBarras("VOLKAN-BLACK-40-GRS")).toMatchObject({ ok: true, codigo: "VOLKAN-BLACK-40", sinSufijo: true })
+  })
+  it("rechaza vacía y caracteres fuera de Code128B", () => {
+    expect(codigoDeBarras(null)).toEqual({ ok: false, mensaje: "El producto no tiene referencia." })
+    expect(codigoDeBarras("ÑANDÚ-1-GRS").ok).toBe(false)
   })
 })

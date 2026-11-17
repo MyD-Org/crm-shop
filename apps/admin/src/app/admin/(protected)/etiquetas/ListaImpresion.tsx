@@ -2,6 +2,7 @@
 
 import { Badge, Button, Input, Table, type TableColumn } from "@myd-org/ui"
 import { MENSAJE_SIN_REFERENCIA, type FilaLista } from "@/lib/etiquetas/lista"
+import { codigoDeBarras } from "@/lib/etiquetas/trabajos"
 import { MENSAJE_CANTIDAD, validarCantidad } from "@/lib/etiquetas/texto"
 
 interface Props {
@@ -31,6 +32,7 @@ export function ListaImpresion({ lista, onCambiar, sucursal, usaReferencia, inva
           {usaReferencia && !f.referencia && (
             <div className="text-xs" style={{ color: "var(--amber)" }}>{MENSAJE_SIN_REFERENCIA}</div>
           )}
+          {usaReferencia && f.referencia && <AvisoCodigo referencia={f.referencia} />}
         </div>
       ),
     },
@@ -90,6 +92,17 @@ export function ListaImpresion({ lista, onCambiar, sucursal, usaReferencia, inva
       {invalidas.size > 0 && (
         <p className="text-sm text-danger" role="alert">{MENSAJE_CANTIDAD}</p>
       )}
+    </div>
+  )
+}
+
+/** Avisa antes de imprimir si el código va sin el sufijo o si el producto se va a omitir. */
+function AvisoCodigo({ referencia }: { referencia: string }) {
+  const cod = codigoDeBarras(referencia)
+  if (cod.ok && !cod.sinSufijo) return null
+  return (
+    <div className="text-xs" style={{ color: "var(--amber)" }}>
+      {cod.ok ? `Se imprime sin el sufijo: ${cod.codigo}` : `No se imprimirá. ${cod.mensaje}`}
     </div>
   )
 }

@@ -380,7 +380,10 @@ export interface FiltrosAdmin {
   stockEn?: string
   /** "si" = solo los destacados (`catalog_overlay.orden` no nulo). Combinable con `categoria` (subárbol). */
   destacado?: "si"
-  /** Clave normalizada de la marca (`lower(btrim(brand))`, la de `listarMarcas`). */
+  /**
+   * Marca: se compara contra `lower(btrim(brand))` sin distinguir mayúsculas ni espacios en los
+   * bordes (la clave de `listarMarcas` o la grafía real, p. ej. "ACME").
+   */
   marca?: string
 }
 
@@ -507,7 +510,7 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
 
   if (f.destacado === "si") cond.push(sql`o.orden IS NOT NULL`)
 
-  if (f.marca) cond.push(sql`lower(btrim(p.brand)) = ${f.marca}`)
+  if (f.marca) cond.push(sql`lower(btrim(p.brand)) = lower(btrim(${f.marca}))`)
 
   if (f.tag && esUuid(f.tag)) {
     cond.push(sql`EXISTS (

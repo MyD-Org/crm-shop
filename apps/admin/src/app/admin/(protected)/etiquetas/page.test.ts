@@ -14,8 +14,19 @@ describe("/admin/etiquetas", () => {
     expect(fuente).toMatch(/export const dynamic = "force-dynamic"/)
   })
 
-  it("todavía no tiene entrada en el menú (llega en R3)", () => {
-    expect(leer("../../../../components/admin/AdminShell.tsx")).not.toContain("/admin/etiquetas")
+  it("tiene una única entrada en el menú, en el grupo Datos y sólo para admin+", () => {
+    const entradas = leer("../../../../components/admin/AdminShell.tsx")
+      .split("\n")
+      .filter((l) => l.includes('href: "/admin/etiquetas"'))
+    expect(entradas).toHaveLength(1)
+    expect(entradas[0]).toContain('group: "Datos"')
+    expect(entradas[0]).toContain('minRole: "admin"')
+  })
+
+  it("la API de contexto exige admin+ (requireAdminPlus) y usa el tenant del guard", () => {
+    const fuente = leer("../../../api/admin/etiquetas/contexto/route.ts")
+    expect(fuente).toMatch(/await requireAdminPlus\(req\)/)
+    expect(fuente).toMatch(/armarContexto\(guard\.tenantId/)
   })
 })
 

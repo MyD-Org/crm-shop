@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { MessageSquare, Users, LogOut, BarChart3, FileText, Package, Receipt, ShoppingBag, UserRound, Store, CreditCard, Clock, Truck, MessageCircleQuestion, Globe, ShieldCheck, PackagePlus } from "lucide-react"
+import { MessageSquare, Users, LogOut, BarChart3, FileText, Package, Receipt, ShoppingBag, UserRound, Store, CreditCard, Clock, Truck, MessageCircleQuestion, Globe, ShieldCheck, PackagePlus, Printer } from "lucide-react"
 import { SideNav, ToastProvider } from "@myd-org/ui"
 import { AvailabilityToggle, type Availability } from "./AvailabilityToggle"
 import { NotificationsPrompt } from "./NotificationsPrompt"
@@ -196,6 +196,7 @@ const NAV: NavEntry[] = [
   { href: "/admin/horarios", label: "Horarios", group: "Datos", icon: <Clock size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/chat-tienda", label: "Chat de la tienda", group: "Datos", icon: <MessageCircleQuestion size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/tienda-online", label: "Tienda online", group: "Datos", icon: <Globe size={16} strokeWidth={1.6} />, minRole: "admin" as const },
+  { href: "/admin/etiquetas", label: "Etiquetas", group: "Datos", icon: <Printer size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/plantillas", label: "Plantillas", group: "Datos", icon: <FileText size={16} strokeWidth={1.6} />, minRole: "superadmin" as const },
   { href: "/admin/usuarios", label: "Usuarios", group: "Administración", icon: <Users size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/seguridad", label: "Seguridad", group: "Administración", icon: <ShieldCheck size={16} strokeWidth={1.6} /> },

@@ -5,9 +5,9 @@ import { EtiquetasClient } from "./EtiquetasClient"
 
 export const dynamic = "force-dynamic"
 
-// Etiquetas: impresión por WebUSB desde el navegador. Admin+ (operator → 404).
-// Provisional (R2): sólo conexión e impresión de prueba, sin entrada en el menú. La pantalla
-// completa y el menú llegan en R3.
+// Etiquetas: impresión por WebUSB desde el navegador (código de barras 29x20 y QR 6 por hoja).
+// Admin+ (operator → 404). Los datos llegan por /api/admin/etiquetas/contexto y el listado del
+// catálogo; el TSPL se arma y se envía en el navegador.
 export default async function EtiquetasPage() {
   const guard = await getGuardedAdminSession()
   if (!guard.ok || roleRank(guard.user.role) < 1) notFound()

@@ -1343,6 +1343,17 @@ Change `envio-por-zona-con-tarifa`, rebanada A (migración `0101` del CRM). Admi
 - **Contrato con el Shop**: `shop_app` sólo LEE `metodos_envio`, `metodos_envio_zonas`, `metodos_envio_zona_entradas` y `metodos_envio_localidades` (GRANT en la 0101); el Shop las declara en `apps/clientes/src/db/crm.ts` y `__fixtures__/crm-contrato.json`.
 - **CSP**: `/admin/envios` admite `img-src https://tile.openstreetmap.org` (la CSP sigue en Report-Only).
 
+## Etiquetas (impresión por USB)
+
+`/admin/etiquetas` (grupo Datos, admin+; operador → 404) imprime etiquetas en la impresora térmica TSPL (VID `0x0416`, PID `0x5011`) **desde el navegador, por WebUSB**: el servidor sólo entrega datos y el TSPL se arma y se envía en el cliente (`src/lib/etiquetas/`). Change `etiquetas-desde-crm`; los scripts de `scripts/etiquetas/` siguen funcionando como alternativa.
+
+- **Tipos**: código de barras 29x20 (rollo chico, 3 por fila, Code128 de la referencia con `BAR`/`TEXT`, tandas de 10 filas) y QR 6 por hoja (rollo grande 100x150, GAP 3 mm, DENSITY 10; hoja de 800x1200 dibujada en canvas y enviada como `BITMAP`, un trabajo por hoja). El QR lleva a `<URL pública del Shop>/producto/<alegraId>`; sin URL de Shop el tipo QR queda bloqueado.
+- **Productos**: búsqueda por nombre o código y "Agregar todos los de la marca" (hasta 1000, con aviso) sobre `GET /api/admin/catalogo/productos` (`alegra=active`, `marca` sin distinguir mayúsculas). Un modelo se agrega por variante. Los productos sin referencia se omiten en el 29x20 y se listan al imprimir.
+- **Cantidades**: a mano (1 a 999) o "Usar stock de sucursal" (stock redondeado; 0, negativo o sin dato cuenta 1 y se marca). Sólo se ofrecen las sucursales activas del tenant.
+- **Vista previa** con las mismas funciones que arman lo que se envía; **confirmación obligatoria del rollo** antes de cada impresión.
+- **Datos**: `GET /api/admin/etiquetas/contexto` (admin+, tenant del guard) → `{ tenant:{nombre, rubro, logoPath, shopUrl|null}, sucursales, marcas }`.
+- **Requisitos del puesto**: Chrome o Edge de escritorio, conexión segura (HTTPS o `localhost`). En Windows la impresora necesita el controlador WinUSB (Zadig). En macOS, si aparece "No se pudo acceder a la impresora", quitarla de Ajustes → Impresoras y escáneres para que CUPS no la tenga tomada (en la prueba con Chrome de macOS no hizo falta).
+
 ## Base de datos
 
 DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):

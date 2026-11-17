@@ -4,7 +4,7 @@
  * como layout + ensamble de bitmaps, y el dibujo en canvas vive aparte.
  */
 import { ascii, cabeceraTspl, comandoBitmap, concatenar, rgbaA1bit, type OpcionesCabecera } from "./bitmap"
-import { barras, code128b, MAX_CARACTERES_REFERENCIA, PUNTOS_POR_MM, validarReferencia } from "./code128"
+import { barras, code128b, MAX_CARACTERES_REFERENCIA, MENSAJES_REFERENCIA, PUNTOS_POR_MM } from "./code128"
 import { hostWeb, urlProductoQr } from "./qr"
 import { textoImprimible, validarCantidad } from "./texto"
 
@@ -76,6 +76,37 @@ function fila(etiquetas: EtiquetaCodigo[]): string {
   return L.join("\r\n") + "\r\n"
 }
 
+export const MENSAJE_CODIGO_ANCHO_SIN_SUFIJO =
+  "El código de barras de la referencia no entra en la etiqueta de 29 mm, ni siquiera sin el sufijo."
+
+export type CodigoDeBarras =
+  | { ok: true; codigo: string; patron: string; sinSufijo: boolean }
+  | { ok: false; mensaje: string }
+
+function entraEn29mm(codigo: string): string | null {
+  if (codigo.length > MAX_CARACTERES_REFERENCIA) return null
+  const patron = code128b(codigo)
+  return barras(patron, 0, 0, 0).ancho > ANCHO_ETIQUETA - 16 ? null : patron
+}
+
+/**
+ * Qué se codifica en el código de barras de una referencia. Si la referencia completa no entra
+ * en 29 mm, se prueba sin el sufijo de marca (lo que sigue al último guion): Alegra busca por
+ * coincidencia parcial, así que "VOLKAN-BLACK-40" encuentra "VOLKAN-BLACK-40-GRS".
+ */
+export function codigoDeBarras(referencia: string | null): CodigoDeBarras {
+  if (referencia == null || referencia.trim() === "") return { ok: false, mensaje: MENSAJES_REFERENCIA.vacia }
+  if (!/^[\x20-\x7e]+$/.test(referencia)) return { ok: false, mensaje: MENSAJES_REFERENCIA.caracteres }
+  const ref = referencia
+  const completo = entraEn29mm(ref)
+  if (completo) return { ok: true, codigo: ref, patron: completo, sinSufijo: false }
+  const guion = ref.lastIndexOf("-")
+  const base = guion > 0 ? ref.slice(0, guion) : ""
+  const sinSufijo = base ? entraEn29mm(base) : null
+  if (sinSufijo) return { ok: true, codigo: base, patron: sinSufijo, sinSufijo: true }
+  return { ok: false, mensaje: base ? MENSAJE_CODIGO_ANCHO_SIN_SUFIJO : MENSAJE_CODIGO_ANCHO }
+}
+
 /**
  * Etiquetas 29x20 con Code128 de la referencia: 3 por fila, cada unidad de cantidad es una
  * etiqueta, tandas de a lo sumo 10 filas por trabajo. Los productos que no se pueden imprimir
@@ -91,18 +122,12 @@ export function trabajoCodigos(items: ItemEtiqueta[]): ResultadoTrabajos {
       omitir(cant.mensaje)
       continue
     }
-    const ref = validarReferencia(item.referencia)
-    if (!ref.ok) {
-      omitir(ref.mensaje)
+    const cod = codigoDeBarras(item.referencia)
+    if (!cod.ok) {
+      omitir(cod.mensaje)
       continue
     }
-    const referencia = item.referencia as string
-    const patron = code128b(referencia)
-    if (barras(patron, 0, 0, 0).ancho > ANCHO_ETIQUETA - 16) {
-      omitir(MENSAJE_CODIGO_ANCHO)
-      continue
-    }
-    for (let k = 0; k < item.cantidad; k++) etiquetas.push({ nombre: item.nombre, referencia, patron })
+    for (let k = 0; k < item.cantidad; k++) etiquetas.push({ nombre: item.nombre, referencia: cod.codigo, patron: cod.patron })
   }
 
   const filas: EtiquetaCodigo[][] = []

@@ -1,18 +1,17 @@
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { and, eq } from "drizzle-orm"
 import { notFound } from "next/navigation"
 import { getDb } from "@/db"
 import { adminUsers, adminPasswordTokens } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
-import { canManageUsers } from "@/lib/roles"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { UserList } from "@/components/admin/UserList"
 
 export const dynamic = "force-dynamic"
 
 export default async function UsuariosPage() {
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  if (!canManageUsers(session.role)) notFound()
+  // Sección fija `usuarios` (admin+, la regla de `canManageUsers`). Rol, tenant e id del usuario
+  // salen de la fila fresca, nunca de la cookie.
+  const acceso = await accesoSeccion("usuarios")
+  if (!acceso) notFound()
 
   const users = await getDb()
     .select({
@@ -33,7 +32,7 @@ export default async function UsuariosPage() {
       adminPasswordTokens,
       and(eq(adminPasswordTokens.userId, adminUsers.id), eq(adminPasswordTokens.type, "invite")),
     )
-    .where(eq(adminUsers.tenantId, session.tenantId))
+    .where(eq(adminUsers.tenantId, acceso.tenantId))
 
   const userList = users.map(({ canalesPermitidos, totpEnabledAt, ...u }) => ({
     ...u,
@@ -45,7 +44,7 @@ export default async function UsuariosPage() {
 
   return (
     <div className="p-4 md:p-6">
-      <UserList initialUsers={userList} currentUserId={session.userId} currentRole={session.role} />
+      <UserList initialUsers={userList} currentUserId={acceso.userId} currentRole={acceso.role} />
     </div>
   )
 }

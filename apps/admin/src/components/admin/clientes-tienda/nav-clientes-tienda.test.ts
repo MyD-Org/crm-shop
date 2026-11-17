@@ -1,31 +1,30 @@
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
+import { SECCIONES, SECCION_POR_CLAVE, seccionesVisibles } from "@/lib/secciones"
 
-// Test a nivel FUENTE (esta app no tiene jsdom y `NAV` no se exporta), como nav-pedidos: fija
-// que "Clientes de la tienda" exista en el sidebar, solo para admin+ (el operador no la ve)
-// y sin `flag`, justo después de Pedidos.
+// El menú sale del catálogo de secciones (lib/secciones.ts): fija que "Clientes de la tienda"
+// exista, admin+ por defecto (el operador no la ve), sin `flag`, justo después de Catálogo.
 const fuente = readFileSync(fileURLToPath(new URL("../AdminShell.tsx", import.meta.url)), "utf8")
-const lineas = fuente.split("\n")
 
-describe("AdminShell: entrada Clientes de la tienda", () => {
-  const entrada = lineas.filter((l) => l.includes('href: "/admin/clientes-tienda"'))
+describe("menú: entrada Clientes de la tienda", () => {
+  const entrada = SECCION_POR_CLAVE["clientes-tienda"]
 
   it("existe una sola vez, con la etiqueta y el ícono UserRound", () => {
-    expect(entrada).toHaveLength(1)
-    expect(entrada[0]).toContain('label: "Clientes de la tienda"')
-    expect(entrada[0]).toContain("<UserRound")
+    expect(SECCIONES.filter((s) => s.href === "/admin/clientes-tienda")).toHaveLength(1)
+    expect(entrada.label).toBe("Clientes de la tienda")
+    expect(fuente).toMatch(/"clientes-tienda": <UserRound /)
   })
 
-  it("es solo admin+ y sin feature flag: el operador no la ve", () => {
-    expect(entrada[0]).toContain('minRole: "admin"')
-    expect(entrada[0]).not.toContain("flag")
+  it("es admin+ por defecto y sin feature flag: el operador no la ve", () => {
+    expect(entrada.rolMin).toBe("admin")
+    expect(entrada.flag).toBeUndefined()
+    expect(seccionesVisibles({ role: "operator" }, { compras: true, usagePanel: true })).not.toContain("clientes-tienda")
   })
 
   it("va en el grupo Datos, justo después de Catálogo", () => {
-    expect(entrada[0]).toContain('group: "Datos"')
-    const entradas = lineas.filter((l) => /^\s*\{ href: "\/admin\//.test(l))
-    const i = entradas.findIndex((l) => l.includes('"/admin/catalogo"'))
-    expect(entradas[i + 1]).toContain('"/admin/clientes-tienda"')
+    expect(entrada.grupo).toBe("Datos")
+    const i = SECCIONES.findIndex((s) => s.clave === "catalogo")
+    expect(SECCIONES[i + 1].clave).toBe("clientes-tienda")
   })
 })

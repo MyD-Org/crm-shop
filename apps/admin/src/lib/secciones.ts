@@ -131,7 +131,7 @@ export function seccionesPorDefecto(role: string): SeccionClave[] {
   )
 }
 
-/** Default de «ver costos» por rol: admin y superadmin (la regla de `canSeeCosts`). */
+/** Default de «ver costos» por rol: admin y superadmin (la regla del retirado `canSeeCosts`; ver `puedeVerCostos`). */
 export function costosPorDefecto(role: string): boolean {
   return isKnownAdminRole(role) && roleRank(role) >= roleRank("admin")
 }
@@ -141,6 +141,16 @@ export function puedeVerCostos(u: ActorSecciones): boolean {
   if (u.role === "superadmin") return true
   if (u.role !== "operator" && u.role !== "admin") return false
   return u.verCostos ?? costosPorDefecto(u.role)
+}
+
+/**
+ * Copia de `o` sin las claves de costo indicadas: para omitir en el SERVIDOR los campos de costo de
+ * una respuesta cuando `puedeVerCostos` da falso (la clave no existe, no viaja en null).
+ */
+export function sinCampos<T extends object, K extends keyof T>(o: T, claves: readonly K[]): Omit<T, K> {
+  const copia = { ...o }
+  for (const k of claves) delete copia[k]
+  return copia
 }
 
 /** Únicas, sólo claves tildables conocidas, en orden de catálogo. */
@@ -178,4 +188,65 @@ export function verCostosTrasCambioDeRol(
   if (rolAnterior === rolNuevo) return verCostos ?? null
   if (!ROLES_CON_LISTA.has(rolNuevo) || !ROLES_CON_LISTA.has(rolAnterior)) return null
   return verCostos ?? null
+}
+
+/** Una clave o varias: un arreglo significa "cualquiera de" (rutas compartidas entre secciones). */
+export type ClaveOAlguna = SeccionClave | readonly SeccionClave[]
+
+/** Piso extra de rol sobre la sección (p. ej. subrutas del inbox que sólo edita admin+). */
+export interface OpcionesSeccion {
+  rolMin?: "admin" | "superadmin"
+}
+
+/**
+ * Decisión común de `requireSeccion` (API) y `accesoSeccion` (páginas), sin I/O propio salvo el flag
+ * de Compras, que se evalúa sólo si alguna de las secciones concedidas lo necesita. Orden: política
+ * (`puedeVerSeccion`, any-of) -> `rolMin` -> flag. Cualquier "no" es el mismo `false` (404 arriba).
+ */
+export async function autorizaSeccion(
+  u: ActorSecciones,
+  clave: ClaveOAlguna,
+  opts: OpcionesSeccion | undefined,
+  flagCompras: () => Promise<boolean>,
+): Promise<boolean> {
+  const claves: readonly SeccionClave[] = typeof clave === "string" ? [clave] : clave
+  const concedidas = claves.filter((c) => puedeVerSeccion(u, c))
+  if (concedidas.length === 0) return false
+  if (opts?.rolMin && !(isKnownAdminRole(u.role) && cumpleRolMin(u.role, opts.rolMin))) return false
+  // Con varias claves alcanza una que pase también su flag.
+  for (const c of concedidas) {
+    if (SECCION_POR_CLAVE[c].flag !== "compras") return true
+    if (await flagCompras()) return true
+  }
+  return false
+}
+
+/** Flags evaluados en el servidor que ocultan secciones enteras. */
+export interface FlagsSecciones {
+  compras: boolean
+  usagePanel: boolean
+}
+
+/**
+ * Secciones que el menú muestra a `u`: la política más los flags. La calcula el layout protegido
+ * (servidor) y se la pasa a AdminShell, así el cliente no duplica la política.
+ */
+export function seccionesVisibles(u: ActorSecciones, flags: FlagsSecciones): SeccionClave[] {
+  return SECCIONES.filter((s) => {
+    if (s.flag === "compras" && !flags.compras) return false
+    if (s.flag === "usagePanel" && !flags.usagePanel) return false
+    return puedeVerSeccion(u, s.clave)
+  }).map((s) => s.clave)
+}
+
+/**
+ * Adónde entra el usuario al iniciar sesión (o en `/admin`): la primera sección de TRABAJO visible
+ * en el orden del menú. Usuarios y Seguridad no cuentan como sección de trabajo; si no hay
+ * ninguna, cae en Seguridad (que todo usuario conocido tiene).
+ */
+export function primeraSeccionVisible(visibles: readonly SeccionClave[]): string {
+  const deTrabajo = SECCIONES.find(
+    (s) => s.clave !== "usuarios" && s.clave !== "seguridad" && visibles.includes(s.clave),
+  )
+  return deTrabajo?.href ?? SECCION_POR_CLAVE.seguridad.href
 }

@@ -3,6 +3,7 @@ import { getGuardedAdminSession } from "@/lib/admin-session"
 import { getTenantByIdFromDb } from "@/lib/tenants"
 import { botUsagePanelEnabled } from "@/lib/flags"
 import { comprasHabilitado } from "@/lib/compras-flag"
+import { seccionesVisibles } from "@/lib/secciones"
 import { AdminShell } from "@/components/admin/AdminShell"
 
 export default async function ProtectedAdminLayout({ children }: { children: React.ReactNode }) {
@@ -28,14 +29,14 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
     comprasHabilitado(),
   ])
   const availability = user.availability === "available" ? "available" : "away"
+  // Menú: política por sección sobre la fila fresca (rol + secciones_permitidas) más los flags.
+  const visibles = seccionesVisibles(user, { compras: comprasEnabled, usagePanel: usagePanelEnabled })
 
   return (
     <AdminShell
       name={session.name}
       email={session.email}
-      // Rol FRESCO de la DB, no el de la cookie. Consecuencia aceptada: bajar de admin a operator
-      // no es instantáneo en las rutas API — los lectores de `session.role` ven el rol viejo hasta
-      // el próximo login (la cookie no se puede reescribir desde un Server Component).
+      // Rol FRESCO de la DB, no el de la cookie (etiqueta del usuario y rol «compras»).
       role={user.role}
       logoSrc={tenant?.logoPath}
       // Mismo icono cuadrado que sirve de favicon del tenant (convención en root layout.tsx):
@@ -46,7 +47,7 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
       availability={availability}
       currentUserId={session.userId}
       usagePanelEnabled={usagePanelEnabled}
-      comprasEnabled={comprasEnabled}
+      seccionesVisibles={visibles}
     >
       {children}
     </AdminShell>

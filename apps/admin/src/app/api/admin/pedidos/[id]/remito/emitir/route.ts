@@ -19,7 +19,7 @@ import {
   type PedidoRow,
 } from "@/lib/pedidos-repo"
 import { getTenantByIdFromDb, type TenantConfig } from "@/lib/tenants"
-import { canSeeCosts } from "@/lib/roles"
+import { puedeVerCostos } from "@/lib/secciones"
 
 // "Emitir remito": crea el remito REAL en Alegra desde el pedido, en 0 (papel de depósito, no
 // venta) y lo persiste. A diferencia de "Vincular remito existente" (el remito ya está en
@@ -212,7 +212,7 @@ export async function POST(req: Request, { params }: IdParams) {
       }),
     )
     return Response.json(
-      toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, { incluirCosto: canSeeCosts(guard.user.role), pagoManual: result.pagoManual, pagos: result.pagos, comprobantes: result.comprobantes, intentos: result.intentos,
+      toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, { incluirCosto: puedeVerCostos(guard.user), pagoManual: result.pagoManual, pagos: result.pagos, comprobantes: result.comprobantes, intentos: result.intentos,
     }),
       { headers: NO_STORE },
     )

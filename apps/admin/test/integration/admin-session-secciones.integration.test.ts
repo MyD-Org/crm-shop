@@ -19,6 +19,8 @@ vi.mock("next/headers", () => ({
 vi.mock("iron-session", () => ({ getIronSession: async () => session }))
 
 const { getGuardedAdminSession } = await import("@/lib/admin-session")
+const { configurarFlagCompras, requireSeccion } = await import("@/lib/admin-route-guard")
+const { accesoSeccion } = await import("@/lib/secciones-acceso")
 
 let userId: string
 
@@ -61,5 +63,50 @@ describe("getGuardedAdminSession + secciones/costos (0106)", () => {
     await getDb().update(adminUsers).set({ seccionesPermitidas: ["pedidos"] }).where(eq(adminUsers.id, userId))
     tenantHeader = "tenant-b"
     expect(await getGuardedAdminSession()).toEqual({ ok: false, reason: "tenant-mismatch" })
+  })
+})
+
+describe("requireSeccion / accesoSeccion contra la fila fresca (S2a)", () => {
+  const req = () => new Request("http://tenant-a.localhost/api/admin/pedidos", { headers: { host: "tenant-a.localhost" } })
+  const NOT_FOUND = { error: "No encontrado", code: "not_found" }
+
+  it("efecto inmediato: quitar `pedidos` deniega el siguiente request sin volver a iniciar sesión", async () => {
+    await getDb().update(adminUsers).set({ seccionesPermitidas: ["inbox", "pedidos"] }).where(eq(adminUsers.id, userId))
+    expect((await requireSeccion(req(), "pedidos")).ok).toBe(true)
+    expect(await accesoSeccion("pedidos")).not.toBeNull()
+
+    await getDb().update(adminUsers).set({ seccionesPermitidas: ["inbox"] }).where(eq(adminUsers.id, userId))
+    const r = await requireSeccion(req(), "pedidos")
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.response.status).toBe(404)
+      expect(await r.response.json()).toEqual(NOT_FOUND)
+    }
+    expect(await accesoSeccion("pedidos")).toBeNull()
+  })
+
+  it("columnas NULL: mismo acceso que el rango de rol de antes, para los cuatro roles", async () => {
+    configurarFlagCompras(async () => true)
+    const casos: [string, Record<string, boolean>][] = [
+      ["operator", { inbox: true, pedidos: false, catalogo: false, compras: false, usuarios: false, plantillas: false }],
+      ["admin", { inbox: true, pedidos: true, catalogo: true, compras: true, usuarios: true, plantillas: false }],
+      ["superadmin", { inbox: true, pedidos: true, catalogo: true, compras: true, usuarios: true, plantillas: true }],
+      ["compras", { inbox: false, pedidos: false, catalogo: false, compras: true, usuarios: false, plantillas: false }],
+    ]
+    for (const [role, esperado] of casos) {
+      await getDb().update(adminUsers).set({ role, seccionesPermitidas: null, verCostos: null }).where(eq(adminUsers.id, userId))
+      for (const [clave, ok] of Object.entries(esperado)) {
+        const r = await requireSeccion(req(), clave as Parameters<typeof requireSeccion>[1])
+        expect(r.ok, `${role} -> ${clave}`).toBe(ok)
+      }
+    }
+  })
+
+  it("sin sesión: 401", async () => {
+    session = {}
+    const r = await requireSeccion(req(), "inbox")
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.response.status).toBe(401)
+    expect(await accesoSeccion("inbox")).toBeNull()
   })
 })

@@ -10,7 +10,8 @@ import { AvailabilityToggle, type Availability } from "./AvailabilityToggle"
 import { NotificationsPrompt } from "./NotificationsPrompt"
 import { PendingRepliesDialog, type PendingContact } from "./PendingRepliesDialog"
 import type { InboxContact } from "@/lib/inbox-api"
-import { esRolCompras, roleRank, type AdminRole } from "@/lib/roles"
+import { esRolCompras, type AdminRole } from "@/lib/roles"
+import { SECCIONES, type SeccionClave } from "@/lib/secciones"
 import { UnsavedGuardProvider, useUnsavedGuardCtx } from "@/lib/unsaved-guard"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
 import { bannerText, type WaCostsSummary } from "@/lib/wa-costos"
@@ -28,8 +29,8 @@ interface AdminShellProps {
   availability: "available" | "away"
   currentUserId: string
   usagePanelEnabled?: boolean
-  /** Flag `compras-en-transito` (evaluado en el servidor): sin él, la entrada «Compras» no se muestra. */
-  comprasEnabled?: boolean
+  /** Secciones del menú visibles para este usuario (política + flags), calculadas en el servidor. */
+  seccionesVisibles: readonly SeccionClave[]
   children: React.ReactNode
 }
 
@@ -163,45 +164,32 @@ function roleLabel(role: AdminRole): string {
   return "Operador"
 }
 
-// `acceso`: entradas que además se abren al rol lateral «compras». Ese rol ve SÓLO las entradas
-// con `acceso: "compras"` (allow-list); el resto del menú no existe para él, tenga o no `minRole`.
-// `flag`: entradas gateadas por feature flag (evaluado server-side y pasado por prop).
-// `minRole`: nivel mínimo para ver la entrada (usa el ranking de roles).
-// `badge`: contador de pendientes que va sobre el ícono (ver usePendingCounts).
-// `group`: el sidebar parte el menú en tres grupos, en orden de frecuencia de uso:
-//   Operación (lo de todos los días, con badges) · Datos (lo que se carga y mantiene) ·
-//   Administración (se toca cada tanto). El operador sólo ve Operación y Clientes.
-//   Las entradas van ya ordenadas por grupo: SideNav no reordena.
-interface NavEntry {
-  href: string
-  label: string
-  group: string
-  icon: React.ReactNode
-  minRole?: "admin" | "superadmin"
-  badge?: BadgeSection
-  flag?: "usagePanel" | "compras"
-  acceso?: "compras"
+// El menú sale del catálogo único de secciones (lib/secciones.ts): orden, grupo (Operación ·
+// Datos · Administración, contiguos: SideNav no reordena), href, etiqueta y badge. Acá sólo se
+// suma el ícono: `Record<SeccionClave, ...>` obliga a que toda sección nueva tenga uno.
+// QUÉ entradas se ven NO se decide en el cliente: el layout protegido calcula en el servidor
+// `seccionesVisibles` (política por sección + flags) y la pasa por prop.
+const ICONOS: Record<SeccionClave, React.ReactNode> = {
+  inbox: <MessageSquare size={16} strokeWidth={1.6} />,
+  pedidos: <ShoppingBag size={16} strokeWidth={1.6} />,
+  comprobantes: <Receipt size={16} strokeWidth={1.6} />,
+  compras: <PackagePlus size={16} strokeWidth={1.6} />,
+  catalogo: <Package size={16} strokeWidth={1.6} />,
+  "clientes-tienda": <UserRound size={16} strokeWidth={1.6} />,
+  sucursales: <Store size={16} strokeWidth={1.6} />,
+  envios: <Truck size={16} strokeWidth={1.6} />,
+  cuotas: <CreditCard size={16} strokeWidth={1.6} />,
+  horarios: <Clock size={16} strokeWidth={1.6} />,
+  "chat-tienda": <MessageCircleQuestion size={16} strokeWidth={1.6} />,
+  "tienda-online": <Globe size={16} strokeWidth={1.6} />,
+  etiquetas: <Printer size={16} strokeWidth={1.6} />,
+  plantillas: <FileText size={16} strokeWidth={1.6} />,
+  usuarios: <Users size={16} strokeWidth={1.6} />,
+  seguridad: <ShieldCheck size={16} strokeWidth={1.6} />,
+  uso: <BarChart3 size={16} strokeWidth={1.6} />,
 }
 
-const NAV: NavEntry[] = [
-  { href: "/admin/inbox", label: "Mensajes", group: "Operación", icon: <MessageSquare size={16} strokeWidth={1.6} />, badge: "inbox" as const },
-  { href: "/admin/pedidos", label: "Pedidos", group: "Operación", icon: <ShoppingBag size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "pedidos" as const },
-  { href: "/admin/comprobantes", label: "Comprobantes", group: "Operación", icon: <Receipt size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "comprobantes" as const },
-  { href: "/admin/compras", label: "Compras", group: "Operación", icon: <PackagePlus size={16} strokeWidth={1.6} />, minRole: "admin" as const, acceso: "compras" as const, flag: "compras" as const },
-  { href: "/admin/catalogo", label: "Catálogo", group: "Datos", icon: <Package size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/clientes-tienda", label: "Clientes de la tienda", group: "Datos", icon: <UserRound size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/sucursales", label: "Sucursales", group: "Datos", icon: <Store size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/envios", label: "Envíos", group: "Datos", icon: <Truck size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/cuotas", label: "Pagos y cuotas", group: "Datos", icon: <CreditCard size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/horarios", label: "Horarios", group: "Datos", icon: <Clock size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/chat-tienda", label: "Chat de la tienda", group: "Datos", icon: <MessageCircleQuestion size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/tienda-online", label: "Tienda online", group: "Datos", icon: <Globe size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/etiquetas", label: "Etiquetas", group: "Datos", icon: <Printer size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/plantillas", label: "Plantillas", group: "Datos", icon: <FileText size={16} strokeWidth={1.6} />, minRole: "superadmin" as const },
-  { href: "/admin/usuarios", label: "Usuarios", group: "Administración", icon: <Users size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/seguridad", label: "Seguridad", group: "Administración", icon: <ShieldCheck size={16} strokeWidth={1.6} /> },
-  { href: "/admin/uso", label: "Uso del bot", group: "Administración", icon: <BarChart3 size={16} strokeWidth={1.6} />, minRole: "superadmin" as const, flag: "usagePanel" as const },
-]
+const NAV = SECCIONES.map((s) => ({ ...s, icon: ICONOS[s.clave] }))
 
 export function AdminShell(props: AdminShellProps) {
   // El Provider tiene que envolver TODO lo que renderea `AdminShellInner` (sidebar +
@@ -214,7 +202,7 @@ export function AdminShell(props: AdminShellProps) {
   )
 }
 
-function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, availability: initialAvailability, currentUserId, usagePanelEnabled, comprasEnabled, children }: AdminShellProps) {
+function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, availability: initialAvailability, currentUserId, usagePanelEnabled, seccionesVisibles, children }: AdminShellProps) {
   const pathname = usePathname()
   const router = useRouter()
   const guard = useUnsavedGuardCtx()
@@ -283,13 +271,10 @@ function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, avai
     })
   }
 
-  const visibleNav = NAV.filter((item) => {
-    if (item.flag === "compras" && !comprasEnabled) return false
-    if (esCompras) return item.acceso === "compras"
-    if (item.minRole && roleRank(role) < roleRank(item.minRole)) return false
-    if (item.flag === "usagePanel" && !usagePanelEnabled) return false
-    return true
-  })
+  // Lista calculada en el servidor (política + flags): sin política duplicada en el cliente. Una
+  // sección fuera de la lista no muestra entrada ni badge.
+  const visibles = new Set(seccionesVisibles)
+  const visibleNav = NAV.filter((item) => visibles.has(item.clave))
 
   const logo = logoSrc ? (
     <div className="flex flex-col gap-1">
@@ -350,7 +335,7 @@ function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, avai
       items={visibleNav.map((item) => ({
         href: item.href,
         label: item.label,
-        group: item.group,
+        group: item.grupo,
         icon: item.badge ? <BadgeIcon icon={item.icon} count={badgeCount(pendingCounts, item.badge)} /> : item.icon,
         active: pathname.startsWith(item.href),
       }))}

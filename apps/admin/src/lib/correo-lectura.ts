@@ -2,6 +2,7 @@ import { adminNotFoundResponse, adminUnauthorizedResponse } from "@/lib/admin-ro
 import { getGuardedAdminSession } from "@/lib/admin-session"
 import { requireCasilla } from "@/lib/correo-acceso"
 import { isKnownAdminRole } from "@/lib/roles"
+import { puedeVerSeccion } from "@/lib/secciones"
 import { correoHabilitado } from "@/lib/correo-flag"
 import type { CasillaRow } from "@/lib/correo-repo"
 import type { CorreoCarpeta } from "@/lib/correo-resend"
@@ -21,6 +22,9 @@ export async function requireCorreoLector(req: Request, casillaId: string): Prom
   // Allow-list: un rol fuera de los tres jerárquicos (p. ej. «compras») no lee correo aunque
   // tuviera una fila de acceso a una casilla.
   if (!isKnownAdminRole(guarded.user.role)) return { ok: false, response: adminNotFoundResponse() }
+  // El correo vive dentro de Mensajes: sin la sección `inbox` no se lee ninguna casilla, aunque
+  // conserve la fila de acceso (permisos-por-seccion). Mismo 404.
+  if (!puedeVerSeccion(guarded.user, "inbox")) return { ok: false, response: adminNotFoundResponse() }
   if (!(await correoHabilitado())) return { ok: false, response: adminNotFoundResponse() }
   const actor = { id: guarded.user.id, role: guarded.user.role }
   const r = await requireCasilla(guarded.tenantId, actor, casillaId)

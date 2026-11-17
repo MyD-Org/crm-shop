@@ -8,6 +8,10 @@ import type { ResultadoBorrado, ResultadoSucursal, ResultadoZona } from "@/lib/s
 
 export const NO_STORE = { "Cache-Control": "private, no-store" }
 
+/**
+ * @deprecated permisos-por-seccion: sus rutas migran a `requireSeccion` (S2b) y este guard se borra.
+ * No usar en rutas nuevas.
+ */
 export async function requireSucursalesAccess(req: Request): Promise<AdminGuardResult> {
   const guarded = await getGuardedAdminSession(req)
   if (!guarded.ok) {

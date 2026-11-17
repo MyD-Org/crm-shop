@@ -1,11 +1,8 @@
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { eq } from "drizzle-orm"
 import { notFound } from "next/navigation"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { adminSessionOptions, getGuardedAdminSession, type AdminSessionData } from "@/lib/admin-session"
-import { isKnownAdminRole } from "@/lib/roles"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { listConversations, getMessages } from "@/lib/inbox-api"
 import { ThreadView } from "@/components/admin/ThreadView"
 
@@ -13,10 +10,10 @@ export const dynamic = "force-dynamic"
 
 export default async function ThreadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok || !isKnownAdminRole(guard.user.role)) notFound()
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, session.tenantId))
+  // Sección Mensajes con la fila fresca (rol, tenant e id del usuario), nunca la cookie.
+  const acceso = await accesoSeccion("inbox")
+  if (!acceso) notFound()
+  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, acceso.tenantId))
 
   if (!tenant?.aiTenantId || !tenant?.aiApiUrl) {
     return (
@@ -40,7 +37,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
     <ThreadView
       conversation={conversation}
       initialMessages={messages}
-      currentUserId={session.userId}
+      currentUserId={acceso.userId}
     />
   )
 }

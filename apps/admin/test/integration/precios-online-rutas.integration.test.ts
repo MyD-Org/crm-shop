@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterAll, vi } from "vitest"
 import { eq, sql } from "drizzle-orm"
 import { NextRequest } from "next/server"
 import { getDb } from "@/db"
-import { alegraCuentas, catalogProducts, listasPrecioOnline } from "@/db/schema"
+import { adminUsers, alegraCuentas, catalogProducts, listasPrecioOnline } from "@/db/schema"
 import { seedOperator, seedTenant, truncateAll } from "./helpers"
 import { calcular, seedCategoria, seedLista, seedOverrideCategoria, seedOverrideMarca, seedProducto } from "./precios-online-helpers"
 
@@ -253,6 +253,21 @@ describe("retenciones por la ruta", () => {
     expect((await json(await alertasRuta.GET(req("/api/admin/precios-online/alertas")))).alertas.retenidos).toBe(0)
   })
 
+  it("sin permiso de costos el listado de retenidos omite costo vigente y propuesto", async () => {
+    await seedLista(A, "Lista A", "2", { esReferencia: true })
+    await seedProducto(A, { alegraId: "1", costo: "100" })
+    await getDb().execute(sql`SELECT * FROM aplicar_precios_online(${A}, NULL::text[], 'config')`)
+    await getDb().update(catalogProducts).set({ costo: "300" })
+    await getDb().execute(sql`SELECT * FROM aplicar_precios_online(${A}, NULL::text[], 'costo')`)
+    const conCostos = await json(await retencionesRuta.GET(req("/api/admin/precios-online/retenciones")))
+    expect(conCostos.items[0]).toHaveProperty("costoPropuesto")
+    await getDb().update(adminUsers).set({ verCostos: false }).where(eq(adminUsers.id, adminA))
+    const l = await json(await retencionesRuta.GET(req("/api/admin/precios-online/retenciones")))
+    expect(l.total).toBe(1)
+    expect("costoVigente" in l.items[0]).toBe(false)
+    expect("costoPropuesto" in l.items[0]).toBe(false)
+  })
+
   it("no resuelve retenidos de otro tenant", async () => {
     await seedLista(B, "Lista A", "2", { esReferencia: true })
     await seedProducto(B, { alegraId: "1", costo: "100" })
@@ -344,6 +359,19 @@ describe("grilla de precios online", { timeout: 60_000 }, () => {
     await seedProducto(A, { alegraId: "1", costo: "100" })
     await seedProducto(B, { alegraId: "2", costo: "100" })
     expect((await grilla()).items.map((i: { alegraId: string }) => i.alegraId)).toEqual(["1"])
+  })
+
+  it("sin permiso de costos (ver_costos = false) la grilla no trae las claves de costo", async () => {
+    await seedProducto(A, { alegraId: "1", costo: "123.45" })
+    await getDb().update(adminUsers).set({ verCostos: false }).where(eq(adminUsers.id, adminA))
+    const g = await grilla()
+    expect(g.items).toHaveLength(1)
+    expect("costo" in g.items[0]).toBe(false)
+    expect("costoAplicado" in g.items[0]).toBe(false)
+    expect(JSON.stringify(g)).not.toContain("123.45")
+    // NULL = default del rol (admin ve costos), como antes.
+    await getDb().update(adminUsers).set({ verCostos: null }).where(eq(adminUsers.id, adminA))
+    expect((await grilla()).items[0].costo).toBe("123.4500")
   })
 
   it("el costo solo viaja al admin (la ruta es admin+; el operador no recibe nada)", async () => {

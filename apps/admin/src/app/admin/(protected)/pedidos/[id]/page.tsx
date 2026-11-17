@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation"
 import { getGuardedAdminSession } from "@/lib/admin-session"
 import { getPedido, toPedidoDetalleDto } from "@/lib/pedidos-repo"
-import { canSeeCosts, roleRank } from "@/lib/roles"
+import { roleRank } from "@/lib/roles"
+import { puedeVerCostos } from "@/lib/secciones"
 import { nombresMediosPago } from "@/lib/medios-pago-shop-repo"
 import { listarSucursales } from "@/lib/sucursales-repo"
 import { PedidoDetalle } from "@/components/admin/pedidos/PedidoDetalle"
@@ -26,7 +27,7 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
   return (
     <div className="p-4 md:p-6">
       <PedidoDetalle
-        initial={toPedidoDetalleDto(encontrado.pedido, encontrado.items, encontrado.listaPrecios, encontrado.historial, encontrado.remito, { incluirCosto: canSeeCosts(guard.user.role), pagoManual: encontrado.pagoManual, pagos: encontrado.pagos, comprobantes: encontrado.comprobantes, intentos: encontrado.intentos,
+        initial={toPedidoDetalleDto(encontrado.pedido, encontrado.items, encontrado.listaPrecios, encontrado.historial, encontrado.remito, { incluirCosto: puedeVerCostos(guard.user), pagoManual: encontrado.pagoManual, pagos: encontrado.pagos, comprobantes: encontrado.comprobantes, intentos: encontrado.intentos,
         })}
         nombresSucursal={nombresSucursal}
         mediosPago={mediosPago}

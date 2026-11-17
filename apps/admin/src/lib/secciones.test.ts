@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { canSeeCosts, roleRank } from "@/lib/roles"
+import { roleRank } from "@/lib/roles"
 import {
   SECCIONES,
   SECCIONES_TILDABLES,
   SECCION_POR_CLAVE,
+  autorizaSeccion,
+  primeraSeccionVisible,
+  seccionesVisibles,
+  sinCampos,
   costosPorDefecto,
   normalizarSecciones,
   puedeVerCostos,
@@ -53,6 +57,9 @@ describe("catálogo", () => {
 // Golden de regresión cero: el NAV de AdminShell al momento de 0106 (href, minRole, acceso), y su
 // regla de filtrado (sin flags: con los flags prendidos). Con las columnas NULL, la política nueva
 // MUST dar exactamente lo mismo para los 4 roles.
+// Regla de `canSeeCosts` (roles.ts) antes de retirarla en S2a, congelada para el golden de costos.
+const canSeeCostsPrevio = (role: string): boolean => roleRank(role) >= 1
+
 const NAV_PREVIO: { href: string; minRole?: "admin" | "superadmin"; acceso?: "compras" }[] = [
   { href: "/admin/inbox" },
   { href: "/admin/pedidos", minRole: "admin" },
@@ -93,9 +100,9 @@ describe("golden: columnas NULL == reglas vigentes", () => {
         expect(puedeVerSeccion({ role }, s.clave)).toBe(reglaPrevia(role, item))
       })
     }
-    it(`${role} · costos NULL == canSeeCosts`, () => {
-      expect(puedeVerCostos({ role, verCostos: null })).toBe(canSeeCosts(role))
-      expect(costosPorDefecto(role)).toBe(canSeeCosts(role))
+    it(`${role} · costos NULL == canSeeCosts previo`, () => {
+      expect(puedeVerCostos({ role, verCostos: null })).toBe(canSeeCostsPrevio(role))
+      expect(costosPorDefecto(role)).toBe(canSeeCostsPrevio(role))
     })
   }
 })
@@ -227,5 +234,74 @@ describe("cambio de rol", () => {
   it("mismo rol: sin cambio", () => {
     expect(seccionesTrasCambioDeRol("admin", "admin", ["pedidos"])).toEqual(["pedidos"])
     expect(verCostosTrasCambioDeRol("admin", "admin", false)).toBe(false)
+  })
+})
+
+describe("autorizaSeccion", () => {
+  const encendido = async () => true
+  const apagado = async () => false
+  it("any-of, rolMin y flag de Compras", async () => {
+    expect(await autorizaSeccion({ role: "admin", seccionesPermitidas: ["cuotas"] }, ["catalogo", "cuotas"], undefined, encendido)).toBe(true)
+    expect(await autorizaSeccion({ role: "admin", seccionesPermitidas: ["cuotas"] }, "catalogo", undefined, encendido)).toBe(false)
+    expect(await autorizaSeccion({ role: "operator" }, "inbox", { rolMin: "admin" }, encendido)).toBe(false)
+    expect(await autorizaSeccion({ role: "admin" }, "compras", undefined, apagado)).toBe(false)
+    expect(await autorizaSeccion({ role: "admin" }, "compras", undefined, encendido)).toBe(true)
+  })
+  it("con varias claves alcanza una cuyo flag esté prendido", async () => {
+    expect(await autorizaSeccion({ role: "admin" }, ["compras", "pedidos"], undefined, apagado)).toBe(true)
+  })
+  it("el flag sólo se consulta si hace falta", async () => {
+    let llamadas = 0
+    const flag = async () => {
+      llamadas++
+      return true
+    }
+    await autorizaSeccion({ role: "admin" }, "pedidos", undefined, flag)
+    await autorizaSeccion({ role: "operator" }, "compras", undefined, flag)
+    expect(llamadas).toBe(0)
+  })
+})
+
+describe("seccionesVisibles (menú)", () => {
+  const todo = { compras: true, usagePanel: true }
+  it("operador por defecto: Mensajes y Seguridad", () => {
+    expect(seccionesVisibles({ role: "operator" }, todo)).toEqual(["inbox", "seguridad"])
+  })
+  it("compras: sólo Compras, y nada con el flag apagado", () => {
+    expect(seccionesVisibles({ role: "compras" }, todo)).toEqual(["compras"])
+    expect(seccionesVisibles({ role: "compras" }, { ...todo, compras: false })).toEqual([])
+  })
+  it("admin con lista ['catalogo']: Catálogo, Usuarios y Seguridad", () => {
+    expect(seccionesVisibles({ role: "admin", seccionesPermitidas: ["catalogo"] }, todo)).toEqual(["catalogo", "usuarios", "seguridad"])
+  })
+  it("Uso del bot sólo con el flag usagePanel", () => {
+    expect(seccionesVisibles({ role: "superadmin" }, todo)).toContain("uso")
+    expect(seccionesVisibles({ role: "superadmin" }, { ...todo, usagePanel: false })).not.toContain("uso")
+  })
+})
+
+describe("primeraSeccionVisible (landing)", () => {
+  it("la primera sección de trabajo en el orden del menú", () => {
+    expect(primeraSeccionVisible(["inbox", "seguridad"])).toBe("/admin/inbox")
+    expect(primeraSeccionVisible(["catalogo", "usuarios", "seguridad"])).toBe("/admin/catalogo")
+    expect(primeraSeccionVisible(["seguridad", "pedidos"])).toBe("/admin/pedidos")
+  })
+  it("sin secciones de trabajo cae en Seguridad", () => {
+    expect(primeraSeccionVisible(["usuarios", "seguridad"])).toBe("/admin/seguridad")
+    expect(primeraSeccionVisible([])).toBe("/admin/seguridad")
+  })
+  it("con columnas NULL todo rol jerárquico entra por Mensajes, como antes", () => {
+    for (const role of ["operator", "admin", "superadmin"]) {
+      expect(primeraSeccionVisible(seccionesVisibles({ role }, { compras: true, usagePanel: true }))).toBe("/admin/inbox")
+    }
+  })
+})
+
+describe("sinCampos", () => {
+  it("quita la clave (no la deja en null) y no muta el original", () => {
+    const o = { a: 1, costo: 2 }
+    const r = sinCampos(o, ["costo"])
+    expect("costo" in r).toBe(false)
+    expect(o.costo).toBe(2)
   })
 })

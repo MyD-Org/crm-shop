@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest"
+import * as roles from "./roles"
 import { assignableRoles, canActOnRole, canManageUsers, esRolCompras, isKnownAdminRole, roleRank } from "./roles"
 
 describe("roles", () => {
@@ -61,5 +62,9 @@ describe("roles", () => {
     expect(canActOnRole("compras", "operator")).toBe(false)
     expect(canActOnRole("compras", "compras")).toBe(false)
     expect(canManageUsers("compras")).toBe(false)
+  })
+
+  it("canSeeCosts se retiró: la política de costos es `puedeVerCostos` (lib/secciones.ts)", () => {
+    expect("canSeeCosts" in roles).toBe(false)
   })
 })

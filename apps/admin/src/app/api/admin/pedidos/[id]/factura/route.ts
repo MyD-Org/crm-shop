@@ -18,7 +18,7 @@ import {
   type PedidoRow,
 } from "@/lib/pedidos-repo"
 import { configAlegraDelPedido } from "@/lib/pedido-cuenta-alegra"
-import { canSeeCosts } from "@/lib/roles"
+import { puedeVerCostos } from "@/lib/secciones"
 
 // "Vincular factura" del detalle de pedido (change webhooks-stock-alegra, PR-3b).
 //
@@ -245,7 +245,7 @@ export async function POST(req: Request, { params }: IdParams) {
       logAvisoFactura(ctx, aviso)
     }
   }
-  return respuestaResultado(result, canSeeCosts(guard.user.role), aviso)
+  return respuestaResultado(result, puedeVerCostos(guard.user), aviso)
 }
 
 export async function DELETE(req: Request, { params }: IdParams) {
@@ -281,5 +281,5 @@ export async function DELETE(req: Request, { params }: IdParams) {
       }),
     )
   }
-  return respuestaResultado(result, canSeeCosts(guard.user.role))
+  return respuestaResultado(result, puedeVerCostos(guard.user))
 }

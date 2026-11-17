@@ -8,7 +8,8 @@ import { contarNoLeidos } from "@/lib/correo-repo"
 import { listConversations, type InboxConversation } from "@/lib/inbox-api"
 import { listPendingSubmittedAt } from "@/lib/payment-receipts"
 import { listPendientesCreatedAt } from "@/lib/pedidos-repo"
-import { isKnownAdminRole, roleRank } from "@/lib/roles"
+import { isKnownAdminRole } from "@/lib/roles"
+import { puedeVerSeccion } from "@/lib/secciones"
 
 // GET /api/admin/pending-counts — contadores para los badges de "novedades" del sidebar del
 // backoffice. El badge NO es "todo lo pendiente" sino "lo nuevo desde mi última visita a la
@@ -27,8 +28,9 @@ import { isKnownAdminRole, roleRank } from "@/lib/roles"
 //     `sincePedidos` filtran por sección (lo que manda el cliente: cada sección tiene su propio last-visit).
 //     Inválido o ausente = sin filtro (primer uso: backlog completo, razonable).
 //
-// Responde CUALQUIER rol autenticado (operador incluido). `comprobantes` va en null para
-// operadores: no lo usa la UI y no se expone el dato innecesariamente.
+// Responde CUALQUIER rol autenticado (operador incluido), pero cada contador sale SÓLO si el
+// usuario ve su sección (`puedeVerSeccion`, fila fresca): `pedidos` y `comprobantes` en null sin
+// la sección (con lista NULL: el operador, como antes), `inbox` y `correo` en 0 sin Mensajes.
 //
 // Cache en memoria ~15 s por tenant del RAW (lista de conversaciones + submittedAt de los
 // pending), no de los contadores: así cada request cuenta sobre el mismo snapshot, el count
@@ -129,8 +131,9 @@ export async function GET(req: Request) {
   // Correo: no leídos de Recibidos de las casillas a las que ESTE usuario tiene acceso. Depende
   // del usuario, así que va fuera del cache por tenant. Solo con el flag `correo` prendido; un
   // fallo no rompe el resto de los badges. Es un contador absoluto (no usa last-visit).
+  const veInbox = puedeVerSeccion(guarded.user, "inbox")
   let correo = 0
-  if (await correoHabilitado()) {
+  if (veInbox && (await correoHabilitado())) {
     try {
       const casillas = await casillasAccesibles(guarded.tenantId, { id: guarded.user.id, role: guarded.user.role })
       correo = await contarNoLeidos(casillas.map((c) => c.id))
@@ -139,9 +142,13 @@ export async function GET(req: Request) {
     }
   }
 
-  const esAdmin = roleRank(guarded.user.role) >= roleRank("admin")
   return Response.json(
-    { inbox, comprobantes: esAdmin ? comprobantes : null, pedidos: esAdmin ? pedidos : null, correo },
+    {
+      inbox: veInbox ? inbox : 0,
+      comprobantes: puedeVerSeccion(guarded.user, "comprobantes") ? comprobantes : null,
+      pedidos: puedeVerSeccion(guarded.user, "pedidos") ? pedidos : null,
+      correo,
+    },
     { headers: { "Cache-Control": "private, no-store" } },
   )
 }

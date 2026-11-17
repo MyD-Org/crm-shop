@@ -1,10 +1,8 @@
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { eq } from "drizzle-orm"
 import { notFound } from "next/navigation"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { getUsageSummary, getLimits, type UsageSummary, type BotLimits } from "@/lib/inbox-api"
 import { botUsagePanelEnabled } from "@/lib/flags"
 import { UsagePanel } from "@/components/admin/UsagePanel"
@@ -16,11 +14,12 @@ export default async function UsoPage() {
   // Feature gateada por flag (migrará a ia-dashboard). Off → la página no existe.
   if (!(await botUsagePanelEnabled())) notFound()
 
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  // El gasto es información de administración: solo superadmin (igual que el guard del endpoint).
-  if (session.role !== "superadmin") notFound()
+  // El gasto es información de administración: solo superadmin (sección fija `uso`, igual que el
+  // guard del endpoint). Rol y tenant de la fila fresca, nunca de la cookie.
+  const acceso = await accesoSeccion("uso")
+  if (!acceso) notFound()
 
-  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, session.tenantId))
+  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, acceso.tenantId))
 
   let summary: UsageSummary | null = null
   let limits: BotLimits | null = null

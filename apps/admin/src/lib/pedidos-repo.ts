@@ -1624,8 +1624,8 @@ export interface PedidoItemDto {
   campaniaNombre: string | null
   /** Unitario sin IVA antes del cupón (0042 del Shop) en las líneas que alcanzó; null = sin cupón. */
   precioSinCupon: number | null
-  /** Costo unitario cargado en Alegra (`inventory.unitCost`). SÓLO viaja para admin y
-   *  superadmin (`incluirCosto` en `toPedidoDetalleDto`): para operator la clave no existe en
+  /** Costo unitario cargado en Alegra (`inventory.unitCost`). SÓLO viaja con permiso de
+   *  costos (`incluirCosto` en `toPedidoDetalleDto`, `puedeVerCostos`): sin él la clave no existe en
    *  la respuesta. `null` = sin costo cargado en Alegra, o producto fuera del espejo. */
   costoUnitario?: number | null
 }
@@ -1844,7 +1844,7 @@ function toItemDto(item: ItemParaDto, incluirCosto: boolean): PedidoItemDto {
 export interface DetalleDtoOpciones {
   /** `DetalleExtras.pagoManual` (incluye los medios configurables). Sin él, sólo la lista fija. */
   pagoManual?: boolean
-  /** Incluir el costo unitario de cada ítem. Sale de `canSeeCosts(rol)` del guard. */
+  /** Incluir el costo unitario de cada ítem. Sale de `puedeVerCostos(guard.user)` (lib/secciones.ts). */
   incluirCosto?: boolean
   /** `DetalleExtras.pagos`. Sin él, ninguno. */
   pagos?: PagoRegistradoDto[]

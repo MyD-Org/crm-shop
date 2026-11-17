@@ -232,7 +232,7 @@ export function PedidoDetalle({
               {[i.code, i.brand].filter(Boolean).join(" · ")}
             </div>
           )}
-          <DatosDelLocal item={i} esAdminPlus={esAdminPlus} />
+          <DatosDelLocal item={i} />
         </>
       ),
     },
@@ -771,9 +771,9 @@ function EstadoAcciones({
 // del producto, chica y en gris, para que no se lean como columnas del pedido.
 // Stock ACTUAL del espejo del catálogo, no el del momento del pedido; sin dato (producto fuera del
 // espejo) muestra una raya: que falte se tiene que notar.
-// Costo unitario cargado en Alegra: SÓLO admin+. El DTO no trae el campo para operator (ver
-// `canSeeCosts`), así que se oculta por rol y no por "vino null".
-function DatosDelLocal({ item, esAdminPlus }: { item: PedidoItemDto; esAdminPlus: boolean }) {
+// Costo unitario cargado en Alegra: sólo con permiso de costos. El DTO no trae la CLAVE sin permiso
+// (`puedeVerCostos`, lib/secciones.ts), así que se decide por la clave presente y no por "vino null".
+function DatosDelLocal({ item }: { item: PedidoItemDto }) {
   const falta = !item.ventaSinStock && item.stockActual !== null && item.stockActual < item.qty ? item.qty - item.stockActual : 0
   return (
     <div className="mt-1 text-xs tabular-nums" style={{ color: "var(--ink-faint)" }}>
@@ -790,7 +790,7 @@ function DatosDelLocal({ item, esAdminPlus }: { item: PedidoItemDto; esAdminPlus
           {falta > 0 && ` (falta ${fmtCantidad(falta)})`}
         </span>
       )}
-      {esAdminPlus && (
+      {"costoUnitario" in item && (
         <> · Costo {item.costoUnitario == null ? "—" : fmtMoneda(item.costoUnitario)}</>
       )}
     </div>

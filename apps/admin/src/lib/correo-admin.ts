@@ -1,5 +1,6 @@
 import { adminNotFoundResponse, requireAdminPlus, type AdminGuardResult } from "@/lib/admin-route-guard"
 import { correoHabilitado } from "@/lib/correo-flag"
+import { puedeVerSeccion } from "@/lib/secciones"
 import { accesosDelTenant, listarCasillas, usuariosParaAcceso } from "@/lib/correo-repo"
 import { NOMBRE_CASILLA_MAX } from "@/lib/correo-admin-constantes"
 import { CorreoResendError } from "@/lib/correo-resend"
@@ -14,10 +15,14 @@ export function esUuid(valor: string): boolean {
   return UUID.test(valor)
 }
 
-/** Admin+ con el flag `correo` prendido. Sin sesión 401; operador o flag apagado, 404 idéntico. */
+/**
+ * Admin+ con la sección Mensajes (`inbox`, el correo vive ahí) y el flag `correo` prendido. Sin
+ * sesión 401; operador, sin la sección o flag apagado, 404 idéntico.
+ */
 export async function requireCorreoAdmin(req: Request): Promise<AdminGuardResult> {
   const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard
+  if (!puedeVerSeccion(guard.user, "inbox")) return { ok: false, response: adminNotFoundResponse() }
   if (!(await correoHabilitado())) return { ok: false, response: adminNotFoundResponse() }
   return guard
 }

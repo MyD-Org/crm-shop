@@ -1,17 +1,15 @@
 import { notFound } from "next/navigation"
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { adminSessionOptions, getGuardedAdminSession, type AdminSessionData } from "@/lib/admin-session"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { getBotStatus, listWhatsappNumbersRaw, type InboxContact } from "@/lib/inbox-api"
 import { assignPendingConversations } from "@/lib/assignment"
 import { listEnrichedContacts } from "@/lib/inbox-contacts"
 import { listarNombres } from "@/lib/inbox-canales-repo"
 import { filtrarNombres, filtrarNumerosRaw, type ActorCanales } from "@/lib/canal-acceso"
 import { parseWhatsappNumbers } from "@/lib/inbox-canales"
-import { isKnownAdminRole, roleRank } from "@/lib/roles"
+import { roleRank } from "@/lib/roles"
 import { casillasAccesibles } from "@/lib/correo-acceso"
 import { correoHabilitado } from "@/lib/correo-flag"
 import { contarNoLeidosPorCasilla } from "@/lib/correo-repo"
@@ -22,8 +20,12 @@ export const dynamic = "force-dynamic"
 
 export default async function InboxPage({ searchParams }: { searchParams: Promise<{ casilla?: string; hilo?: string }> }) {
   const { casilla: casillaParam, hilo: hiloParam } = await searchParams
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, session.tenantId))
+  // Sección Mensajes (`inbox`) con la fila FRESCA del usuario (rol, tenant, canales), nunca la
+  // cookie. Sin la sección (o el rol «compras»): el mismo 404 de siempre.
+  const acceso = await accesoSeccion("inbox")
+  if (!acceso) notFound()
+  const { tenantId, user } = acceso
+  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, tenantId))
 
   let contacts: InboxContact[] = []
   let botEnabled = true
@@ -32,19 +34,12 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   // null = no se pudo consultar; las solapas se arman como antes.
   let canalesHabilitados: string[] | null = null
   let telefonosCanal: Record<string, string> = {}
-  // Política de canales con la fila FRESCA del usuario (no la cookie). Si no se puede resolver
-  // se asume restringido sin canales (fail-closed): el layout protegido ya cubre el caso sin sesión.
-  const guardedUser = await getGuardedAdminSession().catch(() => null)
-  // Allow-list: el rol «compras» no entra al inbox (la fila fresca manda, no la cookie).
-  if (guardedUser?.ok === true && !isKnownAdminRole(guardedUser.user.role)) notFound()
-  const actor: ActorCanales =
-    guardedUser?.ok === true
-      ? guardedUser.user
-      : { id: session.userId, role: "operator", canalesPermitidos: [] }
+  // Política de canales con la fila fresca del usuario.
+  const actor: ActorCanales = user
   // Los nombres de canal también delatan canales ajenos: se filtran ANTES de armar las solapas.
   const canalNombres = filtrarNombres(
     actor,
-    await listarNombres(session.tenantId).catch(() => ({}) as Record<string, string>),
+    await listarNombres(tenantId).catch(() => ({}) as Record<string, string>),
   )
 
   // Casillas de correo como solapas de Mensajes. Con el flag `correo` apagado (o ante un error)
@@ -53,11 +48,9 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   let casillas: { id: string; nombre: string; email: string; noLeidos: number }[] = []
   if (correoOn) {
     try {
-      if (guardedUser?.ok) {
-        const accesibles = await casillasAccesibles(session.tenantId, { id: guardedUser.user.id, role: guardedUser.user.role })
-        const conteo = await contarNoLeidosPorCasilla(accesibles.map((c) => c.id))
-        casillas = accesibles.map((c) => ({ id: c.id, nombre: c.nombre, email: c.email, noLeidos: conteo[c.id] ?? 0 }))
-      }
+      const accesibles = await casillasAccesibles(tenantId, { id: user.id, role: user.role })
+      const conteo = await contarNoLeidosPorCasilla(accesibles.map((c) => c.id))
+      casillas = accesibles.map((c) => ({ id: c.id, nombre: c.nombre, email: c.email, noLeidos: conteo[c.id] ?? 0 }))
     } catch {
       casillas = []
     }
@@ -77,7 +70,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
       const { convs, assignments } = await assignPendingConversations(tenantRef)
       contacts = await listEnrichedContacts(tenantRef, "active", convs, assignments, actor)
       botEnabled = await botStatusPromise
-      const numeros = await listWhatsappNumbersRaw(tenant.aiApiUrl, tenant.aiTenantId, session.role)
+      const numeros = await listWhatsappNumbersRaw(tenant.aiApiUrl, tenant.aiTenantId, user.role)
         .then(async (r) => (r.ok ? parseWhatsappNumbers(filtrarNumerosRaw(actor, await r.json())) : null))
         .catch(() => null)
       canalesHabilitados = numeros?.map((n) => n.id) ?? null
@@ -108,11 +101,11 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
           {configError}
         </div>
       ) : (
-        <InboxList initialContacts={contacts} currentUserId={session.userId} initialBotEnabled={botEnabled}
+        <InboxList initialContacts={contacts} currentUserId={user.id} initialBotEnabled={botEnabled}
           initialCanalNombres={canalNombres}
           canalesHabilitados={canalesHabilitados}
           telefonosCanal={telefonosCanal}
-          canEditCanales={roleRank(session.role) >= 1}
+          canEditCanales={roleRank(user.role) >= 1}
           casillas={casillas}
           correoHabilitado={correoOn}
           initialCasillaId={casillaInicial}

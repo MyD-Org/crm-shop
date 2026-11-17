@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest"
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { listaPrecioOverrides, preciosOnlineCambios } from "@/db/schema"
 import { validarCambios, type CambioPrecios } from "@/lib/precios-online-cambios"
@@ -113,6 +113,10 @@ describe("selección y asignación", () => {
     for (let i = 0; i < muchos.length; i += 250) {
       await Promise.all(muchos.slice(i, i + 250).map((id) => seedProducto(T, { alegraId: id, costo: "10" })))
     }
+    // Sin estadísticas el planner estima 1 fila para `base` de calcular_precios_online y elige
+    // nested loops sobre CTE scans: con 1.500 productos pasa de ms a minutos (en una DB recién
+    // clonada, como la de CI, nunca corrió un autoanalyze). En producción las estadísticas existen.
+    await getDb().execute(sql`ANALYZE catalog_products`)
     const r = await aplicarLote([lote(muchos, [{ listaId: tarjeta, coeficiente: "2" }])])
     expect(r.entradas).toBe(1)
     expect(await overrides()).toHaveLength(1500)

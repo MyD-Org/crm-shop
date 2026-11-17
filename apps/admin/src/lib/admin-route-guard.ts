@@ -37,6 +37,13 @@ export interface AdminGuardUser {
   role: string
   /** Canales del inbox permitidos (null = todos). Solo restringe a los operadores. */
   canalesPermitidos: string[] | null
+  /**
+   * Secciones permitidas (0106; null/undefined = default del rol). Opcional para que los tests
+   * que mockean el guard sigan compilando. Ver lib/secciones.ts.
+   */
+  seccionesPermitidas?: string[] | null
+  /** Ver costos (0106; null/undefined = default del rol). */
+  verCostos?: boolean | null
 }
 
 export type AdminGuardResult =

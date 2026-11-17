@@ -61,6 +61,10 @@ export type GuardedSession =
         availability: string
         /** Canales del inbox permitidos: null = todos, [] = ninguno. Fila fresca (revocación inmediata). */
         canalesPermitidos: string[] | null
+        /** Secciones permitidas (0106): null = default del rol. Fila fresca. Ver lib/secciones.ts. */
+        seccionesPermitidas: string[] | null
+        /** Ver costos (0106): null = default del rol. Fila fresca. */
+        verCostos: boolean | null
       }
     }
   | { ok: false; reason: GuardFailReason }
@@ -111,6 +115,8 @@ export async function getGuardedAdminSession(req?: Request): Promise<GuardedSess
       role: adminUsers.role,
       availability: adminUsers.availability,
       canalesPermitidos: adminUsers.canalesPermitidos,
+      seccionesPermitidas: adminUsers.seccionesPermitidas,
+      verCostos: adminUsers.verCostos,
       tenantId: adminUsers.tenantId,
       passwordHash: adminUsers.passwordHash,
       sessionsRevokedBefore: adminUsers.sessionsRevokedBefore,
@@ -140,6 +146,8 @@ export async function getGuardedAdminSession(req?: Request): Promise<GuardedSess
       role: me.role as AdminSessionData["role"],
       availability: me.availability,
       canalesPermitidos: me.canalesPermitidos,
+      seccionesPermitidas: me.seccionesPermitidas,
+      verCostos: me.verCostos,
     },
   }
 }

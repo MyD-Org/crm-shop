@@ -8,7 +8,7 @@ import { BotonFavorito } from "@/components/BotonFavorito";
 import { BotonCompartir } from "@/components/BotonCompartir";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
-import { fmtPrecio } from "@/lib/format";
+import { fmtPesosEnteros } from "@/lib/format";
 import { rotuloMedio } from "@/lib/precio-medio-texto";
 import type { Product } from "@/data/products";
 import { agotadoSinModalidad } from "@/lib/venta-sin-stock";
@@ -139,7 +139,8 @@ export function CatalogoProductos({
           stockLabel={etiquetaStock(p)}
           showStock={mostrarStockEnCard(p)}
           // Final con IVA si se conoce; si no, el de siempre.
-          price={medioPrimero ? (medio.precioFinal ?? medio.price) : vv.precio}
+          // Sin centavos en la card market: "$ 273.761", no "$ 273.760,99".
+          price={medioPrimero ? Math.round(medio.precioFinal ?? medio.price) : market ? Math.round(vv.precio) : vv.precio}
           priceNote={vv.nota}
           oldPrice={vv.esDesde ? undefined : p.oldPrice}
           badge={p.campania ? badgeCampania(p.campania) : (badgePromo(promoDe(p.sku), p) ?? badgeProducto(p))}
@@ -174,7 +175,7 @@ export function CatalogoProductos({
           installments={
             market ? (
               <>
-                {medioPrimero && <span className="block">{fmtPrecio(vv.precio)} con otros medios</span>}
+                {medioPrimero && <span className="block">{fmtPesosEnteros(vv.precio)} con otros medios</span>}
                 {reservarCuotas && (
                   <span className="block min-h-4.5">
                     <CuotasCard opcion={vv.esDesde ? null : (cuotasPorProducto.get(p.id) ?? null)} />

@@ -118,6 +118,13 @@ export const adminUsers = pgTable(
     // los operadores (admin/superadmin son exentos). Sin default: los usuarios existentes quedan
     // en NULL y ven lo mismo que antes. Ver lib/canal-acceso.ts (0092).
     canalesPermitidos: text("canales_permitidos").array(),
+    // Secciones del backoffice que el usuario puede ver (claves tildables de lib/secciones.ts).
+    // NULL = default del rol; lista = exactamente esas; {} = ninguna tildable. Superadmin y
+    // «compras» la ignoran. Sin default: los existentes quedan en NULL (0106).
+    seccionesPermitidas: text("secciones_permitidas").array(),
+    // Ver precio de costo. NULL = default del rol (admin+); true/false = explícito. Superadmin
+    // siempre ve; «compras» nunca. Ver puedeVerCostos en lib/secciones.ts (0106).
+    verCostos: boolean("ver_costos"),
     // Presencia para asignación de handoff: 'available' = el operador está atendiendo y
     // puede recibir conversaciones; 'away' = no se le asignan. Distinto de "cuenta activa"
     // (passwordHash): existir ≠ estar disponible ahora. Default 'away'. Ver ADR 0006.

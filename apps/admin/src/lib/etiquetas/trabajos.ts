@@ -3,7 +3,7 @@
  * `scripts/etiquetas/codigos.ts` (mismas posiciones y comandos); el QR 6 por hoja se arma acá
  * como layout + ensamble de bitmaps, y el dibujo en canvas vive aparte.
  */
-import { ascii, cabeceraTspl, comandoBitmap, concatenar, type OpcionesCabecera } from "./bitmap"
+import { ascii, cabeceraTspl, comandoBitmap, concatenar, rgbaA1bit, type OpcionesCabecera } from "./bitmap"
 import { barras, code128b, MAX_CARACTERES_REFERENCIA, PUNTOS_POR_MM, validarReferencia } from "./code128"
 import { hostWeb, urlProductoQr } from "./qr"
 import { textoImprimible, validarCantidad } from "./texto"
@@ -205,4 +205,64 @@ export function ensamblarTrabajoBitmap(opciones: OpcionesCabecera, imagenes: Ima
     partes.push(ascii("CLS\r\n"), comandoBitmap(0, 0, img.anchoBytes, img.alto, img.bytes), ascii("\r\nPRINT 1,1\r\n"))
   }
   return concatenar(partes)
+}
+
+/** Píxeles RGBA de una hoja dibujada (lo que devuelve `getImageData`). */
+export interface PixelesRgba {
+  data: Uint8ClampedArray
+  width: number
+  height: number
+}
+
+export type ResultadoTrabajosQr = ({ ok: true } & ResultadoTrabajos) | { ok: false; mensaje: string }
+
+/**
+ * QR 6 por hoja (100x150, GAP 3 mm, DENSITY 10): un trabajo por hoja (un BITMAP + PRINT 1,1),
+ * así ningún envío pasa de ~120 KB. `dibujar` rasteriza la hoja (canvas.ts en el navegador; un
+ * doble en los tests): es la misma función que alimenta la vista previa.
+ */
+export async function trabajoQr6(
+  items: ItemEtiqueta[],
+  shopUrl: string | null | undefined,
+  dibujar: (hoja: HojaQr) => Promise<PixelesRgba>,
+): Promise<ResultadoTrabajosQr> {
+  const layout = layoutQr6(items, shopUrl)
+  if (!layout.ok) return layout
+  const trabajos: Trabajo[] = []
+  for (const hoja of layout.hojas) {
+    const px = await dibujar(hoja)
+    const { bytes, anchoBytes } = rgbaA1bit(px.data, px.width, px.height)
+    trabajos.push({
+      tipo: "qr-6up",
+      datos: ensamblarTrabajoBitmap(CABECERA_100X150, [{ bytes, anchoBytes, alto: px.height }]),
+      etiquetas: hoja.celdas.filter(Boolean).length,
+    })
+  }
+  return { ok: true, trabajos, omitidos: layout.omitidos, etiquetas: layout.etiquetas }
+}
+
+// ---------------------------------------------------------------------------
+// Vista previa del 29x20: la primera fila leída del MISMO TSPL que se envía
+// ---------------------------------------------------------------------------
+
+export interface FilaTspl {
+  barras: { x: number; y: number; ancho: number; alto: number }[]
+  textos: { x: number; y: number; texto: string }[]
+}
+
+/** BAR y TEXT del primer bloque CLS…PRINT de un trabajo de texto TSPL. */
+export function primeraFilaTspl(tspl: string): FilaTspl {
+  const fila: FilaTspl = { barras: [], textos: [] }
+  for (const linea of tspl.split("\r\n")) {
+    if (linea.startsWith("PRINT")) break
+    const bar = /^BAR (\d+),(\d+),(\d+),(\d+)$/.exec(linea)
+    if (bar) {
+      const [x, y, ancho, alto] = bar.slice(1).map(Number)
+      fila.barras.push({ x, y, ancho, alto })
+      continue
+    }
+    const txt = /^TEXT (\d+),(\d+),"[^"]*",\d+,\d+,\d+,"(.*)"$/.exec(linea)
+    if (txt) fila.textos.push({ x: Number(txt[1]), y: Number(txt[2]), texto: txt[3] })
+  }
+  return fila
 }

@@ -740,11 +740,6 @@ interface Simulada {
 }
 
 async function simular(tx: Tx, tenantId: string, cambios: CambioPrecios[], cfg: ConfigPrecios): Promise<Simulada> {
-  // Sin JIT: `calcular_precios_online` y el diff con `jsonb_array_elements` inflan el costo estimado
-  // por encima de `jit_above_cost`, y en un Postgres con LLVM (CI) compilar cada consulta tardaba
-  // segundos por llamada (el lote de 1.500 productos pasaba el timeout). Mismo caso que #877.
-  // `SET LOCAL` vale sólo para esta transacción.
-  await tx.execute(sql`SET LOCAL jit = off`)
   const entradas: EntradaHistorial[] = []
   for (const c of cambios) entradas.push(...(await aplicarUno(tx, tenantId, c)))
 

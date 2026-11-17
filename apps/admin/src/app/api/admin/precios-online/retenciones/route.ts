@@ -3,13 +3,15 @@ import { invalidResponse } from "@/lib/catalogo-admin"
 import { esUuid, MSG_BODY } from "@/lib/precios-online-cambios"
 import { aprobarRetenidos, listarRetenidos, rechazarRetenidos } from "@/lib/precios-online-costos"
 import { NO_STORE, leerJson, respuestaDeError } from "@/lib/precios-online-http"
+import { puedeVerCostos, sinCampos } from "@/lib/secciones"
 
 // Cambios de costo desde Alegra retenidos por superar el umbral de retención.
 //   GET  /api/admin/precios-online/retenciones?start=&limit=   -> pendientes de aprobación.
 //   POST { accion: "aprobar" | "rechazar", ids: [uuid], confirmar?: boolean }
 //        Resolver varios a la vez exige confirmar: true. Aprobar actualiza el precio y deja historial;
 //        rechazar mantiene el precio vigente. Un retenido sin costo propuesto no se aprueba (se omite).
-// admin+ (operator -> 404). Tenant = el del guard.
+// admin+ (operator -> 404). Tenant = el del guard. Sin permiso de costos (`puedeVerCostos`) el GET
+// no incluye `costoVigente` ni `costoPropuesto` (sí la variación y si queda sin costo).
 
 export async function GET(req: Request) {
   const guard = await requireAdminPlus(req)
@@ -20,7 +22,11 @@ export async function GET(req: Request) {
   if (!Number.isInteger(start) || start < 0 || !Number.isInteger(limit) || limit < 1) {
     return invalidResponse("Los filtros indicados no son válidos.")
   }
-  return Response.json({ ...(await listarRetenidos(guard.tenantId, { start, limit: Math.min(limit, 100) })), start }, { headers: NO_STORE })
+  const r = await listarRetenidos(guard.tenantId, { start, limit: Math.min(limit, 100) })
+  const items = puedeVerCostos(guard.user)
+    ? r.items
+    : r.items.map((item) => sinCampos(item, ["costoVigente", "costoPropuesto"]))
+  return Response.json({ ...r, items, start }, { headers: NO_STORE })
 }
 
 const MAX_IDS = 200

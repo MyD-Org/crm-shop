@@ -758,7 +758,8 @@ de crédito): los corrige la sync diaria, que sigue siendo obligatoria.
 - Log: `[alegra-stock/drenar] tenant=… leidos=… inactivos=… errores=… requests=… pendientes=… corte=… ms=…`.
 
 **Cron de red** `GET|POST /api/cron/alegra-stock-drenar` (Bearer `CRON_SECRET`, `?tenant=`
-opcional; workflow `admin-alegra-stock-drenar`, **cada 15 min**, grupo de concurrencia propio):
+opcional; workflow `admin-alegra-stock-drenar`, **cada 15 min** en teoría (GitHub lo corre cada varias horas;
+por eso cada corrida repite la invocación mientras quede cola, hasta 12 pasadas), grupo de concurrencia propio):
 drena lo que quedó (hasta 270 s), purga la cola de más de 48 h y el índice de más de 400 días,
 y devuelve por tenant `{ok, leidos, inactivos, errores, requests, pendientes, corte,
 ultimoAvisoMin}`. Si un tenant lleva más de un día sin avisos, el workflow deja un

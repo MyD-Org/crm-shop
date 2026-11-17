@@ -44,7 +44,7 @@ import {
   type PedidoRow,
 } from "@/lib/pedidos-repo"
 import { getTenantByIdFromDb, type TenantConfig } from "@/lib/tenants"
-import { canSeeCosts } from "@/lib/roles"
+import { puedeVerCostos } from "@/lib/secciones"
 
 // "Emitir factura" del detalle de pedido. Endpoint y acción de UI separados de "Vincular
 // factura" (.../factura/route.ts): acá se CREA la factura real en Alegra (dinero real e
@@ -499,5 +499,5 @@ export async function POST(req: Request, { params }: IdParams) {
 
   const aviso = await enviarFacturaPedido({ tenantId: guard.tenantId, pedido: result.pedido })
   logAvisoFactura(ctx, aviso)
-  return respuestaResultado(result, canSeeCosts(guard.user.role), aviso)
+  return respuestaResultado(result, puedeVerCostos(guard.user), aviso)
 }

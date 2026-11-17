@@ -2,6 +2,7 @@ import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { invalidResponse } from "@/lib/catalogo-admin"
 import { listarGrilla, listarIds, parsearQueryGrilla } from "@/lib/precios-online-grilla"
 import { NO_STORE } from "@/lib/precios-online-http"
+import { puedeVerCostos, sinCampos } from "@/lib/secciones"
 
 // GET /api/admin/catalogo/precios-online — grilla de precios online.
 //   ?q= &marca= &categoria=(uuid|sin) &estado=(ok|sin-costo|sin-precio|retenido|nuevo) &lista=uuid
@@ -11,7 +12,8 @@ import { NO_STORE } from "@/lib/precios-online-http"
 // Filtrado, conteo, orden y paginado se resuelven en Postgres: el navegador recibe una página. Para
 // los ids de la página trae el coeficiente efectivo y su origen por lista, y los precios de las
 // listas de Alegra por cuenta como REFERENCIA informativa (nunca participan del cálculo). El costo
-// solo viaja al admin. admin+ (operator -> 404). Tenant = el del guard.
+// (`costo`, `costoAplicado`) sólo viaja con permiso de costos (`puedeVerCostos`, fila fresca): sin
+// él las claves no existen en la respuesta. admin+ (operator -> 404). Tenant = el del guard.
 
 export async function GET(req: Request) {
   const guard = await requireAdminPlus(req)
@@ -28,5 +30,8 @@ export async function GET(req: Request) {
     limit: parsed.limit,
     orden: parsed.orden,
   })
-  return Response.json({ items, total, start: parsed.start, limit: parsed.limit }, { headers: NO_STORE })
+  const filas = puedeVerCostos(guard.user)
+    ? items
+    : items.map((fila) => sinCampos(fila, ["costo", "costoAplicado"]))
+  return Response.json({ items: filas, total, start: parsed.start, limit: parsed.limit }, { headers: NO_STORE })
 }

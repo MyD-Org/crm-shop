@@ -3,7 +3,7 @@ import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard
 import { nombreDocumentoAlegra, resolverRemito, validarRemision } from "@/lib/remito"
 import { desvincularRemito, getPedido, toPedidoDetalleDto, vincularRemito, type PedidoRow, type RemitoResult } from "@/lib/pedidos-repo"
 import { configAlegraDelPedido } from "@/lib/pedido-cuenta-alegra"
-import { canSeeCosts } from "@/lib/roles"
+import { puedeVerCostos } from "@/lib/secciones"
 
 // "Vincular remito existente" del detalle de pedido (rebanada D, remito único por pedido).
 //
@@ -181,7 +181,7 @@ export async function POST(req: Request, { params }: IdParams) {
       }),
     )
   }
-  return respuestaResultado(result, canSeeCosts(guard.user.role))
+  return respuestaResultado(result, puedeVerCostos(guard.user))
 }
 
 export async function DELETE(req: Request, { params }: IdParams) {
@@ -215,5 +215,5 @@ export async function DELETE(req: Request, { params }: IdParams) {
       }),
     )
   }
-  return respuestaResultado(result, canSeeCosts(guard.user.role))
+  return respuestaResultado(result, puedeVerCostos(guard.user))
 }

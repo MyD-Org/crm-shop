@@ -67,7 +67,7 @@ export default function AdminLoginPage() {
         setPaso("codigos")
         return
       }
-      router.push("/admin/inbox")
+      router.push("/admin")
     } finally {
       setLoading(false)
     }
@@ -89,7 +89,7 @@ export default function AdminLoginPage() {
           setPaso(body.paso)
           setCodigo("")
         } else {
-          router.push("/admin/inbox")
+          router.push("/admin")
         }
       } else {
         const body = await res.json()
@@ -127,7 +127,7 @@ export default function AdminLoginPage() {
       </div>
 
       {paso === "codigos" && (
-        <CodigosRespaldo codigos={codigosRespaldo} onContinuar={() => router.push("/admin/inbox")} />
+        <CodigosRespaldo codigos={codigosRespaldo} onContinuar={() => router.push("/admin")} />
       )}
 
       {(paso === "verificar" || paso === "alta") && (

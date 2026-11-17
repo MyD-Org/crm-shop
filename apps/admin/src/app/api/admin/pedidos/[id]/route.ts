@@ -9,7 +9,8 @@ import {
   mensajeTransicionInvalida,
   puedeTransicionar,
 } from "@/lib/pedidos-transiciones"
-import { canSeeCosts, roleRank } from "@/lib/roles"
+import { roleRank } from "@/lib/roles"
+import { puedeVerCostos } from "@/lib/secciones"
 
 // GET   /api/admin/pedidos/[id] — detalle con ítems.
 // PATCH /api/admin/pedidos/[id] — cambio de estado. Body { estado, estadoEsperado, motivo? }.
@@ -49,7 +50,7 @@ export async function GET(req: Request, { params }: IdParams) {
   try {
     const found = await getPedido(guard.tenantId, id)
     if (!found) return adminNotFoundResponse()
-    return Response.json(toPedidoDetalleDto(found.pedido, found.items, found.listaPrecios, found.historial, found.remito, { incluirCosto: canSeeCosts(guard.user.role), pagoManual: found.pagoManual, pagos: found.pagos, comprobantes: found.comprobantes, intentos: found.intentos,
+    return Response.json(toPedidoDetalleDto(found.pedido, found.items, found.listaPrecios, found.historial, found.remito, { incluirCosto: puedeVerCostos(guard.user), pagoManual: found.pagoManual, pagos: found.pagos, comprobantes: found.comprobantes, intentos: found.intentos,
     }), {
       headers: NO_STORE,
     })
@@ -173,7 +174,7 @@ export async function PATCH(req: Request, { params }: IdParams) {
   })
   logAviso("estado", { tenant: guard.tenantId, orderId: id }, aviso)
 
-  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, { incluirCosto: canSeeCosts(guard.user.role), pagoManual: result.pagoManual, pagos: result.pagos, comprobantes: result.comprobantes, intentos: result.intentos,
+  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, { incluirCosto: puedeVerCostos(guard.user), pagoManual: result.pagoManual, pagos: result.pagos, comprobantes: result.comprobantes, intentos: result.intentos,
     }), {
     headers: NO_STORE,
   })

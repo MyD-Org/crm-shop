@@ -1,6 +1,7 @@
 import { getGuardedAdminSession } from "@/lib/admin-session"
 import { comprasHabilitado } from "@/lib/compras-flag"
 import { esRolCompras, isKnownAdminRole, roleRank } from "@/lib/roles"
+import { autorizaSeccion, type ClaveOAlguna, type OpcionesSeccion } from "@/lib/secciones"
 
 // Guards de las rutas /api/admin/* nuevas. Hay dos niveles:
 //  - `requireAdminPlus`:    admin y superadmin (comprobantes de pago, settings de comprobantes).
@@ -37,6 +38,13 @@ export interface AdminGuardUser {
   role: string
   /** Canales del inbox permitidos (null = todos). Solo restringe a los operadores. */
   canalesPermitidos: string[] | null
+  /**
+   * Secciones permitidas (0106; null/undefined = default del rol). Opcional para que los tests
+   * que mockean el guard sigan compilando. Ver lib/secciones.ts.
+   */
+  seccionesPermitidas?: string[] | null
+  /** Ver costos (0106; null/undefined = default del rol). */
+  verCostos?: boolean | null
 }
 
 export type AdminGuardResult =
@@ -113,3 +121,32 @@ export async function requireComprasAccess(req: Request): Promise<AdminGuardResu
   if (!(await flagCompras())) return { ok: false, response: adminNotFoundResponse() }
   return { ok: true, tenantId: guarded.tenantId, user: guarded.user }
 }
+
+/**
+ * Autoriza una ruta de una SECCIÓN del backoffice (change `permisos-por-seccion`). El gate es la
+ * política de `lib/secciones.ts` sobre la fila fresca del usuario (rol + `secciones_permitidas`),
+ * no el rango de rol. Mismo manejo que los guards de arriba:
+ *  - sesión inválida/revocada/2FA pendiente -> 401 (`reason` sólo a logs);
+ *  - sin ninguna de las secciones pedidas (arreglo = "cualquiera de"), `rolMin` no cumplido, o la
+ *    sección es Compras con el flag apagado -> 404 con el cuerpo IDÉNTICO al de un id inexistente.
+ *
+ *   const guard = await requireSeccion(req, "pedidos")
+ *   if (!guard.ok) return guard.response
+ */
+export async function requireSeccion(
+  req: Request,
+  clave: ClaveOAlguna,
+  opts?: OpcionesSeccion,
+): Promise<AdminGuardResult> {
+  const guarded = await getGuardedAdminSession(req)
+  if (!guarded.ok) {
+    console.warn(`[admin-guard] request rechazado: ${guarded.reason}`)
+    return { ok: false, response: adminUnauthorizedResponse() }
+  }
+  // Fila fresca: rol y secciones de la base, nunca de la cookie.
+  if (!(await autorizaSeccion(guarded.user, clave, opts, flagCompras))) {
+    return { ok: false, response: adminNotFoundResponse() }
+  }
+  return { ok: true, tenantId: guarded.tenantId, user: guarded.user }
+}
+

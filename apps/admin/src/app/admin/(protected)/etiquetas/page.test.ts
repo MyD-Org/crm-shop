@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { headersDeSeguridad } from "@/lib/headers-seguridad"
+import { SECCIONES, SECCION_POR_CLAVE } from "@/lib/secciones"
 
 // Test a nivel FUENTE (patrón de nav-grupos.test.ts / rutas-guard.test.ts).
 const leer = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8")
@@ -14,13 +15,10 @@ describe("/admin/etiquetas", () => {
     expect(fuente).toMatch(/export const dynamic = "force-dynamic"/)
   })
 
-  it("tiene una única entrada en el menú, en el grupo Datos y sólo para admin+", () => {
-    const entradas = leer("../../../../components/admin/AdminShell.tsx")
-      .split("\n")
-      .filter((l) => l.includes('href: "/admin/etiquetas"'))
-    expect(entradas).toHaveLength(1)
-    expect(entradas[0]).toContain('group: "Datos"')
-    expect(entradas[0]).toContain('minRole: "admin"')
+  it("tiene una única entrada en el menú, en el grupo Datos y admin+ por defecto", () => {
+    expect(SECCIONES.filter((s) => s.href === "/admin/etiquetas")).toHaveLength(1)
+    expect(SECCION_POR_CLAVE.etiquetas.grupo).toBe("Datos")
+    expect(SECCION_POR_CLAVE.etiquetas.rolMin).toBe("admin")
   })
 
   it("la API de contexto exige admin+ (requireAdminPlus) y usa el tenant del guard", () => {

@@ -715,6 +715,13 @@
       "when": 1794900000000,
       "tag": "0105_compras_en_transito",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1795000000000,
+      "tag": "0106_admin_users_secciones_permitidas",
+      "breakpoints": true
     }
   ]
 }

@@ -1,10 +1,11 @@
-import { getGuardedAdminSession } from "@/lib/admin-session"
-import { comprasHabilitado, comprasRecepcionHabilitada } from "@/lib/compras-flag"
-import { esRolCompras, isKnownAdminRole, roleRank } from "@/lib/roles"
+import { comprasRecepcionHabilitada } from "@/lib/compras-flag"
+import { isKnownAdminRole, roleRank } from "@/lib/roles"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 
-// Acceso de las PÁGINAS de Compras (las rutas API usan `requireComprasAccess`). Misma regla: el
-// rol lateral «compras» o admin/superadmin, con el flag `compras-en-transito` prendido. El rol sale
-// de la fila fresca de la base (getGuardedAdminSession), nunca de la cookie. null = `notFound()`.
+// Acceso de las PÁGINAS de Compras (las rutas API usan `requireComprasAccess`). Wrapper de
+// `accesoSeccion("compras")`: el rol lateral «compras» o quien tenga la sección (admin/superadmin
+// por defecto), con el flag `compras-en-transito` prendido. El rol sale de la fila fresca de la
+// base, nunca de la cookie. null = `notFound()`.
 
 export interface AccesoCompras {
   tenantId: string
@@ -16,15 +17,12 @@ export interface AccesoCompras {
 }
 
 export async function accesoCompras(): Promise<AccesoCompras | null> {
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok) return null
-  const role = guard.user.role
-  const permitido = esRolCompras(role) || (isKnownAdminRole(role) && roleRank(role) >= 1)
-  if (!permitido) return null
-  if (!(await comprasHabilitado())) return null
+  const acceso = await accesoSeccion("compras")
+  if (!acceso) return null
+  const role = acceso.role
   return {
-    tenantId: guard.tenantId,
-    userId: guard.user.id,
+    tenantId: acceso.tenantId,
+    userId: acceso.userId,
     role,
     esAdmin: isKnownAdminRole(role) && roleRank(role) >= 1,
     edicionHabilitada: await comprasRecepcionHabilitada(),

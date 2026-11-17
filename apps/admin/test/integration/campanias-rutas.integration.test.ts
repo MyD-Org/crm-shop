@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest"
-import { sql } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { NextRequest } from "next/server"
 import { getDb } from "@/db"
+import { adminUsers } from "@/db/schema"
 import { seedOperator, seedTenant, truncateAll } from "./helpers"
 import { aplicar, seedLista, seedProducto } from "./precios-online-helpers"
 
@@ -148,5 +149,19 @@ describe("/api/admin/campanias", () => {
     )
     expect(res.status).toBe(200)
     expect((await json(res)).previa).toMatchObject({ productos: 1, bajoCosto: 1, choque: null })
+  })
+
+  it("previsualizar sin permiso de costos: la muestra no trae `costo` (el conteo bajoCosto sí)", async () => {
+    const ahora = await ahoraDb()
+    await getDb().update(adminUsers).set({ verCostos: false }).where(eq(adminUsers.id, adminA))
+    const res = await previa.POST(
+      req("/api/admin/campanias/previsualizar", {
+        body: { campania: cuerpo(ahora, { reglas: [{ alcance: { tipo: "marca", marca: "acme" }, pct: 50 }] }) },
+      }),
+    )
+    const p = (await json(res)).previa
+    expect(p).toMatchObject({ productos: 1, bajoCosto: 1 })
+    expect(p.muestra.length).toBeGreaterThan(0)
+    for (const f of p.muestra) expect("costo" in f).toBe(false)
   })
 })

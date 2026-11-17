@@ -1,11 +1,8 @@
-import { cookies } from "next/headers"
-import { getIronSession } from "iron-session"
 import { eq } from "drizzle-orm"
 import { notFound } from "next/navigation"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { isKnownAdminRole } from "@/lib/roles"
-import { adminSessionOptions, getGuardedAdminSession, type AdminSessionData } from "@/lib/admin-session"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { canalKey } from "@/lib/inbox-canales"
 import { puedeVerCanal } from "@/lib/canal-acceso"
 import { getContact, getContactMessages, getBotStatus, listConversations } from "@/lib/inbox-api"
@@ -24,8 +21,11 @@ export default async function ContactThreadPage({ params, searchParams }: {
   // Número del negocio del hilo (la lista lo manda): la ventana y la respuesta son de ese número.
   const { cuenta } = await searchParams
   const channelAccountId = typeof cuenta === "string" ? cuenta : null
-  const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
-  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, session.tenantId))
+  // Sección Mensajes con la fila fresca (rol, tenant, canales e id del usuario), nunca la cookie.
+  // Va antes que todo: sin la sección no se consulta nada.
+  const acceso = await accesoSeccion("inbox")
+  if (!acceso) notFound()
+  const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, acceso.tenantId))
 
   if (!tenant?.aiTenantId || !tenant?.aiApiUrl) {
     return (
@@ -50,9 +50,6 @@ export default async function ContactThreadPage({ params, searchParams }: {
   // Estado del kill switch: si el bot está pausado, el footer no dice "el bot responde".
   const botStatusP = getBotStatus(tenant.aiApiUrl, tenant.aiTenantId).catch(() => true)
 
-  // También arranca antes del contacto: no depende de él (una tanda menos en la cascada).
-  const guardedP = getGuardedAdminSession().catch(() => null)
-
   const result = await Promise.all([
     getContact(tenant.aiApiUrl, tenant.aiTenantId, endUserId, channelAccountId),
     getContactMessages(tenant.aiApiUrl, tenant.aiTenantId, endUserId, { limit: 30 }),
@@ -63,9 +60,7 @@ export default async function ContactThreadPage({ params, searchParams }: {
 
   // Política de canales con la fila fresca del usuario (no la cookie). Se valida el canal del
   // contacto DEVUELTO por ai-api, no el ?cuenta= de la URL. Sin acceso: el mismo notFound().
-  // Sin guard válido el layout protegido ya habría redirigido; por las dudas, también 404.
-  const guarded = await guardedP
-  if (!guarded?.ok || !isKnownAdminRole(guarded.user.role) || !puedeVerCanal(guarded.user, canalKey(contact))) notFound()
+  if (!puedeVerCanal(acceso.user, canalKey(contact))) notFound()
 
   // Operador (fuente de verdad: CRM) + departamento (de ai-api).
   const [enrichedContact, botEnabled] = await Promise.all([
@@ -81,7 +76,7 @@ export default async function ContactThreadPage({ params, searchParams }: {
     <ContactThreadView
       contact={enrichedContact}
       initialPage={page}
-      currentUserId={session.userId}
+      currentUserId={acceso.userId}
       botEnabled={botEnabled}
       copilotEnabled={tenant.copilotEnabled}
     />

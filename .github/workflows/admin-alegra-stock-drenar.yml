@@ -4,6 +4,10 @@
 # que murió), purga lo viejo y avisa si hace más de un día que no llega ningún aviso (Alegra
 # puede desactivar una suscripción sin decir nada).
 # Con la cola vacía no gasta requests a Alegra.
+#
+# GitHub no garantiza el horario de `schedule`: en la práctica corre cada 4 a 9 horas, no cada
+# 15 minutos. Por eso cada corrida repite la invocación (≈270 ítems cada una) mientras quede
+# cola, hasta MAX_PASADAS: una sola corrida vacía una carga masiva antes de la purga de 48 h.
 # Ver apps/admin/docs/FUNCIONALIDADES.md, "Stock casi en tiempo real (webhooks de Alegra)".
 
 name: admin · Drenar cola de stock Alegra
@@ -31,7 +35,8 @@ concurrency:
 jobs:
   drenar:
     runs-on: ubuntu-latest
-    timeout-minutes: 7
+    # MAX_PASADAS × ~5,5 min por pasada, más margen.
+    timeout-minutes: 70
     steps:
       - name: Drenar la cola de re-lectura de stock
         env:
@@ -41,6 +46,8 @@ jobs:
           TENANT: ${{ github.event.inputs.tenant }}
           # Minutos sin avisos a partir de los cuales se advierte (un día).
           SIN_AVISOS_MIN: "1440"
+          # Invocaciones por corrida como máximo (12 × 270 s ≈ 54 min ≈ 3.200 ítems por tenant).
+          MAX_PASADAS: "12"
         run: |
           if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
             echo "Faltan los secrets ADMIN_BASE_URL o ADMIN_CRON_SECRET del repo." >&2
@@ -50,25 +57,37 @@ jobs:
           query=""
           if [ -n "$TENANT" ]; then query="?tenant=$(jq -rn --arg t "$TENANT" '$t|@uri')"; fi
 
-          # --max-time 320 > maxDuration=300 de la ruta: si Vercel corta, queremos ver su error,
-          # no un timeout de curl.
-          http_code=$(curl -sS -o response.json -w '%{http_code}' \
-            --max-time 320 \
-            -X POST \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "$BASE_URL/api/cron/alegra-stock-drenar$query" || true)
-          echo "HTTP $http_code"
+          pasada=0
+          while :; do
+            pasada=$((pasada + 1))
+            echo "── Pasada $pasada de $MAX_PASADAS"
 
-          # Una respuesta 200 que no es el JSON de la ruta (p. ej. una página HTML de por medio)
-          # no puede pasar por "nada pendiente".
-          if [ "$http_code" != "200" ] || ! jq -e '.tenants | type == "array"' response.json > /dev/null 2>&1; then
-            echo "::error::El drenaje falló (HTTP $http_code o respuesta que no es la de la ruta)."
-            exit 1
-          fi
+            # --max-time 320 > maxDuration=300 de la ruta: si Vercel corta, queremos ver su
+            # error, no un timeout de curl.
+            http_code=$(curl -sS -o response.json -w '%{http_code}' \
+              --max-time 320 \
+              -X POST \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              "$BASE_URL/api/cron/alegra-stock-drenar$query" || true)
+            echo "HTTP $http_code"
 
-          # Resumen para logs públicos: identificador de tenant, estado y conteos. Nunca el
-          # campo "error" ni datos de Alegra.
-          jq -c '.tenants[] | {tenant, ok, leidos, inactivos, errores, requests, pendientes, corte, ultimoAvisoMin}' response.json
+            # Una respuesta 200 que no es el JSON de la ruta (p. ej. una página HTML de por
+            # medio) no puede pasar por "nada pendiente".
+            if [ "$http_code" != "200" ] || ! jq -e '.tenants | type == "array"' response.json > /dev/null 2>&1; then
+              echo "::error::El drenaje falló (HTTP $http_code o respuesta que no es la de la ruta)."
+              exit 1
+            fi
+
+            # Resumen para logs públicos: identificador de tenant, estado y conteos. Nunca el
+            # campo "error" ni datos de Alegra.
+            jq -c '.tenants[] | {tenant, ok, leidos, inactivos, errores, requests, pendientes, corte, ultimoAvisoMin}' response.json
+
+            # Otra pasada sólo si algún tenant sano cortó por tiempo con cola pendiente. Un 429,
+            # un lease ocupado o un tenant que falló no se insisten: se ven abajo o en la próxima
+            # corrida.
+            seguir=$(jq -r '[.tenants[] | select(.ok != false and .corte == "deadline" and (.pendientes // 0) > 0)] | length' response.json)
+            if [ "$seguir" = "0" ] || [ "$pasada" -ge "$MAX_PASADAS" ]; then break; fi
+          done
 
           for t in $(jq -r --argjson lim "$SIN_AVISOS_MIN" '.tenants[] | select(.ultimoAvisoMin != null and .ultimoAvisoMin > $lim) | .tenant' response.json); do
             echo "::warning::El tenant $t no recibe avisos de stock de Alegra hace más de un día. Revise las suscripciones (scripts/alegra-webhooks-stock.ts listar)."

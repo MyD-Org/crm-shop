@@ -2,8 +2,7 @@ import { eq } from "drizzle-orm"
 import { notFound } from "next/navigation"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { getGuardedAdminSession } from "@/lib/admin-session"
-import { roleRank } from "@/lib/roles"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { listarSucursales, toSucursalDto } from "@/lib/sucursales-repo"
 import { listarCuentas } from "@/lib/alegra-cuentas-repo"
 import { SucursalesTab } from "@/components/admin/SucursalesTab"
@@ -11,10 +10,10 @@ import { SucursalesTab } from "@/components/admin/SucursalesTab"
 export const dynamic = "force-dynamic"
 
 // Sucursales: dato maestro con alta, baja y estado, por eso es una sección
-// propia del menú (grupo Datos) y no una pestaña de configuración. Admin+ (operator → 404).
+// propia del menú (grupo Datos) y no una pestaña de configuración. Sección Sucursales (sin ella → 404).
 export default async function SucursalesPage() {
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok || roleRank(guard.user.role) < 1) notFound()
+  const guard = await accesoSeccion("sucursales")
+  if (!guard) notFound()
 
   const [sucursales, cuentas, [tenant]] = await Promise.all([
     listarSucursales(guard.tenantId),

@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { requireOperatorPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { getBotStatus, setBotStatus } from "@/lib/inbox-api"
 
 async function requireTenant(req: Request) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireSeccion(req, "inbox")
   if (!guard.ok) return { error: guard.response }
 
   const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, guard.tenantId))

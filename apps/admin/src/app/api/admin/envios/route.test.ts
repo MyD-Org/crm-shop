@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 
 /**
- * /api/admin/envios: guard (401/403), validación (400, mensajes en usted) y éxito con el aviso al
+ * /api/admin/envios: guard (401/404), validación (400, mensajes en usted) y éxito con el aviso al
  * Shop. El repo de datos se simula: la DB real se cubre en
  * test/integration/envio-configurable-0049.integration.test.ts.
  */
@@ -60,11 +60,11 @@ describe("/api/admin/envios", () => {
     expect(state.ping).toBe(0)
   })
 
-  it("rol desconocido → 403 y sin guardar", async () => {
+  it("rol desconocido → 404 y sin guardar", async () => {
     state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "X", email: "x@cliente.example", role: "visitante" } }
     const { PUT } = await import("@/app/api/admin/envios/route")
     const res = await PUT(req("PUT", { domicilioActivo: true, gratisActivo: false }))
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(404)
     expect(state.guardado).toEqual([])
   })
 

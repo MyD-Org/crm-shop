@@ -1,5 +1,6 @@
 import { guardarDespacho, leerDespacho } from "@/lib/reglas-venta-repo"
-import { NO_STORE, requireSucursalesAccess } from "@/lib/sucursales-respuestas"
+import { requireSeccion } from "@/lib/admin-route-guard"
+import { NO_STORE } from "@/lib/sucursales-respuestas"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 
 // GET /api/admin/despacho — plazo de despacho que muestra el Shop (defaults si todavía no hay
@@ -9,13 +10,13 @@ import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 // trae `propagado`. Guard y tenant como /api/admin/envios.
 
 export async function GET(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
   return Response.json({ despacho: await leerDespacho(guard.tenantId) }, { headers: NO_STORE })
 }
 
 export async function PUT(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
 
   const body = await req.json().catch(() => null)

@@ -5,7 +5,7 @@ import type { Geometria } from "@/lib/geo-poligono"
 
 /**
  * /api/admin/envios/probar: la "Prueba de dirección" corre las mismas funciones que el Shop sobre un
- * método guardado (`metodoId`) o sobre el borrador que se está editando (`metodo`). Guard 401/403,
+ * método guardado (`metodoId`) o sobre el borrador que se está editando (`metodo`). Guard 401/404,
  * validación 400 y casos del fixture compartido.
  */
 
@@ -22,7 +22,7 @@ const guardado: MetodoEnvio = {
 }
 
 const state = vi.hoisted(() => ({
-  guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "operator" } } as Record<string, unknown>,
+  guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } } as Record<string, unknown>,
   metodo: null as unknown,
   tenantsLeidos: [] as string[],
 }))
@@ -45,19 +45,19 @@ const req = (body: unknown) =>
   })
 
 beforeEach(() => {
-  state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "operator" } }
+  state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } }
   state.metodo = guardado
   state.tenantsLeidos = []
   vi.spyOn(console, "warn").mockImplementation(() => {})
 })
 
 describe("POST /api/admin/envios/probar", () => {
-  it("sin sesión → 401; rol desconocido → 403", async () => {
+  it("sin sesión → 401; rol desconocido → 404", async () => {
     const { POST } = await import("@/app/api/admin/envios/probar/route")
     state.guarded = { ok: false, reason: "no-session" }
     expect((await POST(req({ modo: "direccion", metodoId: ID }))).status).toBe(401)
     state.guarded = { ok: true, tenantId: "t", user: { id: "u", name: "X", email: "x@cliente.example", role: "visitante" } }
-    expect((await POST(req({ modo: "direccion", metodoId: ID }))).status).toBe(403)
+    expect((await POST(req({ modo: "direccion", metodoId: ID }))).status).toBe(404)
   })
 
   it("dirección: zona, regla, precio y entrega con las funciones del Shop (método guardado, tenant del guard)", async () => {

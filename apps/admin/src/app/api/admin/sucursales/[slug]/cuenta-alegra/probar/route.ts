@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { configDeSucursal } from "@/lib/alegra-cuentas-repo"
 import { probarConexionAlegra } from "@/lib/alegra"
 import { noEncontrado, NO_STORE } from "@/lib/sucursales-respuestas"
@@ -6,12 +6,12 @@ import { noEncontrado, NO_STORE } from "@/lib/sucursales-respuestas"
 // POST /api/admin/sucursales/[slug]/cuenta-alegra/probar — prueba de conexión con UNA llamada de
 // solo lectura a Alegra. Sin cuerpo prueba la cuenta guardada; con `email` y/o `token` prueba esas
 // credenciales sin guardarlas (lo que falte se completa con lo guardado). Nunca devuelve el token
-// ni el detalle crudo de Alegra. Admin o superadmin.
+// ni el detalle crudo de Alegra. Sección Sucursales (por defecto admin+).
 
 type Ctx = { params: Promise<{ slug: string }> }
 
 export async function POST(req: Request, { params }: Ctx) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "sucursales")
   if (!guard.ok) return guard.response
 
   const { slug } = await params

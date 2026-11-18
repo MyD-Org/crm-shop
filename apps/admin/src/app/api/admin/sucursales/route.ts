@@ -1,13 +1,16 @@
 import { crearSucursal, listarSucursales, listarZonas, toSucursalDto, toZonaDto } from "@/lib/sucursales-repo"
-import { errorDeResultado, NO_STORE, requireSucursalesAccess } from "@/lib/sucursales-respuestas"
+import { requireSeccion } from "@/lib/admin-route-guard"
+import { errorDeResultado, NO_STORE } from "@/lib/sucursales-respuestas"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 
 // GET  /api/admin/sucursales — sucursales y zonas del tenant.
 // POST /api/admin/sucursales — alta de una sucursal (slug inmutable). Tenant = el del guard.
 // Tras persistir se avisa al Shop (best-effort): la respuesta trae `propagado`.
+// El GET lo leen también Envíos (EnviosSucursalesCard, MetodoEnvioEditor) y Pagos y cuotas
+// (CuentasBancariasShopCard); el alta es sólo de Sucursales.
 
 export async function GET(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, ["sucursales", "envios", "cuotas"])
   if (!guard.ok) return guard.response
 
   const [suc, zon] = await Promise.all([listarSucursales(guard.tenantId), listarZonas(guard.tenantId)])
@@ -15,7 +18,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "sucursales")
   if (!guard.ok) return guard.response
 
   const body = await req.json().catch(() => null)

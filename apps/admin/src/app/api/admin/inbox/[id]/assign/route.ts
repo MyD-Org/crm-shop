@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, tenants } from "@/db/schema"
-import { requireOperatorPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { listConversations } from "@/lib/inbox-api"
 import { assignInCrm, availableOperators, getAssignments, loadFromAssignments, pickLeastLoaded } from "@/lib/assignment"
 import { sendPushToOperator } from "@/lib/push"
@@ -18,7 +18,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 //                                                       conversaciones activas asignadas;
 //                                                       si se pasa department filtra por él
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireSeccion(req, "inbox")
   if (!guard.ok) return guard.response
 
   const { id } = await params

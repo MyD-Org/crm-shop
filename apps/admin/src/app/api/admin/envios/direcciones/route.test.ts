@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 
 /**
- * /api/admin/envios/direcciones: proxy de Nominatim para la "Prueba de dirección". Guard (401/403),
+ * /api/admin/envios/direcciones: proxy de Nominatim para la "Prueba de dirección". Guard (401/404),
  * rate limit (429), búsqueda acotada con un reintento, SIN firmar token (el admin no confía en el
  * punto: sólo lo dibuja) y User-Agent identificable.
  */
 
 const state = vi.hoisted(() => ({
-  guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "operator" } } as Record<string, unknown>,
+  guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } } as Record<string, unknown>,
   permitido: true,
   claves: [] as string[],
 }))
@@ -27,7 +27,7 @@ const ENCONTRADA = [{ lat: "-38.0016", lon: "-57.5522", address: { road: "Avenid
 const req = (qs: string) => new Request(`http://admin.test/api/admin/envios/direcciones?${qs}`)
 
 beforeEach(() => {
-  state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "operator" } }
+  state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } }
   state.permitido = true
   state.claves = []
   fetchMock.mockReset()
@@ -44,10 +44,10 @@ describe("GET /api/admin/envios/direcciones", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it("rol desconocido → 403", async () => {
+  it("rol desconocido → 404", async () => {
     state.guarded = { ok: true, tenantId: "t", user: { id: "u", name: "X", email: "x@cliente.example", role: "visitante" } }
     const { GET } = await import("@/app/api/admin/envios/direcciones/route")
-    expect((await GET(req("q=Colon%202500"))).status).toBe(403)
+    expect((await GET(req("q=Colon%202500"))).status).toBe(404)
   })
 
   it("texto de menos de 4 caracteres → lista vacía sin salir a la red", async () => {

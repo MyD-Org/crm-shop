@@ -1,5 +1,6 @@
 import { guardarEnvio, leerEnvio } from "@/lib/reglas-venta-repo"
-import { NO_STORE, requireSucursalesAccess } from "@/lib/sucursales-respuestas"
+import { requireSeccion } from "@/lib/admin-route-guard"
+import { NO_STORE } from "@/lib/sucursales-respuestas"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 
 // GET /api/admin/envios — configuración de envío del tenant (defaults si todavía no hay fila:
@@ -7,17 +8,17 @@ import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 // PUT /api/admin/envios — guarda la configuración COMPLETA (domicilio, gratis, alcance, provincias,
 // mínimo). Valida en servidor igual que el formulario. Rige para los pedidos NUEVOS. Tras persistir
 // se avisa al Shop (best-effort): la respuesta trae `propagado`.
-// Guard como /api/admin/reglas-venta (operador o superior; la página, en cambio, es admin+);
+// Sección Envíos (`requireSeccion`, como la página);
 // tenant = el del guard.
 
 export async function GET(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
   return Response.json({ envio: await leerEnvio(guard.tenantId) }, { headers: NO_STORE })
 }
 
 export async function PUT(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
 
   const body = await req.json().catch(() => null)

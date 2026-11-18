@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { leerPromocionEntrada } from "@/lib/cupones-http"
 import { guardarPromocion, listarPromociones } from "@/lib/cupones-repo"
 import { NO_STORE, leerJson, respuestaDeError } from "@/lib/precios-online-http"
@@ -6,16 +6,16 @@ import { NO_STORE, leerJson, respuestaDeError } from "@/lib/precios-online-http"
 // GET  /api/admin/cupones — { promociones } con estado, códigos emitidos y canjes.
 // POST /api/admin/cupones — promoción -> 201 { id }. 400 si no valida; 409 `codigo_repetido`;
 // 422 `medio_no_admitido` (cuenta corriente o inexistente).
-// admin+ (operator -> 404). Tenant = el del guard.
+// Con la sección (sin ella -> 404). Tenant = el del guard.
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   return Response.json({ promociones: await listarPromociones(guard.tenantId) }, { headers: NO_STORE })
 }
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   const body = await leerJson(req)
   if (body instanceof Response) return body

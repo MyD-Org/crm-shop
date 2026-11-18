@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { priceLists, catalogItems } from "@/db/schema"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { parsePriceListExcel } from "@/lib/price-list-parser"
 
 // POST /api/admin/catalog/upload
 // Body: multipart/form-data con campos: name, category, file (xlsx)
 export async function POST(req: NextRequest) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const formData = await req.formData()

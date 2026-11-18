@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { NO_STORE } from "@/lib/catalogo-admin"
 import { revisionDeCatalogo } from "@/lib/catalogo-revision"
 
@@ -6,10 +6,10 @@ import { revisionDeCatalogo } from "@/lib/catalogo-revision"
 //  - "Códigos a revisar": códigos duplicados o faltantes de la última sync de cada cuenta (esos
 //    ítems no entran al catálogo);
 //  - "Productos solo en <cuenta>": informativo.
-// Sin credenciales en la respuesta. admin+ (requireAdminPlus: operator → 404). Tenant = el del guard.
+// Sin credenciales en la respuesta. Con la sección (requireSeccion: sin ella → 404). Tenant = el del guard.
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   const cuentas = await revisionDeCatalogo(guard.tenantId)
   return Response.json({ cuentas }, { headers: NO_STORE })

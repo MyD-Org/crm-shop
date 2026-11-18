@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop, conflictoResponse, NO_STORE } from "@/lib/catalogo-admin"
 import { leerAtributos, upsertAtributos } from "@/lib/catalogo-atributos-repo"
 import { ErrorLecturaFicha, leerFichaPdf, MODELO_FICHA } from "@/lib/catalogo-atributos-pdf"
@@ -14,7 +14,7 @@ import { tomarLectura } from "@/lib/catalogo-atributos-lectura-guarda"
 // con `fuente = 'pdf'`. La precedencia la aplica el upsert: un valor `manual` NO se pisa (se
 // informa como `protegidos`). A pedido y de a un producto; el lote masivo es un script aparte.
 //
-// admin+ (operator → 404). Tenant = el del guard. El PDF nunca pasa por el navegador.
+// Con la sección (sin ella → 404). Tenant = el del guard. El PDF nunca pasa por el navegador.
 // Cada lectura es una llamada paga: una sola en curso por producto y un tope por tenant por minuto
 // (`catalogo-atributos-lectura-guarda.ts`), así los clics repetidos no disparan varias.
 
@@ -30,7 +30,7 @@ interface Params {
 const errorResponse = (error: string, status: number) => Response.json({ error }, { status, headers: NO_STORE })
 
 export async function POST(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const { alegraId } = await params

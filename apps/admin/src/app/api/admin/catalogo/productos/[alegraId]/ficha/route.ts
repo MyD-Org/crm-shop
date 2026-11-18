@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop, conUrlDeFicha, conflictoResponse, NO_STORE, rechazarSiVarianteAgrupada, validacionResponse } from "@/lib/catalogo-admin"
 import { MAX_BYTES_FICHA, sha256Hex } from "@/lib/catalogo-ficha-contenido"
 import { borrarFichaSiHuerfana, contarReferenciasFicha } from "@/lib/catalogo-ficha-repo"
@@ -27,7 +27,7 @@ import { fichaContenidoKey, fichaKey, getShopMediaR2, idDeRuta, prefijoProducto,
 // Una variante de un modelo no tiene ficha propia: la ficha del modelo se edita sobre el ancla y las
 // escrituras sobre una variante agrupada responden 400.
 //
-// admin+ (operator → 404). Tenant = el del guard, siempre.
+// Con la sección (sin ella → 404). Tenant = el del guard, siempre.
 
 interface Params {
   params: Promise<{ alegraId: string }>
@@ -44,7 +44,7 @@ const SHA256_RE = /^[0-9a-f]{64}$/
  * como archivo; sin eso se sirve inline.
  */
 export async function GET(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const alegraId = idDeRuta((await params).alegraId)
@@ -82,7 +82,7 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 export async function POST(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const r2 = getShopMediaR2()
@@ -139,7 +139,7 @@ export async function POST(req: Request, { params }: Params) {
 }
 
 export async function PUT(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const alegraId = idDeRuta((await params).alegraId)
@@ -218,7 +218,7 @@ export async function PUT(req: Request, { params }: Params) {
 }
 
 export async function DELETE(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const alegraId = idDeRuta((await params).alegraId)

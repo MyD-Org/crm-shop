@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop, NO_STORE } from "@/lib/catalogo-admin"
 import { importarCategoriasDeAlegra } from "@/lib/catalogo-overlay-repo"
 
@@ -9,10 +9,10 @@ import { importarCategoriasDeAlegra } from "@/lib/catalogo-overlay-repo"
 // productos a mano es el verdadero costo del cambio. Se puede correr más de una vez sin duplicar
 // nada, y NUNCA pisa una clasificación hecha a mano.
 //
-// admin+ (operator → 404). Tenant = el del guard, siempre.
+// Con la sección (sin ella → 404). Tenant = el del guard, siempre.
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const resultado = await importarCategoriasDeAlegra(guard.tenantId, guard.user.id)

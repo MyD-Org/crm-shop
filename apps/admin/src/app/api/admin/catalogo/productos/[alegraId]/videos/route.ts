@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop, conUrlDeFotos, NO_STORE, rechazarSiVarianteAgrupada, validacionResponse } from "@/lib/catalogo-admin"
 import { detalleProducto, guardarOverlay } from "@/lib/catalogo-overlay-repo"
 import { idDeRuta } from "@/lib/shop-media"
@@ -12,14 +12,14 @@ import { validarVideos } from "@/lib/video-youtube"
 // Variantes de un modelo: los videos del modelo se editan sobre el ancla; los PROPIOS de una variante
 // se editan con `?alcance=variante` (escribe sólo `videos` en el overlay de la variante).
 //
-// admin+ (operator → 404). Tenant = el del guard, siempre.
+// Con la sección (sin ella → 404). Tenant = el del guard, siempre.
 
 interface Params {
   params: Promise<{ alegraId: string }>
 }
 
 export async function PUT(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const alegraId = idDeRuta((await params).alegraId)

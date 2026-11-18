@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { priceLists } from "@/db/schema"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const { id } = await params

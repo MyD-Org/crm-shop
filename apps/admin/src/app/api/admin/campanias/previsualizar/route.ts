@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { leerCampania } from "@/lib/campanias-http"
 import { previsualizarCampania } from "@/lib/campanias-repo"
 import { esUuid } from "@/lib/precios-online-cambios"
@@ -7,11 +7,11 @@ import { puedeVerCostos, sinCampos } from "@/lib/secciones"
 
 // POST /api/admin/campanias/previsualizar — { campania, exceptoId? } -> { previa }: productos
 // alcanzados, cuántos quedan por debajo del costo, una muestra normal -> campaña por lista y el
-// choque de fechas con otra campaña (si lo hay). No guarda nada. admin+ (operator -> 404). Sin
+// choque de fechas con otra campaña (si lo hay). No guarda nada. Con la sección (sin ella -> 404). Sin
 // permiso de costos (`puedeVerCostos`) la muestra no incluye `costo` (el conteo `bajoCosto` sí).
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   const body = await leerJson(req)
   if (body instanceof Response) return body

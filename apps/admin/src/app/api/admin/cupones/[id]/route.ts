@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { invalidResponse } from "@/lib/catalogo-admin"
 import { leerPromocionEntrada } from "@/lib/cupones-http"
 import { listarCanjes } from "@/lib/cupones-canjes"
@@ -10,12 +10,12 @@ import { NO_STORE, leerJson, respuestaDeError } from "@/lib/precios-online-http"
 // PUT    /api/admin/cupones/[id] — edita; con canjes no cambia tipo ni % (409 `promocion_con_canjes`).
 // PATCH  /api/admin/cupones/[id] — { activa } pausa o reanuda.
 // DELETE /api/admin/cupones/[id] — sólo sin canjes -> 204 (borra sus códigos).
-// admin+ (operator -> 404). Tenant = el del guard.
+// Con la sección (sin ella -> 404). Tenant = el del guard.
 
 type Params = { params: Promise<{ id: string }> }
 
 export async function GET(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   const { id } = await params
   if (!esUuid(id)) return adminNotFoundResponse()
@@ -25,7 +25,7 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 export async function PUT(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   const { id } = await params
   if (!esUuid(id)) return adminNotFoundResponse()
@@ -42,7 +42,7 @@ export async function PUT(req: Request, { params }: Params) {
 }
 
 export async function PATCH(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   const { id } = await params
   if (!esUuid(id)) return adminNotFoundResponse()
@@ -58,7 +58,7 @@ export async function PATCH(req: Request, { params }: Params) {
 }
 
 export async function DELETE(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   const { id } = await params
   if (!esUuid(id)) return adminNotFoundResponse()

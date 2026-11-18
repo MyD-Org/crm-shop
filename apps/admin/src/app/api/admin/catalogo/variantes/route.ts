@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop, conUrlDeFotos, invalidResponse, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
 import { detalleProducto } from "@/lib/catalogo-overlay-repo"
 import { ocultarVariante, quitarDelGrupo, sumarAGrupo, type ResultadoGrupoManual } from "@/lib/catalogo-variantes-repo"
@@ -18,7 +18,7 @@ import { ocultarVariante, quitarDelGrupo, sumarAGrupo, type ResultadoGrupoManual
 // ciclos, un padre no se suma) están en `lib/catalogo-variantes-repo.ts`; acá se parsea, se
 // responde y se avisa al Shop. Después de cada cambio el repo recalcula los grupos tocados.
 //
-// admin+ (operator → 404). Tenant = el del guard, siempre: un producto de otro tenant se comporta
+// Con la sección (sin ella → 404). Tenant = el del guard, siempre: un producto de otro tenant se comporta
 // como uno inexistente.
 
 const NO_ENCONTRADO = "No encontramos el producto. Actualice el listado e inténtelo nuevamente."
@@ -39,7 +39,7 @@ async function modeloActualizado(tenantId: string, grupoId: string) {
 }
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
@@ -85,7 +85,7 @@ export async function DELETE(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null

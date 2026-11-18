@@ -2,11 +2,11 @@ import { NextResponse } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { getDb } from "@/db"
 import { priceLists, catalogItems } from "@/db/schema"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 
 // GET /api/admin/catalog — lista todas las price_lists del tenant con conteo de items
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const db = getDb()

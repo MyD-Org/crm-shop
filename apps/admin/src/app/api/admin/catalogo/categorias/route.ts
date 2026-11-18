@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop, duplicadoResponse, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
 import { crearCategoria, listarCategoriasConUso } from "@/lib/catalogo-overlay-repo"
 
@@ -10,7 +10,7 @@ import { crearCategoria, listarCategoriasConUso } from "@/lib/catalogo-overlay-r
 //      hermanas. El mismo nombre bajo padres distintos sí se puede.
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const categorias = await listarCategoriasConUso(guard.tenantId)
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const r = await crearCategoria(guard.tenantId, await req.json().catch(() => null))

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { basePublicaFotos, getShopMediaR2, marcaKey } from "@/lib/shop-media"
 import { CONTENT_TYPE_MARCA, EXTENSIONES_MARCA, type ExtensionMarca } from "@/lib/tienda-online"
 
@@ -19,7 +19,7 @@ function invalido(error: string) {
 }
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "tienda-online")
   if (!guard.ok) return guard.response
 
   const r2 = getShopMediaR2()

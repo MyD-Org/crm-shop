@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 
 // GET /api/admin/catalog/payment-conditions
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const db = getDb()
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 // PUT /api/admin/catalog/payment-conditions
 // Body: [{ method: "Transferencia", description: "5% de descuento" }, ...]
 export async function PUT(req: NextRequest) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const body = await req.json()

@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { generarTokenIntegracion, revocarTokenIntegracion } from "@/lib/cupones-repo"
 import { esUuid } from "@/lib/precios-online-cambios"
 import { NO_STORE, respuestaDeError } from "@/lib/precios-online-http"
@@ -6,12 +6,12 @@ import { NO_STORE, respuestaDeError } from "@/lib/precios-online-http"
 // POST   /api/admin/cupones/[id]/token — genera (o reemplaza) el token del bot -> { token }. Se
 //        muestra UNA vez: la base guarda sólo su hash.
 // DELETE /api/admin/cupones/[id]/token — lo revoca -> 204.
-// 422 `solo_unicos` si la promoción es genérica. admin+ (operator -> 404).
+// 422 `solo_unicos` si la promoción es genérica. Con la sección (sin ella -> 404).
 
 type Params = { params: Promise<{ id: string }> }
 
 export async function POST(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   const { id } = await params
   if (!esUuid(id)) return adminNotFoundResponse()
@@ -23,7 +23,7 @@ export async function POST(req: Request, { params }: Params) {
 }
 
 export async function DELETE(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   const { id } = await params
   if (!esUuid(id)) return adminNotFoundResponse()

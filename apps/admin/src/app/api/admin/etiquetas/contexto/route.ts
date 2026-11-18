@@ -1,13 +1,13 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { NO_STORE } from "@/lib/catalogo-admin"
 import { armarContexto } from "@/lib/etiquetas-repo"
 
 // GET /api/admin/etiquetas/contexto — datos de la tienda para la pantalla de etiquetas:
 //   { tenant:{nombre, rubro, logoPath, shopUrl|null}, sucursales:[…], marcas:[{clave,nombre}] }
-// admin+ (requireAdminPlus: sin sesión → 401, operator → 404). Tenant = el del guard, siempre.
+// Con la sección (requireSeccion: sin sesión → 401, sin la sección → 404). Tenant = el del guard, siempre.
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "etiquetas")
   if (!guard.ok) return guard.response
 
   try {

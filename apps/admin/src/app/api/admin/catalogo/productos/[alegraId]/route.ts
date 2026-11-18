@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import {
   avisarShop,
   conUrlDeFicha,
@@ -26,13 +26,13 @@ import {
 // etiquetas ni las fotos (REQ-ADM-04). Precio, stock y alegra_id no viven en el overlay y no hay
 // forma de mandarlos (REQ-OVL-02).
 //
-// Un alegraId inexistente o de otro tenant devuelve el MISMO 404 que el guard de operator: el
+// Un alegraId inexistente o de otro tenant devuelve el MISMO 404 que el guard sin la sección: el
 // cuerpo idéntico es lo que cierra el oráculo de existencia.
 
 type Params = { params: Promise<{ alegraId: string }> }
 
 export async function GET(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const { alegraId } = await params
@@ -42,7 +42,7 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 export async function PATCH(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const { alegraId } = await params

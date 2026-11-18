@@ -2,16 +2,15 @@ import { notFound } from "next/navigation"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { getGuardedAdminSession } from "@/lib/admin-session"
-import { roleRank } from "@/lib/roles"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { ChatTiendaForm } from "@/components/admin/ChatTiendaForm"
 
 export const dynamic = "force-dynamic"
 
-// Textos del chat del Shop: el del chat vacío y las preguntas sugeridas. Admin+ (operator → 404).
+// Textos del chat del Shop: el del chat vacío y las preguntas sugeridas. Sección Chat de la tienda (`accesoSeccion`; sin ella, 404).
 export default async function ChatTiendaPage() {
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok || roleRank(guard.user.role) < 1) notFound()
+  const guard = await accesoSeccion("chat-tienda")
+  if (!guard) notFound()
 
   const [tenant] = await getDb()
     .select({ emptyState: tenants.chatEmptyState, suggestions: tenants.chatSuggestions })

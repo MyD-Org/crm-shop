@@ -2,7 +2,7 @@ import { notFound } from "next/navigation"
 import { accesoSeccion } from "@/lib/secciones-acceso"
 import { getPedido, toPedidoDetalleDto } from "@/lib/pedidos-repo"
 import { roleRank } from "@/lib/roles"
-import { puedeVerCostos } from "@/lib/secciones"
+import { puedeVerCostos, puedeVerSeccion } from "@/lib/secciones"
 import { nombresMediosPago } from "@/lib/medios-pago-shop-repo"
 import { listarSucursales } from "@/lib/sucursales-repo"
 import { PedidoDetalle } from "@/components/admin/pedidos/PedidoDetalle"
@@ -32,7 +32,10 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
         nombresSucursal={nombresSucursal}
         mediosPago={mediosPago}
         whatsappsSucursal={whatsappsSucursal}
-        esAdminPlus={roleRank(guard.user.role) >= roleRank("admin")}
+        // Facturar, remitir y extender la reserva siguen a la sección Pedidos (la de esta página,
+        // igual que sus APIs). "Cancelar con devolución" sigue siendo de admin+ (la API lo exige).
+        puedeCancelarConDevolucion={roleRank(guard.user.role) >= roleRank("admin")}
+        gestionaComprobantes={puedeVerSeccion(guard.user, "comprobantes")}
       />
     </div>
   )

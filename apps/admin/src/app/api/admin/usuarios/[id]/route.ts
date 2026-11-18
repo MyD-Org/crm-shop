@@ -8,6 +8,24 @@ import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
 import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { assignableRoles, canActOnRole, canManageUsers } from "@/lib/roles"
 import { parseCanalesPermitidos } from "@/lib/canal-acceso"
+import {
+  ERROR_PROPIOS_PERMISOS,
+  ERROR_ULTIMO_GESTOR,
+  quedaGestor,
+  resolverPermisos,
+} from "@/lib/permisos-usuario"
+
+// ¿Queda en el tenant algún otro gestor de usuarios activo si `objetivoId` deja de serlo?
+async function hayOtroGestor(tenantId: string, objetivoId: string): Promise<boolean> {
+  const filas = await getDb()
+    .select({ id: adminUsers.id, role: adminUsers.role, passwordHash: adminUsers.passwordHash })
+    .from(adminUsers)
+    .where(eq(adminUsers.tenantId, tenantId))
+  return quedaGestor(
+    filas.map((f) => ({ id: f.id, role: f.role, activo: f.passwordHash != null })),
+    objetivoId,
+  )
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requireOperatorPlus(req)
@@ -39,6 +57,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "No tiene permisos para cambiar los canales de este usuario" }, { status: 403 })
   }
 
+  // Secciones y costos: igual que los canales, sólo sobre OTRO usuario (nadie se amplía ni se
+  // recorta su propio acceso).
+  const tocaSecciones = Object.hasOwn(body, "secciones_permitidas")
+  const tocaCostos = Object.hasOwn(body, "ver_costos")
+  if ((tocaSecciones || tocaCostos) && isSelf) {
+    return NextResponse.json({ error: ERROR_PROPIOS_PERMISOS }, { status: 403 })
+  }
+
   const updates: Partial<typeof adminUsers.$inferInsert> = {}
   if (body.name && typeof body.name === "string") updates.name = body.name.trim()
   // Rol y departamentos: solo al gestionar a otro (no a uno mismo). El rol a asignar debe estar
@@ -67,6 +93,31 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       updates.canalesPermitidos = parsed.value
     }
     if (rolFinal !== "operator" && target.canalesPermitidos !== null) updates.canalesPermitidos = null
+
+    // Secciones y costos: política del cambio de rol + lo que mande el cuerpo, con el techo del
+    // actor revalidado sobre el resultado (lib/permisos-usuario.ts).
+    const permisos = resolverPermisos(
+      guard.user,
+      { role: target.role, seccionesPermitidas: target.seccionesPermitidas, verCostos: target.verCostos },
+      {
+        rolNuevo: rolFinal,
+        secciones: tocaSecciones ? body.secciones_permitidas : undefined,
+        verCostos: tocaCostos ? body.ver_costos : undefined,
+      },
+    )
+    if (!permisos.ok) return NextResponse.json({ error: permisos.error }, { status: 400 })
+    if (!mismaLista(permisos.value.seccionesPermitidas, target.seccionesPermitidas)) {
+      updates.seccionesPermitidas = permisos.value.seccionesPermitidas
+    }
+    if (permisos.value.verCostos !== target.verCostos) updates.verCostos = permisos.value.verCostos
+    if (tocaSecciones && !("seccionesPermitidas" in updates)) updates.seccionesPermitidas = permisos.value.seccionesPermitidas
+    if (tocaCostos && !("verCostos" in updates)) updates.verCostos = permisos.value.verCostos
+
+    // Siempre debe quedar alguien que gestione usuarios en el tenant.
+    if (updates.role && updates.role !== target.role && !(await hayOtroGestor(guard.tenantId, id))) {
+      const sigueGestor = updates.role === "admin" || updates.role === "superadmin"
+      if (!sigueGestor) return NextResponse.json({ error: ERROR_ULTIMO_GESTOR }, { status: 409 })
+    }
   }
 
   if (!Object.keys(updates).length) {
@@ -74,6 +125,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const [updated] = await db.update(adminUsers).set(updates).where(eq(adminUsers.id, id)).returning()
+
+  // Auditoría mínima de permisos: sólo ids y valores, sin datos personales.
+  if ("seccionesPermitidas" in updates || "verCostos" in updates) {
+    console.info("[usuarios] permisos", {
+      tenantId: guard.tenantId,
+      actorId: guard.user.id,
+      objetivoId: id,
+      antes: { secciones: target.seccionesPermitidas, verCostos: target.verCostos, rol: target.role },
+      despues: { secciones: updated.seccionesPermitidas, verCostos: updated.verCostos, rol: updated.role },
+    })
+  }
 
   // Si el usuario editó su propio nombre, actualizar la sesión para que se refleje de inmediato
   if (isSelf && updates.name) {
@@ -89,7 +151,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     role: updated.role,
     departments: updated.departments,
     canales_permitidos: updated.canalesPermitidos,
+    secciones_permitidas: updated.seccionesPermitidas,
+    ver_costos: updated.verCostos,
   })
+}
+
+function mismaLista(a: readonly string[] | null, b: readonly string[] | null): boolean {
+  if (a === null || b === null) return a === b
+  return a.length === b.length && a.every((k, i) => k === b[i])
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -110,6 +179,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   // Un admin solo puede eliminar operadores; al superadmin y a otros admins, solo el superadmin.
   if (!canActOnRole(guard.user.role, target.role)) {
     return NextResponse.json({ error: "No tiene permisos sobre este usuario" }, { status: 403 })
+  }
+
+  if (!(await hayOtroGestor(guard.tenantId, id))) {
+    return NextResponse.json({ error: ERROR_ULTIMO_GESTOR }, { status: 409 })
   }
 
   await db.delete(adminUsers).where(eq(adminUsers.id, id))

@@ -24,15 +24,16 @@ export function PagosComprobantes({
   cuentaPago,
   comprobantes,
   pagos,
-  esAdminPlus = false,
+  gestionaComprobantes = false,
   onChanged,
 }: {
   pedidoId: string
   cuentaPago: CuentaPagoDto | null
   comprobantes: ComprobantePedidoDto[]
   pagos: PagoRegistradoDto[]
-  /** admin+: el popup trae las acciones de Comprobantes; el operador lo ve de sólo lectura. */
-  esAdminPlus?: boolean
+  /** Con la sección Comprobantes el popup trae sus acciones (usan /api/admin/comprobantes); sin ella
+   *  se ve de sólo lectura por la ruta del pedido. */
+  gestionaComprobantes?: boolean
   /** El popup cambió el comprobante (p. ej. "Ya lo cargué a mano"): refrescar el pedido. */
   onChanged?: () => void
 }) {
@@ -107,8 +108,8 @@ export function PagosComprobantes({
         <ComprobanteDialog
           id={abierto}
           initial={null}
-          pedidoId={esAdminPlus ? undefined : pedidoId}
-          soloLectura={!esAdminPlus}
+          pedidoId={gestionaComprobantes ? undefined : pedidoId}
+          soloLectura={!gestionaComprobantes}
           onClose={() => setAbierto(null)}
           onChanged={() => onChanged?.()}
         />

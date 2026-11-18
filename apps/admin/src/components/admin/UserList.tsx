@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { UserPlus, Mail, Shield, Clock, Pencil, Check, X, Link, RefreshCw, Trash2, ChevronDown, ShieldOff } from "lucide-react"
-import { Button, Input, Field, Select, Badge, Alert, Avatar, Dialog, useToast } from "@myd-org/ui"
+import { Button, Input, Field, Select, Badge, Alert, Avatar, Dialog, Checkbox, Tooltip, useToast } from "@myd-org/ui"
 import { assignableRoles, canActOnRole } from "@/lib/roles"
 import { useUnsavedGuard } from "@/lib/unsaved-guard"
 import {
@@ -14,6 +14,27 @@ import {
   canalesSinGuardar,
   type CanalesForm,
 } from "@/lib/canales-form"
+import {
+  NOTA_SECCION,
+  alternarSeccion,
+  avisoPermisos,
+  badgePermisos,
+  costosMarcado,
+  errorTechoPermisos,
+  estadoCasilla,
+  estadoCasillaCostos,
+  permisosFormDesde,
+  permisosPayload,
+  permisosSinGuardar,
+  permisosTrasCambioDeRol,
+  restablecerPermisos,
+  rolConSecciones,
+  seccionesMarcadas,
+  seccionesPorGrupo,
+  segunElRol,
+  type PermisosForm,
+} from "@/lib/permisos-form"
+import type { ActorSecciones, SeccionClave } from "@/lib/secciones"
 
 function roleLabel(role: string): string {
   if (role === "superadmin") return "Superadmin"
@@ -35,6 +56,10 @@ interface AdminUser {
   departments: string[]
   /** Canales del inbox permitidos: null = todos, [] = ninguno. Solo restringe a operadores. */
   canales_permitidos: string[] | null
+  /** Secciones del backoffice: null = según el rol, [] = ninguna de trabajo. */
+  secciones_permitidas?: string[] | null
+  /** Ver costos: null = según el rol. */
+  ver_costos?: boolean | null
   hasPassword: boolean
   /** Verificación en dos pasos dada de alta (obligatoria; se da de alta en el primer login). */
   tiene2fa: boolean
@@ -50,9 +75,17 @@ interface Props {
   initialUsers: AdminUser[]
   currentUserId: string
   currentRole: string
+  /** Quien edita (fila fresca): fija el techo de lo que puede otorgar. */
+  actor: ActorSecciones
+  /** Secciones apagadas por flag (no se ofrecen). */
+  seccionesOcultas?: SeccionClave[]
 }
 
-export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
+function permisosDe(u: Pick<AdminUser, "secciones_permitidas" | "ver_costos">): PermisosForm {
+  return permisosFormDesde(u.secciones_permitidas, u.ver_costos)
+}
+
+export function UserList({ initialUsers, currentUserId, currentRole, actor, seccionesOcultas = [] }: Props) {
   const [users, setUsers] = useState(initialUsers)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<{ name: string; email: string; role: string; departments: string[] }>({ name: "", email: "", role: "operator", departments: [] })
@@ -62,12 +95,21 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
   // URLs de invitación conocidas en esta sesión (userId → url)
   const [pendingUrls, setPendingUrls] = useState<Record<string, string>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<{ name: string; role: string; departments: string[]; canales: CanalesForm }>({
+  const [editForm, setEditForm] = useState<{
+    name: string
+    role: string
+    departments: string[]
+    canales: CanalesForm
+    permisos: PermisosForm
+  }>({
     name: "",
     role: "",
     departments: [],
     canales: canalesFormDesde(null),
+    permisos: restablecerPermisos(),
   })
+  // Aviso al cambiar el rol en el editor (p. ej. "Se conservó la lista de secciones").
+  const [avisoRol, setAvisoRol] = useState<string | null>(null)
   // Canales que se pueden otorgar (se cargan al editar a un operador).
   const [canalOptions, setCanalOptions] = useState<{ key: string; label: string }[] | null>(null)
   const [editError, setEditError] = useState("")
@@ -111,6 +153,7 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
     if (editForm.name !== editingUser.name) return true
     if (editForm.role !== editingUser.role) return true
     if (editForm.role === "operator" && canalesSinGuardar(editingUser.canales_permitidos, editForm.canales)) return true
+    if (permisosSinGuardar(permisosDe(editingUser), editForm.permisos)) return true
     const origDepts = editingUser.departments ?? []
     if (editForm.departments.length !== origDepts.length) return true
     const orig = new Set(origDepts)
@@ -137,11 +180,20 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
       role: user.role,
       departments: user.departments ?? [],
       canales: canalesFormDesde(user.canales_permitidos),
+      permisos: permisosDe(user),
     })
+    setAvisoRol(null)
     setEditError("")
   }
 
+  function cambiarRolEdicion(rolNuevo: string) {
+    const r = permisosTrasCambioDeRol(editForm.permisos, editForm.role, rolNuevo)
+    setAvisoRol(r.aviso)
+    setEditForm((p) => ({ ...p, role: rolNuevo, permisos: r.form }))
+  }
+
   function cancelEdit() {
+    setAvisoRol(null)
     setEditingId(null)
     setEditError("")
   }
@@ -166,12 +218,23 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
           role: editForm.role,
           departments: editForm.departments,
           ...(mandaCanales ? { canales_permitidos: canalesPayload(editForm.canales) } : {}),
+          // Secciones y costos: sólo sobre OTRO usuario y sólo lo que cambió (null = según el rol).
+          ...(userId !== currentUserId && original ? permisosPayload(permisosDe(original), editForm.permisos) : {}),
         }),
       })
       const body = await res.json()
       if (res.ok) {
-        setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, name: body.name, role: body.role, departments: body.departments ?? [], canales_permitidos: body.canales_permitidos ?? null } : u))
+        setUsers((prev) => prev.map((u) => u.id === userId ? {
+                ...u,
+                name: body.name,
+                role: body.role,
+                departments: body.departments ?? [],
+                canales_permitidos: body.canales_permitidos ?? null,
+                secciones_permitidas: body.secciones_permitidas ?? null,
+                ver_costos: body.ver_costos ?? null,
+              } : u))
         setEditingId(null)
+        setAvisoRol(null)
       } else {
         setEditError(body.error ?? "Error al guardar")
       }
@@ -410,8 +473,12 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
               const canManageTarget = !isSelf && canActOnRole(currentRole, user.role)
               const canEdit = isSelf || canManageTarget
 
+              const editaPermisos = isEditing && canManageTarget
+              const badgeSecciones = badgePermisos(user.role, user.secciones_permitidas)
+
               return (
-                <tr key={user.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                <Fragment key={user.id}>
+                <tr style={{ borderBottom: editaPermisos ? "none" : "1px solid var(--border)" }}>
                   {/* Usuario */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -484,15 +551,22 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
                     {isEditing && canManageTarget ? (
                       <Select
                         value={editForm.role}
-                        onValueChange={(v) => setEditForm((p) => ({ ...p, role: v }))}
+                        onValueChange={cambiarRolEdicion}
                         options={roleOptions}
                         className="w-36"
                       />
                     ) : (
-                      <Badge tone={roleTone(user.role)} className="flex items-center gap-1 w-fit">
-                        <Shield size={10} />
-                        {roleLabel(user.role)}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge tone={roleTone(user.role)} className="flex items-center gap-1 w-fit">
+                          <Shield size={10} />
+                          {roleLabel(user.role)}
+                        </Badge>
+                        {badgeSecciones && (
+                          <span className="text-[10px]" style={{ color: "var(--ink-faint)" }}>
+                            Secciones: {badgeSecciones}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </td>
 
@@ -574,12 +648,200 @@ export function UserList({ initialUsers, currentUserId, currentRole }: Props) {
                     )}
                   </td>
                 </tr>
+                {editaPermisos && (
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td colSpan={7} className="px-4 pb-4">
+                      <PermisosEditor
+                        role={editForm.role}
+                        value={editForm.permisos}
+                        original={{ role: user.role, ...permisosDe(user) }}
+                        actor={actor}
+                        seccionesOcultas={seccionesOcultas}
+                        avisoRol={avisoRol}
+                        onChange={(v) => setEditForm((p) => ({ ...p, permisos: v }))}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               )
             })}
           </tbody>
         </table>
       </div>
     </div>
+  )
+}
+
+// "Secciones con acceso" de un usuario (operador o admin) + "Ver costos". NULL en las dos columnas =
+// según el rol; tocar una casilla pasa a lista explícita. Lo que el actor no tiene no se puede dar.
+function PermisosEditor({
+  role,
+  value,
+  original,
+  actor,
+  seccionesOcultas,
+  avisoRol,
+  onChange,
+}: {
+  role: string
+  value: PermisosForm
+  original: { role: string } & PermisosForm
+  actor: ActorSecciones
+  seccionesOcultas: SeccionClave[]
+  avisoRol: string | null
+  onChange: (v: PermisosForm) => void
+}) {
+  const titulo = (
+    <h3 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>Secciones con acceso</h3>
+  )
+  if (role === "superadmin" || role === "compras") {
+    return (
+      <div className="flex flex-col gap-1 pt-1">
+        {titulo}
+        <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+          {role === "superadmin" ? "Los superadministradores tienen acceso a todo." : "Este rol sólo accede a Compras."}
+        </p>
+      </div>
+    )
+  }
+  if (!rolConSecciones(role)) return null
+
+  const marcadas = seccionesMarcadas(value, role)
+  const costos = costosMarcado(value, role)
+  const estadoCostos = estadoCasillaCostos(actor, costos)
+  const aviso = avisoPermisos(value)
+  const errorTecho = errorTechoPermisos(actor, original, role, value)
+  const porRol = segunElRol(value)
+
+  return (
+    <div
+      className="flex flex-col gap-3 p-4 rounded-[var(--radius)]"
+      style={{ background: "var(--elevated)", border: "1px solid var(--border)" }}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            {titulo}
+            <Badge tone={porRol ? "neutral" : "info"}>
+              {porRol ? `Según el rol: ${roleLabel(role)}` : "Personalizado"}
+            </Badge>
+          </div>
+          <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+            Seleccione las secciones a las que este usuario podrá acceder.
+            {porRol && " Hoy usa las de su rol; al cambiar una casilla, la lista pasa a ser propia de este usuario."}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={porRol}
+          onClick={() => onChange(restablecerPermisos())}
+        >
+          Restablecer al rol
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {seccionesPorGrupo(seccionesOcultas).map(({ grupo, secciones }) => (
+          <fieldset key={grupo} className="flex flex-col gap-1.5">
+            <legend className="text-xs font-semibold mb-1" style={{ color: "var(--ink-soft)" }}>{grupo}</legend>
+            {secciones.map((s) => {
+              const marcada = marcadas.includes(s.clave)
+              const estado = estadoCasilla(actor, s.clave, marcada)
+              return (
+                <CasillaPermiso
+                  key={s.clave}
+                  id={`seccion-${s.clave}`}
+                  label={s.label}
+                  nota={NOTA_SECCION[s.clave]}
+                  checked={marcada}
+                  disabled={estado.disabled}
+                  motivo={estado.motivo}
+                  onCheckedChange={() => onChange(alternarSeccion(value, role, s.clave))}
+                />
+              )
+            })}
+          </fieldset>
+        ))}
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="text-xs font-semibold mb-1" style={{ color: "var(--ink-soft)" }}>Costos</legend>
+          <CasillaPermiso
+            id="permiso-ver-costos"
+            label="Ver costos"
+            nota={
+              value.verCostos === null
+                ? `Según el rol: ${costos ? "sí" : "no"}. Muestra el precio de costo en pedidos y catálogo.`
+                : "Muestra el precio de costo en pedidos y catálogo."
+            }
+            checked={costos}
+            disabled={estadoCostos.disabled}
+            motivo={estadoCostos.motivo}
+            onCheckedChange={(v) => onChange({ ...value, verCostos: v })}
+          />
+        </fieldset>
+      </div>
+
+      <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
+        Plantillas y Uso del bot son sólo para superadministradores, Usuarios depende del rol y Seguridad
+        está siempre disponible: esas secciones no se ajustan aquí.
+        {role === "operator" && marcadas.includes("inbox") && " Los canales de Mensajes se ajustan en la columna Canales."}
+      </p>
+      <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
+        Los cambios rigen desde su próxima acción, sin necesidad de volver a iniciar sesión.
+      </p>
+      {avisoRol && <Alert tone="neutral">{avisoRol}</Alert>}
+      {aviso && <Alert tone="warning">{aviso}</Alert>}
+      {errorTecho && <Alert tone="danger">{errorTecho}</Alert>}
+    </div>
+  )
+}
+
+function CasillaPermiso({
+  id,
+  label,
+  nota,
+  checked,
+  disabled,
+  motivo,
+  onCheckedChange,
+}: {
+  id: string
+  label: string
+  nota?: string
+  checked: boolean
+  disabled: boolean
+  motivo: string | null
+  onCheckedChange: (v: boolean) => void
+}) {
+  const motivoId = motivo ? `${id}-motivo` : undefined
+  const casilla = (
+    <div className="flex items-start gap-2">
+      <Checkbox
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onCheckedChange}
+        aria-describedby={motivoId}
+      />
+      <label
+        htmlFor={id}
+        className="flex flex-col text-sm leading-tight"
+        style={{ color: disabled ? "var(--ink-faint)" : "var(--ink)" }}
+      >
+        <span>{label}</span>
+        {nota && <span className="text-[11px]" style={{ color: "var(--ink-faint)" }}>{nota}</span>}
+        {motivo && <span id={motivoId} className="sr-only">{motivo}</span>}
+      </label>
+    </div>
+  )
+  return motivo ? (
+    <Tooltip content={motivo}>
+      <span className="w-fit">{casilla}</span>
+    </Tooltip>
+  ) : (
+    casilla
   )
 }
 

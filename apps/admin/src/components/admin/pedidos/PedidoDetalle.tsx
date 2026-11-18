@@ -151,13 +151,17 @@ function Seccion({ titulo, children }: { titulo: string; children: React.ReactNo
 
 export function PedidoDetalle({
   initial,
-  esAdminPlus,
+  puedeCancelarConDevolucion,
+  gestionaComprobantes,
   nombresSucursal = {},
   mediosPago = {},
   whatsappsSucursal = {},
 }: {
   initial: PedidoDetalleDto
-  esAdminPlus: boolean
+  /** "Cancelar con devolución": privilegio de rol (admin+), igual que en la API. */
+  puedeCancelarConDevolucion: boolean
+  /** Sección Comprobantes: el popup del comprobante trae sus acciones. */
+  gestionaComprobantes: boolean
   /** `slug -> nombre` de las sucursales del tenant, para mostrar la asignada con su nombre. */
   nombresSucursal?: NombresSucursal
   /** `slug -> nombre` de los medios de pago del checkout (`medios_pago_shop`); un slug que no está
@@ -454,7 +458,7 @@ export function PedidoDetalle({
             cuentaPago={pedido.cuentaPago}
             comprobantes={pedido.comprobantes}
             pagos={pedido.pagos}
-            esAdminPlus={esAdminPlus}
+            gestionaComprobantes={gestionaComprobantes}
             onChanged={() => void recargar(false)}
           />
 
@@ -493,10 +497,9 @@ export function PedidoDetalle({
             <ContactoControl pedidoId={pedido.id} estado={pedido.estado} creadoEn={pedido.creadoEn} />
             <ReservaControl
               pedido={pedido}
-              esAdminPlus={esAdminPlus}
               onChanged={(venceEn) => setPedido((p) => ({ ...p, reserva: { venceEn } }))}
             />
-            <EstadoAcciones key={pedido.estado} esAdminPlus={esAdminPlus} pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
+            <EstadoAcciones key={pedido.estado} puedeCancelarConDevolucion={puedeCancelarConDevolucion} pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
           </Card>
 
           <Card title="Pago" className="p-4">
@@ -543,23 +546,15 @@ export function PedidoDetalle({
                         pedido={pedido}
                         onChanged={setPedido}
                         onConflicto={() => void recargar(true)}
-                        esAdminPlus={esAdminPlus}
                       />
                     )}
                   </>
                 )}
               </div>
-              {esAdminPlus && (
-                <div className="border-t pt-4" style={{ borderColor: "var(--border)" }}>
-                  <SubTitulo>Remito</SubTitulo>
-                  <RemitoControl
-                    pedido={pedido}
-                    onChanged={setPedido}
-                    onConflicto={() => void recargar(true)}
-                    esAdminPlus={esAdminPlus}
-                  />
-                </div>
-              )}
+              <div className="border-t pt-4" style={{ borderColor: "var(--border)" }}>
+                <SubTitulo>Remito</SubTitulo>
+                <RemitoControl pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
+              </div>
             </div>
           </Card>
         </aside>
@@ -591,12 +586,12 @@ function Total({ label, valor, destacado }: { label: string; valor: string; dest
  */
 function EstadoAcciones({
   pedido,
-  esAdminPlus,
+  puedeCancelarConDevolucion,
   onChanged,
   onConflicto,
 }: {
   pedido: PedidoDetalleDto
-  esAdminPlus: boolean
+  puedeCancelarConDevolucion: boolean
   onChanged: (pedido: PedidoDetalleDto) => void
   onConflicto: () => void
 }) {
@@ -678,7 +673,7 @@ function EstadoAcciones({
         </Field>
       )}
 
-      {esAdminPlus && (
+      {puedeCancelarConDevolucion && (
         <Button
           variant="ghost"
           onClick={() => pedirCancelacionForzada({ id: pedido.id, estado: pedido.estado })}

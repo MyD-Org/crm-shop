@@ -39,7 +39,7 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState("")
   const [archiving, setArchiving] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   // Poll pausado mientras la pestaña no esté visible (ver use-visible-poll.ts): con la
   // pestaña oculta el aviso lo da el push, y cada pasada despertaba el compute de Neon.
@@ -50,7 +50,9 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
   useVisiblePoll(pollMessages, 5_000)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+    // Sólo el contenedor de mensajes: scrollIntoView también corría el shell (ver ContactThreadView).
+    const el = listRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
   }, [messages])
 
   async function handleArchive() {
@@ -166,7 +168,7 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
       </div>
 
       {/* Mensajes */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
+      <div ref={listRef} className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
         {messages.map((msg) => (
           <MessageBubble
             key={msg.id}
@@ -177,7 +179,6 @@ export function ThreadView({ conversation, initialMessages, currentUserId }: Pro
             } : undefined}
           />
         ))}
-        <div ref={bottomRef} />
       </div>
 
       {/* Input de respuesta */}

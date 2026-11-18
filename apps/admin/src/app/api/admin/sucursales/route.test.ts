@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 
 /**
- * Rutas de /api/admin/sucursales: guard (401/403), validación (400), conflicto (409) y éxito
+ * Rutas de /api/admin/sucursales: guard (401/404), validación (400), conflicto (409) y éxito
  * (200/201) con el aviso al Shop. El repo y el guard de sesión se simulan: la DB real se cubre
  * en test/integration/sucursales-repo.integration.test.ts.
  */
 
 const state = vi.hoisted(() => ({
-  guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "operator" } } as Record<string, unknown>,
+  guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } } as Record<string, unknown>,
   repo: {} as Record<string, unknown>,
   ping: 0,
 }))
@@ -28,6 +28,8 @@ vi.mock("@/lib/sucursales-repo", async (importOriginal) => {
     crearSucursal: async (tenant: string, body: unknown) => (state.repo.crearSucursal as (t: string, b: unknown) => unknown)(tenant, body),
     guardarZona: async (tenant: string, body: unknown) => (state.repo.guardarZona as (t: string, b: unknown) => unknown)(tenant, body),
     eliminarSucursal: async (tenant: string, slug: string) => (state.repo.eliminarSucursal as (t: string, s: string) => unknown)(tenant, slug),
+    actualizarSucursal: async (tenant: string, slug: string, body: unknown) =>
+      (state.repo.actualizarSucursal as (t: string, s: string, b: unknown) => unknown)(tenant, slug, body),
   }
 })
 
@@ -40,7 +42,7 @@ const req = (body?: unknown) =>
   })
 
 beforeEach(() => {
-  state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "operator" } }
+  state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } }
   state.ping = 0
   state.repo = {}
   vi.spyOn(console, "warn").mockImplementation(() => {})
@@ -55,12 +57,12 @@ describe("guard de /api/admin/sucursales", () => {
     expect(state.ping).toBe(0)
   })
 
-  it("rol desconocido → 403 en usted", async () => {
+  it("rol desconocido → 404 (cuerpo de id inexistente)", async () => {
     state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "X", email: "x@cliente.example", role: "visitante" } }
     const { POST } = await import("@/app/api/admin/sucursales/route")
     const res = await POST(req({ slug: "aaa", nombre: "Aaa" }))
-    expect(res.status).toBe(403)
-    expect((await res.json()).error).toBe("No tiene permiso para administrar las sucursales.")
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: "No encontrado", code: "not_found" })
     expect(state.ping).toBe(0)
   })
 })
@@ -122,5 +124,61 @@ describe("zonas y bajas", () => {
     const noHay = await DELETE(req(), { params: Promise.resolve({ slug: "zzz" }) })
     expect(noHay.status).toBe(404)
     expect(state.ping).toBe(0)
+  })
+})
+
+describe("permisos por sección (S2b-iii)", () => {
+  const conSecciones = (role: string, seccionesPermitidas: string[] | null) => {
+    state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role, seccionesPermitidas } }
+  }
+  const NF = { error: "No encontrado", code: "not_found" }
+
+  it("con columnas NULL el operador recibe 404 (antes 200: el guard viejo era operador o superior)", async () => {
+    conSecciones("operator", null)
+    const { GET } = await import("@/app/api/admin/sucursales/route")
+    const res = await GET(req())
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual(NF)
+  })
+
+  it("el listado lo leen Envíos y Pagos y cuotas; el alta sigue siendo sólo de Sucursales", async () => {
+    const { GET, POST } = await import("@/app/api/admin/sucursales/route")
+    state.repo.crearSucursal = () => ({ kind: "ok", sucursal: sucursalDto })
+    for (const s of [["envios"], ["cuotas"]]) {
+      conSecciones("admin", s)
+      expect((await GET(req())).status).toBe(200)
+      expect((await POST(req({ slug: "aaa", nombre: "Aaa" }))).status).toBe(404)
+    }
+    conSecciones("admin", ["pedidos"])
+    expect((await GET(req())).status).toBe(404)
+    expect(state.ping).toBe(0)
+  })
+
+  it("con Envíos y sin Sucursales el PATCH sólo admite los campos de la tarjeta de Envíos y no borra", async () => {
+    conSecciones("admin", ["envios"])
+    const { PATCH, DELETE } = await import("@/app/api/admin/sucursales/[slug]/route")
+    const ctx = { params: Promise.resolve({ slug: "aaa" }) }
+    const otro = await PATCH(req({ nombre: "Otro" }), ctx)
+    expect(otro.status).toBe(404)
+    expect(await otro.json()).toEqual(NF)
+    expect((await PATCH(req({ aceptaEnvio: true, nombre: "Otro" }), ctx)).status).toBe(404)
+    expect((await DELETE(req(), ctx)).status).toBe(404)
+    expect(state.ping).toBe(0)
+  })
+  it("con Envíos y sin Sucursales: marcar predeterminada o el envío por ciudades pasa", async () => {
+    conSecciones("admin", ["envios"])
+    const cuerpos: unknown[] = []
+    state.repo.actualizarSucursal = (_t: string, _s: string, b: unknown) => {
+      cuerpos.push(b)
+      return { kind: "ok", sucursal: sucursalDto }
+    }
+    const { PATCH } = await import("@/app/api/admin/sucursales/[slug]/route")
+    const ctx = { params: Promise.resolve({ slug: "aaa" }) }
+    expect((await PATCH(req({ predeterminada: true }), ctx)).status).toBe(200)
+    expect((await PATCH(req({ aceptaEnvio: true, envioCiudades: ["Posadas"] }), ctx)).status).toBe(200)
+    expect(cuerpos).toHaveLength(2)
+    // Con Sucursales, cualquier campo.
+    conSecciones("admin", ["sucursales"])
+    expect((await PATCH(req({ nombre: "Otro" }), ctx)).status).toBe(200)
   })
 })

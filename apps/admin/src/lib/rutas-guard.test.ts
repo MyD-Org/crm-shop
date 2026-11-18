@@ -11,8 +11,7 @@ import { SECCIONES_TILDABLES, esSeccionClave, type SeccionClave } from "@/lib/se
 // 2. Permisos por sección (change `permisos-por-seccion`): todo archivo resuelve, por el prefijo más
 //    largo de su carpeta, a una entrada del MAPA (carpeta nueva sin mapear = falla). En las carpetas
 //    de SECCIÓN el archivo usa `requireSeccion(`/`accesoSeccion(` con claves incluidas en su entrada
-//    y nunca un guard de rol pelado. Las carpetas que todavía usan los guards viejos están en
-//    CARPETAS_PENDIENTES (se migran en S2b; el último PR la deja vacía).
+//    y nunca un guard de rol pelado. Desde S2b-iii no quedan carpetas con los guards viejos.
 const SRC = fileURLToPath(new URL("..", import.meta.url))
 const API = "app/api/admin/"
 const PAGINAS = "app/admin/(protected)/"
@@ -40,7 +39,6 @@ const GUARDS = [
   /\baccesoSeccion\b/,
   /\brequireAdminPlus\b/,
   /\brequireOperatorPlus\b/,
-  /\brequireSucursalesAccess\b/,
   /\baccesoCompras\b/, // páginas de Compras: wrapper de accesoSeccion("compras") (lib/compras-acceso.ts)
   /\brequireCorreoAdmin\b/,
   /\brequireCorreoLector\b/,
@@ -85,11 +83,12 @@ const SUPERADMIN = /\brequireSuperadmin\w*\(|\.role\s*!==\s*"superadmin"/
 // mapeo de trabajo del diseño (D6); S2b las confirma leyendo cada consumidor al migrarlas.
 const MAPA: Record<string, Entrada> = {
   // --- API: Operación
+  // Las subrutas que sólo edita admin+ (inbox/canales PUT) llevan además `{ rolMin: "admin" }`.
   [`${API}inbox`]: { secciones: ["inbox"] },
   [`${API}inbox/limits`]: { fijo: SUPERADMIN, motivo: "topes del bot: superadmin (guard propio, sin cambio)" },
   [`${API}inbox/usage`]: { fijo: SUPERADMIN, motivo: "gasto del bot: superadmin (sin cambio)" },
   [`${API}inbox/wa-costos`]: { fijo: SUPERADMIN, motivo: "costos de WhatsApp: superadmin (sin cambio)" },
-  [`${API}whatsapp-numbers`]: { secciones: ["inbox"] },
+  [`${API}whatsapp-numbers`]: { secciones: ["inbox"] }, // CanalesNombresEditor, dentro de Mensajes
   [`${API}correo`]: {
     fijo: /\brequireCorreo(Admin|Lector)\(/,
     motivo: "correo vive en Mensajes: requireCorreoAdmin/Lector exigen la sección inbox por dentro",
@@ -123,11 +122,22 @@ const MAPA: Record<string, Entrada> = {
   // Consumidores: VincularContacto y ClienteTiendaDetalle (sólo Clientes de la tienda); Pedidos no
   // las usa, así que no se admite (S2b-i, 2b.0).
   [`${API}contactos-alegra`]: { secciones: ["clientes-tienda"] },
+  // Alta, baja y cuentas de Alegra de una sucursal: SucursalesTab (S2b-iii, 2b.0).
   [`${API}sucursales`]: { secciones: ["sucursales"] },
+  // GET listado: SucursalesTab, Envíos (EnviosSucursalesCard, MetodoEnvioEditor) y Pagos y cuotas
+  // (CuentasBancariasShopCard). El POST (alta) pide sólo Sucursales (S2b-iii, 2b.0).
+  [`${API}sucursales/route.ts`]: { secciones: ["sucursales", "envios", "cuotas"] },
+  // PATCH: SucursalesTab y EnviosSucursalesCard (predeterminada, aceptaEnvio, envioCiudades; con
+  // Envíos y sin Sucursales sólo esos campos). DELETE sólo Sucursales (S2b-iii, 2b.0).
+  [`${API}sucursales/[slug]/route.ts`]: { secciones: ["sucursales", "envios"] },
+  // Zonas por provincia: EnviosSucursalesCard (S2b-iii, 2b.0); se admite Sucursales (dato maestro).
   [`${API}sucursales/zonas`]: { secciones: ["sucursales", "envios"] },
-  // Único consumidor del GET: SucursalesTab (S2b-i, 2b.0). Se migra en S2b-iii.
+  // Único consumidor del GET: SucursalesTab (S2b-i, 2b.0).
   [`${API}alegra-cuentas`]: { secciones: ["sucursales"] },
-  [`${API}reglas-venta`]: { secciones: ["sucursales"] },
+  // ReglasVentaCard (Sucursales) y EnviosSucursalesCard (Envíos: sólo `respaldoEnvio`) (S2b-iii, 2b.0).
+  [`${API}reglas-venta`]: { secciones: ["sucursales", "envios"] },
+  // EnviosCard, MetodosEnvioCard/Editor, PruebaDireccionPanel, selectores de localidad y
+  // DespachoCard: todos en la página de Envíos (S2b-iii, 2b.0).
   [`${API}envios`]: { secciones: ["envios"] },
   [`${API}despacho`]: { secciones: ["envios"] },
   [`${API}metodos-envio`]: { secciones: ["envios"] },
@@ -168,23 +178,6 @@ const MAPA: Record<string, Entrada> = {
   [`${PAGINAS}seguridad`]: { comun: true, motivo: "2FA del propio usuario, todos los roles" },
 }
 
-// Carpetas de sección que todavía usan los guards de rol viejos (comportamiento idéntico con las
-// columnas NULL). Exentas de la regla 2; cada PR de S2b achica la lista y el último la vacía.
-const CARPETAS_PENDIENTES: string[] = [
-  // S2b-iii
-  `${API}inbox`,
-  `${API}whatsapp-numbers`,
-  `${API}sucursales`,
-  `${API}sucursales/zonas`,
-  `${API}alegra-cuentas`,
-  `${API}reglas-venta`,
-  `${API}envios`,
-  `${API}despacho`,
-  `${API}metodos-envio`,
-  `${PAGINAS}sucursales`,
-  `${PAGINAS}envios`,
-]
-
 const GUARDS_DE_ROL_PELADOS = /\b(requireAdminPlus|requireOperatorPlus|requireSucursalesAccess|requireComprasAccess)\b/
 
 function entradaDe(rel: string): { clave: string; entrada: Entrada } | null {
@@ -209,9 +202,8 @@ function auditarSecciones(rels: string[]): string[] {
       continue
     }
     const fuente = leer(rel)
-    const { clave, entrada } = r
+    const { entrada } = r
     if ("secciones" in entrada) {
-      if (CARPETAS_PENDIENTES.includes(clave)) continue
       // accesoCompras es el wrapper de accesoSeccion("compras").
       const usaGuard = /\b(requireSeccion|accesoSeccion)\(/.test(fuente) || (entrada.secciones.includes("compras") && /\baccesoCompras\(/.test(fuente))
       if (!usaGuard) errores.push(`${rel}: falta requireSeccion/accesoSeccion (sección esperada: ${entrada.secciones.join(" | ")})`)
@@ -276,20 +268,10 @@ describe("rutas-guard: deny-by-default", () => {
       for (const s of SECCIONES_TILDABLES) expect(usadas.has(s.clave), s.clave).toBe(true)
     })
 
-    it("CARPETAS_PENDIENTES sólo lista carpetas de sección del mapa, sin repetir", () => {
-      expect(new Set(CARPETAS_PENDIENTES).size).toBe(CARPETAS_PENDIENTES.length)
-      for (const c of CARPETAS_PENDIENTES) {
-        const e = MAPA[c]
-        expect(e && "secciones" in e, c).toBe(true)
-      }
-    })
-
-    it("una carpeta pendiente sigue teniendo guards viejos (si ya migró, hay que sacarla de la lista)", () => {
-      const migradas = CARPETAS_PENDIENTES.filter((c) => {
-        const propios = [...rutas, ...paginas].filter((rel) => entradaDe(rel)?.clave === c)
-        return propios.length > 0 && propios.every((rel) => !GUARDS_DE_ROL_PELADOS.test(leer(rel)) && /\b(requireSeccion|accesoSeccion)\(/.test(leer(rel)))
-      })
-      expect(migradas).toEqual([])
+    it("toda carpeta de app/api/admin tiene entrada en el mapa (no quedan carpetas pendientes)", () => {
+      const carpetas = readdirSync(join(SRC, API)).filter((e) => statSync(join(SRC, API, e)).isDirectory())
+      const sinEntrada = carpetas.filter((c) => !Object.keys(MAPA).some((k) => k === `${API}${c}` || k.startsWith(`${API}${c}/`)))
+      expect(sinEntrada).toEqual([])
     })
   })
 })

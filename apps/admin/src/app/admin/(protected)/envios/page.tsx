@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation"
-import { getGuardedAdminSession } from "@/lib/admin-session"
-import { roleRank } from "@/lib/roles"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { EnviosCard } from "@/components/admin/EnviosCard"
 import { DespachoCard } from "@/components/admin/DespachoCard"
 import { VentaSinStockCard } from "@/components/admin/VentaSinStockCard"
@@ -10,11 +9,10 @@ import { MetodosEnvioCard } from "@/components/admin/envios/MetodosEnvioCard"
 export const dynamic = "force-dynamic"
 
 // Envíos: si la tienda ofrece envío a domicilio, cuándo es gratis y qué plazo de despacho muestra.
-// Dato maestro del negocio, por eso es una sección propia del menú (grupo Datos). Admin+
-// (operator → 404).
+// Dato maestro del negocio, por eso es una sección propia del menú (grupo Datos). Sección Envíos
+// (sin ella → 404).
 export default async function EnviosPage() {
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok || roleRank(guard.user.role) < 1) notFound()
+  if (!(await accesoSeccion("envios"))) notFound()
 
   return (
     <div className="p-4 md:p-6">

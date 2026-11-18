@@ -2,11 +2,11 @@ import { NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { requireOperatorPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { getContactMessages } from "@/lib/inbox-api"
 
 export async function GET(req: Request, { params }: { params: Promise<{ endUserId: string }> }) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireSeccion(req, "inbox")
   if (!guard.ok) return guard.response
 
   const { endUserId } = await params

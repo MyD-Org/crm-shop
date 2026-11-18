@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 
-/** GET/PUT /api/admin/inbox/canales: guard por rol, validación y tenant tomado del guard. */
+/** GET/PUT /api/admin/inbox/canales: sección Mensajes (PUT además admin+), validación y tenant tomado del guard. */
 
 const state = vi.hoisted(() => ({
   guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } } as Record<string, unknown>,
@@ -46,6 +46,17 @@ describe("/api/admin/inbox/canales", () => {
     const res = await GET(get())
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ nombres: { a: "Centro" } })
+    expect((await PUT(put({ nombres: { a: "X" } }))).status).toBe(404)
+    expect(state.saved).toBeNull()
+  })
+
+  it("sin la sección Mensajes → 404 aun siendo admin; operador con Mensajes explícito sigue sin editar", async () => {
+    state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "X", email: "x@cliente.example", role: "admin", seccionesPermitidas: ["pedidos"] } }
+    const { GET, PUT } = await import("./route")
+    expect((await GET(get())).status).toBe(404)
+    expect((await PUT(put({ nombres: { a: "X" } }))).status).toBe(404)
+    state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "X", email: "x@cliente.example", role: "operator", seccionesPermitidas: ["inbox"] } }
+    expect((await GET(get())).status).toBe(200)
     expect((await PUT(put({ nombres: { a: "X" } }))).status).toBe(404)
     expect(state.saved).toBeNull()
   })

@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 
 /**
- * /api/admin/reglas-venta: guard (401/403), validación (400) y éxito con el aviso al Shop. El repo
+ * /api/admin/reglas-venta: guard (401/404), validación (400) y éxito con el aviso al Shop. El repo
  * de datos se simula: la DB real se cubre en test/integration/reglas-venta.integration.test.ts.
  */
 
 const state = vi.hoisted(() => ({
-  guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "operator" } } as Record<string, unknown>,
+  guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } } as Record<string, unknown>,
   ping: 0,
   guardado: [] as unknown[],
 }))
@@ -41,7 +41,7 @@ const req = (method: string, body?: unknown) =>
   })
 
 beforeEach(() => {
-  state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "operator" } }
+  state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } }
   state.ping = 0
   state.guardado = []
   vi.spyOn(console, "warn").mockImplementation(() => {})
@@ -56,12 +56,12 @@ describe("/api/admin/reglas-venta", () => {
     expect(state.ping).toBe(0)
   })
 
-  it("rol desconocido → 403 en usted", async () => {
+  it("rol desconocido → 404 (cuerpo de id inexistente)", async () => {
     state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "X", email: "x@cliente.example", role: "visitante" } }
     const { PUT } = await import("@/app/api/admin/reglas-venta/route")
     const res = await PUT(req("PUT", { reservaDias: 3 }))
-    expect(res.status).toBe(403)
-    expect(((await res.json()) as { error: string }).error).toMatch(/No tiene permiso/)
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: "No encontrado", code: "not_found" })
   })
 
   it("GET devuelve los defaults cuando no hay fila", async () => {
@@ -90,5 +90,34 @@ describe("/api/admin/reglas-venta", () => {
     expect(json.reglas.reservaDias).toBe(0)
     expect(state.guardado).toEqual([["tenant-a", { reservaDias: 0 }]])
     expect(state.ping).toBe(1)
+  })
+})
+
+describe("permisos por sección (S2b-iii)", () => {
+  const conSecciones = (role: string, seccionesPermitidas: string[] | null) => {
+    state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role, seccionesPermitidas } }
+  }
+
+  it("con columnas NULL el operador recibe 404 (antes 200)", async () => {
+    conSecciones("operator", null)
+    const { GET } = await import("@/app/api/admin/reglas-venta/route")
+    expect((await GET(req("GET"))).status).toBe(404)
+  })
+
+  it("con Envíos y sin Sucursales: lee y guarda sólo `respaldoEnvio`", async () => {
+    conSecciones("admin", ["envios"])
+    const { GET, PUT } = await import("@/app/api/admin/reglas-venta/route")
+    expect((await GET(req("GET"))).status).toBe(200)
+    expect((await PUT(req("PUT", { respaldoEnvio: false }))).status).toBe(200)
+    const otro = await PUT(req("PUT", { reservaDias: 3 }))
+    expect(otro.status).toBe(404)
+    expect(await otro.json()).toEqual({ error: "No encontrado", code: "not_found" })
+    expect(state.guardado).toHaveLength(1)
+  })
+
+  it("con Sucursales guarda cualquier regla", async () => {
+    conSecciones("admin", ["sucursales"])
+    const { PUT } = await import("@/app/api/admin/reglas-venta/route")
+    expect((await PUT(req("PUT", { reservaDias: 3 }))).status).toBe(200)
   })
 })

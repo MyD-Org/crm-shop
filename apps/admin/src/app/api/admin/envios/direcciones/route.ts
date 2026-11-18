@@ -1,9 +1,10 @@
 import { consultasNominatim, sugerenciasDeNominatim, type SugerenciaDireccion } from "@/lib/nominatim-direcciones"
 import { permitirAsync } from "@/lib/rate-limit"
-import { NO_STORE, requireSucursalesAccess } from "@/lib/sucursales-respuestas"
+import { requireSeccion } from "@/lib/admin-route-guard"
+import { NO_STORE } from "@/lib/sucursales-respuestas"
 
 // GET /api/admin/envios/direcciones?q=...&ciudad=...&provincia=... — proxy de Nominatim para la
-// "Prueba de dirección" del editor de zonas. Guard de Envíos (operador o superior), rate limit por
+// "Prueba de dirección" del editor de zonas. Sección Envíos, rate limit por
 // tenant y usuario, User-Agent identificable, caché de una semana por URL y búsqueda acotada a la
 // localidad (consulta estructurada + UN reintento; sin ciudad, una consulta libre en Argentina).
 // A diferencia del Shop NO firma ningún token: el admin sólo dibuja el punto para probar, no
@@ -34,7 +35,7 @@ async function buscar(url: URL): Promise<SugerenciaDireccion[]> {
 }
 
 export async function GET(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
 
   const params = new URL(req.url).searchParams

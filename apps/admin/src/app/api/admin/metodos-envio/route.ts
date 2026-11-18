@@ -1,22 +1,23 @@
 import { crearMetodo, listarMetodos } from "@/lib/metodos-envio-repo"
 import { errorDeResultadoMetodo, prepararMetodo } from "@/lib/metodos-envio-guardado"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
-import { NO_STORE, requireSucursalesAccess } from "@/lib/sucursales-respuestas"
+import { requireSeccion } from "@/lib/admin-route-guard"
+import { NO_STORE } from "@/lib/sucursales-respuestas"
 
 // GET  /api/admin/metodos-envio — métodos de envío por zona del tenant (con zonas, geometrías,
 //      entradas y localidades atendidas).
 // POST /api/admin/metodos-envio — crea un método. Valida en servidor (mensajes en usted), completa
 //      centro/rectángulo de las localidades y avisa al Shop (best-effort: `propagado`).
-// Mismo guard que el resto de Envíos (operador o superior); tenant = el del guard.
+// Sección Envíos, como el resto de sus rutas; tenant = el del guard.
 
 export async function GET(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
   return Response.json({ metodos: await listarMetodos(guard.tenantId) }, { headers: NO_STORE })
 }
 
 export async function POST(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
 
   const body = await req.json().catch(() => null)

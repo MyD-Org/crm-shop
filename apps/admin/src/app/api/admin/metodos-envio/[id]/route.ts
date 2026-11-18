@@ -1,7 +1,8 @@
 import { eliminarMetodo, guardarMetodo } from "@/lib/metodos-envio-repo"
 import { errorDeResultadoMetodo, prepararMetodo } from "@/lib/metodos-envio-guardado"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
-import { noEncontrado, NO_STORE, requireSucursalesAccess } from "@/lib/sucursales-respuestas"
+import { requireSeccion } from "@/lib/admin-route-guard"
+import { noEncontrado, NO_STORE } from "@/lib/sucursales-respuestas"
 
 // PUT    /api/admin/metodos-envio/[id] — guarda el método COMPLETO (datos, zonas, geometrías, entradas
 //        y localidades) en una transacción. Avisa al Shop.
@@ -12,7 +13,7 @@ type Ctx = { params: Promise<{ id: string }> }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function PUT(req: Request, { params }: Ctx) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
 
   const { id } = await params
@@ -29,7 +30,7 @@ export async function PUT(req: Request, { params }: Ctx) {
 }
 
 export async function DELETE(req: Request, { params }: Ctx) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
 
   const { id } = await params

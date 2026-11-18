@@ -5,6 +5,7 @@ import { Alert, Button, Card, Field, Progress, Select, Spinner } from "@myd-org/
 import { api } from "@/components/admin/catalogo/tipos"
 import { dibujarHojaQr6 } from "@/lib/etiquetas/canvas"
 import { agregarSinDuplicar, aplicarStockSucursal, itemsDeLista, mensajeEnviadas, tituloOmitidos, type FilaLista } from "@/lib/etiquetas/lista"
+import { rotuloTienda, tiendaDelQr } from "@/lib/etiquetas/qr"
 import { layoutQr6, trabajoCodigos, trabajoQr6, type Omitido, type TipoEtiqueta } from "@/lib/etiquetas/trabajos"
 import { useImpresora, type EstadoImpresora } from "@/lib/etiquetas/useImpresora"
 import type { ContextoEtiquetas } from "@/lib/etiquetas-repo"
@@ -37,6 +38,7 @@ export function EtiquetasClient() {
   const [tipo, setTipo] = useState<TipoEtiqueta>("codigos-29x20")
   const [lista, setLista] = useState<FilaLista[]>([])
   const [sucursal, setSucursal] = useState<string | null>(null)
+  const [tiendaElegida, setTiendaElegida] = useState<string | null>(null)
   const [invalidas, setInvalidas] = useState<Set<string>>(new Set())
   const [confirmar, setConfirmar] = useState<number | null>(null)
   const [preparando, setPreparando] = useState(false)
@@ -48,7 +50,9 @@ export function EtiquetasClient() {
       .catch((e: unknown) => setErrorContexto(e instanceof Error ? e.message : "No se pudieron cargar los datos de la tienda."))
   }, [])
 
-  const shopUrl = contexto?.tenant.shopUrl ?? null
+  const tiendas = useMemo(() => contexto?.tiendas ?? [], [contexto])
+  // Destino del QR (y host impreso): la tienda elegida; por defecto, la principal.
+  const shopUrl = tiendas.length > 0 ? tiendaDelQr(tiendas, tiendaElegida) : (contexto?.tenant.shopUrl ?? null)
   const sucursales = useMemo(() => (contexto?.sucursales ?? []).filter((s) => s.activa), [contexto])
   const { items } = useMemo(() => itemsDeLista(lista), [lista])
   const qrBloqueado = tipo === "qr-6up" && !shopUrl
@@ -184,6 +188,21 @@ export function EtiquetasClient() {
                 options={TIPOS}
               />
             </Field>
+            {tipo === "qr-6up" && tiendas.length > 1 && (
+              <Field label="Tienda del código QR" hint="El código QR y la dirección impresa llevan a esta tienda.">
+                <Select
+                  aria-label="Tienda del código QR"
+                  value={shopUrl ?? ""}
+                  onValueChange={(v) => {
+                    setTiendaElegida(v)
+                    setConfirmar(null)
+                    setResultado(null)
+                  }}
+                  options={tiendas.map((t) => ({ value: t.url, label: rotuloTienda(t) }))}
+                  disabled={ocupada}
+                />
+              </Field>
+            )}
             {qrBloqueado ? (
               <Alert tone="warning">{MENSAJE_SIN_SHOP}</Alert>
             ) : (

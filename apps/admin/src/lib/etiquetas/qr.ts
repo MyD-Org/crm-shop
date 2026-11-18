@@ -21,6 +21,20 @@ export function hostWeb(shopUrl: string): string {
 }
 
 /**
+ * URL de la tienda elegida para el QR: la elegida si sigue entre las opciones; si no, la primera
+ * (la principal). Sin opciones → null.
+ */
+export function tiendaDelQr(tiendas: { url: string }[], elegida: string | null | undefined): string | null {
+  return tiendas.find((t) => t.url === elegida)?.url ?? tiendas[0]?.url ?? null
+}
+
+/** Texto de la opción del selector: "Luz Atlántica (tienda.cliente.example)". */
+export function rotuloTienda(t: { etiqueta: string; url: string }): string {
+  const host = hostWeb(t.url)
+  return t.etiqueta.trim() ? `${t.etiqueta.trim()} (${host})` : host
+}
+
+/**
  * Matriz de módulos del QR (true = negro), nivel de corrección M. `qrcode` se importa a demanda
  * para no sumarlo al bundle de otras páginas.
  */

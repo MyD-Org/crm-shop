@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const state = vi.hoisted(() => ({
   guarded: {} as Record<string, unknown>,
-  tenants: {} as Record<string, { id: string; name: string; subtitle: string; logoPath: string; shopUrl?: string }>,
+  tenants: {} as Record<string, { id: string; name: string; subtitle: string; logoPath: string; shopUrl?: string; shopDestinosExtra?: unknown }>,
   pedidos: [] as string[],
 }))
 
@@ -77,6 +77,7 @@ describe("GET /api/admin/etiquetas/contexto", () => {
     expect(res.headers.get("Cache-Control")).toContain("no-store")
     expect(await res.json()).toEqual({
       tenant: { nombre: "Tienda A", rubro: "Iluminación", logoPath: "/logos/a.svg", shopUrl: "https://tienda.cliente.example" },
+      tiendas: [{ etiqueta: "Tienda A", url: "https://tienda.cliente.example" }],
       sucursales: [{ slug: "igz", nombre: "Iguazú", direccion: "Calle 1", ciudad: "Iguazú", whatsapp: "5491100000000", activa: true }],
       marcas: [{ clave: "acme", nombre: "ACME" }],
     })
@@ -88,8 +89,33 @@ describe("GET /api/admin/etiquetas/contexto", () => {
     const { GET } = await import("./route")
     const body = await (await GET(req())).json()
     expect(body.tenant.shopUrl).toBeNull()
+    expect(body.tiendas).toEqual([])
     expect(body.sucursales).toEqual([])
     expect(body.marcas).toEqual([])
     expect(state.pedidos.every((p) => p.endsWith(":tenant-b"))).toBe(true)
+  })
+
+  it("con destinos extra → tiendas: la principal primero y después los extras válidos", async () => {
+    state.tenants["tenant-a"].shopDestinosExtra = [
+      { etiqueta: "segunda", url: "https://otra.cliente.example/", marca: { nombre: "Segunda tienda" } },
+      { etiqueta: "sin-marca", url: "https://alias.cliente.example" },
+      { etiqueta: "invalido", url: "no es una url" },
+    ]
+    const { GET } = await import("./route")
+    const body = await (await GET(req())).json()
+    expect(body.tenant.shopUrl).toBe("https://tienda.cliente.example")
+    expect(body.tiendas).toEqual([
+      { etiqueta: "Tienda A", url: "https://tienda.cliente.example" },
+      { etiqueta: "Segunda tienda", url: "https://otra.cliente.example" },
+      { etiqueta: "", url: "https://alias.cliente.example" },
+    ])
+  })
+
+  it("destinos extra sin tienda principal → tiendas vacío (sin QR)", async () => {
+    state.guarded = admin("tenant-b")
+    state.tenants["tenant-b"].shopDestinosExtra = [{ etiqueta: "segunda", url: "https://otra.cliente.example" }]
+    const { GET } = await import("./route")
+    const body = await (await GET(req())).json()
+    expect(body.tiendas).toEqual([])
   })
 })

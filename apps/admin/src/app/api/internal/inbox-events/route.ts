@@ -2,7 +2,14 @@ import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants, conversationAssignments } from "@/db/schema"
 import { bearerMatches } from "@/lib/secure-compare"
-import { sendPushToDepartment, sendPushToOperator, sendPushToSuperadmins } from "@/lib/push"
+import {
+  canalDelEvento,
+  sendPushToDepartment,
+  sendPushToOperatorConAcceso,
+  sendPushToSuperadmins,
+} from "@/lib/push"
+import { cuentaDeConversacion } from "@/lib/canal-acceso-conversacion"
+import { canalKey } from "@/lib/inbox-canales"
 import { billingPushText, isWaBillingKind } from "@/lib/wa-costos"
 
 // Endpoint interno: la ai-api avisa al CRM de eventos del inbox para disparar notificaciones
@@ -16,6 +23,9 @@ import { billingPushText, isWaBillingKind } from "@/lib/wa-costos"
 //     notifica a esa persona; si no, a los operadores disponibles del departamento.
 //   - event 'inbound': llegó un mensaje del cliente en una conversación en modo humano →
 //     se notifica al operador asignado (según conversation_assignments del CRM).
+//   - channel / channelAccountId (opcionales, contrato S2): canal de la conversación, para no
+//     notificar a quien no lo ve (acceso por canal). Sin ellos (ai-api anterior) el CRM lo
+//     resuelve contra ai-api solo si algún destinatario está restringido.
 //   - event 'wa_billing': aviso de costos de WhatsApp. No lleva conversationId; trae
 //     { kind: 'free_80'|'service_billed', month, phone, volume, limit } y va sólo a superadmins.
 export async function POST(req: Request) {
@@ -30,6 +40,8 @@ export async function POST(req: Request) {
     department?: string | null
     operatorId?: string | null
     contactName?: string | null
+    channel?: string | null
+    channelAccountId?: string | null
     kind?: string
     month?: string
     phone?: string
@@ -52,7 +64,7 @@ export async function POST(req: Request) {
   const db = getDb()
   // La ai-api manda el aiTenantId; lo resolvemos al tenant del CRM (fuente de las subs).
   const [tenant] = await db
-    .select({ id: tenants.id })
+    .select({ id: tenants.id, aiApiUrl: tenants.aiApiUrl, aiTenantId: tenants.aiTenantId })
     .from(tenants)
     .where(eq(tenants.aiTenantId, body.tenantId))
   if (!tenant) return Response.json({ ok: true, sent: 0 }, { status: 200 })
@@ -63,6 +75,16 @@ export async function POST(req: Request) {
   const tag = `${body.event}-${body.conversationId}`
 
   let sent = 0
+
+  // Canal del evento: el que manda ai-api (S2) o, si no lo manda, el que resuelva el CRM.
+  const conversationId = body.conversationId
+  const canal = canalDelEvento(async () => {
+    if (typeof body.channel === "string" && body.channel) {
+      return canalKey({ channel: body.channel, channel_account_id: body.channelAccountId ?? null })
+    }
+    if (!conversationId || !tenant.aiApiUrl || !tenant.aiTenantId) return null
+    return cuentaDeConversacion({ aiApiUrl: tenant.aiApiUrl, aiTenantId: tenant.aiTenantId }, conversationId)
+  })
 
   if (body.event === "wa_billing") {
     const kind = body.kind as "free_80" | "service_billed"
@@ -77,13 +99,13 @@ export async function POST(req: Request) {
   } else if (body.event === "handoff") {
     if (body.operatorId) {
       // Handoff a una persona puntual (assign_to_human por nombre).
-      sent = await sendPushToOperator(tenant.id, body.operatorId, {
+      sent = await sendPushToOperatorConAcceso(tenant.id, body.operatorId, {
         title: "Nueva conversación asignada",
         body: `Se le derivó la conversación con ${contact}.`,
         url,
         icon,
         tag,
-      })
+      }, canal)
     } else {
       // Handoff genérico a la cola de un departamento (o a todos si no hay depto).
       const dept = body.department ?? null
@@ -93,7 +115,7 @@ export async function POST(req: Request) {
         url,
         icon,
         tag,
-      })
+      }, canal)
     }
   } else if (body.event === "inbound") {
     // Mensaje del cliente en modo humano → avisamos al operador asignado (si lo hay).
@@ -111,13 +133,13 @@ export async function POST(req: Request) {
           )
       )[0]?.operatorId
     if (operatorId) {
-      sent = await sendPushToOperator(tenant.id, operatorId, {
+      sent = await sendPushToOperatorConAcceso(tenant.id, operatorId, {
         title: contact,
         body: "Le escribió un mensaje.",
         url,
         icon,
         tag,
-      })
+      }, canal)
     }
   } else {
     return Response.json({ error: "unknown event" }, { status: 400 })

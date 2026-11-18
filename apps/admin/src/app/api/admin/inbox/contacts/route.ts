@@ -5,6 +5,7 @@ import { tenants } from "@/db/schema"
 import { requireSeccion } from "@/lib/admin-route-guard"
 import { assignPendingConversations } from "@/lib/assignment"
 import { listEnrichedContacts } from "@/lib/inbox-contacts"
+import { tieneAlgunCanal } from "@/lib/canal-acceso"
 
 export async function GET(req: Request) {
   const guard = await requireSeccion(req, "inbox")
@@ -14,6 +15,9 @@ export async function GET(req: Request) {
   if (!tenant?.aiTenantId || !tenant?.aiApiUrl) {
     return NextResponse.json({ error: "inbox no configurado" }, { status: 503 })
   }
+
+  // Operador restringido sin canales: no hay nada que listar (ni que pedirle a ai-api).
+  if (!tieneAlgunCanal(guard.user)) return NextResponse.json([])
 
   const params = new URL(req.url).searchParams
   const scope = params.get("scope") === "all" ? "all" : "active"

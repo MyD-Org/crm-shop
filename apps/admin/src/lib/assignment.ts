@@ -2,6 +2,8 @@ import { and, eq, isNotNull, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, conversationAssignments } from "@/db/schema"
 import { listConversations, type InboxConversation } from "./inbox-api"
+import { hayRestringidos, operadoresConAcceso, puedeVerCanal } from "./canal-acceso"
+import { canalesDeConversaciones, type TenantInbox } from "./canal-acceso-conversacion"
 
 // Asignación de conversaciones a operadores. El bot (ai-api) solo etiqueta el departamento
 // y deja la conversación sin dueño; el CRM elige al operador DISPONIBLE menos cargado y
@@ -12,6 +14,10 @@ import { listConversations, type InboxConversation } from "./inbox-api"
 export interface Operator {
   id: string
   departments: string[]
+  // Acceso por canal (lib/canal-acceso.ts): un operador restringido solo es candidato para las
+  // conversaciones de sus canales. Opcionales: sin ellos, el operador es irrestricto.
+  role?: string
+  canalesPermitidos?: string[] | null
 }
 
 export interface Assignment {
@@ -40,7 +46,12 @@ export function normalizeDepartment(d: string | null | undefined): string {
  */
 export async function availableOperators(tenantId: string, department?: string | null): Promise<Operator[]> {
   const rows = await getDb()
-    .select({ id: adminUsers.id, departments: adminUsers.departments })
+    .select({
+      id: adminUsers.id,
+      departments: adminUsers.departments,
+      role: adminUsers.role,
+      canalesPermitidos: adminUsers.canalesPermitidos,
+    })
     .from(adminUsers)
     .where(and(
       eq(adminUsers.tenantId, tenantId),
@@ -119,6 +130,74 @@ export function loadFromAssignments(assignments: Assignment[], activeConvIds: Se
   return load
 }
 
+/** Operadores del tenant con canales restringidos (lista no NULL). Vacío en el caso normal. */
+export async function operadoresRestringidos(
+  tenantId: string,
+): Promise<{ id: string; role: string; canalesPermitidos: string[] | null }[]> {
+  return getDb()
+    .select({ id: adminUsers.id, role: adminUsers.role, canalesPermitidos: adminUsers.canalesPermitidos })
+    .from(adminUsers)
+    .where(and(
+      eq(adminUsers.tenantId, tenantId),
+      eq(adminUsers.role, "operator"),
+      isNotNull(adminUsers.canalesPermitidos),
+    ))
+}
+
+/**
+ * Asignaciones cuyo operador ya no tiene acceso al canal de la conversación ("perder acceso
+ * devuelve la conversación a la cola"). Solo cuenta cuando el canal es CONOCIDO: una
+ * conversación sin canal resuelto no se invalida (sin idas y vueltas con un ai-api viejo; la
+ * superficie igual se la oculta al restringido).
+ */
+export function asignacionesSinAcceso(
+  assignments: Assignment[],
+  restringidos: { id: string; role: string; canalesPermitidos: string[] | null }[],
+  canales: Map<string, string>,
+): Assignment[] {
+  const porId = new Map(restringidos.map((o) => [o.id, o]))
+  return assignments.filter((a) => {
+    const op = porId.get(a.operatorId)
+    if (!op) return false
+    const key = canales.get(a.conversationId)
+    return key !== undefined && !puedeVerCanal(op, key)
+  })
+}
+
+/** Borra asignaciones (solo si siguen siendo del mismo operador). Devuelve cuántas borró. */
+export async function quitarAsignaciones(tenantId: string, rows: Assignment[]): Promise<number> {
+  let n = 0
+  for (const a of rows) {
+    const borradas = await getDb()
+      .delete(conversationAssignments)
+      .where(and(
+        eq(conversationAssignments.tenantId, tenantId),
+        eq(conversationAssignments.conversationId, a.conversationId),
+        eq(conversationAssignments.operatorId, a.operatorId),
+      ))
+      .returning({ id: conversationAssignments.conversationId })
+    n += borradas.length
+  }
+  return n
+}
+
+/**
+ * Invalidación EAGER al guardar los canales de un operador: sus asignaciones en canales que ya no
+ * tiene vuelven a la cola en el mismo guardado. Best-effort: si ai-api falla, queda para la
+ * invalidación de la reconciliación (assignPendingConversations). Devuelve cuántas devolvió.
+ */
+export async function devolverAsignacionesSinAcceso(
+  tenant: { id: string } & TenantInbox,
+  operador: { id: string; role: string; canalesPermitidos: string[] | null },
+): Promise<number> {
+  const propias = (await getAssignments(tenant.id)).filter((a) => a.operatorId === operador.id)
+  if (!propias.length) return 0
+  const convs = await listConversations(tenant.aiApiUrl, tenant.aiTenantId)
+  const propiasIds = new Set(propias.map((a) => a.conversationId))
+  const canales = await canalesDeConversaciones(tenant, convs.filter((c) => propiasIds.has(c.id)))
+  return quitarAsignaciones(tenant.id, asignacionesSinAcceso(propias, [operador], canales))
+}
+
 /** Elige el operador menos cargado del conjunto de candidatos. Devuelve null si está vacío. */
 export function pickLeastLoaded(candidates: Operator[], load: Map<string, number>): Operator | null {
   let chosen: Operator | null = null
@@ -159,11 +238,17 @@ export async function assignPendingConversations(tenant: {
   if (!list) return { convs: null, assignments }
   const convsList = list
 
-  const assignedConvIds = new Set(assignments.map((a) => a.conversationId))
+  let assignedConvIds = new Set(assignments.map((a) => a.conversationId))
   const activeConvIds = new Set(convsList.filter((c) => c.status !== "closed").map((c) => c.id))
 
   // Escrituras acumuladas: se mandan todas juntas al final, en una sola query.
-  const writes: { conversationId: string; operatorId: string; department: string | null }[] = []
+  let writes: { conversationId: string; operatorId: string; department: string | null }[] = []
+
+  // Acceso por canal: el canal de cada conversación se resuelve solo si hay restringidos en juego
+  // (y una sola vez por pasada). Sin restringidos, la reconciliación es la de siempre.
+  let canales: Promise<Map<string, string>> | null = null
+  const canalesConv = () => (canales ??= canalesDeConversaciones(tenant, convsList).catch(() => new Map()))
+  const restringidos = await operadoresRestringidos(tenant.id).catch(() => [])
 
   // Migración transparente: conversaciones que ai-api ya tenía asignadas pero el CRM no.
   // Las adoptamos a la DB del CRM sin tocar ai-api. Una sola vez por conversación.
@@ -177,6 +262,19 @@ export async function assignPendingConversations(tenant: {
       writes.push(row)
       assignments.push(row)
       assignedConvIds.add(conv.id)
+    }
+  }
+
+  // Invalidación lazy: asignaciones a quien perdió el acceso al canal vuelven a la cola y se
+  // reasignan en esta misma pasada (best-effort; si el borrado falla, se reintenta en la próxima).
+  if (restringidos.length && assignments.length) {
+    const sinAcceso = asignacionesSinAcceso(assignments, restringidos, await canalesConv())
+    if (sinAcceso.length) {
+      const fuera = new Set(sinAcceso.map((a) => a.conversationId))
+      await quitarAsignaciones(tenant.id, sinAcceso).catch(() => 0)
+      for (let i = assignments.length - 1; i >= 0; i--) if (fuera.has(assignments[i].conversationId)) assignments.splice(i, 1)
+      writes = writes.filter((w) => !fuera.has(w.conversationId))
+      assignedConvIds = new Set(assignments.map((a) => a.conversationId))
     }
   }
 
@@ -198,7 +296,11 @@ export async function assignPendingConversations(tenant: {
   }
 
   for (const conv of pending) {
-    const candidates = await getCandidates(conv.assigned_department ?? null)
+    const delDepto = await getCandidates(conv.assigned_department ?? null)
+    // Nunca se asigna a quien no tiene el canal. Sin canal conocido: solo los irrestrictos.
+    const candidates = hayRestringidos(delDepto)
+      ? operadoresConAcceso(delDepto, (await canalesConv()).get(conv.id) ?? null)
+      : delDepto
     const chosen = pickLeastLoaded(candidates, load)
     if (!chosen) continue // nadie disponible en ese depto → queda en la cola
     const row = { conversationId: conv.id, operatorId: chosen.id, department: conv.assigned_department ?? null }

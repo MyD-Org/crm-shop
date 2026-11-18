@@ -156,14 +156,16 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
   // Polling de la primera página (lo reciente) cada 5s, pausado mientras la pestaña no esté
   // visible: con la pestaña oculta nadie está leyendo este thread y el aviso de un mensaje
   // nuevo llega por push. Al volver a la pestaña se refetchea al instante.
+  // Número del hilo: el server lo usa para validar el canal de usuarios restringidos.
+  const cuentaQs = contact.channel_account_id ? `&cuenta=${encodeURIComponent(contact.channel_account_id)}` : ""
   const pollRecent = useCallback(async () => {
     // `no-store`: evita que el navegador sirva del cache el mismo GET en cada poll y deje
     // el thread sin mensajes nuevos hasta un reload.
-    const res = await fetch(`/api/admin/inbox/contacts/${contact.end_user_id}/messages?limit=${PAGE_SIZE}`, { cache: "no-store" })
+    const res = await fetch(`/api/admin/inbox/contacts/${contact.end_user_id}/messages?limit=${PAGE_SIZE}${cuentaQs}`, { cache: "no-store" })
     if (!res.ok) return
     const page: ContactMessagesPage = await res.json()
     setMessages((prev) => mergeRecent(prev, page.messages))
-  }, [contact.end_user_id])
+  }, [contact.end_user_id, cuentaQs])
   useVisiblePoll(pollRecent, 5_000)
 
   // Scroll: preservar posición al prepender histórico; si no, pegarse al fondo.
@@ -181,7 +183,7 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
     if (!hasMore || loadingOlder || nextCursor == null) return
     setLoadingOlder(true)
     try {
-      const res = await fetch(`/api/admin/inbox/contacts/${contact.end_user_id}/messages?limit=${PAGE_SIZE}&before=${nextCursor}`)
+      const res = await fetch(`/api/admin/inbox/contacts/${contact.end_user_id}/messages?limit=${PAGE_SIZE}&before=${nextCursor}${cuentaQs}`)
       if (!res.ok) return
       const page: ContactMessagesPage = await res.json()
       if (containerRef.current) prependHeight.current = containerRef.current.scrollHeight

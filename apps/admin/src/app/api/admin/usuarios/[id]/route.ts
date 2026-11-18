@@ -3,11 +3,12 @@ import { cookies } from "next/headers"
 import { getIronSession } from "iron-session"
 import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
-import { adminUsers } from "@/db/schema"
+import { adminUsers, tenants } from "@/db/schema"
 import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
 import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { assignableRoles, canActOnRole, canManageUsers } from "@/lib/roles"
-import { parseCanalesPermitidos } from "@/lib/canal-acceso"
+import { esRestringido, parseCanalesPermitidos } from "@/lib/canal-acceso"
+import { devolverAsignacionesSinAcceso } from "@/lib/assignment"
 import {
   ERROR_PROPIOS_PERMISOS,
   ERROR_ULTIMO_GESTOR,
@@ -137,6 +138,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     })
   }
 
+  // Acceso por canal: si el operador perdió canales, sus conversaciones asignadas en esos canales
+  // vuelven a la cola en este mismo guardado. Best-effort: si ai-api falla, las devuelve la
+  // reconciliación del inbox en la próxima pasada.
+  let asignacionesDevueltas: number | undefined
+  if ("canalesPermitidos" in updates && !mismaLista(target.canalesPermitidos, updated.canalesPermitidos) && esRestringido(updated)) {
+    asignacionesDevueltas = 0
+    try {
+      const [tenant] = await db.select().from(tenants).where(eq(tenants.id, guard.tenantId))
+      if (tenant?.aiApiUrl && tenant.aiTenantId) {
+        asignacionesDevueltas = await devolverAsignacionesSinAcceso(
+          { id: tenant.id, aiApiUrl: tenant.aiApiUrl, aiTenantId: tenant.aiTenantId },
+          { id: updated.id, role: updated.role, canalesPermitidos: updated.canalesPermitidos },
+        )
+      }
+    } catch (err) {
+      console.error("[usuarios] no se pudieron devolver las asignaciones sin acceso:", err)
+    }
+  }
+
   // Si el usuario editó su propio nombre, actualizar la sesión para que se refleje de inmediato
   if (isSelf && updates.name) {
     // La cookie guarda el nombre para la UI; el guard no la expone, así que se refresca aparte.
@@ -151,6 +171,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     role: updated.role,
     departments: updated.departments,
     canales_permitidos: updated.canalesPermitidos,
+    ...(asignacionesDevueltas !== undefined ? { asignaciones_devueltas: asignacionesDevueltas } : {}),
     secciones_permitidas: updated.seccionesPermitidas,
     ver_costos: updated.verCostos,
   })

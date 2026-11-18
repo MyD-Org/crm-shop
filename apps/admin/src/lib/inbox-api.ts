@@ -202,6 +202,35 @@ export async function listConversations(
   return res.json()
 }
 
+// Canal de UNA conversación (acceso por canal, rutas por id). Lo resuelve
+// GET /v1/inbox/conversations/:id (aditivo de ai-api, contrato S2). "unsupported" = ai-api
+// anterior sin esa ruta (o caído): el llamador cae a otra fuente o deniega (fail-closed).
+export type ConversationCanalResult =
+  | { status: "ok"; channel: string; channel_account_id: string | null }
+  | { status: "not_found" }
+  | { status: "unsupported" }
+
+export async function getConversationCanal(
+  aiApiUrl: string,
+  aiTenantId: string,
+  conversationId: string,
+): Promise<ConversationCanalResult> {
+  try {
+    const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/conversations/${encodeURIComponent(conversationId)}`)
+    const body = await res.json().catch(() => null) as Record<string, unknown> | null
+    if (res.ok && body && typeof body.channel === "string") {
+      const cuenta = body.channel_account_id
+      return { status: "ok", channel: body.channel, channel_account_id: typeof cuenta === "string" && cuenta ? cuenta : null }
+    }
+    // Solo la ruta nueva responde este error: el 404 genérico de un ai-api viejo ("Route ... not
+    // found") no prueba que la conversación no exista.
+    if (res.status === 404 && body?.error === "conversation_not_found") return { status: "not_found" }
+    return { status: "unsupported" }
+  } catch {
+    return { status: "unsupported" }
+  }
+}
+
 export async function getMessages(
   aiApiUrl: string,
   aiTenantId: string,
@@ -243,9 +272,12 @@ export async function getContactMessages(
   aiApiUrl: string,
   aiTenantId: string,
   endUserId: string,
-  opts: { before?: number; limit?: number } = {},
+  // account: solo el hilo de ese número (aditivo de ai-api, S2). Lo manda el CRM para usuarios
+  // restringidos por canal; un ai-api viejo lo ignora y devuelve el hilo mergeado.
+  opts: { before?: number; limit?: number; account?: string | null } = {},
 ): Promise<ContactMessagesPage> {
   const params = new URLSearchParams()
+  if (opts.account) params.set("account", opts.account)
   if (opts.before != null) params.set("before", String(opts.before))
   if (opts.limit != null) params.set("limit", String(opts.limit))
   const qs = params.toString()

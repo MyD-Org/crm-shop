@@ -87,6 +87,11 @@ export function operadoresConAcceso<T extends { role?: string; canalesPermitidos
   )
 }
 
+/** ¿Hay algún restringido entre estos usuarios? Si no, no hace falta resolver el canal. */
+export function hayRestringidos(ops: { role?: string; canalesPermitidos?: string[] | null }[]): boolean {
+  return ops.some((o) => esRestringido({ role: o.role ?? "operator", canalesPermitidos: o.canalesPermitidos ?? null }))
+}
+
 /**
  * Opciones del selector "Canales con acceso": los números de WhatsApp de ai-api, los canales que
  * aparecen en los contactos (p. ej. Instagram sin cuenta), los que el admin nombró y, al final,

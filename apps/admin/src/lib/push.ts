@@ -1,8 +1,9 @@
 import webpush from "web-push"
-import { and, eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, pushSubscriptions } from "@/db/schema"
 import { availableOperators } from "@/lib/assignment"
+import { esRestringido, hayRestringidos, operadoresConAcceso, puedeVerCanal } from "@/lib/canal-acceso"
 import { destinatariosCasilla } from "@/lib/correo-repo"
 
 // ── Web Push ────────────────────────────────────────────────────────────────
@@ -19,6 +20,17 @@ export interface PushPayload {
   icon?: string
   // Agrupa/reemplaza notificaciones del mismo hilo (ej. no apilar 5 avisos de la misma conv).
   tag?: string
+}
+
+// Canal de la conversación del evento, resuelto a pedido (y una sola vez): solo hace falta si
+// algún destinatario está restringido por canal (lib/canal-acceso.ts). null = desconocido, y
+// entonces los restringidos no reciben (fail-closed).
+export type CanalDelEvento = () => Promise<string | null>
+
+/** Memoiza el resolvedor: varias funciones de push pueden pedir el mismo canal. */
+export function canalDelEvento(resolver: () => Promise<string | null>): CanalDelEvento {
+  let p: Promise<string | null> | null = null
+  return () => (p ??= resolver().catch(() => null))
 }
 
 let configured = false
@@ -80,17 +92,58 @@ export async function sendPushToOperator(tenantId: string, operatorId: string, p
 }
 
 /**
+ * Push a UN usuario solo si puede ver el canal de la conversación. Sin `canal`, igual que
+ * sendPushToOperator. Un restringido sin acceso (o con canal desconocido) no recibe.
+ */
+export async function sendPushToOperatorConAcceso(
+  tenantId: string,
+  operatorId: string,
+  payload: PushPayload,
+  canal?: CanalDelEvento,
+): Promise<number> {
+  if (!ensureConfigured()) return 0
+  if (canal) {
+    const [u] = await getDb()
+      .select({ id: adminUsers.id, role: adminUsers.role, canalesPermitidos: adminUsers.canalesPermitidos })
+      .from(adminUsers)
+      .where(and(eq(adminUsers.tenantId, tenantId), eq(adminUsers.id, operatorId)))
+    if (u && esRestringido(u) && !puedeVerCanal(u, await canal())) {
+      console.info("[push] omitido: el destinatario no tiene acceso al canal", { tenantId, operatorId })
+      return 0
+    }
+  }
+  return sendPushToOperator(tenantId, operatorId, payload)
+}
+
+/**
  * Envía un push a los operadores DISPONIBLES de un departamento (cola de handoff sin dueño).
  * Si no se pasa department, notifica a todos los disponibles del tenant.
+ * Con `canal`, solo a quienes ven ese canal; si había disponibles pero ninguno con acceso, el
+ * aviso cae a admin y superadmin (alguien tiene que enterarse). Si no había nadie disponible, como
+ * siempre: no se envía.
  */
 export async function sendPushToDepartment(
   tenantId: string,
   department: string | null,
   payload: PushPayload,
+  canal?: CanalDelEvento,
 ): Promise<number> {
   if (!ensureConfigured()) return 0
-  const operators = await availableOperators(tenantId, department)
+  const disponibles = await availableOperators(tenantId, department)
+  const operators = canal && hayRestringidos(disponibles) ? operadoresConAcceso(disponibles, await canal()) : disponibles
+  if (disponibles.length && !operators.length) return sendPushToAdmins(tenantId, payload)
   const counts = await Promise.all(operators.map((op) => sendPushToOperator(tenantId, op.id, payload)))
+  return counts.reduce((a, b) => a + b, 0)
+}
+
+/** Push a los admin y superadmin del tenant (respaldo cuando nadie del depto ve el canal). */
+export async function sendPushToAdmins(tenantId: string, payload: PushPayload): Promise<number> {
+  if (!ensureConfigured()) return 0
+  const admins = await getDb()
+    .select({ id: adminUsers.id })
+    .from(adminUsers)
+    .where(and(eq(adminUsers.tenantId, tenantId), inArray(adminUsers.role, ["admin", "superadmin"])))
+  const counts = await Promise.all(admins.map((a) => sendPushToOperator(tenantId, a.id, payload)))
   return counts.reduce((a, b) => a + b, 0)
 }
 

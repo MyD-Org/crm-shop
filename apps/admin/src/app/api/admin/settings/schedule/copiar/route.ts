@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { copiarHorario, MSG_SUCURSAL_NO_EXISTE, QUE_COPIAR, type QueCopiar } from "@/lib/horarios-repo"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 
 // POST /api/admin/settings/schedule/copiar  (change `horarios-por-sucursal`)
 // Body: { desde: slug, hacia: slug[] | "todas", que: "excepciones" | "horario" | "todo" }
 // Copia lo GUARDADO de la sucursal `desde` a las demás (sobrescribe lo copiado, en una
-// transacción). Admin y superadmin. Un destino que no es del tenant → 404 y no se escribe nada.
+// transacción). Con la sección Horarios (requireSeccion). Un destino que no es del tenant → 404 y no se escribe nada.
 
 const invalido = (error: string) => NextResponse.json({ error }, { status: 400 })
 
 export async function POST(req: NextRequest) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "horarios")
   if (!guard.ok) return guard.response
 
   let body: unknown

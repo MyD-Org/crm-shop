@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { NO_STORE } from "@/lib/precios-online-http"
 import { leerConfig, listarListas, listarListasAlegra, listarMarcas } from "@/lib/precios-online-repo"
 
@@ -7,10 +7,10 @@ import { leerConfig, listarListas, listarListasAlegra, listarMarcas } from "@/li
 // Alegra disponibles para enlazar (todas las de cada cuenta, con su cantidad de clientes); y la configuración
 // (versión y umbrales); y las marcas del catálogo para el desplegable del ajuste por marca. Los
 // cambios NO se hacen acá: pasan por previsualizar -> aplicar.
-// admin+ (requireAdminPlus: operator -> 404). Tenant = el del guard.
+// Con la sección (requireSeccion: sin ella -> 404). Tenant = el del guard.
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, ["catalogo", "cuotas"])
   if (!guard.ok) return guard.response
   const [listas, alegra, config, marcas] = await Promise.all([
     listarListas(guard.tenantId),

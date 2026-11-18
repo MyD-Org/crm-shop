@@ -1,16 +1,16 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { invalidResponse } from "@/lib/catalogo-admin"
 import { generarLote, LOTE_MAX } from "@/lib/cupones-repo"
 import { esUuid } from "@/lib/precios-online-cambios"
 import { NO_STORE, leerJson, respuestaDeError } from "@/lib/precios-online-http"
 
 // POST /api/admin/cupones/[id]/lote — { cantidad } (1..500) -> text/csv con los códigos nuevos.
-// 422 `solo_unicos` si la promoción es genérica. admin+ (operator -> 404).
+// 422 `solo_unicos` si la promoción es genérica. Con la sección (sin ella -> 404).
 
 type Params = { params: Promise<{ id: string }> }
 
 export async function POST(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   const { id } = await params
   if (!esUuid(id)) return adminNotFoundResponse()

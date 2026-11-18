@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation"
-import { getGuardedAdminSession } from "@/lib/admin-session"
-import { roleRank } from "@/lib/roles"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { leerHorario, listarSucursalesActivas } from "@/lib/horarios-repo"
 import { resolverSucursalElegida } from "@/lib/horarios-seleccion"
 import { ScheduleForm } from "@/components/admin/ScheduleForm"
@@ -9,14 +8,14 @@ export const dynamic = "force-dynamic"
 
 // Horario de atención y excepciones (feriados, vacaciones). Lo leen el Shop y el bot para decir si
 // el local está abierto. Con sucursales activas se edita el de cada una (selector, `?sucursal=`);
-// sin sucursales, el de la empresa. Admin+ (operator → 404).
+// sin sucursales, el de la empresa. Sección Horarios (`accesoSeccion`; sin ella, 404).
 export default async function HorariosPage({
   searchParams,
 }: {
   searchParams: Promise<{ sucursal?: string | string[] }>
 }) {
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok || roleRank(guard.user.role) < 1) notFound()
+  const guard = await accesoSeccion("horarios")
+  if (!guard) notFound()
 
   const { sucursal } = await searchParams
   const activas = await listarSucursalesActivas(guard.tenantId)

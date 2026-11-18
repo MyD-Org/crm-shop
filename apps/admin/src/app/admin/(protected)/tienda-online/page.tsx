@@ -2,18 +2,17 @@ import { notFound } from "next/navigation"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { getGuardedAdminSession } from "@/lib/admin-session"
-import { roleRank } from "@/lib/roles"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { shopMediaConfig } from "@/lib/shop-media"
 import { destinosParaPantalla } from "@/lib/shop-destino"
 import { TiendaOnlineForm } from "@/components/admin/TiendaOnlineForm"
 
 export const dynamic = "force-dynamic"
 
-// Marca, tema y direcciones de la tienda online de la empresa. Admin+ (operator → 404).
+// Marca, tema y direcciones de la tienda online de la empresa. Sección Tienda online (`accesoSeccion`; sin ella, 404).
 export default async function TiendaOnlinePage() {
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok || roleRank(guard.user.role) < 1) notFound()
+  const guard = await accesoSeccion("tienda-online")
+  if (!guard) notFound()
 
   const [tenant] = await getDb()
     .select({ marca: tenants.shopMarca, tema: tenants.shopTema, shopUrl: tenants.shopUrl, shopInternalUrl: tenants.shopInternalUrl, destinosExtra: tenants.shopDestinosExtra })

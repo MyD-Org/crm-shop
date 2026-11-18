@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { invalidResponse } from "@/lib/catalogo-admin"
 import { validarCambios } from "@/lib/precios-online-cambios"
 import { NO_STORE, leerJson, respuestaDeError } from "@/lib/precios-online-http"
@@ -8,10 +8,10 @@ import { previsualizar } from "@/lib/precios-online-repo"
 // Aplica los cambios dentro de una transacción y los DESHACE: no modifica ningún precio, lista ni
 // historial. Devuelve el resumen (afectados, suben/bajan, mayor suba/baja, sin costo excluidos,
 // muestra, advertencias) y las claves (baseVersion, huella) que `aplicar` exige.
-// admin+ (requireAdminPlus: operator -> 404). Tenant = el del guard.
+// Con la sección (requireSeccion: sin ella -> 404). Tenant = el del guard.
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, ["catalogo", "cuotas"])
   if (!guard.ok) return guard.response
   const body = await leerJson(req)
   if (body instanceof Response) return body

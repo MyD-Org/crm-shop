@@ -1,7 +1,7 @@
 import { desc, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { catalogSyncLog } from "@/db/schema"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { getTenantByIdFromDb } from "@/lib/tenants"
 import { PRESUPUESTO_TRAMO_MS, syncTenant } from "@/lib/alegra-sync-tenant"
 
@@ -14,8 +14,8 @@ export const maxDuration = 300
 // tramos: procesa hasta ~220 s y, si no terminó, responde 200 con `continuar: true` y el avance en
 // `progreso`; el botón vuelve a llamar hasta que deje de venir.
 export async function POST(req: Request) {
-  // admin+ (operator → 404): sincronizar toca el catálogo de toda la tienda.
-  const guard = await requireAdminPlus(req)
+  // con la sección Catálogo (sin ella → 404): sincronizar toca el catálogo de toda la tienda.
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const tenant = await getTenantByIdFromDb(guard.tenantId)
@@ -27,8 +27,8 @@ export async function POST(req: Request) {
 
 // GET: última sincronización (para mostrar estado/fecha en el admin).
 export async function GET(req: Request) {
-  // admin+, igual que el POST.
-  const guard = await requireAdminPlus(req)
+  // Misma sección que el POST.
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const [last] = await getDb()

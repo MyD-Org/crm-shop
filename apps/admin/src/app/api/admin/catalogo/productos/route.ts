@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { NO_STORE, parsearQueryListado, conUrlDeFotos, validarStockEn } from "@/lib/catalogo-admin"
 import { leerAvisoShop, listarProductos, ultimaSyncAlegra } from "@/lib/catalogo-overlay-repo"
 
@@ -9,10 +9,11 @@ import { leerAvisoShop, listarProductos, ultimaSyncAlegra } from "@/lib/catalogo
 // Filtrado, conteo, orden y paginado se resuelven en Postgres: el navegador recibe una página,
 // no el catálogo (REQ-ADM-01). Los filtros se combinan y el total es el de la intersección.
 //
-// admin+ (requireAdminPlus: operator → 404). Tenant = el del guard, siempre.
+// Con la sección Catálogo o Etiquetas (requireSeccion: sin ninguna → 404): la pantalla de Etiquetas
+// (SelectorProductos) busca productos con este mismo listado, de sólo lectura. Tenant = el del guard, siempre.
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, ["catalogo", "etiquetas"])
   if (!guard.ok) return guard.response
 
   const parsed = parsearQueryListado(new URL(req.url))

@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop, invalidResponse, NO_STORE, parsearSeleccion, validacionResponse, validarStockEn } from "@/lib/catalogo-admin"
 import { MSG_SUCURSAL_INVALIDA } from "@/lib/catalogo-overlay"
 import { hayVariantesAgrupadas, masivaOverlay, masivaSucursal, masivaTags, type Seleccion } from "@/lib/catalogo-overlay-repo"
@@ -28,7 +28,7 @@ function esObjeto(v: unknown): v is Record<string, unknown> {
 }
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const body = await req.json().catch(() => null)

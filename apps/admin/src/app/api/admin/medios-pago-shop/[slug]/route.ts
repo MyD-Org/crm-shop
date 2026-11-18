@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { actualizarMedioPago, conAvisos, eliminarMedioPago } from "@/lib/medios-pago-shop-repo"
 import { errorDeMedio } from "@/lib/medios-pago-shop-respuestas"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
@@ -8,12 +8,12 @@ import { NO_STORE } from "@/lib/sucursales-respuestas"
 //        medio, `idListaPrecios` (null = lista por defecto), `destacarEnCatalogo` (uno por tenant:
 //        destacar otro lo mueve) y `mostrarEnFicha`. Cualquier cambio avisa al Shop.
 // DELETE /api/admin/medios-pago-shop/[slug] — sólo si ningún pedido lo eligió; si no, desactivar.
-// Admin o superadmin. Tras persistir se avisa al Shop (best-effort).
+// Con la sección Pagos y cuotas (requireSeccion; sin ella, 404). Tras persistir se avisa al Shop (best-effort).
 
 type Ctx = { params: Promise<{ slug: string }> }
 
 export async function PATCH(req: Request, { params }: Ctx) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "cuotas")
   if (!guard.ok) return guard.response
 
   const { slug } = await params
@@ -27,7 +27,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
 }
 
 export async function DELETE(req: Request, { params }: Ctx) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "cuotas")
   if (!guard.ok) return guard.response
 
   const { slug } = await params

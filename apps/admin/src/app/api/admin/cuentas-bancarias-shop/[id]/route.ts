@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { actualizarCuenta, eliminarCuenta } from "@/lib/cuentas-bancarias-shop-repo"
 import { programarAvisoCuentaBancaria } from "@/lib/cuentas-bancarias-shop-aviso"
 import { diffCuenta } from "@/lib/cuentas-bancarias-shop-aviso-email"
@@ -8,14 +8,14 @@ import { NO_STORE } from "@/lib/sucursales-respuestas"
 
 // PATCH  /api/admin/cuentas-bancarias-shop/[id] — cambios parciales (se valida la cuenta completa).
 // DELETE /api/admin/cuentas-bancarias-shop/[id] — elimina la cuenta (los pedidos conservan su copia).
-// Admin o superadmin. Tras persistir se avisa al Shop (best-effort).
+// Con la sección (requireSeccion; sin ella, 404). Tras persistir se avisa al Shop (best-effort).
 
 type Ctx = { params: Promise<{ id: string }> }
 
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function PATCH(req: Request, { params }: Ctx) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "cuotas")
   if (!guard.ok) return guard.response
 
   const { id } = await params
@@ -33,7 +33,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
 }
 
 export async function DELETE(req: Request, { params }: Ctx) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "cuotas")
   if (!guard.ok) return guard.response
 
   const { id } = await params

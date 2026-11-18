@@ -7,7 +7,7 @@ import { crearCategoria, guardarOverlay } from "@/lib/catalogo-overlay-repo"
 import { crearSucursal } from "@/lib/sucursales-repo"
 import { seedOperator, seedTenant, truncateAll } from "./helpers"
 
-// L6 — API del panel de catálogo, productos. DB real (crm_test), guard real (requireAdminPlus:
+// L6 — API del panel de catálogo, productos. DB real (crm_test), guard real (requireSeccion("catalogo"):
 // rol y tenant salen de la FILA de admin_users, no de la cookie).
 //
 // Lo que protegen estos tests, en orden de gravedad:

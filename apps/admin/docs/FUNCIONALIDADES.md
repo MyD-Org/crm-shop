@@ -760,9 +760,12 @@ de crédito): los corrige la sync diaria, que sigue siendo obligatoria.
 **Cron de red** `GET|POST /api/cron/alegra-stock-drenar` (Bearer `CRON_SECRET`, `?tenant=`
 opcional; workflow `admin-alegra-stock-drenar`, **cada 15 min** en teoría (GitHub lo corre cada varias horas;
 por eso cada corrida repite la invocación mientras quede cola, hasta 12 pasadas), grupo de concurrencia propio):
-drena lo que quedó (hasta 270 s), purga la cola de más de 48 h y el índice de más de 400 días,
-y devuelve por tenant `{ok, leidos, inactivos, errores, requests, pendientes, corte,
-ultimoAvisoMin}`. Si un tenant lleva más de un día sin avisos, el workflow deja un
+antes de drenar cada tenant encola los ítems de sus **ajustes de inventario** recientes (Alegra no
+los avisa por webhook: un request por cuenta, últimos 30 ajustes de los últimos 2 días; los ya vistos
+quedan en el índice con tipo `inventory-adjustment` y se re-encolan solo si se editan;
+`src/lib/alegra-ajustes-inventario.ts`), drena lo que quedó (hasta 270 s), purga la cola de más de
+48 h y el índice de más de 400 días, y devuelve por tenant `{ok, leidos, inactivos, errores,
+requests, pendientes, corte, ultimoAvisoMin, ajustesEncolados}`. Si un tenant lleva más de un día sin avisos, el workflow deja un
 `::warning::` (Alegra puede desactivar suscripciones sin avisar).
 
 **Prender** (por tenant; cambia la configuración de la cuenta REAL de Alegra, pide "SI"):

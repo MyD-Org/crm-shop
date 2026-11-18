@@ -10,6 +10,8 @@ const state = vi.hoisted(() => ({
   llamadas: [] as { tenant: string; deadline: number }[],
   fallaEn: null as string | null,
   purgas: 0,
+  ajustes: [] as string[],
+  ajustesFalla: false,
 }))
 
 vi.mock("@/lib/tenants", () => ({
@@ -29,6 +31,14 @@ vi.mock("@/lib/alegra-stock-cola", () => ({
   purgarCola: async () => {
     state.purgas++
     return { cola: 0, indice: 0 }
+  },
+}))
+
+vi.mock("@/lib/alegra-ajustes-inventario", () => ({
+  encolarAjustesRecientes: async (cfg: TenantConfig) => {
+    state.ajustes.push(cfg.id)
+    if (state.ajustesFalla) throw new Error("se cayó la base")
+    return { ajustes: 1, encolados: 2, errores: 0 }
   },
 }))
 
@@ -53,6 +63,8 @@ beforeEach(() => {
   state.llamadas = []
   state.fallaEn = null
   state.purgas = 0
+  state.ajustes = []
+  state.ajustesFalla = false
   vi.spyOn(console, "error").mockImplementation(() => {})
 })
 
@@ -74,8 +86,8 @@ describe("/api/cron/alegra-stock-drenar", () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.tenants).toEqual([
-      { tenant: "tenant-a", ok: true, leidos: 0, inactivos: 0, errores: 0, requests: 0, pendientes: 0, corte: "vacia", ultimoAvisoMin: 3 },
-      { tenant: "tenant-b", ok: true, leidos: 0, inactivos: 0, errores: 0, requests: 0, pendientes: 0, corte: "vacia", ultimoAvisoMin: null },
+      { tenant: "tenant-a", ok: true, leidos: 0, inactivos: 0, errores: 0, requests: 0, pendientes: 0, corte: "vacia", ultimoAvisoMin: 3, ajustesEncolados: 2 },
+      { tenant: "tenant-b", ok: true, leidos: 0, inactivos: 0, errores: 0, requests: 0, pendientes: 0, corte: "vacia", ultimoAvisoMin: null, ajustesEncolados: 2 },
     ])
     expect(state.purgas).toBe(1)
     expect(state.llamadas[0].deadline - antes).toBeGreaterThanOrEqual(270_000)
@@ -102,6 +114,21 @@ describe("/api/cron/alegra-stock-drenar", () => {
     state.configs["tenant-b"] = { alegraToken: "" }
     const body = await (await pedir()).json()
     expect(body.tenants.map((t: { tenant: string }) => t.tenant)).toEqual(["tenant-a"])
+  })
+
+  it("encola los ajustes de inventario de cada tenant antes de drenarlo", async () => {
+    await pedir()
+    expect(state.ajustes).toEqual(["tenant-a", "tenant-b"])
+  })
+
+  it("si fallan los ajustes, drena igual y reporta 0 encolados", async () => {
+    state.ajustesFalla = true
+    const body = await (await pedir()).json()
+    expect(body.tenants.map((t: { ok: boolean; ajustesEncolados: number }) => [t.ok, t.ajustesEncolados])).toEqual([
+      [true, 0],
+      [true, 0],
+    ])
+    expect(state.llamadas).toHaveLength(2)
   })
 
   it("GET es el mismo handler", () => {

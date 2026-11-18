@@ -8,10 +8,10 @@ import { SECCIONES, SECCION_POR_CLAVE } from "@/lib/secciones"
 const leer = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8")
 
 describe("/admin/etiquetas", () => {
-  it("la página exige admin+: getGuardedAdminSession y notFound() con roleRank < 1", () => {
+  it("la página exige la sección Etiquetas: accesoSeccion y notFound() sin ella", () => {
     const fuente = leer("./page.tsx")
-    expect(fuente).toMatch(/getGuardedAdminSession\(\)/)
-    expect(fuente).toMatch(/if \(!guard\.ok \|\| roleRank\(guard\.user\.role\) < 1\) notFound\(\)/)
+    expect(fuente).toMatch(/await accesoSeccion\("etiquetas"\)/)
+    expect(fuente).toMatch(/if \(!guard\) notFound\(\)/)
     expect(fuente).toMatch(/export const dynamic = "force-dynamic"/)
   })
 
@@ -21,9 +21,9 @@ describe("/admin/etiquetas", () => {
     expect(SECCION_POR_CLAVE.etiquetas.rolMin).toBe("admin")
   })
 
-  it("la API de contexto exige admin+ (requireAdminPlus) y usa el tenant del guard", () => {
+  it("la API de contexto exige la sección Etiquetas (requireSeccion) y usa el tenant del guard", () => {
     const fuente = leer("../../../api/admin/etiquetas/contexto/route.ts")
-    expect(fuente).toMatch(/await requireAdminPlus\(req\)/)
+    expect(fuente).toMatch(/await requireSeccion\(req, "etiquetas"\)/)
     expect(fuente).toMatch(/armarContexto\(guard\.tenantId/)
   })
 })

@@ -105,12 +105,19 @@ const MAPA: Record<string, Entrada> = {
   [`${API}compras`]: { secciones: ["compras"] },
   // --- API: Datos
   [`${API}catalogo`]: { secciones: ["catalogo"] },
-  [`${API}catalog`]: { secciones: ["catalogo"] },
+  // El listado de productos (sólo GET) lo usa también Etiquetas (SelectorProductos) (S2b-ii, 2b.0).
+  [`${API}catalogo/productos/route.ts`]: { secciones: ["catalogo", "etiquetas"] },
+  [`${API}catalog`]: { secciones: ["catalogo"] }, // sync/upload de Alegra: SincronizarAlegra, en Catálogo
+  // Campañas y cupones: CampaniasPanel y CuponesPanel, sólo solapas de Catálogo (S2b-ii, 2b.0).
   [`${API}campanias`]: { secciones: ["catalogo"] },
   [`${API}cupones`]: { secciones: ["catalogo"] },
+  // Paneles de Catálogo (PreciosOnline, Listas, Historial, Retenidos, Campañas) y MediosPagoShopCard
+  // (Pagos y cuotas: previsualizar/aplicar las cuotas por lista) (S2b-ii, 2b.0).
   [`${API}precios-online`]: { secciones: ["catalogo", "cuotas"] },
+  // MediosPagoShopCard (Pagos y cuotas) y CuponesPanel (Catálogo, sólo lectura del GET) (S2b-ii, 2b.0).
   [`${API}medios-pago-shop`]: { secciones: ["cuotas", "catalogo"] },
-  [`${API}cuentas-bancarias-shop`]: { secciones: ["cuotas"] },
+  [`${API}cuentas-bancarias-shop`]: { secciones: ["cuotas"] }, // CuentasBancariasShopCard (Pagos y cuotas)
+  // VentaSinStockCard (Envíos) y CatalogoShell (Catálogo, GET) (S2b-ii, 2b.0).
   [`${API}modalidades-sin-stock`]: { secciones: ["catalogo", "envios"] },
   [`${API}clientes-tienda`]: { secciones: ["clientes-tienda"] },
   // Consumidores: VincularContacto y ClienteTiendaDetalle (sólo Clientes de la tienda); Pedidos no
@@ -164,25 +171,6 @@ const MAPA: Record<string, Entrada> = {
 // Carpetas de sección que todavía usan los guards de rol viejos (comportamiento idéntico con las
 // columnas NULL). Exentas de la regla 2; cada PR de S2b achica la lista y el último la vacía.
 const CARPETAS_PENDIENTES: string[] = [
-  // S2b-ii
-  `${API}catalogo`,
-  `${API}catalog`,
-  `${API}campanias`,
-  `${API}cupones`,
-  `${API}precios-online`,
-  `${API}medios-pago-shop`,
-  `${API}cuentas-bancarias-shop`,
-  `${API}modalidades-sin-stock`,
-  `${API}etiquetas`,
-  `${API}settings/schedule`,
-  `${API}settings/chat-tienda`,
-  `${API}settings/tienda-online`,
-  `${PAGINAS}catalogo`,
-  `${PAGINAS}cuotas`,
-  `${PAGINAS}horarios`,
-  `${PAGINAS}chat-tienda`,
-  `${PAGINAS}tienda-online`,
-  `${PAGINAS}etiquetas`,
   // S2b-iii
   `${API}inbox`,
   `${API}whatsapp-numbers`,

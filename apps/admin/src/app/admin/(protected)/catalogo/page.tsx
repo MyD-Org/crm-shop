@@ -2,22 +2,21 @@ import { notFound } from "next/navigation"
 import { asc, eq, and } from "drizzle-orm"
 import { getDb } from "@/db"
 import { alegraCuentas, sucursales } from "@/db/schema"
-import { getGuardedAdminSession } from "@/lib/admin-session"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { listarCategoriasConUso, listarTags } from "@/lib/catalogo-overlay-repo"
 import { basePublicaFotos } from "@/lib/shop-media"
-import { roleRank } from "@/lib/roles"
 import { CatalogoShell } from "@/components/admin/catalogo/CatalogoShell"
 
 export const dynamic = "force-dynamic"
 
-// Panel de catálogo: admin+ (operator → 404, igual que Comprobantes y Horarios). No pide
+// Panel de catálogo: sección Catálogo (`accesoSeccion`; sin ella, 404, igual que Comprobantes y Horarios). No pide
 // superadmin a propósito: curar el catálogo es trabajo diario, no una configuración del sistema.
 //
 // La primera página de productos la pide el shell por API (tiene sus propios filtros); acá sólo
 // se siembran la taxonomía y las etiquetas, que las tres solapas comparten.
 export default async function CatalogoPage() {
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok || roleRank(guard.user.role) < 1) notFound()
+  const guard = await accesoSeccion("catalogo")
+  if (!guard) notFound()
 
   const [categorias, tags, cuentas, sucursalesDelTenant] = await Promise.all([
     listarCategoriasConUso(guard.tenantId),

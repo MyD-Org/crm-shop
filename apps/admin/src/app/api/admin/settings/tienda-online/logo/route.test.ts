@@ -8,7 +8,7 @@ const state = vi.hoisted(() => ({
 }))
 
 vi.mock("@/lib/admin-route-guard", () => ({
-  requireAdminPlus: async () => {
+  requireSeccion: async () => {
     const s = state.session
     if (!s.userId) return { ok: false, response: Response.json({ error: "No autorizado" }, { status: 401 }) }
     if (s.role === "operator") return { ok: false, response: Response.json({ error: "No encontrado" }, { status: 404 }) }

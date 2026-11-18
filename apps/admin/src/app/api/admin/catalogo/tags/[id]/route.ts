@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop, duplicadoResponse, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
 import { borrarTag, impactoBorrarTag, renombrarTag } from "@/lib/catalogo-overlay-repo"
 
@@ -13,7 +13,7 @@ import { borrarTag, impactoBorrarTag, renombrarTag } from "@/lib/catalogo-overla
 type Params = { params: Promise<{ id: string }> }
 
 export async function GET(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const { id } = await params
@@ -23,7 +23,7 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 export async function PATCH(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const { id } = await params
@@ -37,7 +37,7 @@ export async function PATCH(req: Request, { params }: Params) {
 }
 
 export async function DELETE(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const { id } = await params

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { parseSchedule, parseExceptions } from "@/lib/schedule"
 import { guardarHorario, leerHorario, MSG_SUCURSAL_NO_EXISTE } from "@/lib/horarios-repo"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 // notes ya no se carga a mano: el ai-api lo recibe generado a partir de las excepciones
 // (ver exceptionsToNotes en el endpoint interno). Acá solo persistimos schedule + exceptions.
-// Autorización: admin y superadmin (rank ≥ 1). El operator no puede tocar horarios.
+// Autorización: sección Horarios (requireSeccion; sin ella, 404).
 //
 // `?sucursal=<slug>` (change `horarios-por-sucursal`): lee/escribe el horario de esa sucursal del
 // tenant de la sesión; sin el parámetro, el de la empresa (`tenants`). Un slug inexistente o de
@@ -20,7 +20,7 @@ const noExiste = () => NextResponse.json({ error: MSG_SUCURSAL_NO_EXISTE }, { st
 
 // GET /api/admin/settings/schedule[?sucursal=slug] → { schedule: WeeklySchedule, exceptions: ScheduleException[] }
 export async function GET(req: NextRequest) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "horarios")
   if (!guard.ok) return guard.response
 
   const r = await leerHorario(guard.tenantId, slugDe(req))
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 //   schedule: franjas por día ("HH:MM"); día sin franjas = cerrado
 //   exceptions: feriados/vacaciones (closed) u horario especial en una fecha (special)
 export async function PUT(req: NextRequest) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "horarios")
   if (!guard.ok) return guard.response
 
   const body = (await req.json()) as { schedule?: unknown; exceptions?: unknown }

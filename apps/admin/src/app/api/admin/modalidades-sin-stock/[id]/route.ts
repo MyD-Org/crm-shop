@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop } from "@/lib/aviso-shop"
 import { actualizarModalidad, borrarModalidad } from "@/lib/modalidades-sin-stock-repo"
 
@@ -11,7 +11,7 @@ const NO_STORE = { "Cache-Control": "private, no-store" }
 type Params = { params: Promise<{ id: string }> }
 
 export async function PUT(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
 
   const { id } = await params
@@ -26,7 +26,7 @@ export async function PUT(req: Request, { params }: Params) {
 }
 
 export async function DELETE(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
 
   const { id } = await params

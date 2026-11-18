@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { esUuid } from "@/lib/precios-online-cambios"
 import { NO_STORE, leerClavesDePrevia, leerJson, respuestaDeError } from "@/lib/precios-online-http"
 import { aplicarReversion, previsualizarReversion } from "@/lib/precios-online-repo"
@@ -7,12 +7,12 @@ import { aplicarReversion, previsualizarReversion } from "@/lib/precios-online-r
 //   { previa: true }                              -> vista previa de los cambios inversos (no escribe).
 //   { baseVersion, huella, confirmaExtra? }       -> aplica la reversión (mismo camino que cualquier cambio).
 // Solo se revierte la ÚLTIMA entrada vigente de cada objeto (409 `choque` si hay una posterior) y
-// una sola vez (409 `ya_revertido`). admin+ (operator -> 404). Tenant = el del guard.
+// una sola vez (409 `ya_revertido`). Con la sección (sin ella -> 404). Tenant = el del guard.
 
 type Params = { params: Promise<{ id: string }> }
 
 export async function POST(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, ["catalogo", "cuotas"])
   if (!guard.ok) return guard.response
   const { id } = await params
   if (!esUuid(id)) return adminNotFoundResponse()

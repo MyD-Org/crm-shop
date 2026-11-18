@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { parseChatTienda } from "@/lib/chat-tienda"
 
 // GET/PUT /api/admin/settings/chat-tienda — texto del chat vacío y preguntas sugeridas del chat
@@ -11,7 +11,7 @@ import { parseChatTienda } from "@/lib/chat-tienda"
 const NO_STORE = { "Cache-Control": "private, no-store" }
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "chat-tienda")
   if (!guard.ok) return guard.response
 
   const [tenant] = await getDb()
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "chat-tienda")
   if (!guard.ok) return guard.response
 
   const parsed = parseChatTienda(await req.json().catch(() => null))

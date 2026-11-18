@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { invalidResponse } from "@/lib/catalogo-admin"
 import { listarGrilla, listarIds, parsearQueryGrilla } from "@/lib/precios-online-grilla"
 import { NO_STORE } from "@/lib/precios-online-http"
@@ -13,10 +13,10 @@ import { puedeVerCostos, sinCampos } from "@/lib/secciones"
 // los ids de la página trae el coeficiente efectivo y su origen por lista, y los precios de las
 // listas de Alegra por cuenta como REFERENCIA informativa (nunca participan del cálculo). El costo
 // (`costo`, `costoAplicado`) sólo viaja con permiso de costos (`puedeVerCostos`, fila fresca): sin
-// él las claves no existen en la respuesta. admin+ (operator -> 404). Tenant = el del guard.
+// él las claves no existen en la respuesta. Con la sección (sin ella -> 404). Tenant = el del guard.
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
   const parsed = parsearQueryGrilla(new URL(req.url))
   if (!parsed.ok) return invalidResponse(parsed.error)

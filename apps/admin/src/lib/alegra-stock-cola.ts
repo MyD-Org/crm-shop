@@ -21,7 +21,8 @@ import { escribirStockPrincipal } from "./catalogo-union-repo"
 //   cuenta comparte con la sync, el portal y el bot) y escribe el valor ABSOLUTO con el upsert
 //   por frescura. Ante un 429 corta y deja todo en la cola: no insiste contra un cupo saturado.
 // - Lo que quede lo barre el cron cada 15 min (/api/cron/alegra-stock-drenar); lo que falle 5
-//   veces se descarta y lo corrige la sync diaria.
+//   veces se descarta y lo corrige la sync diaria. El cron también encola los ítems de los ajustes
+//   de inventario recientes, que Alegra no avisa por webhook (alegra-ajustes-inventario.ts).
 // - Al terminar, si hubo cambios (ítems leídos o dados de baja), avisa al Shop UNA vez por
 //   drenaje para que descarte su caché del catálogo (lib/aviso-shop.ts). Best-effort: un fallo
 //   del aviso no cambia el resultado del drenaje.
@@ -54,7 +55,10 @@ const REINTENTOS_429 = 1
  * drenador que lo está leyendo no lo borra: su lectura puede ser anterior al aviso nuevo),
  * cambia el motivo y resetea intentos y error. Devuelve cuántos ids distintos encoló.
  */
-export async function encolar(tx: Ejecutor, tenantId: string, ids: string[], motivo: EventoStock): Promise<number> {
+/** Motivo de un encolado: un evento de webhook o un ajuste de inventario (alegra-ajustes-inventario.ts). */
+export type MotivoCola = EventoStock | "inventory-adjustment"
+
+export async function encolar(tx: Ejecutor, tenantId: string, ids: string[], motivo: MotivoCola): Promise<number> {
   const unicos = [...new Set(ids)]
   if (unicos.length === 0) return 0
   const ahora = new Date()

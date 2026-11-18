@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop, conUrlDeFotos, NO_STORE, rechazarSiVarianteAgrupada, validacionResponse } from "@/lib/catalogo-admin"
 import { detalleProducto, guardarOverlay } from "@/lib/catalogo-overlay-repo"
 import { ANCHOS_FOTO, esAnchoValido, fotoKey, getShopMediaR2, idDeRuta, prefijoProducto } from "@/lib/shop-media"
@@ -16,7 +16,7 @@ import { ANCHOS_FOTO, esAnchoValido, fotoKey, getShopMediaR2, idDeRuta, prefijoP
 // (la que se muestra al elegir ese color) se edita con `?alcance=variante` y escribe en el overlay de la
 // variante, sólo `fotos`. Sin ese parámetro, una variante agrupada responde 400.
 //
-// admin+ (operator → 404). Tenant = el del guard, siempre.
+// Con la sección (sin ella → 404). Tenant = el del guard, siempre.
 
 interface Params {
   params: Promise<{ alegraId: string }>
@@ -29,7 +29,7 @@ const TTL_FIRMA_S = 600
 const MAX_BYTES_VARIANTE = 5 * 1024 * 1024
 
 export async function POST(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const r2 = getShopMediaR2()
@@ -87,7 +87,7 @@ export async function POST(req: Request, { params }: Params) {
 }
 
 export async function PUT(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const alegraId = idDeRuta((await params).alegraId)

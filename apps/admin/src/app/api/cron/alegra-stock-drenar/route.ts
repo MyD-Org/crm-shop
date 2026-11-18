@@ -1,5 +1,6 @@
 import { getTenantByIdFromDb } from "@/lib/tenants"
 import { drenarTenant, purgarCola, tenantsParaDrenar, type ResultadoDrenaje } from "@/lib/alegra-stock-cola"
+import { encolarAjustesRecientes } from "@/lib/alegra-ajustes-inventario"
 import { motivoError } from "@/lib/alegra-webhook-comun"
 import { bearerMatches } from "@/lib/secure-compare"
 
@@ -8,6 +9,9 @@ import { bearerMatches } from "@/lib/secure-compare"
 // todos los tenants con cola o con avisos, o sólo para `?tenant=<id>`. La dispara el workflow
 // admin-alegra-stock-drenar de GitHub Actions cada 15 min con CRON_SECRET.
 //
+// Antes de drenar cada tenant encola los ítems de sus ajustes de inventario recientes: Alegra no
+// los avisa por webhook (lib/alegra-ajustes-inventario.ts). Best-effort: no frena el drenaje.
+//
 // También purga la cola vieja y el índice documento→ítems, y devuelve por tenant los minutos
 // desde el último aviso: si pasa de un día, Alegra pudo haber desactivado las suscripciones.
 export const maxDuration = 300
@@ -15,7 +19,11 @@ export const maxDuration = 300
 /** 270 s: margen contra maxDuration para soltar el lease y responder. */
 const DEADLINE_MS = 270_000
 
-type ResultadoTenant = { tenant: string; ok: boolean; error?: string } & ResultadoDrenaje & { ultimoAvisoMin: number | null }
+type ResultadoTenant = { tenant: string; ok: boolean; error?: string } & ResultadoDrenaje & {
+  ultimoAvisoMin: number | null
+  /** Ítems encolados en esta corrida por ajustes de inventario nuevos. */
+  ajustesEncolados: number
+}
 
 const VACIO: ResultadoDrenaje = { leidos: 0, inactivos: 0, errores: 0, requests: 0, pendientes: 0, corte: "vacia" }
 
@@ -37,11 +45,17 @@ export async function POST(req: Request) {
       const cfg = await getTenantByIdFromDb(tenant)
       // Sin Alegra configurado (ni mock ni token) no hay a quién preguntarle.
       if (!cfg || !(cfg.alegraMock || cfg.alegraToken)) continue
+      let ajustesEncolados = 0
       try {
-        results.push({ tenant, ok: true, ...(await drenarTenant(cfg, { deadline })), ultimoAvisoMin })
+        ajustesEncolados = (await encolarAjustesRecientes(cfg)).encolados
+      } catch (err) {
+        console.error(`cron/alegra-stock-drenar ajustes tenant=${tenant} error=${motivoError(err)}`)
+      }
+      try {
+        results.push({ tenant, ok: true, ...(await drenarTenant(cfg, { deadline })), ultimoAvisoMin, ajustesEncolados })
       } catch (err) {
         // drenarTenant sólo tira si falla la base: el resto de los tenants sigue.
-        results.push({ tenant, ok: false, error: motivoError(err), ...VACIO, ultimoAvisoMin })
+        results.push({ tenant, ok: false, error: motivoError(err), ...VACIO, ultimoAvisoMin, ajustesEncolados })
       }
     }
 

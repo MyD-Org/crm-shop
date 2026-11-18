@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { invalidResponse } from "@/lib/catalogo-admin"
 import { esUuid, MSG_BODY } from "@/lib/precios-online-cambios"
 import { aprobarRetenidos, listarRetenidos, rechazarRetenidos } from "@/lib/precios-online-costos"
@@ -10,11 +10,11 @@ import { puedeVerCostos, sinCampos } from "@/lib/secciones"
 //   POST { accion: "aprobar" | "rechazar", ids: [uuid], confirmar?: boolean }
 //        Resolver varios a la vez exige confirmar: true. Aprobar actualiza el precio y deja historial;
 //        rechazar mantiene el precio vigente. Un retenido sin costo propuesto no se aprueba (se omite).
-// admin+ (operator -> 404). Tenant = el del guard. Sin permiso de costos (`puedeVerCostos`) el GET
+// Con la sección (sin ella -> 404). Tenant = el del guard. Sin permiso de costos (`puedeVerCostos`) el GET
 // no incluye `costoVigente` ni `costoPropuesto` (sí la variación y si queda sin costo).
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, ["catalogo", "cuotas"])
   if (!guard.ok) return guard.response
   const p = new URL(req.url).searchParams
   const start = Number(p.get("start") ?? 0)
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 const MAX_IDS = 200
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, ["catalogo", "cuotas"])
   if (!guard.ok) return guard.response
   const body = await leerJson(req)
   if (body instanceof Response) return body

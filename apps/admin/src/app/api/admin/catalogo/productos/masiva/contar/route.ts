@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { NO_STORE, parsearSeleccion, validarStockEn } from "@/lib/catalogo-admin"
 import { contarSeleccion } from "@/lib/catalogo-overlay-repo"
 
@@ -11,7 +11,7 @@ import { contarSeleccion } from "@/lib/catalogo-overlay-repo"
 // No escribe nada, así que no avisa al Shop.
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const seleccion = parsearSeleccion(await req.json().catch(() => null))

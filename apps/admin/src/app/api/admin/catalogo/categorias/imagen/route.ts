@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
 import { getShopMediaR2 } from "@/lib/shop-media"
 
@@ -16,7 +16,7 @@ const MAX_BYTES = 5 * 1024 * 1024
 const ANCHO = 800
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const r2 = getShopMediaR2()

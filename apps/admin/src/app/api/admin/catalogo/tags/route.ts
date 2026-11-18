@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop, duplicadoResponse, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
 import { crearTag, listarTags } from "@/lib/catalogo-overlay-repo"
 
@@ -10,7 +10,7 @@ import { crearTag, listarTags } from "@/lib/catalogo-overlay-repo"
 // Las etiquetas son planas: no aceptan padre ni nivel (no participan de la jerarquía).
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const tags = await listarTags(guard.tenantId)
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const r = await crearTag(guard.tenantId, await req.json().catch(() => null))

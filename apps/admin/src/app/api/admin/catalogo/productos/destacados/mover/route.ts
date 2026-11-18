@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { avisarShop, invalidResponse, NO_STORE } from "@/lib/catalogo-admin"
 import { esUuid, moverDestacado } from "@/lib/catalogo-overlay-repo"
 
@@ -16,7 +16,7 @@ function esObjeto(v: unknown): v is Record<string, unknown> {
 }
 
 export async function POST(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const body = await req.json().catch(() => null)

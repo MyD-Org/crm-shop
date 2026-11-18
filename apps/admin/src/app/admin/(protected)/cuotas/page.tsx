@@ -1,16 +1,15 @@
 import { notFound } from "next/navigation"
-import { getGuardedAdminSession } from "@/lib/admin-session"
-import { roleRank } from "@/lib/roles"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { MediosPagoShopCard } from "@/components/admin/MediosPagoShopCard"
 import { CuentasBancariasShopCard } from "@/components/admin/CuentasBancariasShopCard"
 
 export const dynamic = "force-dynamic"
 
 // Pagos y cuotas: medios de pago del checkout (con sus cuotas sin interés por lista de precios) y
-// cuentas bancarias del Shop (grupo Datos del menú). Admin+ (operator → 404).
+// cuentas bancarias del Shop (grupo Datos del menú). Sección Pagos y cuotas (`accesoSeccion`; sin ella, 404).
 export default async function CuotasPage() {
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok || roleRank(guard.user.role) < 1) notFound()
+  const guard = await accesoSeccion("cuotas")
+  if (!guard) notFound()
 
   return (
     <div className="p-4 md:p-6">

@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq, and, ilike, or } from "drizzle-orm"
 import { getDb } from "@/db"
 import { priceLists, catalogItems } from "@/db/schema"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 
 // GET /api/admin/catalog/[id]?q=... — items de una lista, con búsqueda opcional
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const { id } = await params
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 // DELETE /api/admin/catalog/[id] — elimina una lista y sus items (cascade en DB)
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "catalogo")
   if (!guard.ok) return guard.response
 
   const { id } = await params

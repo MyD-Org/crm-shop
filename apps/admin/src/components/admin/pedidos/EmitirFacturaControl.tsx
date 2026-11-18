@@ -46,8 +46,6 @@ interface Props {
   onChanged: (pedido: PedidoDetalleDto) => void
   /** 409: otro operador lo cambió (o ya lo facturó); hay que volver a pedir el pedido. */
   onConflicto: () => void
-  /** Sólo admin/superadmin pueden emitir. Un operator ni ve el botón (el servidor le daría 404). */
-  esAdminPlus: boolean
 }
 
 const esPreview = (b: unknown): b is PreviewEmision => Array.isArray((b as PreviewEmision)?.lineas)
@@ -68,7 +66,7 @@ function Fila({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
-export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPlus }: Props) {
+export function EmitirFacturaControl({ pedido, onChanged, onConflicto }: Props) {
   const { toast } = useToast()
   const [abierto, setAbierto] = useState(false)
   const [cargando, setCargando] = useState(false)
@@ -163,8 +161,6 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
       onConflicto()
     }
   }
-
-  if (!esAdminPlus) return null
 
   return (
     <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>

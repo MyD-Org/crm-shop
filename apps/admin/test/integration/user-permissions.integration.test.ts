@@ -192,4 +192,111 @@ describe("permisos en las rutas de usuarios", () => {
       expect((await remove(superadmin)).status).toBe(400)
     })
   })
+
+  describe("secciones y costos (S3)", () => {
+    async function fila(id: string) {
+      const [row] = await getDb().select().from(adminUsers).where(eq(adminUsers.id, id))
+      return row
+    }
+    async function setPermisos(id: string, secciones: string[] | null, verCostos: boolean | null) {
+      await getDb().update(adminUsers).set({ seccionesPermitidas: secciones, verCostos }).where(eq(adminUsers.id, id))
+    }
+
+    it("el admin otorga secciones y costos a un operador; la respuesta trae los valores", async () => {
+      loginAs(admin, "admin")
+      const res = await patch(operador, { secciones_permitidas: ["pedidos", "inbox", "pedidos"], ver_costos: true })
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.secciones_permitidas).toEqual(["inbox", "pedidos"])
+      expect(body.ver_costos).toBe(true)
+      expect((await fila(operador)).seccionesPermitidas).toEqual(["inbox", "pedidos"])
+    })
+
+    it("Restablecer al rol: null vuelve las dos columnas a NULL", async () => {
+      await setPermisos(operador, ["pedidos"], false)
+      loginAs(admin, "admin")
+      expect((await patch(operador, { secciones_permitidas: null, ver_costos: null })).status).toBe(200)
+      const row = await fila(operador)
+      expect(row.seccionesPermitidas).toBeNull()
+      expect(row.verCostos).toBeNull()
+    })
+
+    it("clave no tildable -> 400 «Sección no válida.»", async () => {
+      loginAs(admin, "admin")
+      const res = await patch(operador, { secciones_permitidas: ["usuarios"] })
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe("Sección no válida.")
+    })
+
+    it("nadie modifica sus propios permisos -> 403", async () => {
+      loginAs(admin, "admin")
+      const res = await patch(admin, { secciones_permitidas: [] })
+      expect(res.status).toBe(403)
+      expect((await res.json()).error).toBe("No puede modificar sus propios permisos.")
+    })
+
+    it("techo: un admin con ['pedidos','catalogo'] no da ['inbox','etiquetas'] y no se persiste nada", async () => {
+      await setPermisos(admin, ["pedidos", "catalogo"], null)
+      await setPermisos(operador, [], null)
+      loginAs(admin, "admin")
+      const res = await patch(operador, { secciones_permitidas: ["inbox", "etiquetas"] })
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe("No puede otorgar secciones a las que usted no tiene acceso.")
+      expect((await fila(operador)).seccionesPermitidas).toEqual([])
+    })
+
+    it("techo de costos: un admin sin costos no los otorga", async () => {
+      await setPermisos(admin, null, false)
+      loginAs(admin, "admin")
+      expect((await patch(operador, { ver_costos: true })).status).toBe(400)
+    })
+
+    it("el admin no edita permisos de un superadmin (canActOnRole)", async () => {
+      loginAs(admin, "admin")
+      expect((await patch(superadmin, { secciones_permitidas: ["inbox"] })).status).toBe(403)
+    })
+
+    it("superadmin con valores no nulos -> 400", async () => {
+      loginAs(superadmin, "superadmin")
+      const res = await patch(admin, { role: "superadmin", secciones_permitidas: ["inbox"] })
+      expect(res.status).toBe(400)
+      expect((await fila(admin)).role).toBe("admin")
+    })
+
+    it("operador ['inbox','pedidos'] -> admin conserva la lista; admin -> superadmin la limpia", async () => {
+      await setPermisos(operador, ["inbox", "pedidos"], false)
+      loginAs(superadmin, "superadmin")
+      const res = await patch(operador, { role: "admin" })
+      expect(res.status).toBe(200)
+      expect((await res.json()).secciones_permitidas).toEqual(["inbox", "pedidos"])
+      const res2 = await patch(operador, { role: "superadmin" })
+      const body2 = await res2.json()
+      expect(body2.secciones_permitidas).toBeNull()
+      expect(body2.ver_costos).toBeNull()
+    })
+
+    it("debe quedar al menos un gestor: el actor cuenta, así que bajar al otro admin pasa", async () => {
+      // La regla (quedaGestor, unit) es una defensa: como nadie se edita ni se elimina a sí mismo,
+      // el actor (admin+ activo del tenant) siempre queda como gestor.
+      await getDb().delete(adminUsers).where(eq(adminUsers.id, otroAdmin))
+      loginAs(superadmin, "superadmin")
+      expect((await patch(admin, { role: "operator" })).status).toBe(200)
+      expect((await remove(admin)).status).toBe(200)
+    })
+
+    it("con otro gestor activo sí se puede bajar de rol", async () => {
+      loginAs(superadmin, "superadmin")
+      expect((await patch(otroAdmin, { role: "operator" })).status).toBe(200)
+    })
+
+    it("alta de un admin con techo: queda con lo que el actor puede dar", async () => {
+      await setPermisos(admin, ["pedidos"], false)
+      loginAs(admin, "admin")
+      const res = await invite({ name: "Nuevo", email: "nuevo-techo@x.com", role: "admin" })
+      expect(res.status).toBe(201)
+      const [row] = await getDb().select().from(adminUsers).where(eq(adminUsers.email, "nuevo-techo@x.com"))
+      expect(row.seccionesPermitidas).toEqual(["pedidos"])
+      expect(row.verCostos).toBe(false)
+    })
+  })
 })

@@ -10,6 +10,7 @@ import { sendEmail } from "@/lib/email"
 import { buildInvitacionEmail } from "@/lib/invitacion-email"
 import { EMPTY_TENANT, tenantConfigFromRow, type TenantConfig } from "@/lib/tenants"
 import { logoMailDeTenant } from "@/lib/email-logo"
+import { permisosDeAlta } from "@/lib/permisos-usuario"
 
 // Intenta enviar el email de invitación. Devuelve { sent, errorMsg }.
 async function trySendInviteEmail({
@@ -54,6 +55,8 @@ export async function GET(req: NextRequest) {
       role: adminUsers.role,
       departments: adminUsers.departments,
       canales_permitidos: adminUsers.canalesPermitidos,
+      secciones_permitidas: adminUsers.seccionesPermitidas,
+      ver_costos: adminUsers.verCostos,
       createdAt: adminUsers.createdAt,
       hasPassword: adminUsers.passwordHash,
       totpEnabledAt: adminUsers.totpEnabledAt,
@@ -86,6 +89,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No puede asignar ese rol" }, { status: 403 })
   }
 
+  // Un admin con techo no puede dar, al invitar, secciones o costos que él no tiene: el usuario
+  // nuevo queda con lo que el actor sí puede otorgar (NULL = default del rol si no hay techo).
+  const permisos = permisosDeAlta(guard.user, body.role)
+  if (!permisos.ok) return NextResponse.json({ error: permisos.error }, { status: 400 })
+
   const db = getDb()
   // Unicidad de email SCOPEADA al tenant: el mismo email puede existir en otro tenant
   // (multi-tenant). Chequear global bloquearía altas legítimas y filtraría existencia
@@ -106,6 +114,8 @@ export async function POST(req: NextRequest) {
     departments: Array.isArray(body.departments)
       ? body.departments.map((d: unknown) => String(d).trim()).filter(Boolean)
       : [],
+    seccionesPermitidas: permisos.value.seccionesPermitidas,
+    verCostos: permisos.value.verCostos,
   }).returning()
 
   const { token, tokenHash } = generateToken()

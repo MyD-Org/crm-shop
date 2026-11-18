@@ -10,6 +10,8 @@ import { listPendingSubmittedAt } from "@/lib/payment-receipts"
 import { listPendientesCreatedAt } from "@/lib/pedidos-repo"
 import { isKnownAdminRole } from "@/lib/roles"
 import { puedeVerSeccion } from "@/lib/secciones"
+import { esRestringido, puedeVerCanal } from "@/lib/canal-acceso"
+import { canalesDeConversaciones, type TenantInbox } from "@/lib/canal-acceso-conversacion"
 
 // GET /api/admin/pending-counts — contadores para los badges de "novedades" del sidebar del
 // backoffice. El badge NO es "todo lo pendiente" sino "lo nuevo desde mi última visita a la
@@ -37,6 +39,11 @@ import { puedeVerSeccion } from "@/lib/secciones"
 // es puro y liviano, y el `since` del cliente no invalida nada. El proceso es serverless de
 // corta vida: el Map muere con la instancia. La key es el tenant (no el usuario): el valor
 // crudo es el mismo para todos; el filtro por rol se aplica AL RESPONDER.
+//
+// Acceso por canal: un operador restringido cuenta solo las conversaciones de sus canales. El
+// mapa conversación → canal también es RAW del tenant (se arma la primera vez que lo pide un
+// restringido y vive con el resto del cache); el filtro por usuario va al responder, así que el
+// orden de las consultas no cambia lo que ve cada uno.
 
 const CACHE_TTL_MS = 15_000
 
@@ -45,6 +52,9 @@ interface Raw {
   conversations: InboxConversation[] | null
   pendingSubmittedAt: Date[]
   pedidosCreatedAt: Date[]
+  inbox: TenantInbox | null
+  /** conversationId → clave de canal; solo se calcula si lo pide un usuario restringido. */
+  canales?: Promise<Map<string, string>>
 }
 
 const cache = new Map<string, { at: number; value: Raw }>()
@@ -65,7 +75,9 @@ async function loadRaw(tenantId: string): Promise<Raw> {
   const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, tenantId))
 
   let conversations: InboxConversation[] | null = null
+  let inbox: TenantInbox | null = null
   if (tenant?.aiApiUrl && tenant?.aiTenantId) {
+    inbox = { aiApiUrl: tenant.aiApiUrl, aiTenantId: tenant.aiTenantId }
     conversations = await listConversations(tenant.aiApiUrl, tenant.aiTenantId)
   }
 
@@ -73,7 +85,7 @@ async function loadRaw(tenantId: string): Promise<Raw> {
     listPendingSubmittedAt(tenantId),
     listPendientesCreatedAt(tenantId),
   ])
-  return { conversations, pendingSubmittedAt, pedidosCreatedAt }
+  return { conversations, pendingSubmittedAt, pedidosCreatedAt, inbox }
 }
 
 export async function GET(req: Request) {
@@ -116,8 +128,18 @@ export async function GET(req: Request) {
     cache.set(guarded.tenantId, { at: Date.now(), value })
   }
 
+  // Restringido por canal: solo sus canales (sin canal resuelto no cuenta, fail-closed).
+  let conversaciones = value.conversations
+  if (conversaciones && esRestringido(guarded.user)) {
+    const raw = value
+    const canales = await (raw.canales ??= raw.inbox
+      ? canalesDeConversaciones(raw.inbox, conversaciones).catch(() => new Map<string, string>())
+      : Promise.resolve(new Map<string, string>()))
+    conversaciones = conversaciones.filter((c) => puedeVerCanal(guarded.user, canales.get(c.id)))
+  }
+
   const inbox =
-    value.conversations?.filter((c) => {
+    conversaciones?.filter((c) => {
       if (!c.awaiting_reply || c.status !== "active") return false
       if (!sinceInbox) return true
       // Sin last_inbound_at no hay "entrada reciente" medible: no cuenta cuando hay since.

@@ -7,7 +7,7 @@ import { getBotStatus, listWhatsappNumbersRaw, type InboxContact } from "@/lib/i
 import { assignPendingConversations } from "@/lib/assignment"
 import { listEnrichedContacts } from "@/lib/inbox-contacts"
 import { listarNombres } from "@/lib/inbox-canales-repo"
-import { filtrarNombres, filtrarNumerosRaw, type ActorCanales } from "@/lib/canal-acceso"
+import { filtrarNombres, filtrarNumerosRaw, tieneAlgunCanal, type ActorCanales } from "@/lib/canal-acceso"
 import { parseWhatsappNumbers } from "@/lib/inbox-canales"
 import { roleRank } from "@/lib/roles"
 import { casillasAccesibles } from "@/lib/correo-acceso"
@@ -57,7 +57,12 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   }
   const casillaInicial = casillas.some((c) => c.id === casillaParam) ? (casillaParam ?? null) : null
 
-  if (!tenant?.aiTenantId || !tenant?.aiApiUrl) {
+  // Operador restringido sin ningún canal: no se consulta ai-api y se muestra el aviso.
+  const sinCanales = !tieneAlgunCanal(actor)
+
+  if (sinCanales) {
+    // Nada que listar ni reconciliar para este usuario.
+  } else if (!tenant?.aiTenantId || !tenant?.aiApiUrl) {
     configError = "El inbox no está configurado. Complete AI_TENANT_ID y AI_API_URL en la config del tenant."
   } else {
     const tenantRef = { id: tenant.id, aiApiUrl: tenant.aiApiUrl, aiTenantId: tenant.aiTenantId }
@@ -93,10 +98,31 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
         {/* Estado del bot (kill switch global). La presencia del operador vive en el pie del
             sidebar (AdminShell), no acá: el header es para el estado de la operación. */}
         {/* Kill switch global del bot: visible para todos los usuarios del backoffice (sin gate de rol). */}
-        {!configError && <BotKillSwitch initialEnabled={botEnabled} />}
+        {!configError && !sinCanales && <BotKillSwitch initialEnabled={botEnabled} />}
       </div>
 
-      {configError ? (
+      {sinCanales ? (
+        <>
+          <div className="rounded-[var(--radius)] p-4 text-sm" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--ink-soft)" }}>
+            No tiene canales asignados. Solicite a un administrador que le habilite el acceso.
+          </div>
+          {/* Las casillas de correo no dependen de los canales del inbox: se siguen mostrando. */}
+          {casillas.length > 0 && (
+            <div className="mt-4">
+              <InboxList initialContacts={[]} currentUserId={user.id} initialBotEnabled={botEnabled}
+                initialCanalNombres={{}}
+                canalesHabilitados={[]}
+                telefonosCanal={{}}
+                canEditCanales={false}
+                casillas={casillas}
+                correoHabilitado={correoOn}
+                initialCasillaId={casillaInicial}
+                initialHiloId={casillaInicial ? (hiloParam ?? null) : null}
+              />
+            </div>
+          )}
+        </>
+      ) : configError ? (
         <div className="rounded-[var(--radius)] p-4 text-sm" style={{ background: "var(--amber-soft)", color: "var(--amber)" }}>
           {configError}
         </div>

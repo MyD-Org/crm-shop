@@ -5,6 +5,7 @@ import { tenants } from "@/db/schema"
 import { accesoSeccion } from "@/lib/secciones-acceso"
 import { listConversations, getMessages } from "@/lib/inbox-api"
 import { ThreadView } from "@/components/admin/ThreadView"
+import { exigirAccesoConversacion } from "@/lib/canal-acceso-conversacion"
 
 export const dynamic = "force-dynamic"
 
@@ -24,6 +25,12 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
       </div>
     )
   }
+
+  // Acceso por canal (la URL del push apunta acá): ajena o inexistente = el mismo notFound().
+  const accesoCanal = await exigirAccesoConversacion(
+    { aiApiUrl: tenant.aiApiUrl, aiTenantId: tenant.aiTenantId }, acceso.user, id,
+  )
+  if (!accesoCanal.ok) notFound()
 
   const [conversations, messages] = await Promise.all([
     listConversations(tenant.aiApiUrl, tenant.aiTenantId),

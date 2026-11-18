@@ -3,6 +3,7 @@ import {
   normalizeDepartment,
   pickLeastLoaded,
   loadFromAssignments,
+  asignacionesSinAcceso,
   type Operator,
   type Assignment,
 } from "./assignment"
@@ -64,5 +65,27 @@ describe("pickLeastLoaded", () => {
 
   it("devuelve null si no hay candidatos", () => {
     expect(pickLeastLoaded([], new Map())).toBeNull()
+  })
+})
+
+describe("asignacionesSinAcceso (acceso por canal)", () => {
+  const asignaciones: Assignment[] = [
+    { conversationId: "ca", operatorId: "op1", department: null },
+    { conversationId: "cb", operatorId: "op1", department: null },
+    { conversationId: "desconocida", operatorId: "op1", department: null },
+    { conversationId: "cb2", operatorId: "op2", department: null },
+  ]
+  const restringidos = [{ id: "op1", role: "operator", canalesPermitidos: ["canal-a"] }]
+  const canales = new Map([["ca", "canal-a"], ["cb", "canal-b"], ["cb2", "canal-b"]])
+
+  it("solo las del restringido en un canal CONOCIDO que no tiene", () => {
+    expect(asignacionesSinAcceso(asignaciones, restringidos, canales).map((a) => a.conversationId)).toEqual(["cb"])
+  })
+  it("lista vacía: todas las de canal conocido", () => {
+    const vacio = [{ id: "op1", role: "operator", canalesPermitidos: [] }]
+    expect(asignacionesSinAcceso(asignaciones, vacio, canales).map((a) => a.conversationId)).toEqual(["ca", "cb"])
+  })
+  it("sin restringidos: ninguna", () => {
+    expect(asignacionesSinAcceso(asignaciones, [], canales)).toEqual([])
   })
 })

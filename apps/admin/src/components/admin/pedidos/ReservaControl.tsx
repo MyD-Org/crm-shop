@@ -9,7 +9,7 @@ import { fmtFechaPedido } from "./format"
 // (suma los días de reserva de las reglas de venta a partir de ahora). Un pedido que no reserva
 // por vencimiento (confirmado, pagado, facturado) no muestra nada.
 
-export function ReservaControl({ pedido, esAdminPlus, onChanged }: { pedido: PedidoDetalleDto; esAdminPlus: boolean; onChanged: (venceEn: string | null) => void }) {
+export function ReservaControl({ pedido, onChanged }: { pedido: PedidoDetalleDto; onChanged: (venceEn: string | null) => void }) {
   const [guardando, setGuardando] = useState(false)
   const { toast } = useToast()
   const [ahora] = useState(() => Date.now())
@@ -42,13 +42,11 @@ export function ReservaControl({ pedido, esAdminPlus, onChanged }: { pedido: Ped
           ? "Sin vencimiento."
           : `La reserva ${vencida ? "venció" : "vence"} el ${fmtFechaPedido(venceEn)}.`}
       </p>
-      {esAdminPlus && (
-        <div>
-          <Button variant="secondary" size="sm" loading={guardando} onClick={() => void extender()}>
-            Extender reserva
-          </Button>
-        </div>
-      )}
+      <div>
+        <Button variant="secondary" size="sm" loading={guardando} onClick={() => void extender()}>
+          Extender reserva
+        </Button>
+      </div>
     </div>
   )
 }

@@ -3,6 +3,8 @@ import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, tenants } from "@/db/schema"
 import { requireSeccion } from "@/lib/admin-route-guard"
+import { cuentaDeConversacion, exigirAccesoConversacion } from "@/lib/canal-acceso-conversacion"
+import { esRestringido, hayRestringidos, operadoresConAcceso, puedeVerCanal } from "@/lib/canal-acceso"
 import { listConversations } from "@/lib/inbox-api"
 import { assignInCrm, availableOperators, getAssignments, loadFromAssignments, pickLeastLoaded } from "@/lib/assignment"
 import { sendPushToOperator } from "@/lib/push"
@@ -31,7 +33,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "inbox no configurado" }, { status: 503 })
   }
 
+  // Acceso por canal ANTES de cualquier efecto: ajena o inexistente = el mismo 404.
+  const acceso = await exigirAccesoConversacion(
+    { aiApiUrl: tenant.aiApiUrl, aiTenantId: tenant.aiTenantId }, guard.user, id,
+  )
+  if (!acceso.ok) return acceso.response
+
   let targetOperatorId: string
+
+  // Canal de la conversación, resuelto una sola vez y solo si hace falta (algún restringido en
+  // juego). Si ya lo resolvió el chequeo del actor, se reutiliza.
+  const tenantInbox = { aiApiUrl: tenant.aiApiUrl, aiTenantId: tenant.aiTenantId }
+  let canalResuelto: Promise<string | null> | null =
+    acceso.canalKey !== undefined ? Promise.resolve(acceso.canalKey) : null
+  const canal = () => (canalResuelto ??= cuentaDeConversacion(tenantInbox, id).catch(() => null))
 
   // Depto de la conversación (lo etiquetó el bot en ai-api): lo usamos para elegir
   // candidatos y para guardarlo como snapshot en la asignación del CRM.
@@ -54,7 +69,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // destinatario terminaba viendo —y notificado por push sobre— datos de un cliente ajeno.
     // `passwordHash` NOT NULL = cuenta activa; una invitación pendiente no puede recibir.
     const [operator] = await db
-      .select({ id: adminUsers.id, passwordHash: adminUsers.passwordHash })
+      .select({
+        id: adminUsers.id,
+        passwordHash: adminUsers.passwordHash,
+        role: adminUsers.role,
+        canalesPermitidos: adminUsers.canalesPermitidos,
+      })
       .from(adminUsers)
       .where(and(eq(adminUsers.id, requested), eq(adminUsers.tenantId, guard.tenantId)))
 
@@ -62,11 +82,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "operador no encontrado" }, { status: 404 })
     }
 
+    // Acceso por canal del DESTINATARIO: no se le asigna una conversación que no puede ver. 409
+    // (no 404): quien asigna ya ve la conversación, así que no revela nada.
+    if (esRestringido(operator) && !puedeVerCanal(operator, await canal())) {
+      return NextResponse.json({ error: "El operador seleccionado no tiene acceso a este canal." }, { status: 409 })
+    }
+
     targetOperatorId = operator.id
   } else if (body.strategy === "least-loaded") {
     // Mismo criterio que la reconciliación automática (ADR 0006): operadores DISPONIBLES
     // del depto + menos cargado. La carga se cuenta desde la DB del CRM (fuente de verdad).
-    const operators = await availableOperators(guard.tenantId, body.department ?? null)
+    const disponibles = await availableOperators(guard.tenantId, body.department ?? null)
+    // Solo candidatos con acceso al canal (sin restringidos entre ellos, no se resuelve nada).
+    const operators = hayRestringidos(disponibles) ? operadoresConAcceso(disponibles, await canal()) : disponibles
     if (!operators.length) {
       const reason = body.department
         ? `no hay operadores disponibles en el departamento "${body.department}"`

@@ -25,14 +25,13 @@ interface Props {
   pedido: PedidoDetalleDto
   onChanged: (pedido: PedidoDetalleDto) => void
   onConflicto: () => void
-  esAdminPlus: boolean
 }
 
 const esDetalle = (b: unknown) => typeof (b as { id?: unknown }).id === "string"
 const esEncontrada = (b: unknown) => typeof (b as RemisionEncontrada).remision?.alegraId === "string"
 const esPreview = (b: unknown) => Array.isArray((b as PreviewRemito)?.lineas)
 
-export function RemitoControl({ pedido, onChanged, onConflicto, esAdminPlus }: Props) {
+export function RemitoControl({ pedido, onChanged, onConflicto }: Props) {
   const { toast } = useToast()
   const base = `/api/admin/pedidos/${pedido.id}/remito`
 
@@ -157,8 +156,6 @@ export function RemitoControl({ pedido, onChanged, onConflicto, esAdminPlus }: P
     toast({ title: r.mensaje, tone: "danger" })
     if (r.tipo === "conflicto") onConflicto()
   }
-
-  if (!esAdminPlus) return null
 
   if (pedido.remito) {
     return (

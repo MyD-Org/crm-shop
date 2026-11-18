@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
 import { requireSeccion } from "@/lib/admin-route-guard"
+import { exigirAccesoConversacion } from "@/lib/canal-acceso-conversacion"
 import { sendReply } from "@/lib/inbox-api"
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -17,6 +18,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!tenant?.aiTenantId || !tenant?.aiApiUrl) {
     return NextResponse.json({ error: "inbox no configurado" }, { status: 503 })
   }
+
+  // Acceso por canal ANTES de cualquier efecto: ajena o inexistente = el mismo 404.
+  const acceso = await exigirAccesoConversacion(
+    { aiApiUrl: tenant.aiApiUrl, aiTenantId: tenant.aiTenantId }, guard.user, id,
+  )
+  if (!acceso.ok) return acceso.response
 
   // Respuesta citada (opcional): id de la burbuja del hilo a la que se responde.
   const replyTo = typeof body.reply_to_message_id === "string" && body.reply_to_message_id

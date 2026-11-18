@@ -57,9 +57,9 @@ describe("PedidosPestanas: fuente", () => {
     expect(fuente).toContain("AvisosReingresoShell")
   })
 
-  it("la página Pedidos exige admin+ antes de armar las pestañas", () => {
+  it("la página Pedidos exige la sección Pedidos antes de armar las pestañas", () => {
     const pagina = leer("../../../app/admin/(protected)/pedidos/page.tsx")
-    expect(pagina).toContain('roleRank(guard.user.role) < roleRank("admin")) notFound()')
+    expect(pagina).toContain('const guard = await accesoSeccion("pedidos")\n  if (!guard) notFound()')
     expect(pagina).toContain("PedidosPestanas")
   })
 })

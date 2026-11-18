@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { cleanupStale, listAdmin, toAdminDtos } from "@/lib/payment-receipts"
 import { r2Config } from "@/lib/r2"
 
@@ -16,7 +16,7 @@ import { r2Config } from "@/lib/r2"
 const NO_STORE = { "Cache-Control": "private, no-store" }
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "comprobantes")
   if (!guard.ok) return guard.response
 
   const url = new URL(req.url)

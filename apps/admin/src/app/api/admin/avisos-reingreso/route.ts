@@ -1,10 +1,10 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { FILTROS_AVISOS, listarDemandaReingreso, listarInteresadosDe } from "@/lib/avisos-reingreso-repo"
 
 // GET /api/admin/avisos-reingreso?filtro=&start=&limit= — demanda de "Avisarme cuando ingrese" agrupada por
 // producto (avisos pendientes del tenant de la sesión).
 // GET /api/admin/avisos-reingreso?producto=<alegraId> — las personas que esperan ese producto.
-// Sólo lectura, solo admin y superadmin (requireAdminPlus). El tenant sale SÓLO del guard.
+// Sólo lectura, sólo con la sección Pedidos (`requireSeccion`). El tenant sale SÓLO del guard.
 // Convención de /api/admin/carritos: `{items,total}`, errores `{error,code}`, nunca cacheable.
 
 const NO_STORE = { "Cache-Control": "private, no-store" }
@@ -12,7 +12,7 @@ const NO_STORE = { "Cache-Control": "private, no-store" }
 const invalid = (error: string) => Response.json({ error, code: "invalid" }, { status: 400, headers: NO_STORE })
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "pedidos")
   if (!guard.ok) return guard.response
 
   const url = new URL(req.url)

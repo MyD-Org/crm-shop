@@ -8,7 +8,7 @@ import {
   listTaxes,
   type AlegraInvoiceCreateInput,
 } from "@/lib/alegra"
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { contactoInputDelPedido, crearContactoEnCuenta } from "@/lib/contacto-en-cuenta"
 import { asegurarItemsEnCuenta, itemsSinIdEnCuenta, type LineaParaCuenta } from "@/lib/alegra-items-cuenta"
 import {
@@ -70,7 +70,7 @@ import { puedeVerCostos } from "@/lib/secciones"
 // informa en `cuenta.avisoCobro` (campo aparte: `avisos[]` bloquea) y el POST exige
 // `confirmarCuentaDistintaDeCobro: true` (409 `confirmar_cuenta_distinta_de_cobro` si falta).
 //
-// Permiso `requireAdminPlus` en los dos
+// Sección Pedidos (`requireSeccion`) en los dos
 // verbos: emitir crea dinero real e irreversible en Alegra, aunque el GET sólo lea.
 //
 // Concurrencia: dos POST casi simultáneos sobre el mismo pedido no pueden terminar en DOS
@@ -140,7 +140,7 @@ async function configDe(tenantId: string): Promise<TenantConfig | null> {
 type IdParams = { params: Promise<{ id: string }> }
 
 export async function GET(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "pedidos")
   if (!guard.ok) return guard.response
 
   const { id } = await params
@@ -237,7 +237,7 @@ function lineasParaCuenta(items: PedidoItemRow[]): LineaParaCuenta[] {
 }
 
 export async function POST(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "pedidos")
   if (!guard.ok) return guard.response
 
   const body: unknown = await req.json().catch(() => null)

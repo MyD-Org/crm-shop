@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { getGuardedAdminSession } from "@/lib/admin-session"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import {
   CLIENTES_TIENDA_DEFAULT_LIMIT,
   listarClientesTienda,
@@ -13,15 +13,15 @@ export const dynamic = "force-dynamic"
 const ERROR_PAGINA = "No se pudo cargar el listado. Inténtelo de nuevo."
 
 // "Clientes de la tienda": usuarios registrados en el Shop (espejo de Clerk) con su vínculo a
-// Alegra, acceso a Facturación y pedidos. La ven admin y superadmin (igual que
-// `requireAdminPlus` en la API); las acciones del detalle (vincular, desvincular, dar y quitar
-// acceso a Facturación) sólo admin y superadmin: `puedeGestionar` esconde los botones y la
-// autoridad es `requireAdminPlus` en cada API. Sin sesión, el layout protegido
+// Alegra, acceso a Facturación y pedidos. La ve quien tiene la sección
+// (`accesoSeccion`, igual que `requireSeccion` en la API); los botones del detalle (vincular,
+// desvincular, dar y quitar acceso a Facturación) se muestran a admin y superadmin
+// (`puedeGestionar`); la autoridad es `requireSeccion` en cada API. Sin sesión, el layout protegido
 // ya redirigió al login; acá se repite el guard para tener el tenant verificado por host y el
 // rol FRESCO de la base, nunca los de la cookie.
 export default async function ClientesTiendaPage() {
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok || roleRank(guard.user.role) < roleRank("admin")) notFound()
+  const guard = await accesoSeccion("clientes-tienda")
+  if (!guard) notFound()
 
   // Primera página sin filtros, directo del repo (no se le pega a la propia API). Si falla se
   // muestra el aviso y el shell reintenta por la API al montar.

@@ -117,7 +117,7 @@ describe("admin: pedidos del Shop", () => {
   })
 
   // ───────────────────────────── ADM-1: autorización ─────────────────────────────
-  describe("ADM-1: requireAdminPlus", () => {
+  describe("ADM-1: autorización (sección Pedidos, NULL = rol)", () => {
     let pedido: ShopOrderRow
 
     beforeEach(async () => {
@@ -208,11 +208,58 @@ describe("admin: pedidos del Shop", () => {
       expect(await rowById(pedido.id)).toEqual(antes)
     })
 
-    it("requireAdminPlus: operator también ve 404 en /api/admin/comprobantes", async () => {
+    it("operator (sin la sección) también ve 404 en /api/admin/comprobantes", async () => {
       login(operatorA, { cookieRole: "operator" })
       const res = await comprobantesRoute(adminReq("/api/admin/comprobantes"))
       expect(res.status).toBe(404)
       expect(await res.json()).toEqual(NOT_FOUND_BODY)
+    })
+  })
+
+  // ─────────────── Permisos por sección (S2b-i): el gate es la sección, no el rango ───────────────
+  describe("permisos por sección: requireSeccion(\"pedidos\")", () => {
+    let pedido: ShopOrderRow
+
+    beforeEach(async () => {
+      pedido = await seedEn("pendiente")
+    })
+
+    it("un operador con ['inbox','pedidos'] accede a la lista y al detalle (el rango ya no bloquea)", async () => {
+      await getDb().update(adminUsers).set({ seccionesPermitidas: ["inbox", "pedidos"] }).where(eq(adminUsers.id, operatorA))
+      login(operatorA, { cookieRole: "operator" })
+      expect((await list()).status).toBe(200)
+      expect((await detail(pedido.id)).status).toBe(200)
+    })
+
+    it("un admin sin `pedidos` recibe el 404 estándar y no modifica nada", async () => {
+      await getDb().update(adminUsers).set({ seccionesPermitidas: ["catalogo"] }).where(eq(adminUsers.id, adminA))
+      login(adminA)
+      for (const res of [await list(), await detail(pedido.id)]) {
+        expect(res.status).toBe(404)
+        expect(await res.json()).toEqual(NOT_FOUND_BODY)
+      }
+      const antes = await rowById(pedido.id)
+      const res = await patch(pedido.id, { estado: "confirmado", estadoEsperado: "pendiente" })
+      expect(res.status).toBe(404)
+      expect(await rowById(pedido.id)).toEqual(antes)
+      // El mismo admin tampoco entra a Comprobantes si no la tiene.
+      expect((await comprobantesRoute(adminReq("/api/admin/comprobantes"))).status).toBe(404)
+    })
+
+    it("operador con Pedidos: ve costos sólo con `ver_costos` explícito", async () => {
+      await getDb()
+        .insert(catalogProducts)
+        .values({ tenantId: TENANT_A, alegraId: "item-1", name: "Lámpara A", stock: "7", raw: { id: "item-1", inventory: { unitCost: 277.9 } } })
+      await seedShopOrderItem(pedido.id, { name: "Lámpara A", alegraItemId: "item-1", qty: "1.000" })
+      login(operatorA, { cookieRole: "operator" })
+
+      await getDb().update(adminUsers).set({ seccionesPermitidas: ["inbox", "pedidos"], verCostos: null }).where(eq(adminUsers.id, operatorA))
+      let [item] = (await (await detail(pedido.id)).json()).items
+      expect(item).not.toHaveProperty("costoUnitario")
+
+      await getDb().update(adminUsers).set({ verCostos: true }).where(eq(adminUsers.id, operatorA))
+      ;[item] = (await (await detail(pedido.id)).json()).items
+      expect(item).toMatchObject({ costoUnitario: 277.9 })
     })
   })
 

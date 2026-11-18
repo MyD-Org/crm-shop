@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { extFor } from "@/lib/receipt-file"
 import { getAdmin } from "@/lib/payment-receipts"
 import { getR2 } from "@/lib/r2"
@@ -13,7 +13,7 @@ import { GET_URL_TTL_SECONDS } from "@/lib/receipt-validation"
 type IdParams = { params: Promise<{ id: string }> }
 
 export async function GET(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "comprobantes")
   if (!guard.ok) return guard.response
 
   const { id } = await params

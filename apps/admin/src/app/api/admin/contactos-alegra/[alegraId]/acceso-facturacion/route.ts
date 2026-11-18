@@ -1,8 +1,8 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { ALEGRA_ID_RE, otorgarAcceso, quitarAcceso, type OtorgarResult } from "@/lib/clientes-tienda-acciones"
 
 // Excepción de acceso a Facturación de Mi cuenta del Shop, por CONTACTO de Alegra (empresa).
-// Sólo admin y superadmin (`requireAdminPlus`; un operador recibe su 404, igual que un id
+// Sólo con la sección Clientes de la tienda (`requireSeccion`; sin ella, el mismo 404 que un id
 // inexistente). La regla que ve el Shop es `alegra_contacts_shop.acceso_facturacion` (0039).
 //
 //   POST   /api/admin/contactos-alegra/[alegraId]/acceso-facturacion → excepción vigente con
@@ -32,7 +32,7 @@ function logError(accion: string, tenant: string, err: unknown) {
 }
 
 export async function POST(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "clientes-tienda")
   if (!guard.ok) return guard.response
 
   const { alegraId } = await params
@@ -52,7 +52,7 @@ export async function POST(req: Request, { params }: Params) {
 }
 
 export async function DELETE(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "clientes-tienda")
   if (!guard.ok) return guard.response
 
   const { alegraId } = await params

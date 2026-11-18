@@ -41,7 +41,6 @@ const GUARDS = [
   /\brequireAdminPlus\b/,
   /\brequireOperatorPlus\b/,
   /\brequireSucursalesAccess\b/,
-  /\brequireComprasAccess\b/,
   /\baccesoCompras\b/, // páginas de Compras: wrapper de accesoSeccion("compras") (lib/compras-acceso.ts)
   /\brequireCorreoAdmin\b/,
   /\brequireCorreoLector\b/,
@@ -100,7 +99,9 @@ const MAPA: Record<string, Entrada> = {
   [`${API}avisos-reingreso`]: { secciones: ["pedidos"] },
   [`${API}pagos-intentos`]: { secciones: ["pedidos"] },
   [`${API}comprobantes`]: { secciones: ["comprobantes"] },
-  [`${API}settings/receipts`]: { secciones: ["comprobantes"] },
+  // El único consumidor es ReceiptsEmailForm, dentro de Sucursales (mail de respaldo de avisos):
+  // se admite también Comprobantes porque el dato es el destino de sus avisos.
+  [`${API}settings/receipts`]: { secciones: ["sucursales", "comprobantes"] },
   [`${API}compras`]: { secciones: ["compras"] },
   // --- API: Datos
   [`${API}catalogo`]: { secciones: ["catalogo"] },
@@ -112,10 +113,13 @@ const MAPA: Record<string, Entrada> = {
   [`${API}cuentas-bancarias-shop`]: { secciones: ["cuotas"] },
   [`${API}modalidades-sin-stock`]: { secciones: ["catalogo", "envios"] },
   [`${API}clientes-tienda`]: { secciones: ["clientes-tienda"] },
-  [`${API}contactos-alegra`]: { secciones: ["clientes-tienda", "pedidos"] },
+  // Consumidores: VincularContacto y ClienteTiendaDetalle (sólo Clientes de la tienda); Pedidos no
+  // las usa, así que no se admite (S2b-i, 2b.0).
+  [`${API}contactos-alegra`]: { secciones: ["clientes-tienda"] },
   [`${API}sucursales`]: { secciones: ["sucursales"] },
   [`${API}sucursales/zonas`]: { secciones: ["sucursales", "envios"] },
-  [`${API}alegra-cuentas`]: { secciones: ["sucursales", "compras", "catalogo", "pedidos", "comprobantes"] },
+  // Único consumidor del GET: SucursalesTab (S2b-i, 2b.0). Se migra en S2b-iii.
+  [`${API}alegra-cuentas`]: { secciones: ["sucursales"] },
   [`${API}reglas-venta`]: { secciones: ["sucursales"] },
   [`${API}envios`]: { secciones: ["envios"] },
   [`${API}despacho`]: { secciones: ["envios"] },
@@ -160,19 +164,6 @@ const MAPA: Record<string, Entrada> = {
 // Carpetas de sección que todavía usan los guards de rol viejos (comportamiento idéntico con las
 // columnas NULL). Exentas de la regla 2; cada PR de S2b achica la lista y el último la vacía.
 const CARPETAS_PENDIENTES: string[] = [
-  // S2b-i
-  `${API}pedidos`,
-  `${API}carritos`,
-  `${API}avisos-reingreso`,
-  `${API}pagos-intentos`,
-  `${API}comprobantes`,
-  `${API}settings/receipts`,
-  `${API}compras`,
-  `${API}clientes-tienda`,
-  `${API}contactos-alegra`,
-  `${PAGINAS}pedidos`,
-  `${PAGINAS}comprobantes`,
-  `${PAGINAS}clientes-tienda`,
   // S2b-ii
   `${API}catalogo`,
   `${API}catalog`,

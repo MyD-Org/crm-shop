@@ -4,7 +4,7 @@ import {
   createPayment,
   listOpenInvoicesByContact,
 } from "@/lib/alegra"
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { getAdmin, markLoadedFromAlegra, toAdminDtoConPedido } from "@/lib/payment-receipts"
 import { sinCuentaCorrienteResponse } from "@/lib/receipt-sin-cuenta"
 import { parseLoadBody, validateAllocations } from "@/lib/receipt-alegra-load"
@@ -42,7 +42,7 @@ function badRequest(error: string): Response {
 }
 
 export async function POST(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "comprobantes")
   if (!guard.ok) return guard.response
 
   const now = new Date()

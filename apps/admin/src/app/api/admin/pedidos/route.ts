@@ -1,11 +1,11 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { listarSucursales } from "@/lib/sucursales-repo"
 import { enriquecerConContacto } from "@/lib/pedidos-contacto-repo"
 import { listarPedidos, TABLERO_MAX_LIMIT, toPedidoDto, type Cola } from "@/lib/pedidos-repo"
 import { esEstadoPedido, type EstadoPedido } from "@/lib/pedidos-transiciones"
 
 // GET /api/admin/pedidos?estado=&q=&entrega=&pago=&cola=&sucursal=&start=&limit=&vista= — pedidos del Shop
-// del tenant de la sesión. Solo admin y superadmin (requireAdminPlus). El tenant sale SÓLO
+// del tenant de la sesión. Sólo con la sección Pedidos (`requireSeccion`). El tenant sale SÓLO
 // del guard: cualquier `tenantId` que venga en la query se ignora.
 //
 // `colas` viaja SIEMPRE en la respuesta (una foto sin los filtros de arriba: "cuánto falta" en
@@ -25,7 +25,7 @@ const COLAS = ["sin_confirmar", "pago", "datos", "sin_factura", "sin_contactar"]
 const invalid = (error: string) => Response.json({ error, code: "invalid" }, { status: 400, headers: NO_STORE })
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "pedidos")
   if (!guard.ok) return guard.response
 
   const url = new URL(req.url)

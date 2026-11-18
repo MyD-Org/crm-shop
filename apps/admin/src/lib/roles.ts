@@ -6,7 +6,7 @@
 // es superadmin: solo el dueño puede otorgar ese rol o actuar sobre quien lo tiene, porque
 // es el que da acceso al catálogo, al gasto y a los topes.
 //  - compras:    rol lateral, FUERA del ranking: sólo accede al módulo Compras (allow-list). Ver
-//                `esRolCompras` y `requireComprasAccess`.
+//                `esRolCompras` y la política de `lib/secciones.ts` (`requireSeccion(req, "compras")`).
 export type AdminRole = "operator" | "admin" | "superadmin" | "compras"
 
 // Ranking de los tres roles jerárquicos. "compras" NO está acá a propósito: así queda fuera de

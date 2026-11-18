@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import {
   CARRITOS_Q_MAX,
   DIAS_ANTIGUEDAD,
@@ -9,7 +9,7 @@ import {
 
 // GET /api/admin/carritos?horas=&dias=&pedido=&q=&start=&limit= — carritos abandonados del tenant de la
 // sesión (compradores con sesión, con ítems y sin actividad hace N horas), con monto referencial y la
-// marca de pedido pendiente de pago en línea. Sólo lectura, solo admin y superadmin (requireAdminPlus).
+// marca de pedido pendiente de pago en línea. Sólo lectura, sólo con la sección Pedidos (`requireSeccion`).
 // El tenant sale SÓLO del guard. Convención de /api/admin/pedidos: `{items,total}`, `start`/`limit`,
 // errores `{error,code}`, nunca cacheable.
 
@@ -25,7 +25,7 @@ function entero(valor: string | null, validos: readonly number[]): number | null
 }
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "pedidos")
   if (!guard.ok) return guard.response
 
   const url = new URL(req.url)

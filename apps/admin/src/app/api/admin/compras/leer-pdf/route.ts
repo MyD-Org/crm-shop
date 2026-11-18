@@ -1,4 +1,4 @@
-import { requireComprasAccess } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { parearItemEnCuentaPorCodigo } from "@/lib/alegra-items-cuenta"
 import { configAlegraDeCuenta, cuentaActivaPorSlug, MSG_CUENTA_NO_EXISTE } from "@/lib/compras-config-repo"
 import { fail, ok, responderError } from "@/lib/compras-http"
@@ -25,7 +25,7 @@ export const maxDuration = 60
 const MAX_BYTES = 10 * 1024 * 1024
 
 export async function POST(req: Request) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
 
   let form: FormData

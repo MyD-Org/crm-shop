@@ -4,7 +4,8 @@ import { completarLocalidad } from "@/lib/metodos-envio-localidades"
 import { metodoDeBorrador, probarDireccion, probarLocalidad } from "@/lib/metodos-envio-probar"
 import { leerMetodoPuro } from "@/lib/metodos-envio-repo"
 import { validarMetodoEnvio } from "@/lib/metodos-envio-validacion"
-import { noEncontrado, NO_STORE, requireSucursalesAccess } from "@/lib/sucursales-respuestas"
+import { requireSeccion } from "@/lib/admin-route-guard"
+import { noEncontrado, NO_STORE } from "@/lib/sucursales-respuestas"
 
 // POST /api/admin/envios/probar — "Prueba de dirección" del editor de zonas. Corre las MISMAS
 // funciones que decidirán en el Shop (`resolverZona`/`estimarPorLocalidad`/`fechaEntrega`) sobre un
@@ -19,7 +20,7 @@ const invalido = (error: string, campo?: string) =>
   Response.json({ error, code: "invalid", campo }, { status: 400, headers: NO_STORE })
 
 export async function POST(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
 
   const body: unknown = await req.json().catch(() => null)

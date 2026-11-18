@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { requireOperatorPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { dismissMessage } from "@/lib/inbox-api"
 
 // POST /api/admin/inbox/:id/messages/:messageId/dismiss
@@ -10,7 +10,7 @@ import { dismissMessage } from "@/lib/inbox-api"
 // sigue en el thread marcado como cancelado y deja de contar para el flag "Falló envío"
 // del inbox.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string; messageId: string }> }) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireSeccion(req, "inbox")
   if (!guard.ok) return guard.response
 
   const { id, messageId } = await params

@@ -1,12 +1,13 @@
 import { eliminarZona } from "@/lib/sucursales-repo"
-import { errorDeResultado, noEncontrado, NO_STORE, requireSucursalesAccess } from "@/lib/sucursales-respuestas"
+import { requireSeccion } from "@/lib/admin-route-guard"
+import { errorDeResultado, noEncontrado, NO_STORE } from "@/lib/sucursales-respuestas"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 
 // DELETE /api/admin/sucursales/zonas/[clave] — quita la zona de una provincia (`provincia_clave`):
 // desde ese momento rige la sucursal predeterminada. No afecta pedidos ya creados.
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ clave: string }> }) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, ["sucursales", "envios"])
   if (!guard.ok) return guard.response
 
   const { clave } = await params

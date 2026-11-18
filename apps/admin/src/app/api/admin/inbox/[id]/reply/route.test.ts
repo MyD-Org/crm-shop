@@ -10,7 +10,7 @@ const state = vi.hoisted(() => ({
 }))
 
 vi.mock("@/lib/admin-route-guard", () => ({
-  requireOperatorPlus: async () => ({ ok: true, tenantId: "tenant-a", user: { id: "yo", role: "operator" } }),
+  requireSeccion: async () => ({ ok: true, tenantId: "tenant-a", user: { id: "yo", role: "operator" } }),
 }))
 
 vi.mock("@/db", () => ({

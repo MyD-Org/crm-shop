@@ -2,13 +2,13 @@ import { NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { requireOperatorPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { retryMessage } from "@/lib/inbox-api"
 
 // POST /api/admin/inbox/:id/messages/:messageId/retry
 // Reintenta la entrega al canal de una burbuja saliente que quedó "no entregada".
 export async function POST(req: Request, { params }: { params: Promise<{ id: string; messageId: string }> }) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireSeccion(req, "inbox")
   if (!guard.ok) return guard.response
 
   const { id, messageId } = await params

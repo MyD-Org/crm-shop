@@ -1,5 +1,6 @@
 import { guardarZona, listarZonas, toZonaDto } from "@/lib/sucursales-repo"
-import { errorDeResultado, NO_STORE, noEncontrado, requireSucursalesAccess } from "@/lib/sucursales-respuestas"
+import { requireSeccion } from "@/lib/admin-route-guard"
+import { errorDeResultado, NO_STORE, noEncontrado } from "@/lib/sucursales-respuestas"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 
 // GET  /api/admin/sucursales/zonas — zonas (provincia -> sucursal) del tenant.
@@ -7,14 +8,14 @@ import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 //      { provincia, sucursal, facturaSucursal? }. Los pedidos ya creados no cambian.
 
 export async function GET(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, ["sucursales", "envios"])
   if (!guard.ok) return guard.response
   const zonas = await listarZonas(guard.tenantId)
   return Response.json({ zonas: zonas.map(toZonaDto) }, { headers: NO_STORE })
 }
 
 export async function PUT(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, ["sucursales", "envios"])
   if (!guard.ok) return guard.response
 
   const body = await req.json().catch(() => null)

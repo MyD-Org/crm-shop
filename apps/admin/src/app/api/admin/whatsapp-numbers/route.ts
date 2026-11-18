@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { requireOperatorPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { listWhatsappNumbersRaw } from "@/lib/inbox-api"
 import { esRestringido, filtrarNumerosRaw } from "@/lib/canal-acceso"
 
@@ -12,7 +12,7 @@ import { esRestringido, filtrarNumerosRaw } from "@/lib/canal-acceso"
 // A diferencia de las plantillas, acá alcanza con staff: no expone credenciales ni crea
 // nada en Meta, solo lista lo que ya está configurado.
 export async function GET(req: Request) {
-  const guard = await requireOperatorPlus(req)
+  const guard = await requireSeccion(req, "inbox")
   if (!guard.ok) return guard.response
 
   const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, guard.tenantId))

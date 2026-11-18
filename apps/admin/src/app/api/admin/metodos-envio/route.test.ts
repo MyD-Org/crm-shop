@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 
 /**
- * /api/admin/metodos-envio (+ /[id]): guard (401/403), validación (400, mensajes en usted), conflicto
+ * /api/admin/metodos-envio (+ /[id]): guard (401/404), validación (400, mensajes en usted), conflicto
  * (409) y éxito con el aviso al Shop. El repo, el guard y las consultas a Georef/Nominatim se
  * simulan: la DB real se cubre en test/integration/metodos-envio-repo.integration.test.ts.
  */
 
 const state = vi.hoisted(() => ({
-  guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "operator" } } as Record<string, unknown>,
+  guarded: { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } } as Record<string, unknown>,
   ping: 0,
   pingTenants: [] as string[],
   llamadas: [] as unknown[][],
@@ -71,7 +71,7 @@ const req = (method: string, body?: unknown) =>
 const ctx = (id = ID) => ({ params: Promise.resolve({ id }) })
 
 beforeEach(() => {
-  state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "operator" } }
+  state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } }
   state.ping = 0
   state.pingTenants = []
   state.llamadas = []
@@ -93,11 +93,11 @@ describe("guard", () => {
     expect(state.ping).toBe(0)
   })
 
-  it("rol desconocido → 403", async () => {
+  it("rol desconocido → 404", async () => {
     state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "X", email: "x@cliente.example", role: "visitante" } }
     const { POST } = await import("@/app/api/admin/metodos-envio/route")
     const res = await POST(req("POST", cuerpo()))
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(404)
     expect(state.llamadas).toEqual([])
   })
 })

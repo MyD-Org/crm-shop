@@ -5,7 +5,7 @@ import { getDb } from "@/db"
 import { adminUsers, catalogProducts } from "@/db/schema"
 import { seedOperator, seedTenant, truncateAll } from "./helpers"
 
-// Permisos por sección, S2b-ii (catálogo y tienda). DB real (crm_test), guard real
+// Permisos por sección, S2b-ii (catálogo y tienda) y S2b-iii (sucursales, envíos y mensajes). DB real (crm_test), guard real
 // (`requireSeccion`): rol y secciones salen de la FILA de admin_users, no de la cookie.
 //
 // Protege:
@@ -31,6 +31,14 @@ const productos = await import("@/app/api/admin/catalogo/productos/route")
 const producto = await import("@/app/api/admin/catalogo/productos/[alegraId]/route")
 const mediosPago = await import("@/app/api/admin/medios-pago-shop/route")
 const modalidades = await import("@/app/api/admin/modalidades-sin-stock/route")
+const sucursalesRuta = await import("@/app/api/admin/sucursales/route")
+const sucursalRuta = await import("@/app/api/admin/sucursales/[slug]/route")
+const zonasRuta = await import("@/app/api/admin/sucursales/zonas/route")
+const alegraCuentas = await import("@/app/api/admin/alegra-cuentas/route")
+const reglasVenta = await import("@/app/api/admin/reglas-venta/route")
+const enviosRuta = await import("@/app/api/admin/envios/route")
+const metodosEnvio = await import("@/app/api/admin/metodos-envio/route")
+const inboxCanales = await import("@/app/api/admin/inbox/canales/route")
 
 const TENANT_A = "tenant-a"
 const NOT_FOUND_BODY = { error: "No encontrado", code: "not_found" }
@@ -120,5 +128,75 @@ describe("permisos por sección — catálogo y tienda (S2b-ii)", () => {
     login(admin, "admin")
     await esNotFound(await productos.GET(req("/api/admin/catalogo/productos")))
     await esNotFound(await modalidades.GET(req("/api/admin/modalidades-sin-stock")))
+  })
+})
+
+describe("permisos por sección — sucursales, envíos y mensajes (S2b-iii)", () => {
+  const slug = (s: string) => ({ params: Promise.resolve({ slug: s }) })
+
+  beforeEach(async () => {
+    await truncateAll()
+    await seedTenant(TENANT_A)
+    admin = await seedOperator(TENANT_A, { role: "admin", email: "admin@cliente.example" })
+    operador = await seedOperator(TENANT_A, { role: "operator", email: "op@cliente.example" })
+  })
+
+  afterAll(async () => {
+    await truncateAll()
+  })
+
+  it("con columnas NULL: admin entra; el operador sólo a Mensajes (los nombres de canal los lee, no los edita)", async () => {
+    login(admin, "admin")
+    expect((await sucursalesRuta.GET(req("/api/admin/sucursales"))).status).toBe(200)
+    expect((await reglasVenta.GET(req("/api/admin/reglas-venta"))).status).toBe(200)
+    expect((await enviosRuta.GET(req("/api/admin/envios"))).status).toBe(200)
+    expect((await alegraCuentas.GET(req("/api/admin/alegra-cuentas"))).status).toBe(200)
+    expect((await inboxCanales.GET(req("/api/admin/inbox/canales"))).status).toBe(200)
+
+    login(operador, "operator")
+    // Antes 200 (requireSucursalesAccess era operador o superior): ahora 404, como la página.
+    await esNotFound(await sucursalesRuta.GET(req("/api/admin/sucursales")))
+    await esNotFound(await reglasVenta.GET(req("/api/admin/reglas-venta")))
+    await esNotFound(await enviosRuta.GET(req("/api/admin/envios")))
+    await esNotFound(await alegraCuentas.GET(req("/api/admin/alegra-cuentas")))
+    expect((await inboxCanales.GET(req("/api/admin/inbox/canales"))).status).toBe(200)
+    await esNotFound(await inboxCanales.PUT(req("/api/admin/inbox/canales", { method: "PUT", body: { nombres: {} } })))
+  })
+
+  it("admin con Pagos y cuotas: lee el listado de sucursales (cuentas bancarias) pero no da altas ni ve Alegra ni Envíos", async () => {
+    await secciones(admin, ["cuotas"])
+    login(admin, "admin")
+    expect((await sucursalesRuta.GET(req("/api/admin/sucursales"))).status).toBe(200)
+    await esNotFound(await sucursalesRuta.POST(req("/api/admin/sucursales", { body: { slug: "aaa", nombre: "Aaa" } })))
+    await esNotFound(await alegraCuentas.GET(req("/api/admin/alegra-cuentas")))
+    await esNotFound(await enviosRuta.GET(req("/api/admin/envios")))
+    await esNotFound(await zonasRuta.GET(req("/api/admin/sucursales/zonas")))
+  })
+
+  it("admin con Envíos y sin Sucursales: lee sucursales, zonas y reglas; sólo escribe los campos de Envíos", async () => {
+    await secciones(admin, ["envios"])
+    login(admin, "admin")
+    expect((await sucursalesRuta.GET(req("/api/admin/sucursales"))).status).toBe(200)
+    expect((await zonasRuta.GET(req("/api/admin/sucursales/zonas"))).status).toBe(200)
+    expect((await reglasVenta.GET(req("/api/admin/reglas-venta"))).status).toBe(200)
+    expect((await metodosEnvio.GET(req("/api/admin/metodos-envio"))).status).toBe(200)
+    await esNotFound(await reglasVenta.PUT(req("/api/admin/reglas-venta", { method: "PUT", body: { reservaDias: 3 } })))
+    await esNotFound(
+      await sucursalRuta.PATCH(req("/api/admin/sucursales/aaa", { method: "PATCH", body: { nombre: "Otro" } }), slug("aaa")),
+    )
+    await esNotFound(await sucursalRuta.DELETE(req("/api/admin/sucursales/aaa", { method: "DELETE" }), slug("aaa")))
+    await esNotFound(await alegraCuentas.GET(req("/api/admin/alegra-cuentas")))
+  })
+
+  it("admin sin Mensajes no llega a inbox; operador con Pedidos y sin Mensajes tampoco", async () => {
+    await secciones(admin, ["sucursales"])
+    login(admin, "admin")
+    await esNotFound(await inboxCanales.GET(req("/api/admin/inbox/canales")))
+    expect((await sucursalesRuta.GET(req("/api/admin/sucursales"))).status).toBe(200)
+    await esNotFound(await enviosRuta.GET(req("/api/admin/envios")))
+
+    await secciones(operador, ["pedidos"])
+    login(operador, "operator")
+    await esNotFound(await inboxCanales.GET(req("/api/admin/inbox/canales")))
   })
 })

@@ -1,34 +1,22 @@
-import { getGuardedAdminSession } from "@/lib/admin-session"
-import { adminUnauthorizedResponse, type AdminGuardResult } from "@/lib/admin-route-guard"
-import { isKnownAdminRole } from "@/lib/roles"
+import { puedeVerSeccion, type ActorSecciones } from "@/lib/secciones"
 import type { ResultadoBorrado, ResultadoSucursal, ResultadoZona } from "@/lib/sucursales-repo"
 
-// Guard y respuestas de /api/admin/sucursales/*. Operador o superior (spec "Permiso"): 401 sin
-// sesión, 403 en usted con un rol que no existe. El tenant sale SOLO del guard.
+// Respuestas de /api/admin/sucursales/*, reglas-venta, envíos, despacho y métodos de envío. El
+// guard es `requireSeccion` (change `permisos-por-seccion`): 401 sin sesión, 404 sin la sección.
+// El tenant sale SOLO del guard.
 
 export const NO_STORE = { "Cache-Control": "private, no-store" }
 
 /**
- * @deprecated permisos-por-seccion: sus rutas migran a `requireSeccion` (S2b) y este guard se borra.
- * No usar en rutas nuevas.
+ * Rutas de Sucursales que también escribe la sección Envíos (EnviosSucursalesCard): quien entra
+ * sólo por Envíos puede tocar únicamente los campos que esa tarjeta edita. true = el cuerpo trae
+ * otro campo y hay que rechazarlo (404, como si no tuviera la sección). Un cuerpo que no es objeto
+ * lo rechaza después la validación del repo.
  */
-export async function requireSucursalesAccess(req: Request): Promise<AdminGuardResult> {
-  const guarded = await getGuardedAdminSession(req)
-  if (!guarded.ok) {
-    console.warn(`[sucursales-guard] request rechazado: ${guarded.reason}`)
-    return { ok: false, response: adminUnauthorizedResponse() }
-  }
-  // Rol de la fila fresca (no el de la cookie), con lista explícita de roles conocidos.
-  if (!isKnownAdminRole(guarded.user.role)) {
-    return {
-      ok: false,
-      response: Response.json(
-        { error: "No tiene permiso para administrar las sucursales.", code: "forbidden" },
-        { status: 403, headers: NO_STORE },
-      ),
-    }
-  }
-  return { ok: true, tenantId: guarded.tenantId, user: guarded.user }
+export function excedeCamposDeEnvios(user: ActorSecciones, body: unknown, permitidos: readonly string[]): boolean {
+  if (puedeVerSeccion(user, "sucursales")) return false
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false
+  return Object.keys(body).some((k) => !permitidos.includes(k))
 }
 
 export function noEncontrado(): Response {

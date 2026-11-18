@@ -1,12 +1,13 @@
-import { NO_STORE, requireSucursalesAccess } from "@/lib/sucursales-respuestas"
+import { requireSeccion } from "@/lib/admin-route-guard"
+import { NO_STORE } from "@/lib/sucursales-respuestas"
 import { buscarLocalidades, etiquetaLocalidad, GeorefError } from "@/lib/georef"
 
 // GET /api/admin/envios/localidades?q=... — busca localidades en Georef para el selector de
 // "Ciudades de envío". Con menos de 4 caracteres devuelve lista vacía. 502 si Georef falla.
-// Mismo guard que el resto de Envíos (operador o superior).
+// Sección Envíos, como el resto de sus rutas.
 
 export async function GET(req: Request) {
-  const guard = await requireSucursalesAccess(req)
+  const guard = await requireSeccion(req, "envios")
   if (!guard.ok) return guard.response
 
   const q = new URL(req.url).searchParams.get("q") ?? ""

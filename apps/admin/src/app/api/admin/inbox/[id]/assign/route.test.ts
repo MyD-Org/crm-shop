@@ -23,7 +23,7 @@ const state = vi.hoisted(() => ({
 }))
 
 vi.mock("@/lib/admin-route-guard", () => ({
-  requireOperatorPlus: async () => {
+  requireSeccion: async () => {
     const s = state.session
     if (!s.userId) return { ok: false, response: Response.json({ error: "No autorizado", code: "unauthorized" }, { status: 401 }) }
     return { ok: true, tenantId: s.tenantId, user: { id: s.userId, name: "Nombre", email: "u@cliente.example", role: "operator" } }

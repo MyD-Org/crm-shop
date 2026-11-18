@@ -1,5 +1,5 @@
 import { listBankAccounts, listOpenInvoicesByContact } from "@/lib/alegra"
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { getAdmin } from "@/lib/payment-receipts"
 import { sinCuentaCorrienteResponse } from "@/lib/receipt-sin-cuenta"
 import { getTenantByIdFromDb } from "@/lib/tenants"
@@ -17,7 +17,7 @@ const NO_STORE = { "Cache-Control": "private, no-store" }
 type IdParams = { params: Promise<{ id: string }> }
 
 export async function GET(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "comprobantes")
   if (!guard.ok) return guard.response
 
   const { id } = await params

@@ -1,4 +1,4 @@
-import { requireComprasAccess } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { cuentaActivaPorSlug } from "@/lib/compras-config-repo"
 import { ESTADOS_COMPRA, type EstadoCompra } from "@/lib/compras-estado"
 import { fail, ok, responderError, toCompraListaDto } from "@/lib/compras-http"
@@ -8,13 +8,13 @@ import { crearCompraDesdeBody } from "@/lib/compras-service"
 // GET  /api/admin/compras — listado (filtros: estado, cuenta=<slug>, q, pagina).
 // POST /api/admin/compras — crea la compra (factura del proveedor) y su bill de tránsito en Alegra.
 //
-// Todo detrás de `requireComprasAccess` (rol «compras», admin o superadmin + flag `compras-en-transito`;
+// Todo detrás de `requireSeccion` (rol «compras», admin o superadmin + flag `compras-en-transito`;
 // con el flag apagado responde 404 sin tocar Alegra). El tenant sale SIEMPRE del guard.
 
 const PAGINA = 25
 
 export async function GET(req: Request) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
 
   const url = new URL(req.url)
@@ -45,7 +45,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
 
   const body: unknown = await req.json().catch(() => null)

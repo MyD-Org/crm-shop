@@ -1,4 +1,4 @@
-import { requireComprasAccess } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { listarAlmacenes, listarCategoriasContables, resolverCategoriaTransito } from "@/lib/alegra-compras"
 import {
   configAlegraDeCuenta,
@@ -19,7 +19,7 @@ import { roleRank } from "@/lib/roles"
 const MSG_SOLO_ADMIN = "Su rol no permite modificar la configuración de Compras."
 
 export async function GET(req: Request) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
 
   const slug = new URL(req.url).searchParams.get("cuenta")?.trim() ?? ""
@@ -55,7 +55,7 @@ export async function GET(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
   if (roleRank(guard.user.role) < roleRank("admin")) return fail(403, "forbidden", MSG_SOLO_ADMIN)
 

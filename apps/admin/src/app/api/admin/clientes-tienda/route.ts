@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import {
   CLIENTES_TIENDA_Q_MAX,
   FILTROS_ACCESO,
@@ -9,7 +9,7 @@ import {
 
 // GET /api/admin/clientes-tienda?q=&vinculo=&acceso=&pedidos=&start=&limit= — usuarios
 // registrados en la tienda del tenant de la sesión, con su vínculo, acceso a Facturación y
-// pedidos. Sólo lectura, solo admin y superadmin (requireAdminPlus). El tenant sale SÓLO del
+// pedidos. Sólo lectura, sólo con la sección Clientes de la tienda (`requireSeccion`). El tenant sale SÓLO del
 // guard. Misma convención que /api/admin/pedidos: `{items,total}`, `start`/`limit`, errores
 // `{error,code}`, nunca cacheable.
 
@@ -24,7 +24,7 @@ function filtro<T extends string>(valor: string | null, validos: readonly T[]): 
 }
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "clientes-tienda")
   if (!guard.ok) return guard.response
 
   const url = new URL(req.url)

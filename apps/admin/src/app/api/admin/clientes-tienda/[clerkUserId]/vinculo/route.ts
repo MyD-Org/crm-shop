@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import {
   ALEGRA_ID_RE,
   CLERK_USER_ID_RE,
@@ -9,14 +9,14 @@ import {
 } from "@/lib/clientes-tienda-acciones"
 
 // Vínculo de un usuario de la tienda con un contacto de Alegra, a mano desde el admin
-// ("Clientes de la tienda"). Sólo admin y superadmin (`requireAdminPlus`).
+// ("Clientes de la tienda"). Sólo con la sección Clientes de la tienda (`requireSeccion`).
 //
 //   POST   /api/admin/clientes-tienda/[clerkUserId]/vinculo  body {alegraContactId}
 //          → vínculo activo, metodo 'operador', con quién y cuándo. 200 {cambio, razonSocial}.
 //   DELETE /api/admin/clientes-tienda/[clerkUserId]/vinculo
 //          → el activo pasa a 'revocada' (nunca se borra). 200 {cambio}.
 //
-// Un operador recibe el MISMO 404 que devuelve `requireAdminPlus` en todas las rutas admin
+// Sin la sección se recibe el MISMO 404 que devuelve `requireSeccion` en todas las rutas admin
 // nuevas (cuerpo idéntico al de un id inexistente: no hay oráculo de existencia ni de permisos).
 // Usuario con formato inválido, inexistente, eliminado o de otro tenant ⇒ ese mismo 404.
 
@@ -45,7 +45,7 @@ function logError(accion: string, tenant: string, err: unknown) {
 }
 
 export async function POST(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "clientes-tienda")
   if (!guard.ok) return guard.response
 
   const { clerkUserId } = await params
@@ -75,7 +75,7 @@ export async function POST(req: Request, { params }: Params) {
 }
 
 export async function DELETE(req: Request, { params }: Params) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "clientes-tienda")
   if (!guard.ok) return guard.response
 
   const { clerkUserId } = await params

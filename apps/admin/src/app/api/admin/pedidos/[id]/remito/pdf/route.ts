@@ -1,4 +1,4 @@
-import { requireAdminPlus, adminNotFoundResponse } from "@/lib/admin-route-guard"
+import { requireSeccion, adminNotFoundResponse } from "@/lib/admin-route-guard"
 import { getDocumentPdf } from "@/lib/alegra"
 import { getPedido } from "@/lib/pedidos-repo"
 import { configAlegraDelPedido } from "@/lib/pedido-cuenta-alegra"
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic"
 type IdParams = { params: Promise<{ id: string }> }
 
 export async function GET(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "pedidos")
   if (!guard.ok) return guard.response
 
   const { id } = await params

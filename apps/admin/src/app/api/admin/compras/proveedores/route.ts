@@ -1,4 +1,4 @@
-import { requireComprasAccess } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { configAlegraDeCuenta, cuentaActivaPorSlug, MSG_CUENTA_NO_EXISTE } from "@/lib/compras-config-repo"
 import { fail, ok, responderError } from "@/lib/compras-http"
 import { buscarProveedores } from "@/lib/compras-proveedores-repo"
@@ -7,7 +7,7 @@ import { buscarProveedores } from "@/lib/compras-proveedores-repo"
 // (espejo de contactos; si el espejo de la cuenta está vacío, lectura en vivo con aviso).
 
 export async function GET(req: Request) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
 
   const url = new URL(req.url)

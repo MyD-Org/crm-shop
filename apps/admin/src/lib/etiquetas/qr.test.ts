@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { matrizQr, urlProductoQr } from "./qr"
+import { matrizQr, rotuloTienda, tiendaDelQr, urlProductoQr } from "./qr"
 import { CELDAS_POR_HOJA, layoutQr6, QR6, type ItemEtiqueta } from "./trabajos"
 
 const SHOP = "https://tienda.cliente.example/"
@@ -73,5 +73,32 @@ describe("layoutQr6", () => {
       ok: false,
       mensaje: "No se puede armar el código QR porque la tienda no tiene dirección web.",
     })
+  })
+})
+
+describe("tienda del QR (varias tiendas en el mismo tenant)", () => {
+  const tiendas = [
+    { etiqueta: "Tienda principal", url: "https://tienda.cliente.example" },
+    { etiqueta: "Segunda tienda", url: "https://otra.cliente.example" },
+  ]
+
+  it("sin elección → la principal; elegida válida → esa; elegida que ya no está → la principal", () => {
+    expect(tiendaDelQr(tiendas, null)).toBe("https://tienda.cliente.example")
+    expect(tiendaDelQr(tiendas, "https://otra.cliente.example")).toBe("https://otra.cliente.example")
+    expect(tiendaDelQr(tiendas, "https://vieja.cliente.example")).toBe("https://tienda.cliente.example")
+    expect(tiendaDelQr([], "https://otra.cliente.example")).toBeNull()
+  })
+
+  it("el QR y el host impreso siguen a la tienda elegida", () => {
+    const l = layoutQr6(items(1), tiendaDelQr(tiendas, "https://otra.cliente.example"))
+    expect(l.ok).toBe(true)
+    if (!l.ok) return
+    const celda = l.hojas[0].celdas[0]
+    expect(celda).toMatchObject({ url: "https://otra.cliente.example/producto/1", web: "otra.cliente.example" })
+  })
+
+  it("rótulo de la opción: etiqueta y host", () => {
+    expect(rotuloTienda(tiendas[1])).toBe("Segunda tienda (otra.cliente.example)")
+    expect(rotuloTienda({ etiqueta: " ", url: "https://otra.cliente.example" })).toBe("otra.cliente.example")
   })
 })

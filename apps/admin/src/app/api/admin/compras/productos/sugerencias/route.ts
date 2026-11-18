@@ -1,4 +1,4 @@
-import { requireComprasAccess } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import { cuentaActivaPorSlug, MSG_CUENTA_NO_EXISTE } from "@/lib/compras-config-repo"
 import { fail, ok, responderError } from "@/lib/compras-http"
 import { sugerenciasAlta } from "@/lib/compras-producto-sugerencias-repo"
@@ -8,7 +8,7 @@ import { sugerenciasAlta } from "@/lib/compras-producto-sugerencias-repo"
 // las compras previas del proveedor. Sólo lectura. Guard: rol «compras» o admin+.
 
 export async function GET(req: Request) {
-  const guard = await requireComprasAccess(req)
+  const guard = await requireSeccion(req, "compras")
   if (!guard.ok) return guard.response
   const url = new URL(req.url)
   const slug = url.searchParams.get("cuenta")?.trim() ?? ""

@@ -11,7 +11,6 @@ vi.mock("@/lib/admin-session", () => ({
 import {
   configurarFlagCompras,
   requireAdminPlus,
-  requireComprasAccess,
   requireOperatorPlus,
   requireSeccion,
 } from "./admin-route-guard"
@@ -21,7 +20,7 @@ function comoRol(role: string) {
 }
 const req = new Request("http://localhost/api/admin/compras")
 
-describe("requireComprasAccess", () => {
+describe("requireSeccion(\"compras\") (reemplaza a requireComprasAccess)", () => {
   beforeEach(() => {
     configurarFlagCompras(async () => true)
   })
@@ -29,7 +28,7 @@ describe("requireComprasAccess", () => {
   it("compras y admin/superadmin pasan", async () => {
     for (const role of ["compras", "admin", "superadmin"]) {
       comoRol(role)
-      const r = await requireComprasAccess(req)
+      const r = await requireSeccion(req, "compras")
       expect(r.ok, role).toBe(true)
     }
   })
@@ -37,7 +36,7 @@ describe("requireComprasAccess", () => {
   it("operator -> 404 uniforme; rol desconocido -> 404", async () => {
     for (const role of ["operator", "viewer", ""]) {
       comoRol(role)
-      const r = await requireComprasAccess(req)
+      const r = await requireSeccion(req, "compras")
       expect(r.ok, role).toBe(false)
       if (!r.ok) {
         expect(r.response.status).toBe(404)
@@ -48,7 +47,7 @@ describe("requireComprasAccess", () => {
 
   it("sin sesión -> 401", async () => {
     state.guarded = { ok: false, reason: "no-session" }
-    const r = await requireComprasAccess(req)
+    const r = await requireSeccion(req, "compras")
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.response.status).toBe(401)
   })
@@ -56,7 +55,7 @@ describe("requireComprasAccess", () => {
   it("flag apagado -> 404 incluso para admin", async () => {
     configurarFlagCompras(async () => false)
     comoRol("admin")
-    const r = await requireComprasAccess(req)
+    const r = await requireSeccion(req, "compras")
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.response.status).toBe(404)
   })

@@ -1,4 +1,4 @@
-import { requireAdminPlus } from "@/lib/admin-route-guard"
+import { requireSeccion } from "@/lib/admin-route-guard"
 import {
   CUENTA_RE,
   DIAS_VENTANA,
@@ -10,7 +10,7 @@ import {
 
 // GET /api/admin/pagos-intentos?dias=&proveedor=&cuenta=&clase=&q=&start=&limit= — intentos de cobro
 // en línea del tenant de la sesión (más los pedidos por transferencia/efectivo, que no tienen intento),
-// con la causa de la falla. Sólo lectura, solo admin y superadmin (requireAdminPlus): `error_proveedor`
+// con la causa de la falla. Sólo lectura, sólo con la sección Pedidos (`requireSeccion`): `error_proveedor`
 // es diagnóstico interno. El tenant sale SÓLO del guard. Convención de /api/admin/pedidos:
 // `{items,total}`, `start`/`limit`, errores `{error,code}`, nunca cacheable.
 
@@ -25,7 +25,7 @@ function filtro<T extends string>(valor: string | null, validos: readonly T[]): 
 }
 
 export async function GET(req: Request) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "pedidos")
   if (!guard.ok) return guard.response
 
   const url = new URL(req.url)

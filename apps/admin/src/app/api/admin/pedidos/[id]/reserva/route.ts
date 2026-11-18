@@ -1,4 +1,4 @@
-import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
+import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { extenderReserva } from "@/lib/pedidos-reserva-repo"
 
 // POST /api/admin/pedidos/[id]/reserva → "Extender reserva" de un pendiente sin pago: corre el
@@ -14,7 +14,7 @@ const fail = (status: number, code: string, error: string) =>
   Response.json({ error, code }, { status, headers: NO_STORE })
 
 export async function POST(req: Request, { params }: IdParams) {
-  const guard = await requireAdminPlus(req)
+  const guard = await requireSeccion(req, "pedidos")
   if (!guard.ok) return guard.response
   const { id } = await params
   try {

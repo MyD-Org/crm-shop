@@ -1,19 +1,18 @@
 import { notFound } from "next/navigation"
-import { getGuardedAdminSession } from "@/lib/admin-session"
+import { accesoSeccion } from "@/lib/secciones-acceso"
 import { PEDIDOS_DEFAULT_LIMIT, listarPedidos, toPedidoDto } from "@/lib/pedidos-repo"
-import { roleRank } from "@/lib/roles"
 import { listarSucursales } from "@/lib/sucursales-repo"
 import { PedidosPestanas } from "@/components/admin/pedidos/PedidosPestanas"
 import { PedidosShell } from "@/components/admin/pedidos/PedidosShell"
 
 export const dynamic = "force-dynamic"
 
-// Solo admin y superadmin, igual que `requireAdminPlus` en la API; el operador recibe 404. El layout protegido ya
-// corrió el guard y redirige si no hay sesión; acá se repite para tener el tenant verificado
-// por host y el rol FRESCO de la base, nunca los de la cookie.
+// Sección Pedidos (`accesoSeccion`, igual que `requireSeccion` en la API); sin ella, 404. El layout
+// protegido ya corrió el guard y redirige si no hay sesión; acá se repite para tener el tenant
+// verificado por host y el rol y las secciones FRESCOS de la base, nunca los de la cookie.
 export default async function PedidosPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
-  const guard = await getGuardedAdminSession()
-  if (!guard.ok || roleRank(guard.user.role) < roleRank("admin")) notFound()
+  const guard = await accesoSeccion("pedidos")
+  if (!guard) notFound()
 
   const { tab } = await searchParams
 

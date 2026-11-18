@@ -131,7 +131,6 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
   }
 
   const containerRef = useRef<HTMLDivElement>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
   // Compose textarea: el copiloto prefila acá el texto de una budget card ("Enviar al canal").
   const replyRef = useRef<HTMLTextAreaElement>(null)
 
@@ -176,7 +175,9 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
       prependHeight.current = null
       return
     }
-    if (stickBottom.current) bottomRef.current?.scrollIntoView()
+    // scrollTop del contenedor, no scrollIntoView: éste también corre los ancestros (el shell
+    // h-dvh overflow-hidden) y, con zoom del navegador, dejaba el header fuera de pantalla.
+    if (stickBottom.current && el) el.scrollTop = el.scrollHeight
   }, [messages])
 
   async function loadOlder() {
@@ -602,7 +603,6 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
             </div>
           )
         })}
-        <div ref={bottomRef} />
       </div>
 
       {/* Input de respuesta */}

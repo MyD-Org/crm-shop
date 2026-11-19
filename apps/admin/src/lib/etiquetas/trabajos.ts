@@ -222,7 +222,7 @@ export function renglonPrecio(texto: string): RenglonPrecio | null {
 
 /**
  * Renglones de una etiqueta de precio. Con precio del medio destacado menor al de lista: nombre,
- * precio del medio grande, "con <medio>" y "Lista $X". Sin medio (o no más barato una vez
+ * precio del medio grande, "con <medio>" y "$X con otros medios" (como la card de la web). Sin medio (o no más barato una vez
  * redondeado): nombre y el precio de lista grande, sin las dos líneas de abajo (lo más simple y
  * sin repetir el mismo precio). `{ ok: false }` = se omite con ese motivo.
  */
@@ -240,7 +240,8 @@ export function renglonesPrecio(
   ]
   if (c.rotulo && c.lista) {
     renglones.push({ y: PRECIO_Y.medio, fuente: "1", mx: 1, my: 1, texto: textoImprimible(c.rotulo).slice(0, MAX_NOMBRE_PRECIO).trim() })
-    renglones.push({ y: PRECIO_Y.lista, fuente: "2", mx: 1, my: 1, texto: c.lista })
+    // Fuente "1": "$45.900 con otros medios" no entra en 232 puntos con la "2".
+    renglones.push({ y: PRECIO_Y.lista, fuente: "1", mx: 1, my: 1, texto: c.lista })
   }
   return { ok: true, renglones: renglones.filter((r) => r.texto !== "") }
 }
@@ -252,7 +253,7 @@ export type ContenidoPrecio =
 
 /**
  * Qué dice una etiqueta de precio. Con precio del medio destacado menor al de lista (ya
- * redondeados): el del medio grande, "con transferencia" (rótulo en minúscula) y "Lista $X". Sin
+ * redondeados): el del medio grande, "con transferencia" (rótulo en minúscula) y "$X con otros medios" (como la card). Sin
  * medio, o no más barato: sólo el de lista grande (`rotulo` y `lista` null). Sin precio de lista:
  * se omite con el motivo.
  */
@@ -267,7 +268,7 @@ export function contenidoPrecio(precio: PrecioEtiqueta | undefined): ContenidoPr
     ok: true,
     grande: formatoPesos(medio.precio),
     rotulo: (medio.rotulo || `con ${medio.nombre}`).toLowerCase(),
-    lista: `Lista ${lista}`,
+    lista: `${lista} con otros medios`,
   }
 }
 
@@ -460,7 +461,7 @@ export interface CeldaPrecio {
   grande: string
   /** "con transferencia"; null = sin medio (sólo el precio de lista). */
   rotulo: string | null
-  /** "Lista $45.900"; null = sin medio. */
+  /** "$45.900 con otros medios"; null = sin medio. */
   lista: string | null
 }
 

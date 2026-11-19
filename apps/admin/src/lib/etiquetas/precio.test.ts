@@ -56,7 +56,8 @@ describe("trabajoPrecios (precio 29x20, 3 por fila)", () => {
         // 7 caracteres * 32 = 224 → 16 + 4
         'TEXT 20,44,"5",0,1,1,"$41.310"',
         'TEXT 64,96,"1",0,1,1,"con transferencia"',
-        'TEXT 54,116,"2",0,1,1,"Lista $45.900"',
+        // 24 caracteres * 8 = 192 → 16 + 20
+        'TEXT 36,116,"1",0,1,1,"$45.900 con otros medios"',
         "PRINT 1,1",
         "",
       ].join("\r\n"),
@@ -142,7 +143,7 @@ describe("trabajoPrecios (precio 29x20, 3 por fila)", () => {
       ["1", 1, 1, "A"],
       ["4", 1, 2, "$141.310"],
       ["1", 1, 1, "con transferencia"],
-      ["2", 1, 1, "Lista $200.000"],
+      ["1", 1, 1, "$200.000 con otros medios"],
     ])
   })
 })
@@ -153,7 +154,7 @@ describe("contenidoPrecio", () => {
       ok: true,
       grande: "$41.310",
       rotulo: "con transferencia",
-      lista: "Lista $45.900",
+      lista: "$45.900 con otros medios",
     })
   })
   it("sin precio: omitido", () => {
@@ -181,7 +182,7 @@ describe("layoutPrecio4 / trabajoPrecio4 (precio 4 por hoja, 100x150)", () => {
       nombre: "Uno",
       grande: "$41.310",
       rotulo: "con transferencia",
-      lista: "Lista $45.900",
+      lista: "$45.900 con otros medios",
     })
   })
 
@@ -223,29 +224,27 @@ describe("layoutPrecio4 / trabajoPrecio4 (precio 4 por hoja, 100x150)", () => {
 describe("textosCeldaPrecio4 (etiqueta apaisada 600x400 del 4 por hoja)", () => {
   // Medidor simulado: cada carácter mide la mitad del tamaño de fuente.
   const medir = (t: string, px: number) => t.length * px * 0.5
-  const celda = { nombre: "Lámpara LED 9W", grande: "$41.310", rotulo: "con transferencia", lista: "Lista $45.900" }
+  const celda = { nombre: "Lámpara LED 9W", grande: "$41.310", rotulo: "con transferencia", lista: "$45.900 con otros medios" }
 
-  it("nombre arriba, precio grande lo más grande que entra en 560, y el pie en un renglón", () => {
+  it("nombre, precio grande (lo más grande que entra en 560), «con transferencia» debajo y el otro precio en su renglón", () => {
     const t = textosCeldaPrecio4(celda, medir)
-    expect(t.map((x) => x.texto)).toEqual(["Lámpara LED 9W", "$41.310", "con transferencia", "Lista $45.900"])
+    expect(t.map((x) => x.texto)).toEqual(["Lámpara LED 9W", "$41.310", "con transferencia", "$45.900 con otros medios"])
     const [nombre, grande, rotulo, lista] = t
     expect(grande.px).toBe(160) // 7 * 160 / 2 = 560
     expect(nombre.y).toBeLessThan(grande.y)
-    expect(rotulo.y).toBe(lista.y)
     expect(rotulo.y).toBeGreaterThan(grande.y)
+    // Renglones separados: "con transferencia" no comparte renglón con el otro precio.
+    expect(lista.y).toBeGreaterThan(rotulo.y)
     expect(rotulo.px).toBeLessThan(lista.px)
-    expect(lista.x).toBeGreaterThan(rotulo.x + medir(rotulo.texto, rotulo.px))
   })
 
-  it("todo centrado horizontal (el pie como un bloque) y vertical dentro de 600x400", () => {
+  it("todo centrado horizontal y vertical dentro de 600x400", () => {
     const t = textosCeldaPrecio4(celda, medir)
-    for (const x of t.slice(0, 2)) expect(Math.abs(x.x * 2 + medir(x.texto, x.px) - 600)).toBeLessThanOrEqual(1)
-    const [, , rotulo, lista] = t
-    const finPie = lista.x + medir(lista.texto, lista.px)
-    expect(Math.abs(rotulo.x - (600 - finPie))).toBeLessThanOrEqual(2)
+    for (const x of t) expect(Math.abs(x.x * 2 + medir(x.texto, x.px) - 600)).toBeLessThanOrEqual(1)
+    const lista = t[3]
     // Margen de arriba (al centro del nombre menos media caja) ~ margen de abajo.
     const arriba = t[0].y - Math.round(t[0].px * 1.2) / 2
-    const abajo = 400 - (rotulo.y + Math.round(Math.max(lista.px, 30) * 1.2) / 2)
+    const abajo = 400 - (lista.y + Math.round(lista.px * 1.2) / 2)
     expect(Math.abs(arriba - abajo)).toBeLessThanOrEqual(1)
     expect(t.every((x) => x.x >= 0 && x.x + medir(x.texto, x.px) <= 600)).toBe(true)
   })

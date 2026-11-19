@@ -60,7 +60,6 @@ const P4_ROTULO_PX = 30
 const P4_LISTA_PX = 46
 const P4_SEP_NOMBRE = 24
 const P4_SEP_PIE = 24
-const P4_ESPACIO_PIE = 20
 
 export interface TextoCelda {
   texto: string
@@ -74,8 +73,8 @@ export interface TextoCelda {
 /**
  * Posiciones (puras) de los textos de una etiqueta de precio 4 por hoja en su sistema apaisado de
  * 600x400: nombre en un renglón (achica y, si no entra, corta con …), el precio grande lo más
- * grande que entre en 560 de ancho y, abajo, "con transferencia" chico y "Lista $X" mediano en el
- * mismo renglón. Todo centrado horizontal y el bloque centrado vertical. `medir(texto, px, peso)`
+ * grande que entre en 560 de ancho, debajo "con transferencia" chico y, en otro renglón, "$X con
+ * otros medios" mediano. Todo centrado horizontal y el bloque centrado vertical. `medir(texto, px, peso)`
  * devuelve el ancho (measureText).
  */
 export function textosCeldaPrecio4(
@@ -87,13 +86,13 @@ export function textosCeldaPrecio4(
   const nombre = ajustarTexto(celda.nombre, util, P4_NOMBRE_PX, P4_NOMBRE_MIN_PX, negrita)
   const grandePx = pxQueEntra(celda.grande, util, P4_GRANDE_MAX_PX, P4_GRANDE_MIN_PX, negrita)
   const pie = celda.rotulo != null && celda.lista != null ? { rotulo: celda.rotulo, lista: celda.lista } : null
-  const anchoRotulo = pie ? medir(pie.rotulo, P4_ROTULO_PX, "normal") : 0
-  const listaPx = pie ? pxQueEntra(pie.lista, util - anchoRotulo - P4_ESPACIO_PIE, P4_LISTA_PX, 16, negrita) : 0
+  const listaPx = pie ? pxQueEntra(pie.lista, util, P4_LISTA_PX, 16, negrita) : 0
   // Alto de cada renglón (caja) para centrar el bloque.
   const altoNombre = Math.round(nombre.px * 1.2)
   const altoGrande = Math.round(grandePx * 0.9)
-  const altoPie = pie ? Math.round(Math.max(listaPx, P4_ROTULO_PX) * 1.2) : 0
-  const total = altoNombre + P4_SEP_NOMBRE + altoGrande + (pie ? P4_SEP_PIE + altoPie : 0)
+  const altoRotulo = Math.round(P4_ROTULO_PX * 1.2)
+  const altoLista = Math.round(listaPx * 1.2)
+  const total = altoNombre + P4_SEP_NOMBRE + altoGrande + (pie ? altoRotulo + P4_SEP_PIE + altoLista : 0)
   let y = Math.round((alto - total) / 2)
   const centrado = (texto: string, px: number, peso: "bold" | "normal", yCentro: number): TextoCelda => ({
     texto,
@@ -107,11 +106,11 @@ export function textosCeldaPrecio4(
   out.push(centrado(celda.grande, grandePx, "bold", y + altoGrande / 2))
   y += altoGrande
   if (pie) {
-    y += P4_SEP_PIE
-    const anchoPie = anchoRotulo + P4_ESPACIO_PIE + medir(pie.lista, listaPx, "bold")
-    const x0 = Math.round((ancho - anchoPie) / 2)
-    out.push({ texto: pie.rotulo, px: P4_ROTULO_PX, peso: "normal", x: x0, y: y + altoPie / 2 })
-    out.push({ texto: pie.lista, px: listaPx, peso: "bold", x: Math.round(x0 + anchoRotulo + P4_ESPACIO_PIE), y: y + altoPie / 2 })
+    // "con transferencia" pegado debajo del precio grande y el otro precio en su propio renglón:
+    // en un mismo renglón se leía "con transferencia $57.990" (como si la transferencia fuera más cara).
+    out.push(centrado(pie.rotulo, P4_ROTULO_PX, "normal", y + altoRotulo / 2))
+    y += altoRotulo + P4_SEP_PIE
+    out.push(centrado(pie.lista, listaPx, "bold", y + altoLista / 2))
   }
   return out
 }

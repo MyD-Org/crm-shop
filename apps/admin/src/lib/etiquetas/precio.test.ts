@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { pxQueEntra, textosCeldaPrecio4 } from "./canvas"
+import { armarCeldaPrecio4, pxQueEntra, textosCeldaPrecio4 } from "./canvas"
 import {
   contenidoPrecio,
   formatoPesos,
@@ -187,6 +187,14 @@ describe("layoutPrecio4 / trabajoPrecio4 (precio 4 por hoja, 100x150)", () => {
     })
   })
 
+  it("con dirección web, cada celda lleva la URL de la ficha; sin dirección, sin QR", () => {
+    const precios = { "mdp:12": soloLista(500) }
+    const con = layoutPrecio4([item("mdp:12")], precios, "https://tienda.cliente.example/")
+    expect(con.hojas[0].celdas[0]?.url).toBe("https://tienda.cliente.example/producto/mdp%3A12")
+    expect(layoutPrecio4([item("mdp:12")], precios, null).hojas[0].celdas[0]?.url).toBeNull()
+    expect(layoutPrecio4([item("mdp:12")], precios).hojas[0].celdas[0]?.url).toBeNull()
+  })
+
   it("mismos omitidos que la chica; sin medio, sólo el precio de lista", () => {
     const l = layoutPrecio4([item("1"), item("2"), item("3", "Cero", 0)], { "1": soloLista(500) })
     expect(l.hojas[0].celdas[0]).toMatchObject({ grande: "$500", rotulo: null, lista: null })
@@ -198,7 +206,7 @@ describe("layoutPrecio4 / trabajoPrecio4 (precio 4 por hoja, 100x150)", () => {
 
   it("un trabajo por hoja con la cabecera del rollo grande, un BITMAP y un PRINT", async () => {
     const hojas: HojaPrecio[] = []
-    const r = await trabajoPrecio4([item("1", "Uno", 6)], { "1": soloLista(500) }, async (h) => {
+    const r = await trabajoPrecio4([item("1", "Uno", 6)], { "1": soloLista(500) }, null, async (h) => {
       hojas.push(h)
       return dibujarBlanco()
     })
@@ -213,7 +221,7 @@ describe("layoutPrecio4 / trabajoPrecio4 (precio 4 por hoja, 100x150)", () => {
 
   it("sin nada imprimible no dibuja", async () => {
     let llamadas = 0
-    const r = await trabajoPrecio4([item("1")], {}, async () => {
+    const r = await trabajoPrecio4([item("1")], {}, null, async () => {
       llamadas++
       return dibujarBlanco()
     })
@@ -261,6 +269,31 @@ describe("textosCeldaPrecio4 (etiqueta apaisada 600x400 del 4 por hoja)", () => 
       "Lámpara LED 9W",
       "$500",
     ])
+  })
+
+  it("con QR: el nombre a todo el ancho, el precio en la columna izquierda y el QR de 160 a la derecha", () => {
+    const { textos, qr } = armarCeldaPrecio4(celda, medir, true)
+    expect(qr).not.toBeNull()
+    const caja = qr!
+    expect(caja.lado).toBe(160)
+    // Dentro de la etiqueta, con el margen de 20 a la derecha.
+    expect(caja.x + caja.lado).toBe(580)
+    expect(caja.y).toBeGreaterThanOrEqual(0)
+    expect(caja.y + caja.lado).toBeLessThanOrEqual(400)
+    const [nombre, grande, ...resto] = textos
+    // El nombre sigue centrado a todo el ancho y por encima del QR.
+    expect(Math.abs(nombre.x * 2 + medir(nombre.texto, nombre.px) - 600)).toBeLessThanOrEqual(1)
+    expect(nombre.y + Math.round(nombre.px * 1.2) / 2).toBeLessThanOrEqual(caja.y)
+    // Ningún renglón del precio se mete en el QR.
+    for (const t of [grande, ...resto]) expect(t.x + medir(t.texto, t.px)).toBeLessThanOrEqual(caja.x)
+    expect(grande.px).toBeLessThan(160)
+    expect(textos.map((x) => x.texto)).toEqual(["Lámpara LED 9W", "$41.310", "con transferencia", "$45.900 con otros medios"])
+  })
+
+  it("sin QR: mismos textos que antes y qr null", () => {
+    const r = armarCeldaPrecio4(celda, medir, false)
+    expect(r.qr).toBeNull()
+    expect(r.textos).toEqual(textosCeldaPrecio4(celda, medir))
   })
 
   it("pxQueEntra: el mayor tamaño que entra a lo ancho", () => {

@@ -58,8 +58,8 @@ function soloConPrecio(m: MapaPrecios): Record<string, PrecioEtiqueta> {
 }
 
 /** Etiquetas y omitidos de un tipo con precio, sin dibujar (para confirmar y para la lista). */
-function previstasPrecio(tipo: TipoEtiqueta, items: ItemEtiqueta[], precios: Record<string, PrecioEtiqueta>): { etiquetas: number; omitidos: Omitido[] } {
-  return tipo === "precio-4up" ? layoutPrecio4(items, precios) : trabajoPrecios(items, precios)
+function previstasPrecio(tipo: TipoEtiqueta, items: ItemEtiqueta[], precios: Record<string, PrecioEtiqueta>, shopUrl: string | null): { etiquetas: number; omitidos: Omitido[] } {
+  return tipo === "precio-4up" ? layoutPrecio4(items, precios, shopUrl) : trabajoPrecios(items, precios)
 }
 
 export function EtiquetasClient() {
@@ -170,7 +170,7 @@ export function EtiquetasClient() {
       tipo === "codigos-29x20"
         ? trabajoCodigos(items)
         : conPrecio
-          ? previstasPrecio(tipo, items, preciosOk)
+          ? previstasPrecio(tipo, items, preciosOk, shopUrl)
           : (() => {
               const l = layoutQr6(items, shopUrl)
               return l.ok ? l : { etiquetas: 0, omitidos: [] }
@@ -185,7 +185,7 @@ export function EtiquetasClient() {
   const armarTrabajos = async () => {
     if (tipo === "codigos-29x20") return { ok: true as const, ...trabajoCodigos(items) }
     if (tipo === "precio-29x20") return { ok: true as const, ...trabajoPrecios(items, preciosOk) }
-    if (tipo === "precio-4up") return { ok: true as const, ...(await trabajoPrecio4(items, preciosOk, dibujarHojaPrecio4)) }
+    if (tipo === "precio-4up") return { ok: true as const, ...(await trabajoPrecio4(items, preciosOk, shopUrl, dibujarHojaPrecio4)) }
     return trabajoQr6(items, shopUrl, dibujarHojaQr6)
   }
 
@@ -277,7 +277,7 @@ export function EtiquetasClient() {
                 options={TIPOS}
               />
             </Field>
-            {tipo === "qr-6up" && tiendas.length > 1 && (
+            {(tipo === "qr-6up" || tipo === "precio-4up") && tiendas.length > 1 && (
               <Field label="Tienda del código QR" hint="El código QR y la dirección impresa llevan a esta tienda.">
                 <Select
                   aria-label="Tienda del código QR"

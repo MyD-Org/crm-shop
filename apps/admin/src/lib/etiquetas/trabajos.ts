@@ -468,6 +468,8 @@ export interface CeldaPrecio {
   rotulo: string | null
   /** "$45.900 con otros medios"; null = sin medio. */
   lista: string | null
+  /** Ficha del producto en la tienda (QR al costado del precio); null = la tienda no tiene dirección web. */
+  url: string | null
 }
 
 export interface HojaPrecio {
@@ -482,6 +484,7 @@ export interface HojaPrecio {
 export function layoutPrecio4(
   items: ItemEtiqueta[],
   precios: Record<string, PrecioEtiqueta>,
+  shopUrl?: string | null,
 ): { hojas: HojaPrecio[]; omitidos: Omitido[]; etiquetas: number } {
   const omitidos: Omitido[] = []
   const unidades: Omit<CeldaPrecio, "x" | "y" | "ancho" | "alto">[] = []
@@ -497,8 +500,10 @@ export function layoutPrecio4(
       omitir(c.mensaje)
       continue
     }
+    const u = urlProductoQr(shopUrl, item.alegraId)
+    const url = u.ok ? u.url : null
     for (let k = 0; k < item.cantidad; k++) {
-      unidades.push({ alegraId: item.alegraId, nombre: item.nombre.trim(), grande: c.grande, rotulo: c.rotulo, lista: c.lista })
+      unidades.push({ alegraId: item.alegraId, nombre: item.nombre.trim(), grande: c.grande, rotulo: c.rotulo, lista: c.lista, url })
     }
   }
   const hojas: HojaPrecio[] = []
@@ -531,9 +536,10 @@ export function layoutPrecio4(
 export async function trabajoPrecio4(
   items: ItemEtiqueta[],
   precios: Record<string, PrecioEtiqueta>,
+  shopUrl: string | null | undefined,
   dibujar: (hoja: HojaPrecio) => Promise<PixelesRgba>,
 ): Promise<ResultadoTrabajos> {
-  const layout = layoutPrecio4(items, precios)
+  const layout = layoutPrecio4(items, precios, shopUrl)
   const trabajos: Trabajo[] = []
   for (const hoja of layout.hojas) {
     const px = await dibujar(hoja)

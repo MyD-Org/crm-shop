@@ -60,6 +60,11 @@ const P4_ROTULO_PX = 30
 const P4_LISTA_PX = 46
 const P4_SEP_NOMBRE = 24
 const P4_SEP_PIE = 24
+// QR a la derecha del precio (20 mm): el nombre sigue a todo el ancho y el precio usa la columna
+// que queda a la izquierda.
+const P4_MARGEN = (CELDA_PRECIO4.ancho - CELDA_PRECIO4.util) / 2
+const P4_QR_LADO = 160
+const P4_QR_SEP = 16
 
 export interface TextoCelda {
   texto: string
@@ -70,49 +75,79 @@ export interface TextoCelda {
   y: number
 }
 
-/**
- * Posiciones (puras) de los textos de una etiqueta de precio 4 por hoja en su sistema apaisado de
- * 600x400: nombre en un renglón (achica y, si no entra, corta con …), el precio grande lo más
- * grande que entre en 560 de ancho, debajo "con transferencia" chico y, en otro renglón, "$X con
- * otros medios" mediano. Todo centrado horizontal y el bloque centrado vertical. `medir(texto, px, peso)`
- * devuelve el ancho (measureText).
- */
+/** Caja del QR en el sistema 600x400 de la etiqueta. */
+export interface CajaQr {
+  x: number
+  y: number
+  lado: number
+}
+
+/** Sólo los textos de `armarCeldaPrecio4` (sin QR salvo que se pida). */
 export function textosCeldaPrecio4(
   celda: Pick<CeldaPrecio, "nombre" | "grande" | "rotulo" | "lista">,
   medir: (texto: string, px: number, peso: "bold" | "normal") => number,
+  conQr = false,
 ): TextoCelda[] {
+  return armarCeldaPrecio4(celda, medir, conQr).textos
+}
+
+/**
+ * Posiciones (puras) de una etiqueta de precio 4 por hoja en su sistema apaisado de 600x400:
+ * nombre en un renglón a todo el ancho (achica y, si no entra, corta con …); debajo, el precio
+ * grande lo más grande que entre, "con efectivo" chico y, en otro renglón, "$X con otros medios"
+ * mediano. Con QR, el precio ocupa la columna izquierda y el QR (20 mm) va a la derecha, centrado
+ * con el bloque del precio. El bloque entero va centrado vertical. `medir(texto, px, peso)`
+ * devuelve el ancho (measureText).
+ */
+export function armarCeldaPrecio4(
+  celda: Pick<CeldaPrecio, "nombre" | "grande" | "rotulo" | "lista">,
+  medir: (texto: string, px: number, peso: "bold" | "normal") => number,
+  conQr: boolean,
+): { textos: TextoCelda[]; qr: CajaQr | null } {
   const { ancho, alto, util } = CELDA_PRECIO4
   const negrita = (t: string, px: number) => medir(t, px, "bold")
+  // Columna del precio: todo el ancho útil o, con QR, lo que queda a su izquierda.
+  const colAncho = conQr ? util - P4_QR_LADO - P4_QR_SEP : util
+  const colX = P4_MARGEN
   const nombre = ajustarTexto(celda.nombre, util, P4_NOMBRE_PX, P4_NOMBRE_MIN_PX, negrita)
-  const grandePx = pxQueEntra(celda.grande, util, P4_GRANDE_MAX_PX, P4_GRANDE_MIN_PX, negrita)
+  const grandePx = pxQueEntra(celda.grande, colAncho, P4_GRANDE_MAX_PX, P4_GRANDE_MIN_PX, negrita)
   const pie = celda.rotulo != null && celda.lista != null ? { rotulo: celda.rotulo, lista: celda.lista } : null
-  const listaPx = pie ? pxQueEntra(pie.lista, util, P4_LISTA_PX, 16, negrita) : 0
+  const rotuloPx = pie ? pxQueEntra(pie.rotulo, colAncho, P4_ROTULO_PX, 16, (t, px) => medir(t, px, "normal")) : 0
+  const listaPx = pie ? pxQueEntra(pie.lista, colAncho, P4_LISTA_PX, 16, negrita) : 0
   // Alto de cada renglón (caja) para centrar el bloque.
   const altoNombre = Math.round(nombre.px * 1.2)
   const altoGrande = Math.round(grandePx * 0.9)
-  const altoRotulo = Math.round(P4_ROTULO_PX * 1.2)
+  const altoRotulo = Math.round(rotuloPx * 1.2)
   const altoLista = Math.round(listaPx * 1.2)
-  const total = altoNombre + P4_SEP_NOMBRE + altoGrande + (pie ? altoRotulo + P4_SEP_PIE + altoLista : 0)
+  const altoPrecio = altoGrande + (pie ? altoRotulo + P4_SEP_PIE + altoLista : 0)
+  const altoAbajo = conQr ? Math.max(altoPrecio, P4_QR_LADO) : altoPrecio
+  const total = altoNombre + P4_SEP_NOMBRE + altoAbajo
   let y = Math.round((alto - total) / 2)
-  const centrado = (texto: string, px: number, peso: "bold" | "normal", yCentro: number): TextoCelda => ({
+  const centrado = (texto: string, px: number, peso: "bold" | "normal", yCentro: number, x0: number, w: number): TextoCelda => ({
     texto,
     px,
     peso,
-    x: Math.round((ancho - medir(texto, px, peso)) / 2),
+    x: Math.round(x0 + (w - medir(texto, px, peso)) / 2),
     y: yCentro,
   })
-  const out: TextoCelda[] = [centrado(nombre.texto, nombre.px, "bold", y + altoNombre / 2)]
+  const enCol = (texto: string, px: number, peso: "bold" | "normal", yCentro: number) => centrado(texto, px, peso, yCentro, colX, colAncho)
+  const textos: TextoCelda[] = [centrado(nombre.texto, nombre.px, "bold", y + altoNombre / 2, 0, ancho)]
   y += altoNombre + P4_SEP_NOMBRE
-  out.push(centrado(celda.grande, grandePx, "bold", y + altoGrande / 2))
+  const yAbajo = y
+  y += Math.round((altoAbajo - altoPrecio) / 2)
+  textos.push(enCol(celda.grande, grandePx, "bold", y + altoGrande / 2))
   y += altoGrande
   if (pie) {
-    // "con transferencia" pegado debajo del precio grande y el otro precio en su propio renglón:
-    // en un mismo renglón se leía "con transferencia $57.990" (como si la transferencia fuera más cara).
-    out.push(centrado(pie.rotulo, P4_ROTULO_PX, "normal", y + altoRotulo / 2))
+    // "con efectivo" pegado debajo del precio grande y el otro precio en su propio renglón:
+    // en un mismo renglón se leía como si el medio destacado fuera más caro.
+    textos.push(enCol(pie.rotulo, rotuloPx, "normal", y + altoRotulo / 2))
     y += altoRotulo + P4_SEP_PIE
-    out.push(centrado(pie.lista, listaPx, "bold", y + altoLista / 2))
+    textos.push(enCol(pie.lista, listaPx, "bold", y + altoLista / 2))
   }
-  return out
+  const qr = conQr
+    ? { x: colX + colAncho + P4_QR_SEP, y: yAbajo + Math.round((altoAbajo - P4_QR_LADO) / 2), lado: P4_QR_LADO }
+    : null
+  return { textos, qr }
 }
 
 /** Módulo entero (px) para que el QR de `n` módulos ocupe a lo sumo `lado` px sin suavizado. */
@@ -185,12 +220,14 @@ export async function dibujarHojaQr6(hoja: HojaQr): Promise<ImageData> {
  */
 export async function dibujarHojaPrecio4(hoja: HojaPrecio): Promise<ImageData> {
   const { ctx } = lienzo(PRECIO4.anchoLienzo, PRECIO4.altoLienzo)
+  const matrices = await Promise.all(hoja.celdas.map((c) => (c?.url ? matrizQr(c.url) : null)))
   const medir = (t: string, px: number, peso: "bold" | "normal") => {
     ctx.font = `${peso} ${px}px ${FUENTE}`
     return ctx.measureText(t).width
   }
-  for (const celda of hoja.celdas) {
-    if (!celda) continue
+  hoja.celdas.forEach((celda, i) => {
+    if (!celda) return
+    const matriz = matrices[i]
     // Línea de corte fina, como el borde de la celda del QR 6 por hoja.
     ctx.save()
     ctx.strokeStyle = "#000"
@@ -199,7 +236,7 @@ export async function dibujarHojaPrecio4(hoja: HojaPrecio): Promise<ImageData> {
     ctx.strokeRect(celda.x + 1, celda.y + 1, celda.ancho - 2, celda.alto - 2)
     ctx.restore()
 
-    const textos = textosCeldaPrecio4(celda, medir)
+    const { textos, qr } = armarCeldaPrecio4(celda, medir, matriz != null)
     ctx.save()
     // Origen en la esquina superior derecha de la celda y giro horario: el (0,0) de la etiqueta
     // apaisada (600x400) queda arriba a la derecha y su ancho corre hacia abajo.
@@ -212,8 +249,13 @@ export async function dibujarHojaPrecio4(hoja: HojaPrecio): Promise<ImageData> {
       ctx.font = `${t.peso} ${t.px}px ${FUENTE}`
       ctx.fillText(t.texto, t.x, t.y)
     }
+    if (qr && matriz) {
+      const modulo = moduloQr(matriz.length, qr.lado)
+      const resto = Math.floor((qr.lado - modulo * matriz.length) / 2)
+      dibujarMatriz(ctx, matriz, qr.x + resto, qr.y + resto, modulo)
+    }
     ctx.restore()
-  }
+  })
   return ctx.getImageData(0, 0, PRECIO4.anchoLienzo, PRECIO4.altoLienzo)
 }
 

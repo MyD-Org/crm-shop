@@ -55,7 +55,7 @@ describe("trabajoPrecios (precio 29x20, 3 por fila)", () => {
         'TEXT 76,24,"1",0,1,1,"Lampara LED 9W"',
         // 7 caracteres * 32 = 224 → 16 + 4
         'TEXT 20,44,"5",0,1,1,"$41.310"',
-        'TEXT 64,96,"1",0,1,1,"con transferencia"',
+        'TEXT 84,96,"1",0,1,1,"con efectivo"',
         // 24 caracteres * 8 = 192 → 16 + 20
         'TEXT 36,116,"1",0,1,1,"$45.900 con otros medios"',
         "PRINT 1,1",
@@ -104,9 +104,10 @@ describe("trabajoPrecios (precio 29x20, 3 por fila)", () => {
     }
   })
 
-  it("el rótulo del medio va en minúscula y sin tildes (forma de pago: 'con débito')", () => {
+  it("en el local el rótulo es siempre «con efectivo», cualquiera sea el medio de la web", () => {
     const s = texto(trabajoPrecios([item("1")], { "1": conMedio(1000, 900, "con débito") }).trabajos[0].datos)
-    expect(s).toContain('"con debito"')
+    expect(s).toContain('"con efectivo"')
+    expect(s).not.toContain("debito")
   })
 
   it("nombre recortado a 27 caracteres e imprimible", () => {
@@ -142,7 +143,7 @@ describe("trabajoPrecios (precio 29x20, 3 por fila)", () => {
     expect(fila.textos.map((t) => [t.fuente, t.mx, t.my, t.texto])).toEqual([
       ["1", 1, 1, "A"],
       ["4", 1, 2, "$141.310"],
-      ["1", 1, 1, "con transferencia"],
+      ["1", 1, 1, "con efectivo"],
       ["1", 1, 1, "$200.000 con otros medios"],
     ])
   })
@@ -153,7 +154,7 @@ describe("contenidoPrecio", () => {
     expect(contenidoPrecio(conMedio(45900, 41310))).toEqual({
       ok: true,
       grande: "$41.310",
-      rotulo: "con transferencia",
+      rotulo: "con efectivo",
       lista: "$45.900 con otros medios",
     })
   })
@@ -181,7 +182,7 @@ describe("layoutPrecio4 / trabajoPrecio4 (precio 4 por hoja, 100x150)", () => {
     expect(l.hojas[0].celdas[0]).toMatchObject({
       nombre: "Uno",
       grande: "$41.310",
-      rotulo: "con transferencia",
+      rotulo: "con efectivo",
       lista: "$45.900 con otros medios",
     })
   })

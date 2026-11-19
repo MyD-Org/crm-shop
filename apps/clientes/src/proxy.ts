@@ -38,6 +38,9 @@ const RUTAS_PUBLICAS = [
   "/api/internal/sucursales/revalidar",
   // Y para el aviso de que cambió la marca de la tienda (nombre, textos, logos).
   "/api/internal/marca/revalidar",
+  // Precios para las etiquetas de precio del CRM (Bearer SHOP_CRM_SECRET, server-to-server): con la
+  // cortina el CRM recibiría HTML y no podría imprimir.
+  "/api/internal/etiquetas/precios",
   // Webhook de Clerk (espejo de usuarios en shop.clientes): Clerk/Svix no tiene cookie de gate
   // y se autentica con la firma. Sin esto la cortina responde 200 con HTML, Clerk da el evento
   // por entregado y el alta nunca llega al espejo.

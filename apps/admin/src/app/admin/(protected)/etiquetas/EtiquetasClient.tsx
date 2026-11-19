@@ -3,10 +3,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Alert, Button, Card, Field, Progress, Select, Spinner } from "@myd-org/ui"
 import { api } from "@/components/admin/catalogo/tipos"
-import { dibujarHojaQr6 } from "@/lib/etiquetas/canvas"
+import { dibujarHojaPrecio4, dibujarHojaQr6 } from "@/lib/etiquetas/canvas"
 import { agregarSinDuplicar, aplicarStockSucursal, itemsDeLista, mensajeEnviadas, tituloOmitidos, type FilaLista } from "@/lib/etiquetas/lista"
 import { rotuloTienda, tiendaDelQr } from "@/lib/etiquetas/qr"
-import { layoutQr6, trabajoCodigos, trabajoQr6, type Omitido, type TipoEtiqueta } from "@/lib/etiquetas/trabajos"
+import {
+  layoutPrecio4,
+  layoutQr6,
+  TIPOS_CON_PRECIO,
+  TIPOS_ROLLO_CHICO,
+  trabajoCodigos,
+  trabajoPrecio4,
+  trabajoPrecios,
+  trabajoQr6,
+  type ItemEtiqueta,
+  type Omitido,
+  type PrecioEtiqueta,
+  type TipoEtiqueta,
+} from "@/lib/etiquetas/trabajos"
 import { useImpresora, type EstadoImpresora } from "@/lib/etiquetas/useImpresora"
 import type { ContextoEtiquetas } from "@/lib/etiquetas-repo"
 import { ConfirmarRollo } from "./ConfirmarRollo"
@@ -25,11 +38,29 @@ const TEXTO_ESTADO: Record<EstadoImpresora, string> = {
 
 const TIPOS: { value: TipoEtiqueta; label: string }[] = [
   { value: "codigos-29x20", label: "Código de barras 29x20 (3 por fila)" },
+  { value: "precio-29x20", label: "Precio 29x20 (3 por fila)" },
   { value: "qr-6up", label: "QR 6 por hoja (100x150)" },
+  { value: "precio-4up", label: "Precio 4 por hoja (100x150)" },
 ]
 
 const MENSAJE_SIN_SHOP = "La tienda no tiene dirección web configurada; no se pueden generar códigos QR."
+const MENSAJE_PRECIOS_PENDIENTES = "Espere a que se carguen los precios de la tienda web."
 const MANUAL = "__manual"
+
+/** Precios conocidos por alegraId (`null` = el Shop no tiene ese producto). */
+type MapaPrecios = Record<string, PrecioEtiqueta | null>
+
+/** Lo que entienden `trabajoPrecios` / `layoutPrecio4`: sólo los productos con precio. */
+function soloConPrecio(m: MapaPrecios): Record<string, PrecioEtiqueta> {
+  const out: Record<string, PrecioEtiqueta> = {}
+  for (const [id, p] of Object.entries(m)) if (p) out[id] = p
+  return out
+}
+
+/** Etiquetas y omitidos de un tipo con precio, sin dibujar (para confirmar y para la lista). */
+function previstasPrecio(tipo: TipoEtiqueta, items: ItemEtiqueta[], precios: Record<string, PrecioEtiqueta>): { etiquetas: number; omitidos: Omitido[] } {
+  return tipo === "precio-4up" ? layoutPrecio4(items, precios) : trabajoPrecios(items, precios)
+}
 
 export function EtiquetasClient() {
   const impresora = useImpresora()
@@ -43,12 +74,56 @@ export function EtiquetasClient() {
   const [confirmar, setConfirmar] = useState<number | null>(null)
   const [preparando, setPreparando] = useState(false)
   const [resultado, setResultado] = useState<{ error?: string; omitidos: Omitido[] } | null>(null)
+  const [precios, setPrecios] = useState<MapaPrecios>({})
+  const [cargandoPrecios, setCargandoPrecios] = useState(false)
+  const [errorPrecios, setErrorPrecios] = useState<string | null>(null)
+  const [reintentoPrecios, setReintentoPrecios] = useState(0)
+  const preciosOk = useMemo(() => soloConPrecio(precios), [precios])
 
   useEffect(() => {
     api<ContextoEtiquetas>("/api/admin/etiquetas/contexto")
       .then(setContexto)
       .catch((e: unknown) => setErrorContexto(e instanceof Error ? e.message : "No se pudieron cargar los datos de la tienda."))
   }, [])
+
+  const conPrecio = TIPOS_CON_PRECIO.includes(tipo)
+  // Ids de la lista sin precio pedido todavía (clave estable para el efecto).
+  const faltantes = conPrecio ? lista.map((f) => f.alegraId).filter((id) => !(id in precios)) : []
+  const claveFaltantes = faltantes.join(",")
+
+  // Los tipos con precio piden al Shop (vía el CRM) sólo los productos que faltan; la respuesta
+  // queda en memoria mientras dure la pantalla. Los que el Shop no tiene quedan en null.
+  useEffect(() => {
+    if (!claveFaltantes) return
+    const ids = claveFaltantes.split(",")
+    let vigente = true
+    const t = setTimeout(() => {
+      setCargandoPrecios(true)
+      setErrorPrecios(null)
+      api<{ precios: Record<string, PrecioEtiqueta> }>("/api/admin/etiquetas/precios", {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+      })
+        .then((r) => {
+          if (!vigente) return
+          setPrecios((m) => {
+            const n = { ...m }
+            for (const id of ids) n[id] = r.precios[id] ?? null
+            return n
+          })
+        })
+        .catch((e: unknown) => {
+          if (vigente) setErrorPrecios(e instanceof Error ? e.message : "No se pudieron obtener los precios de la tienda web.")
+        })
+        .finally(() => {
+          if (vigente) setCargandoPrecios(false)
+        })
+    }, 300)
+    return () => {
+      vigente = false
+      clearTimeout(t)
+    }
+  }, [claveFaltantes, reintentoPrecios])
 
   const tiendas = useMemo(() => contexto?.tiendas ?? [], [contexto])
   // Destino del QR (y host impreso): la tienda elegida; por defecto, la principal.
@@ -87,15 +162,31 @@ export function EtiquetasClient() {
     const { invalidas: malas } = itemsDeLista(lista)
     setInvalidas(new Set(malas))
     if (malas.length > 0 || items.length === 0) return
-    const previstas = tipo === "codigos-29x20" ? trabajoCodigos(items).etiquetas : (() => {
-      const l = layoutQr6(items, shopUrl)
-      return l.ok ? l.etiquetas : 0
-    })()
-    if (previstas === 0) {
-      setResultado({ error: "Ningún producto de la lista se puede imprimir con este tipo de etiqueta.", omitidos: trabajoCodigos(items).omitidos })
+    if (conPrecio && faltantes.length > 0) {
+      setResultado({ error: errorPrecios ?? MENSAJE_PRECIOS_PENDIENTES, omitidos: [] })
       return
     }
-    setConfirmar(previstas)
+    const prevision =
+      tipo === "codigos-29x20"
+        ? trabajoCodigos(items)
+        : conPrecio
+          ? previstasPrecio(tipo, items, preciosOk)
+          : (() => {
+              const l = layoutQr6(items, shopUrl)
+              return l.ok ? l : { etiquetas: 0, omitidos: [] }
+            })()
+    if (prevision.etiquetas === 0) {
+      setResultado({ error: "Ningún producto de la lista se puede imprimir con este tipo de etiqueta.", omitidos: prevision.omitidos })
+      return
+    }
+    setConfirmar(prevision.etiquetas)
+  }
+
+  const armarTrabajos = async () => {
+    if (tipo === "codigos-29x20") return { ok: true as const, ...trabajoCodigos(items) }
+    if (tipo === "precio-29x20") return { ok: true as const, ...trabajoPrecios(items, preciosOk) }
+    if (tipo === "precio-4up") return { ok: true as const, ...(await trabajoPrecio4(items, preciosOk, dibujarHojaPrecio4)) }
+    return trabajoQr6(items, shopUrl, dibujarHojaQr6)
   }
 
   const imprimir = async () => {
@@ -104,10 +195,7 @@ export function EtiquetasClient() {
     if (!impresora.tieneDispositivo && !(await impresora.conectar())) return
     setPreparando(true)
     try {
-      const r =
-        tipo === "codigos-29x20"
-          ? { ok: true as const, ...trabajoCodigos(items) }
-          : await trabajoQr6(items, shopUrl, dibujarHojaQr6)
+      const r = await armarTrabajos()
       if (!r.ok) {
         setResultado({ error: r.mensaje, omitidos: [] })
         return
@@ -166,6 +254,7 @@ export function EtiquetasClient() {
               }}
               sucursal={sucursal}
               usaReferencia={tipo === "codigos-29x20"}
+              precios={conPrecio ? precios : null}
               invalidas={invalidas}
               onTocar={tocar}
             />
@@ -203,10 +292,28 @@ export function EtiquetasClient() {
                 />
               </Field>
             )}
+            {conPrecio && (
+              <p className="text-sm" style={{ color: "var(--ink-faint)" }}>
+                Los precios son los que muestra la tienda web: el del medio de pago destacado y el de lista, con IVA.
+              </p>
+            )}
+            {conPrecio && cargandoPrecios && (
+              <p className="flex items-center gap-2 text-sm">
+                <Spinner /> Cargando los precios de la tienda web…
+              </p>
+            )}
+            {conPrecio && errorPrecios && (
+              <Alert tone="danger">
+                <p>{errorPrecios}</p>
+                <Button variant="link" size="sm" onClick={() => setReintentoPrecios((n) => n + 1)} disabled={cargandoPrecios}>
+                  Reintentar
+                </Button>
+              </Alert>
+            )}
             {qrBloqueado ? (
               <Alert tone="warning">{MENSAJE_SIN_SHOP}</Alert>
             ) : (
-              <VistaPrevia tipo={tipo} items={items} shopUrl={shopUrl} />
+              <VistaPrevia tipo={tipo} items={items} shopUrl={shopUrl} precios={conPrecio ? preciosOk : null} />
             )}
           </div>
         </Card>
@@ -253,14 +360,16 @@ export function EtiquetasClient() {
               )}
               <Button
                 onClick={pedirImpresion}
-                disabled={items.length === 0 || qrBloqueado || ocupada || impresora.estado === "sin-soporte"}
+                disabled={
+                  items.length === 0 || qrBloqueado || ocupada || impresora.estado === "sin-soporte" || (conPrecio && cargandoPrecios)
+                }
                 loading={ocupada}
               >
                 Imprimir
               </Button>
               <Button
                 variant="ghost"
-                onClick={() => void impresora.imprimirPrueba(tipo === "codigos-29x20" ? "chico" : "grande")}
+                onClick={() => void impresora.imprimirPrueba(TIPOS_ROLLO_CHICO.includes(tipo) ? "chico" : "grande")}
                 disabled={!impresora.tieneDispositivo || ocupada}
               >
                 Imprimir prueba

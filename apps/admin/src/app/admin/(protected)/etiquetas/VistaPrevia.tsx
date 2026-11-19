@@ -1,20 +1,32 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { dibujarFilaCodigos, dibujarHojaQr6 } from "@/lib/etiquetas/canvas"
-import { layoutQr6, primeraFilaTspl, trabajoCodigos, type ItemEtiqueta, type TipoEtiqueta } from "@/lib/etiquetas/trabajos"
+import { dibujarFilaCodigos, dibujarHojaPrecio4, dibujarHojaQr6 } from "@/lib/etiquetas/canvas"
+import {
+  layoutPrecio4,
+  layoutQr6,
+  primeraFilaTspl,
+  TIPOS_ROLLO_CHICO,
+  trabajoCodigos,
+  trabajoPrecios,
+  type ItemEtiqueta,
+  type PrecioEtiqueta,
+  type TipoEtiqueta,
+} from "@/lib/etiquetas/trabajos"
 
 interface Props {
   tipo: TipoEtiqueta
   items: ItemEtiqueta[]
   shopUrl: string | null
+  /** Precios del Shop (tipos con precio); null = el tipo no imprime precio. */
+  precios: Record<string, PrecioEtiqueta> | null
 }
 
 /**
- * Primera fila (29x20) o primera hoja (QR 6 por hoja) dibujada con las MISMAS funciones que arman
+ * Primera fila (29x20: código o precio) o primera hoja (QR 6 o precio 4 por hoja) dibujada con las MISMAS funciones que arman
  * lo que se envía a la impresora.
  */
-export function VistaPrevia({ tipo, items, shopUrl }: Props) {
+export function VistaPrevia({ tipo, items, shopUrl, precios }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
   const [vacia, setVacia] = useState(true)
 
@@ -23,9 +35,12 @@ export function VistaPrevia({ tipo, items, shopUrl }: Props) {
     const t = setTimeout(async () => {
       let img: ImageData | null = null
       try {
-        if (tipo === "codigos-29x20") {
-          const primero = trabajoCodigos(items).trabajos[0]
+        if (tipo === "codigos-29x20" || tipo === "precio-29x20") {
+          const primero = tipo === "codigos-29x20" ? trabajoCodigos(items).trabajos[0] : trabajoPrecios(items, precios ?? {}).trabajos[0]
           if (primero) img = dibujarFilaCodigos(primeraFilaTspl(new TextDecoder().decode(primero.datos)))
+        } else if (tipo === "precio-4up") {
+          const hoja = layoutPrecio4(items, precios ?? {}).hojas[0]
+          if (hoja) img = await dibujarHojaPrecio4(hoja)
         } else if (tipo === "qr-6up") {
           const layout = layoutQr6(items, shopUrl)
           if (layout.ok && layout.hojas[0]) img = await dibujarHojaQr6(layout.hojas[0])
@@ -45,9 +60,9 @@ export function VistaPrevia({ tipo, items, shopUrl }: Props) {
       vigente = false
       clearTimeout(t)
     }
-  }, [tipo, items, shopUrl])
+  }, [tipo, items, shopUrl, precios])
 
-  const anchoMax = tipo === "codigos-29x20" ? 520 : 320
+  const anchoMax = TIPOS_ROLLO_CHICO.includes(tipo) ? 520 : 320
   return (
     <div className="flex flex-col gap-2">
       <canvas

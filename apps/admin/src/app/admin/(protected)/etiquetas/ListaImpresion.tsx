@@ -2,7 +2,7 @@
 
 import { Badge, Button, Input, Table, type TableColumn } from "@myd-org/ui"
 import { MENSAJE_SIN_REFERENCIA, type FilaLista } from "@/lib/etiquetas/lista"
-import { codigoDeBarras } from "@/lib/etiquetas/trabajos"
+import { codigoDeBarras, contenidoPrecio, type PrecioEtiqueta } from "@/lib/etiquetas/trabajos"
 import { MENSAJE_CANTIDAD, validarCantidad } from "@/lib/etiquetas/texto"
 
 interface Props {
@@ -12,12 +12,14 @@ interface Props {
   sucursal: string | null
   /** El tipo elegido imprime código de barras: las filas sin referencia se omiten. */
   usaReferencia: boolean
+  /** Tipos con precio: precios del Shop por alegraId (null = el Shop no tiene el producto). null = el tipo no imprime precio. */
+  precios: Record<string, PrecioEtiqueta | null> | null
   /** Filas a marcar con error de cantidad (se marcan al perder el foco o al imprimir). */
   invalidas: Set<string>
   onTocar: (alegraId: string, valida: boolean) => void
 }
 
-export function ListaImpresion({ lista, onCambiar, sucursal, usaReferencia, invalidas, onTocar }: Props) {
+export function ListaImpresion({ lista, onCambiar, sucursal, usaReferencia, precios, invalidas, onTocar }: Props) {
   const cambiar = (alegraId: string, cambios: Partial<FilaLista>) =>
     onCambiar(lista.map((f) => (f.alegraId === alegraId ? { ...f, ...cambios } : f)))
 
@@ -33,6 +35,7 @@ export function ListaImpresion({ lista, onCambiar, sucursal, usaReferencia, inva
             <div className="text-xs" style={{ color: "var(--amber)" }}>{MENSAJE_SIN_REFERENCIA}</div>
           )}
           {usaReferencia && f.referencia && <AvisoCodigo referencia={f.referencia} />}
+          {precios && <AvisoPrecio precio={precios[f.alegraId]} />}
         </div>
       ),
     },
@@ -103,6 +106,20 @@ function AvisoCodigo({ referencia }: { referencia: string }) {
   return (
     <div className="text-xs" style={{ color: "var(--amber)" }}>
       {cod.ok ? `Se imprime sin el sufijo: ${cod.codigo}` : `No se imprimirá. ${cod.mensaje}`}
+    </div>
+  )
+}
+
+/** Qué precio se va a imprimir (o por qué se omite), antes de imprimir. */
+function AvisoPrecio({ precio }: { precio: PrecioEtiqueta | null | undefined }) {
+  if (precio === undefined) {
+    return <div className="text-xs" style={{ color: "var(--ink-faint)" }}>Cargando precio…</div>
+  }
+  const c = contenidoPrecio(precio ?? undefined)
+  if (!c.ok) return <div className="text-xs" style={{ color: "var(--amber)" }}>No se imprimirá. {c.mensaje}</div>
+  return (
+    <div className="text-xs tabular-nums">
+      {c.rotulo ? `${c.grande} ${c.rotulo} · ${c.lista}` : c.grande}
     </div>
   )
 }

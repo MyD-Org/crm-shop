@@ -253,7 +253,7 @@ export type ContenidoPrecio =
 
 /**
  * Qué dice una etiqueta de precio. Con precio del medio destacado menor al de lista (ya
- * redondeados): el del medio grande, "con transferencia" (rótulo en minúscula) y "$X con otros medios" (como la card). Sin
+ * redondeados): el del medio grande, "con efectivo" (`ROTULO_LOCAL`) y "$X con otros medios" (como la card). Sin
  * medio, o no más barato: sólo el de lista grande (`rotulo` y `lista` null). Sin precio de lista:
  * se omite con el motivo.
  */
@@ -267,10 +267,15 @@ export function contenidoPrecio(precio: PrecioEtiqueta | undefined): ContenidoPr
   return {
     ok: true,
     grande: formatoPesos(medio.precio),
-    rotulo: (medio.rotulo || `con ${medio.nombre}`).toLowerCase(),
+    // En el local el precio del medio destacado se cobra en efectivo: la etiqueta dice "con efectivo"
+    // aunque la web lo rotule con el medio ("con Transferencia").
+    rotulo: ROTULO_LOCAL,
     lista: `${lista} con otros medios`,
   }
 }
+
+/** Rótulo del precio grande en las etiquetas de precio (góndola del local). */
+export const ROTULO_LOCAL = "con efectivo"
 
 function filaPrecio(etiquetas: RenglonPrecio[][]): string {
   const L = [cabeceraTspl(CABECERA_29X20) + "CLS"]
@@ -459,7 +464,7 @@ export interface CeldaPrecio {
   nombre: string
   /** "$41.310": el del medio destacado o, sin medio, el de lista. */
   grande: string
-  /** "con transferencia"; null = sin medio (sólo el precio de lista). */
+  /** "con efectivo"; null = sin medio (sólo el precio de lista). */
   rotulo: string | null
   /** "$45.900 con otros medios"; null = sin medio. */
   lista: string | null

@@ -253,11 +253,11 @@ export function headersDeSeguridad(env: EnvCsp = process.env as EnvCsp, opciones
     { key: "X-Content-Type-Options", value: "nosniff" },
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
     { key: "X-Frame-Options", value: "DENY" },
-    // Nada del Shop usa cámara ni micrófono. La ubicación del navegador SÓLO la usa el propio sitio,
-    // y sólo si el visitante toca "Usar mi ubicación" (pide permiso; ver /api/ubicacion): `self`,
-    // nunca iframes de terceros. `payment` no se restringe: el Brick de Mercado Pago puede usar
+    // La cámara SÓLO la usa el propio sitio: el escáner del buscador (EscanerCodigo), al tocar
+    // "Escanear código" (pide permiso). Nada usa el micrófono. La ubicación del navegador, igual: sólo
+    // si el visitante toca "Usar mi ubicación" (ver /api/ubicacion). `self`, nunca iframes de terceros. `payment` no se restringe: el Brick de Mercado Pago puede usar
     // Payment Request.
-    { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
+    { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(self)" },
     // Sin includeSubDomains ni preload: el dominio raíz puede tener subdominios
     // que no son del Shop y no se decide eso desde acá.
     { key: "Strict-Transport-Security", value: "max-age=63072000" },

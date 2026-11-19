@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Skeleton } from "@myd-org/ui";
@@ -19,6 +19,7 @@ import {
   vistaDesplegable,
 } from "@/lib/busqueda-inteligente/descubrimiento";
 import { CONSULTA_MOBILE, useMediaQuery } from "@/lib/media-query";
+import { EscanearIcon, EscanerCodigo, puedeEscanear } from "./EscanerCodigo";
 import { GuiaBusqueda } from "./GuiaBusqueda";
 
 function SearchIcon() {
@@ -47,6 +48,9 @@ function FlechaAtrasIcon() {
     </svg>
   );
 }
+
+/** `puedeEscanear` no cambia mientras dura la página: no hay a qué suscribirse. */
+const sinSuscripcion = () => () => {};
 
 function useDebounced<T>(value: T, delay = 150): T {
   const [debounced, setDebounced] = useState(value);
@@ -86,6 +90,12 @@ export function SearchAutocomplete({
   const inputRef = useRef<HTMLInputElement>(null);
   const guiaRef = useRef<HTMLDivElement>(null);
   const idGuia = useId();
+
+  // Escanear el código de barras o el QR de la etiqueta (en el local, para ver precio y ficha).
+  // El botón sale sólo si hay cámara que pedir; se decide en el cliente para no romper la hidratación.
+  const conCamara = useSyncExternalStore(sinSuscripcion, puedeEscanear, () => false);
+  const [escaneando, setEscaneando] = useState(false);
+  const cerrarEscaner = useCallback(() => setEscaneando(false), []);
 
   // Placeholder que rota (sólo con el flag, con el campo vacío y sin foco, y
   // nunca con `prefers-reduced-motion`).
@@ -266,6 +276,17 @@ export function SearchAutocomplete({
           <CruzIcon />
         </button>
       ) : null}
+      {conCamara ? (
+        <button
+          type="button"
+          onClick={() => { setOpen(false); setEscaneando(true); }}
+          aria-label="Escanear código"
+          title="Escanear código"
+          className="flex shrink-0 items-center bg-transparent pl-3 pr-1 text-muted transition-colors hover:text-text"
+        >
+          <EscanearIcon />
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={() => submit()}
@@ -383,6 +404,8 @@ export function SearchAutocomplete({
       className="relative flex w-full max-w-2xl"
     >
       {campo(inputRef, true)}
+
+      {escaneando ? <EscanerCodigo busquedaIa={busquedaIa} onCerrar={cerrarEscaner} /> : null}
 
       {pantallaCompleta ? null : panel}
 

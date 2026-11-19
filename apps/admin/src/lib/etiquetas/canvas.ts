@@ -4,7 +4,7 @@
  * importar: `ajustarTexto` y `moduloQr` son puros y se testean sin DOM.
  */
 import { matrizQr } from "./qr"
-import { PRECIO4, QR6, type CeldaPrecio, type FilaTspl, type HojaPrecio, type HojaQr } from "./trabajos"
+import { PRECIO4, QR6, type CeldaPrecio, type CodigoPrecio4, type FilaTspl, type HojaPrecio, type HojaQr } from "./trabajos"
 
 /** px por mm de la impresora (203 dpi). */
 const PUNTOS_POR_MM = 8
@@ -65,6 +65,11 @@ const P4_SEP_PIE = 24
 const P4_MARGEN = (CELDA_PRECIO4.ancho - CELDA_PRECIO4.util) / 2
 const P4_QR_LADO = 160
 const P4_QR_SEP = 16
+// Franja del código de barras abajo: barras + la referencia en texto.
+const P4_COD_ALTO = 56
+const P4_COD_SEP = 14
+const P4_COD_TEXTO_PX = 20
+const P4_COD_TEXTO_SEP = 4
 
 export interface TextoCelda {
   texto: string
@@ -82,13 +87,28 @@ export interface CajaQr {
   lado: number
 }
 
-/** Sólo los textos de `armarCeldaPrecio4` (sin QR salvo que se pida). */
+/** Barras del código (x, ancho) en el sistema 600x400, más su caja. */
+export interface CajaCodigo {
+  x: number
+  y: number
+  alto: number
+  modulo: number
+  patron: string
+}
+
+/** Sólo los textos de `armarCeldaPrecio4` (sin QR ni código salvo que se pidan). */
 export function textosCeldaPrecio4(
   celda: Pick<CeldaPrecio, "nombre" | "grande" | "rotulo" | "lista">,
   medir: (texto: string, px: number, peso: "bold" | "normal") => number,
   conQr = false,
+  codigo: CodigoPrecio4 | null = null,
 ): TextoCelda[] {
-  return armarCeldaPrecio4(celda, medir, conQr).textos
+  return armarCeldaPrecio4(celda, medir, conQr, codigo).textos
+}
+
+/** Ancho en puntos de un patrón Code128 con `modulo` puntos por módulo. */
+function anchoPatron(patron: string, modulo: number): number {
+  return [...patron].reduce((a, d) => a + Number(d), 0) * modulo
 }
 
 /**
@@ -103,7 +123,8 @@ export function armarCeldaPrecio4(
   celda: Pick<CeldaPrecio, "nombre" | "grande" | "rotulo" | "lista">,
   medir: (texto: string, px: number, peso: "bold" | "normal") => number,
   conQr: boolean,
-): { textos: TextoCelda[]; qr: CajaQr | null } {
+  codigo: CodigoPrecio4 | null = null,
+): { textos: TextoCelda[]; qr: CajaQr | null; barras: CajaCodigo | null } {
   const { ancho, alto, util } = CELDA_PRECIO4
   const negrita = (t: string, px: number) => medir(t, px, "bold")
   // Columna del precio: todo el ancho útil o, con QR, lo que queda a su izquierda.
@@ -121,7 +142,10 @@ export function armarCeldaPrecio4(
   const altoLista = Math.round(listaPx * 1.2)
   const altoPrecio = altoGrande + (pie ? altoRotulo + P4_SEP_PIE + altoLista : 0)
   const altoAbajo = conQr ? Math.max(altoPrecio, P4_QR_LADO) : altoPrecio
-  const total = altoNombre + P4_SEP_NOMBRE + altoAbajo
+  // Con código, los separadores se achican para que entre la franja de abajo.
+  const sepNombre = codigo ? 16 : P4_SEP_NOMBRE
+  const altoCodigo = codigo ? P4_COD_SEP + P4_COD_ALTO + P4_COD_TEXTO_SEP + Math.round(P4_COD_TEXTO_PX * 1.2) : 0
+  const total = altoNombre + sepNombre + altoAbajo + altoCodigo
   let y = Math.round((alto - total) / 2)
   const centrado = (texto: string, px: number, peso: "bold" | "normal", yCentro: number, x0: number, w: number): TextoCelda => ({
     texto,
@@ -132,7 +156,7 @@ export function armarCeldaPrecio4(
   })
   const enCol = (texto: string, px: number, peso: "bold" | "normal", yCentro: number) => centrado(texto, px, peso, yCentro, colX, colAncho)
   const textos: TextoCelda[] = [centrado(nombre.texto, nombre.px, "bold", y + altoNombre / 2, 0, ancho)]
-  y += altoNombre + P4_SEP_NOMBRE
+  y += altoNombre + sepNombre
   const yAbajo = y
   y += Math.round((altoAbajo - altoPrecio) / 2)
   textos.push(enCol(celda.grande, grandePx, "bold", y + altoGrande / 2))
@@ -147,7 +171,15 @@ export function armarCeldaPrecio4(
   const qr = conQr
     ? { x: colX + colAncho + P4_QR_SEP, y: yAbajo + Math.round((altoAbajo - P4_QR_LADO) / 2), lado: P4_QR_LADO }
     : null
-  return { textos, qr }
+  let barras: CajaCodigo | null = null
+  if (codigo) {
+    const yCod = yAbajo + altoAbajo + P4_COD_SEP
+    const w = anchoPatron(codigo.patron, codigo.modulo)
+    barras = { x: Math.round((ancho - w) / 2), y: yCod, alto: P4_COD_ALTO, modulo: codigo.modulo, patron: codigo.patron }
+    const yTexto = yCod + P4_COD_ALTO + P4_COD_TEXTO_SEP + Math.round(P4_COD_TEXTO_PX * 1.2) / 2
+    textos.push(centrado(codigo.texto, P4_COD_TEXTO_PX, "normal", yTexto, 0, ancho))
+  }
+  return { textos, qr, barras }
 }
 
 /** Módulo entero (px) para que el QR de `n` módulos ocupe a lo sumo `lado` px sin suavizado. */
@@ -236,7 +268,7 @@ export async function dibujarHojaPrecio4(hoja: HojaPrecio): Promise<ImageData> {
     ctx.strokeRect(celda.x + 1, celda.y + 1, celda.ancho - 2, celda.alto - 2)
     ctx.restore()
 
-    const { textos, qr } = armarCeldaPrecio4(celda, medir, matriz != null)
+    const { textos, qr, barras } = armarCeldaPrecio4(celda, medir, matriz != null, celda.codigo)
     ctx.save()
     // Origen en la esquina superior derecha de la celda y giro horario: el (0,0) de la etiqueta
     // apaisada (600x400) queda arriba a la derecha y su ancho corre hacia abajo.
@@ -253,6 +285,15 @@ export async function dibujarHojaPrecio4(hoja: HojaPrecio): Promise<ImageData> {
       const modulo = moduloQr(matriz.length, qr.lado)
       const resto = Math.floor((qr.lado - modulo * matriz.length) / 2)
       dibujarMatriz(ctx, matriz, qr.x + resto, qr.y + resto, modulo)
+    }
+    if (barras) {
+      ctx.fillStyle = "#000"
+      let cx = barras.x
+      ;[...barras.patron].forEach((d, k) => {
+        const w = Number(d) * barras.modulo
+        if (k % 2 === 0) ctx.fillRect(cx, barras.y, w, barras.alto)
+        cx += w
+      })
     }
     ctx.restore()
   })

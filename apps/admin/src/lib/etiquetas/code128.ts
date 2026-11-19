@@ -49,6 +49,19 @@ export function validarReferencia(code: string | null | undefined): Validacion {
 export function code128b(texto: string): string {
   const v = validarReferencia(texto)
   if (!v.ok) throw new Error(v.mensaje)
+  return patronCode128b(texto)
+}
+
+/**
+ * Code128B sin el tope de caracteres de la etiqueta de 29 mm (para etiquetas más anchas, como la
+ * de precio 4 por hoja). null si está vacío o tiene caracteres fuera de ASCII imprimible.
+ */
+export function code128bLargo(texto: string): string | null {
+  if (!/^[\x20-\x7e]+$/.test(texto) || texto.trim() === "") return null
+  return patronCode128b(texto)
+}
+
+function patronCode128b(texto: string): string {
   const valores = [INICIO_B, ...[...texto].map((c) => c.charCodeAt(0) - 32)]
   const chk = checksumCode128(valores)
   return [...valores, chk].map((x) => PATRONES[x]).join("") + STOP

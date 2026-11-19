@@ -3,6 +3,7 @@ import { armarCeldaPrecio4, pxQueEntra, textosCeldaPrecio4 } from "./canvas"
 import {
   contenidoPrecio,
   formatoPesos,
+  codigoPrecio4,
   layoutPrecio4,
   MENSAJE_PRECIO_ANCHO,
   MENSAJE_SIN_PRECIO,
@@ -230,6 +231,22 @@ describe("layoutPrecio4 / trabajoPrecio4 (precio 4 por hoja, 100x150)", () => {
   })
 })
 
+describe("codigoPrecio4 (código de barras de la etiqueta de precio 4 por hoja)", () => {
+  it("referencia corta: 2 puntos por módulo; larga: 1 punto; sin referencia o inválida: null", () => {
+    expect(codigoPrecio4("ABC-123")).toMatchObject({ texto: "ABC-123", modulo: 2 })
+    expect(codigoPrecio4("TCOB320-24V-5MM-IP20-WW-MCL")).toMatchObject({ texto: "TCOB320-24V-5MM-IP20-WW-MCL", modulo: 1 })
+    expect(codigoPrecio4(null)).toBeNull()
+    expect(codigoPrecio4("  ")).toBeNull()
+    expect(codigoPrecio4("Ñandú")).toBeNull()
+    expect(codigoPrecio4("X".repeat(60))).toBeNull()
+  })
+
+  it("el layout lleva el código de cada producto", () => {
+    const l = layoutPrecio4([{ alegraId: "1", nombre: "Uno", referencia: "ABC-123", cantidad: 1 }], { "1": soloLista(500) })
+    expect(l.hojas[0].celdas[0]?.codigo?.texto).toBe("ABC-123")
+  })
+})
+
 describe("textosCeldaPrecio4 (etiqueta apaisada 600x400 del 4 por hoja)", () => {
   // Medidor simulado: cada carácter mide la mitad del tamaño de fuente.
   const medir = (t: string, px: number) => t.length * px * 0.5
@@ -288,6 +305,16 @@ describe("textosCeldaPrecio4 (etiqueta apaisada 600x400 del 4 por hoja)", () => 
     for (const t of [grande, ...resto]) expect(t.x + medir(t.texto, t.px)).toBeLessThanOrEqual(caja.x)
     expect(grande.px).toBeLessThan(160)
     expect(textos.map((x) => x.texto)).toEqual(["Lámpara LED 9W", "$41.310", "con transferencia", "$45.900 con otros medios"])
+  })
+
+  it("con código: franja de barras abajo con la referencia en texto, sin pisar el QR", () => {
+    const codigo = codigoPrecio4("TCOB480-24V-8MM-IP20-B-MCL")!
+    const { textos, qr, barras } = armarCeldaPrecio4(celda, medir, true, codigo)
+    expect(barras).not.toBeNull()
+    expect(barras!.y).toBeGreaterThanOrEqual(qr!.y + qr!.lado)
+    expect(barras!.y + barras!.alto).toBeLessThan(400)
+    expect(textos.at(-1)).toMatchObject({ texto: "TCOB480-24V-8MM-IP20-B-MCL", px: 20 })
+    expect(textos.at(-1)!.y).toBeLessThanOrEqual(400 - 10)
   })
 
   it("sin QR: mismos textos que antes y qr null", () => {

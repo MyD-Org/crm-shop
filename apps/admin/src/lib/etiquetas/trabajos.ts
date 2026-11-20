@@ -4,7 +4,7 @@
  * como layout + ensamble de bitmaps, y el dibujo en canvas vive aparte.
  */
 import { ascii, cabeceraTspl, comandoBitmap, concatenar, rgbaA1bit, type OpcionesCabecera } from "./bitmap"
-import { barras, code128b, MAX_CARACTERES_REFERENCIA, MENSAJES_REFERENCIA, PUNTOS_POR_MM } from "./code128"
+import { barras, code128b, code128bLargo, MAX_CARACTERES_REFERENCIA, MENSAJES_REFERENCIA, PUNTOS_POR_MM } from "./code128"
 import { hostWeb, urlProductoQr } from "./qr"
 import { textoImprimible, validarCantidad } from "./texto"
 
@@ -468,6 +468,33 @@ export interface CeldaPrecio {
   rotulo: string | null
   /** "$45.900 con otros medios"; null = sin medio. */
   lista: string | null
+  /** Ficha del producto en la tienda (QR al costado del precio); null = la tienda no tiene dirección web. */
+  url: string | null
+  /** Código de barras de la referencia (franja de abajo); null = sin referencia o no entra. */
+  codigo: CodigoPrecio4 | null
+}
+
+/** Code128B de la referencia completa para la franja de abajo del precio 4 por hoja. */
+export interface CodigoPrecio4 {
+  texto: string
+  /** Anchos barra/espacio en módulos (como `code128b`). */
+  patron: string
+  /** Puntos por módulo: 2 si entra en el ancho útil, si no 1 (el mismo grosor que el 29x20). */
+  modulo: 1 | 2
+}
+
+/** Ancho máximo del código en la etiqueta apaisada de 600 (deja zona libre a los costados). */
+export const ANCHO_CODIGO_PRECIO4 = 520
+
+export function codigoPrecio4(referencia: string | null): CodigoPrecio4 | null {
+  const texto = referencia?.trim() ?? ""
+  if (!texto) return null
+  const patron = code128bLargo(texto)
+  if (!patron) return null
+  const { ancho } = barras(patron, 0, 0, 0)
+  if (ancho * 2 <= ANCHO_CODIGO_PRECIO4) return { texto, patron, modulo: 2 }
+  if (ancho <= ANCHO_CODIGO_PRECIO4) return { texto, patron, modulo: 1 }
+  return null
 }
 
 export interface HojaPrecio {
@@ -482,6 +509,7 @@ export interface HojaPrecio {
 export function layoutPrecio4(
   items: ItemEtiqueta[],
   precios: Record<string, PrecioEtiqueta>,
+  shopUrl?: string | null,
 ): { hojas: HojaPrecio[]; omitidos: Omitido[]; etiquetas: number } {
   const omitidos: Omitido[] = []
   const unidades: Omit<CeldaPrecio, "x" | "y" | "ancho" | "alto">[] = []
@@ -497,8 +525,11 @@ export function layoutPrecio4(
       omitir(c.mensaje)
       continue
     }
+    const u = urlProductoQr(shopUrl, item.alegraId)
+    const url = u.ok ? u.url : null
+    const codigo = codigoPrecio4(item.referencia)
     for (let k = 0; k < item.cantidad; k++) {
-      unidades.push({ alegraId: item.alegraId, nombre: item.nombre.trim(), grande: c.grande, rotulo: c.rotulo, lista: c.lista })
+      unidades.push({ alegraId: item.alegraId, nombre: item.nombre.trim(), grande: c.grande, rotulo: c.rotulo, lista: c.lista, url, codigo })
     }
   }
   const hojas: HojaPrecio[] = []
@@ -531,9 +562,10 @@ export function layoutPrecio4(
 export async function trabajoPrecio4(
   items: ItemEtiqueta[],
   precios: Record<string, PrecioEtiqueta>,
+  shopUrl: string | null | undefined,
   dibujar: (hoja: HojaPrecio) => Promise<PixelesRgba>,
 ): Promise<ResultadoTrabajos> {
-  const layout = layoutPrecio4(items, precios)
+  const layout = layoutPrecio4(items, precios, shopUrl)
   const trabajos: Trabajo[] = []
   for (const hoja of layout.hojas) {
     const px = await dibujar(hoja)

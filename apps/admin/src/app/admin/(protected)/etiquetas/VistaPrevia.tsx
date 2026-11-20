@@ -39,7 +39,7 @@ export function VistaPrevia({ tipo, items, shopUrl, precios }: Props) {
           const primero = tipo === "codigos-29x20" ? trabajoCodigos(items).trabajos[0] : trabajoPrecios(items, precios ?? {}).trabajos[0]
           if (primero) img = dibujarFilaCodigos(primeraFilaTspl(new TextDecoder().decode(primero.datos)))
         } else if (tipo === "precio-4up") {
-          const hoja = layoutPrecio4(items, precios ?? {}).hojas[0]
+          const hoja = layoutPrecio4(items, precios ?? {}, shopUrl).hojas[0]
           if (hoja) img = await dibujarHojaPrecio4(hoja)
         } else if (tipo === "qr-6up") {
           const layout = layoutQr6(items, shopUrl)

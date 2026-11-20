@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { recargarSiVersionVieja } from "@/lib/error-version-vieja";
 import { Button, EmptyState } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 
@@ -19,6 +20,8 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error(error);
+    // Pestaña con el JS de un deploy anterior: recargar trae la versión nueva.
+    recargarSiVersionVieja(error);
   }, [error]);
 
   return (

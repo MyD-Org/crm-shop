@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { recargarSiVersionVieja } from "@/lib/error-version-vieja";
 import { TEMA_POR_DEFECTO } from "@/lib/tema-ip";
 import { nombreMarcaEntorno } from "@/lib/marca-base";
 import "./globals.css";
@@ -20,6 +21,8 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error(error);
+    // Pestaña con el JS de un deploy anterior: recargar trae la versión nueva.
+    recargarSiVersionVieja(error);
   }, [error]);
 
   return (

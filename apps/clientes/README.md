@@ -38,7 +38,8 @@ de las vistas del CRM (`public.catalog_products_shop` y
 | `MIGRATE_DATABASE_URL` | Solo para `npm run db:migrate`. Conexión directa (sin pooler), rol dueño del esquema `shop`. El runtime nunca la usa. |
 | `SHOP_TENANT_ID` | Obligatoria: el Shop no arranca sin ella (falla en `src/instrumentation.ts`, salvo durante `next build`). Tiene que ser un valor de `public.tenants.id` del CRM. |
 | `CRON_SECRET` | Protege `/api/cron/pagos-reconciliar`. Sin esta variable el endpoint rechaza todo. |
-| `ALEGRA_EMAIL` / `ALEGRA_TOKEN` | Auth Basic contra la API de Alegra. `ALEGRA_BASE_URL` es opcional (default: producción). |
+| `ALEGRA_EMAIL` / `ALEGRA_TOKEN` | Auth Basic contra la API de Alegra (cuenta `principal`). `ALEGRA_BASE_URL` es opcional (default: producción). Se leen sólo en `src/lib/cuenta-alegra.ts`. |
+| `SHOP_CUENTA_ALEGRA` | Opcional. Slug de la cuenta de Alegra del despliegue; ausente = `principal`. Con otra cuenta se usan `ALEGRA_EMAIL_<SLUG>` / `ALEGRA_TOKEN_<SLUG>` y, si faltan, las llamadas fallan (nunca caen a las de la principal). Ver `docs/dominios-multiples.md` (U4b). |
 | `CRM_INTERNAL_URL` | Base URL del CRM del mismo entorno. |
 | `SHOP_CRM_SECRET` | Llave propia Shop↔CRM (mismo valor en el proyecto del CRM; NO es el `INTERNAL_SECRET` de ai-api): Bearer hacia el CRM y protección de los `POST /api/internal/*/revalidar`. |
 | `SHOP_MEDIA_HOSTS` | Hosts de las fotos del overlay, separados por coma (ej. `media.plataforma.example`). Alimenta `images.remotePatterns`; sin ella las cards muestran el placeholder. Debe incluir el host de `R2_SHOP_MEDIA_PUBLIC_URL`; si no, el editor de la home rechaza las imágenes subidas. Se lee en el build y en runtime: un cambio requiere redesplegar. |

@@ -347,8 +347,10 @@ export function ProductoClient({
 
         {/* Grilla con áreas: en mobile galería → compra → detalle; desde lg el
             detalle sube debajo de la galería y la compra ocupa la columna
-            derecha entera (así puede quedar fija con sticky). */}
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-12 lg:gap-y-10">
+            derecha entera (así puede quedar fija con sticky). La segunda fila
+            es 1fr: la compra es más alta que la foto y, con dos filas auto, el
+            sobrante se repartía también en la primera y alejaba el detalle. */}
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-10">
           <div className="min-w-0 lg:col-start-1 lg:row-start-1">
             <GaleriaProducto
               // Cada opción tiene sus fotos: la galería arranca de cero al cambiar.

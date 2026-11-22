@@ -11,7 +11,7 @@ let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
 import { getFacetas, getPaginaCatalogo } from "./catalog";
-import { STOCK_INCLUYE_SIN_STOCK, filtrosDeEstado, leerEstado } from "./catalogo-url";
+import { filtrosDeEstado, leerEstado } from "./catalogo-url";
 import { ATRIBUTOS } from "./catalogo-atributos";
 
 /** count(*) = 1 para que la página también dispare la consulta de filas. */
@@ -105,10 +105,10 @@ describe('filtro "solo con stock" (SQL-1)', () => {
   });
 
 
-  it("incluir sin stock no agrega el predicado", async () => {
+  it("el ?stock=todos de los links viejos cae en el default: no agrega el predicado", async () => {
     await getPaginaCatalogo({
       soloVisibles: false,
-      filtros: filtrosDeEstado(leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK })),
+      filtros: filtrosDeEstado(leerEstado({ stock: "todos" })),
     });
     for (const { sql } of sinLecturaDelArbol(grabadora.consultas)) expect(sinOrden(sql)).not.toMatch(STOCK);
   });

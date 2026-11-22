@@ -246,3 +246,29 @@ describe("GET /api/mi-cuenta/comprobantes (Mis comprobantes)", () => {
     expect((await GET(new Request("http://localhost/api/mi-cuenta/comprobantes"))).status).toBe(401);
   });
 });
+
+describe("cuenta de Alegra secundaria (D4: payment_receipts keyed sin cuenta)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("POST sin pedido: 409 en usted y nada se crea", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    vinculado();
+    const res = await post(body({ paidOn: hoy() }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: "El informe de pagos de cuenta corriente no está disponible en este sitio. Comuníquese con su vendedor.",
+    });
+    expect(crearSubiendo).not.toHaveBeenCalled();
+    expect(r2.presignPut).not.toHaveBeenCalled();
+  });
+
+  it("GET del historial: 409 sin leer comprobantes por código de cliente", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    vinculado();
+    const res = await GET(new Request("http://localhost/api/mi-cuenta/comprobantes"));
+    expect(res.status).toBe(409);
+    expect(listarDelCliente).not.toHaveBeenCalled();
+  });
+});

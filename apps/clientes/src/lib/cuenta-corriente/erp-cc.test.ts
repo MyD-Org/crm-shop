@@ -278,6 +278,17 @@ describe("getCondiciones (CON-1)", () => {
     expect(c.condicionPago).toBe("60 días");
   });
 
+  it("cuenta de Alegra secundaria: no consulta client_commercial_conditions (keyed sin cuenta)", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    grabadora = dbGrabadora(() => [["15 días", 15, "Otra", [{ concepto: "X", porcentaje: 10 }], null, { modalidad: "Expreso" }]]);
+    const c = await getCondiciones("42", CONTACTO);
+    expect(grabadora.consultas).toHaveLength(0);
+    expect(c.condicionPago).toBe("30 días");
+    expect(c.descuentos).toEqual([]);
+    expect(c.transporte).toBeNull();
+    expect(c.vendedor).toEqual({ nombre: "Vendedor Uno", telefono: null, email: null });
+  });
+
   it("sin nada en ninguna fuente: todo vacío, sin datos de ejemplo", async () => {
     state.contacto = null;
     grabadora = dbGrabadora(() => []);

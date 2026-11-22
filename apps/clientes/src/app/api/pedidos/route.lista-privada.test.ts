@@ -43,7 +43,6 @@ vi.mock("@/lib/pagos", () => ({ procesadorConfigurado: () => true }));
 vi.mock("@/lib/contacto-pedido-repo", () => ({ contactoDelPedido: async () => null }));
 // Facturación desde el espejo del CRM (comprador vinculado): datos completos, sin pasar por Alegra.
 vi.mock("@/lib/contactos-espejo", () => ({
-  CUENTA_ALEGRA_PRINCIPAL: "principal",
   facturacionEspejo: async () => ({
     alegraId: "42",
     name: "Cliente de Prueba SA",

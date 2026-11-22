@@ -14,6 +14,10 @@ export const INIT_CAIDO = "No pudimos preparar la subida del comprobante. Intén
 export const CONFIRM_CAIDO = "No pudimos procesar el comprobante. Inténtelo de nuevo en unos minutos.";
 export const HISTORIAL_CAIDO = "No pudimos obtener sus comprobantes. Inténtelo de nuevo en unos minutos.";
 
+// Despliegue con cuenta de Alegra secundaria: sólo se informa el pago de un pedido.
+export const INFORME_CC_NO_DISPONIBLE =
+  "El informe de pagos de cuenta corriente no está disponible en este sitio. Comuníquese con su vendedor.";
+
 // Comprobante por pedido (comprador con o sin cuenta corriente).
 export const PEDIDO_NO_ENCONTRADO = "No encontramos el pedido.";
 export const LIMITE_PEDIDO = "Superó el límite de comprobantes. Inténtelo más tarde.";

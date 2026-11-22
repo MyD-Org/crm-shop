@@ -11,6 +11,7 @@
 import { aiApiConfig } from "./ai-api-config";
 import { identidadActual } from "./auth";
 import { chatIaHabilitado } from "./chat-ia-flag";
+import { esCuentaPrincipal } from "./cuenta-alegra";
 import { datosTenant } from "./cuenta-corriente/tenant-cc";
 import { textosChatTenant } from "./chat-ia-textos-tenant";
 import { getMarca } from "./marca";
@@ -53,9 +54,10 @@ export async function propsChatIa(): Promise<PropsChatIa | null> {
  * cuenta) si está configurado. Sólo se lee la identidad cuando hay dos agentes:
  * con uno no cambia nada. El agente es un dato público; lo que protege la cuenta
  * es el `crm_token`, que sólo lleva la sesión del vinculado (ver chat-ia-sesion).
+ * Con cuenta de Alegra secundaria no hay tools de cuenta (sin `crm_token`): agente común.
  */
 async function agenteSegunIdentidad(config: { agentId: string; agentIdCliente?: string }): Promise<string> {
-  if (!config.agentIdCliente) return config.agentId;
+  if (!config.agentIdCliente || !esCuentaPrincipal()) return config.agentId;
   const identidad = await identidadActual().catch(() => null);
   return identidad?.cliente?.codigocliente ? config.agentIdCliente : config.agentId;
 }

@@ -36,7 +36,7 @@ const base: EstadoCatalogo = {
   caracteristicas: [],
   orden: "destacados",
   pagina: 1,
-  soloStock: true,
+  soloStock: false,
   vista: "grilla",
 };
 
@@ -207,7 +207,7 @@ describe("chipsActivos", () => {
       categorias: ["ILUMINACION"],
       marcas: ["GENROD", "MACROLED"],
       precioMin: 500,
-      soloStock: false,
+      soloStock: true,
     };
     const chips = chipsActivos(estado, rango).map((c) => ({
       ...c,
@@ -220,14 +220,14 @@ describe("chipsActivos", () => {
       "Marca: Genrod",
       "Marca: Macroled",
       "Precio: $ 500 – $ 50.000",
-      "Incluye sin stock",
+      "Solo con stock",
     ]);
     expect(chips[1].removeLabel).toBe("Quitar filtro Marca: Genrod");
     expect(chips[0].cambios).toEqual({ categorias: [] });
     expect(chips[1].cambios).toEqual({ marcas: ["MACROLED"] });
     expect(chips[3].cambios).toEqual({ precioMin: undefined, precioMax: undefined });
-    expect(chips[4].removeLabel).toBe("Quitar filtro Incluye sin stock");
-    expect(chips[4].cambios).toEqual({ soloStock: true });
+    expect(chips[4].removeLabel).toBe("Quitar filtro Solo con stock");
+    expect(chips[4].cambios).toEqual({ soloStock: false });
   });
 
   it("los atributos van después de las marcas, con su nombre visible", () => {
@@ -273,7 +273,7 @@ describe("limpiarFiltros / hayFiltros / contarFiltrosActivos", () => {
       caracteristicas: [],
       precioMin: undefined,
       precioMax: undefined,
-      soloStock: true,
+      soloStock: false,
     });
   });
 
@@ -282,8 +282,8 @@ describe("limpiarFiltros / hayFiltros / contarFiltrosActivos", () => {
     expect(hayFiltros({ ...base, query: "led", orden: "precio-asc", vista: "lista" })).toBe(false);
     expect(hayFiltros({ ...base, marcas: ["X"] })).toBe(true);
     expect(hayFiltros({ ...base, precioMax: 10 })).toBe(true);
-    expect(hayFiltros({ ...base, soloStock: true })).toBe(false);
-    expect(hayFiltros({ ...base, soloStock: false })).toBe(true);
+    expect(hayFiltros({ ...base, soloStock: false })).toBe(false);
+    expect(hayFiltros({ ...base, soloStock: true })).toBe(true);
   });
 
   it("cuenta cada categoría y marca, el precio como uno y el stock como uno", () => {
@@ -294,19 +294,19 @@ describe("limpiarFiltros / hayFiltros / contarFiltrosActivos", () => {
         marcas: ["GENROD", "MACROLED"],
         precioMin: 500,
         precioMax: 900,
-        soloStock: false,
+        soloStock: true,
       })
     ).toBe(5);
     expect(contarFiltrosActivos(base)).toBe(0);
     expect(contarFiltrosActivos({ ...base, atributos: ["tono-frio", "zocalo-e27"] })).toBe(2);
-    expect(contarFiltrosActivos({ ...base, soloStock: true })).toBe(0);
+    expect(contarFiltrosActivos({ ...base, soloStock: false })).toBe(0);
   });
 });
 
 describe("indexable", () => {
   it("indexan /catalogo, una categoría y sus páginas", () => {
     expect(indexable(base)).toBe(true);
-    expect(indexable({ ...base, soloStock: true })).toBe(true);
+    expect(indexable({ ...base, soloStock: false })).toBe(true);
     expect(indexable({ ...base, categorias: ["ILUMINACION"], pagina: 3 })).toBe(true);
   });
 
@@ -315,7 +315,7 @@ describe("indexable", () => {
     expect(indexable({ ...base, marcas: ["X"] })).toBe(false);
     expect(indexable({ ...base, precioMin: 500 })).toBe(false);
     expect(indexable({ ...base, precioMax: 500 })).toBe(false);
-    expect(indexable({ ...base, soloStock: false })).toBe(false);
+    expect(indexable({ ...base, soloStock: true })).toBe(false);
     expect(indexable({ ...base, orden: "precio-asc" })).toBe(false);
     expect(indexable({ ...base, vista: "lista" })).toBe(false);
     expect(indexable({ ...base, categorias: ["A", "B"] })).toBe(false);

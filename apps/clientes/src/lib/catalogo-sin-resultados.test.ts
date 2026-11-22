@@ -10,7 +10,7 @@ const base: EstadoCatalogo = {
   caracteristicas: [],
   orden: "nombre",
   pagina: 1,
-  soloStock: true,
+  soloStock: false,
   vista: "grilla",
 };
 const locales = [

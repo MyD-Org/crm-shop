@@ -24,8 +24,8 @@ describe("/buscar: destino", () => {
     const r = await destinoDeBusqueda({ q: "foco cálido e27" }, deps());
     expect(r.href).toBe("/catalogo?q=foco+c%C3%A1lido+e27&ia=1");
     // Quien ya había apagado "Solo con stock" lo conserva: es su elección.
-    expect((await destinoDeBusqueda({ q: "foco cálido e27", stock: "todos" }, deps())).href).toBe(
-      "/catalogo?q=foco+c%C3%A1lido+e27&stock=todos&ia=1",
+    expect((await destinoDeBusqueda({ q: "foco cálido e27", stock: "solo" }, deps())).href).toBe(
+      "/catalogo?q=foco+c%C3%A1lido+e27&stock=solo&ia=1",
     );
     expect(r.resumen).toEqual({ intencion: "producto", fuente: "jev", duros: 3, blandos: 1, ms_jev: 420 });
   });
@@ -55,8 +55,8 @@ describe("/buscar: destino", () => {
 
   it("flag apagado: la búsqueda clásica de siempre, sin plan", async () => {
     const planFn = vi.fn();
-    const r = await destinoDeBusqueda({ q: "foco", stock: "todos" }, deps({ habilitada: async () => false, plan: planFn }));
-    expect(r).toEqual({ href: "/catalogo?q=foco&stock=todos" });
+    const r = await destinoDeBusqueda({ q: "foco", stock: "solo" }, deps({ habilitada: async () => false, plan: planFn }));
+    expect(r).toEqual({ href: "/catalogo?q=foco&stock=solo" });
     expect(planFn).not.toHaveBeenCalled();
   });
 

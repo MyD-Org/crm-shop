@@ -10,22 +10,22 @@
  * Docs: https://developer.alegra.com/reference
  */
 
+import { credencialesAlegra, shopCuentaAlegra, type CredencialesAlegra } from "./cuenta-alegra";
+
 // `|| ` y no `?? `: una variable definida pero vacía (p. ej. un secret inexistente
 // en GitHub Actions) llega como STRING VACÍO, no como undefined, y con `??` el
 // default no entraba: fallaba con "Invalid URL".
 const BASE_URL =
   process.env.ALEGRA_BASE_URL?.trim() || "https://api.alegra.com/api/v1";
 
-/** Header Authorization calculado una sola vez a partir del email + token. */
-function authHeader(): string {
-  const email = process.env.ALEGRA_EMAIL;
-  const token = process.env.ALEGRA_TOKEN;
-  if (!email || !token) {
-    throw new Error(
-      "Faltan ALEGRA_EMAIL o ALEGRA_TOKEN en el entorno. Revisar .env.local."
-    );
-  }
-  const encoded = Buffer.from(`${email}:${token}`).toString("base64");
+/**
+ * Header Authorization con las credenciales de la cuenta de Alegra del despliegue
+ * (`cuenta-alegra.ts`, único lugar que las lee). Sin credenciales de esa cuenta
+ * tira ANTES del fetch: nunca cae a las de otra cuenta. El mensaje nombra las
+ * variables, nunca sus valores.
+ */
+function authHeader(c: CredencialesAlegra): string {
+  const encoded = Buffer.from(`${c.email}:${c.token}`).toString("base64");
   return `Basic ${encoded}`;
 }
 
@@ -83,13 +83,21 @@ export async function apiFetch<T>(
     if (value !== undefined) url.searchParams.set(key, String(value));
   }
 
+  let autorizacion: string;
+  try {
+    autorizacion = authHeader(credencialesAlegra(shopCuentaAlegra()));
+  } catch (e) {
+    console.error(`[alegra] configuración: ${e instanceof Error ? e.message : String(e)}`);
+    throw e;
+  }
+
   let res: Response;
   for (let intento = 0; ; intento++) {
     res = await fetch(url, {
       method: init.method ?? "GET",
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
       headers: {
-        Authorization: authHeader(),
+        Authorization: autorizacion,
         Accept: "application/json",
         "Content-Type": "application/json",
       },

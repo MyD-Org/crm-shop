@@ -76,7 +76,10 @@ La tabla sale de las `process.env.*` que lee `apps/clientes/src`. "Propia" = val
 | `DATABASE_URL`, `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING`, `MIGRATE_DATABASE_URL` | Compartida | Misma base. Solo migra quien corre `db:migrate`; los deploys no migran. |
 | `SHOP_TENANT_ID` | Compartida | Mismo tenant. |
 | `REDIS_URL`, `UPSTASH_REDIS_REST_REDIS_URL` | Compartida | Rate limit. |
-| `ALEGRA_BASE_URL`, `ALEGRA_EMAIL`, `ALEGRA_TOKEN` | Compartida | Las mismas cuentas de Alegra. |
+| `ALEGRA_BASE_URL` | Compartida | Misma API de Alegra. |
+| `SHOP_CUENTA_ALEGRA` | Propia | Slug de la cuenta de Alegra del despliegue (`alegra_cuentas` del CRM). Ausente o vacía = `principal`. Ver U4b. |
+| `ALEGRA_EMAIL`, `ALEGRA_TOKEN` | Propia por proyecto | Credenciales de la cuenta `principal`. Sólo hacen falta si el proyecto opera con la principal. |
+| `ALEGRA_EMAIL_<SLUG>`, `ALEGRA_TOKEN_<SLUG>` | Propia por proyecto | Credenciales de la cuenta `SHOP_CUENTA_ALEGRA` cuando no es `principal` (Sensitive). Ver U4b. |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Compartida | Ver U8 para el dominio remitente. |
 | `SESSION_SECRET`, `OTP_SECRET` | Compartida o propia | Si se comparten, las sesiones propias del Shop valen en ambos hosts; si no, quedan separadas. Cualquiera de las dos sirve, pero que sea una decisión consciente. |
 | `CRON_SECRET` | Compartida | Mismo valor que el secreto `CLIENTES_CRON_SECRET` de GitHub si el workflow apunta a B. |
@@ -88,6 +91,36 @@ La tabla sale de las `process.env.*` que lee `apps/clientes/src`. "Propia" = val
 
 Mercado Pago: la `notification_url` se arma con el origin del request, así que cada proyecto
 notifica a su propio host sin configuración adicional.
+
+### U4b. Cuenta de Alegra del despliegue
+
+Change `shop-contactos-alegra-mdp`. Cada proyecto puede operar contra una cuenta de Alegra distinta
+del mismo tenant (p. ej. A con la `principal` y B con `mdp`). Lo decide `SHOP_CUENTA_ALEGRA`, que se
+lee sólo en `src/lib/cuenta-alegra.ts`:
+
+- Ausente o vacía: `principal`. Es el comportamiento de siempre; un proyecto que no la define no
+  cambia en nada.
+- Valor: slug de `alegra_cuentas` del CRM (minúsculas, dígitos y `-`, hasta 40). Un valor inválido
+  hace fallar las llamadas a Alegra (no se adivina la cuenta).
+- Credenciales: `principal` usa `ALEGRA_EMAIL` / `ALEGRA_TOKEN`; otra cuenta usa
+  `ALEGRA_EMAIL_<SLUG>` / `ALEGRA_TOKEN_<SLUG>`, con el slug en mayúsculas y `-` -> `_` (la misma regla
+  que las credenciales de pagos: `mdp` -> `_MDP`, `mar-del-plata` -> `_MAR_DEL_PLATA`).
+- **Fail-closed**: si la cuenta no es `principal` y falta alguna de sus dos variables, toda llamada en
+  vivo a Alegra falla con un error de configuración (el log nombra las variables, nunca sus valores).
+  **Nunca** se usa `ALEGRA_EMAIL` / `ALEGRA_TOKEN` en su lugar: un id de contacto de una cuenta
+  consultado con la credencial de otra es otra persona.
+- Una guarda (`src/lib/cuenta-alegra.test.ts`) falla si otro archivo de `src` nombra estas variables.
+
+**Rotar el token de una cuenta secundaria** (p. ej. `mdp`): el token vive en dos lugares, la base del
+CRM (credenciales de `alegra_cuentas`, que usa el sync y la facturación) y el env del proyecto del
+Shop que opera con esa cuenta (`ALEGRA_TOKEN_MDP`). Actualizar los dos y redesplegar el Shop.
+
+**Orden de activación**: hoy sólo está la resolución de la cuenta y sus credenciales (rebanada S1).
+Las lecturas del espejo de contactos, los vínculos y los pedidos por cuenta llegan en S2, S3 y S4.
+**No cargar `SHOP_CUENTA_ALEGRA` con un valor distinto de `principal` hasta que S1, S2, S3 y S4 estén
+en producción** (con sus migraciones aplicadas): antes de eso, los vínculos y pedidos existentes
+(ids de la principal) se leerían como ids de la otra cuenta. Rollback: quitar la variable y
+redesplegar.
 
 ### U5. Vercel Flags en B
 

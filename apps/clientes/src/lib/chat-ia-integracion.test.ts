@@ -22,10 +22,10 @@ describe("filtros del agente → URL del catálogo", () => {
         price_min: 1000,
         price_max: 50000,
         sort: "precio-asc",
-        in_stock_only: false,
+        in_stock_only: true,
       }),
     ).toBe(
-      "/catalogo?q=50w&categoria=Reflectores&marca=GENROD&atr=tono-calido&atr=apto-exterior&precio_min=1000&precio_max=50000&stock=todos&orden=precio-asc",
+      "/catalogo?q=50w&categoria=Reflectores&marca=GENROD&atr=tono-calido&atr=apto-exterior&precio_min=1000&precio_max=50000&stock=solo&orden=precio-asc",
     );
   });
 
@@ -39,9 +39,9 @@ describe("filtros del agente → URL del catálogo", () => {
     ).toBe("/catalogo?atr=zocalo-e27");
   });
 
-  it("sin filtros, el catálogo; in_stock_only true o ausente es el default", () => {
+  it("sin filtros, el catálogo; in_stock_only false o ausente es el default", () => {
     expect(hrefDeFiltros({})).toBe("/catalogo");
-    expect(hrefDeFiltros({ in_stock_only: true })).toBe("/catalogo");
+    expect(hrefDeFiltros({ in_stock_only: false })).toBe("/catalogo");
     expect(estadoDeFiltros({ q: "reflector" }).orden).toBe("relevancia");
   });
 

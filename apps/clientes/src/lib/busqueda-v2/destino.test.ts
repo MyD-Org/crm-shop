@@ -11,7 +11,7 @@ const base: EstadoCatalogo = {
   caracteristicas: [],
   orden: "nombre",
   pagina: 1,
-  soloStock: true,
+  soloStock: false,
   vista: "grilla",
 };
 
@@ -109,6 +109,6 @@ describe("estadoConPlan: la b√∫squeda no agrega filtros que la persona no eligi√
     const leido = leerEstado({ q: sp.get("q") ?? undefined, atr: sp.getAll("atr"), ia: sp.get("ia") ?? undefined });
     expect(leido.atributos).toEqual([]);
     expect(leido.categorias).toEqual([]);
-    expect(leido.soloStock).toBe(true);
+    expect(leido.soloStock).toBe(false);
   });
 });

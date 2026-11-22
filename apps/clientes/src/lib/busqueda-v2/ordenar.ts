@@ -32,7 +32,9 @@
  *   industrial): lo industrial o de más de 200 W -2. Señal blanda, nunca
  *   excluye: en el patio de una casa se pone un reflector de 20–50 W, no uno de
  *   240 W;
- * - con stock +1.
+ * - con stock +200: un escalón por encima de todo lo textual (los sin stock se muestran, pero después) y por
+ *   debajo de la medida discreta: el que cumple la medida pedida va antes aunque no tenga stock, y entre los que
+ *   la cumplen (o entre los sin dato) primero los que tienen. Con el filtro "Solo con stock" todos lo suman.
  *
  * Los empates los desempata catalog.ts (`ordenDe`): más stock primero, después
  * el nombre.
@@ -55,7 +57,8 @@ export const PUNTOS = {
   frase: 10,
   categoria: 6,
   atributo: 3,
-  stock: 1,
+  /** Escalón del stock: mayor que la suma de las partes textuales, menor que la medida discreta. */
+  stock: 200,
   /** Lo industrial o de alta potencia en una consulta de la casa (se resta). */
   industrialEnCasa: 2,
   /** Escalón del orden estricto de las medidas discretas: mayor que toda la suma de las demás partes, con holgura. */

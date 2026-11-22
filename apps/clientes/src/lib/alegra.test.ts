@@ -251,3 +251,57 @@ describe("precioDeLista: regla única de la cuenta", () => {
     expect(precioDeLista(prices(), "7")).toBe(1000);
   });
 });
+
+/**
+ * Cuenta de Alegra del despliegue (`SHOP_CUENTA_ALEGRA`): la llamada se autentica con las credenciales
+ * de ESA cuenta y, si faltan, no sale ninguna petición (nunca con las de la principal).
+ */
+describe("apiFetch con la cuenta de Alegra del despliegue", () => {
+  const basic = (email: string, token: string) => `Basic ${Buffer.from(`${email}:${token}`).toString("base64")}`;
+  const autorizacionDe = (fetchMock: ReturnType<typeof vi.fn>) =>
+    (fetchMock.mock.calls[0][1] as RequestInit & { headers: Record<string, string> }).headers.Authorization;
+
+  beforeEach(() => {
+    vi.stubEnv("ALEGRA_EMAIL", "igz@cliente.example");
+    vi.stubEnv("ALEGRA_TOKEN", "token-igz");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("sin SHOP_CUENTA_ALEGRA usa las credenciales de la principal (como siempre)", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "");
+    const fetchMock = vi.fn(async () => respuesta(200, { id: "7" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await getItem("7");
+    expect(autorizacionDe(fetchMock)).toBe(basic("igz@cliente.example", "token-igz"));
+  });
+
+  it("con SHOP_CUENTA_ALEGRA=mdp usa ALEGRA_EMAIL_MDP / ALEGRA_TOKEN_MDP", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    vi.stubEnv("ALEGRA_EMAIL_MDP", "mdp@cliente.example");
+    vi.stubEnv("ALEGRA_TOKEN_MDP", "token-mdp");
+    const fetchMock = vi.fn(async () => respuesta(200, { id: "7" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await getItem("7");
+    expect(autorizacionDe(fetchMock)).toBe(basic("mdp@cliente.example", "token-mdp"));
+  });
+
+  it("mdp sin sus credenciales: rechaza sin llamar a fetch y el log no lleva valores", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    vi.stubEnv("ALEGRA_EMAIL_MDP", "mdp@cliente.example");
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn(async () => respuesta(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(getItem("7")).rejects.toThrow(/ALEGRA_TOKEN_MDP/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const logueado = errorLog.mock.calls.flat().join(" ");
+    expect(logueado).toMatch(/ALEGRA_TOKEN_MDP/);
+    for (const valor of ["igz@cliente.example", "token-igz", "mdp@cliente.example"]) {
+      expect(logueado).not.toContain(valor);
+    }
+  });
+});

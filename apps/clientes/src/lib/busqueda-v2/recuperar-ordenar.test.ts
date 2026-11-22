@@ -200,7 +200,7 @@ describe("ordenar", () => {
     expect(texto).toMatch(/\(case when \(TEXTO ~ \$\d+ or TEXTO ~ \$\d+\) and TEXTO ~ \$\d+ then 3 else 0 end\)/);
     expect(texto).toContain("(case when EN_CATEGORIAS(");
     expect(texto).toContain("(case when ATRIBUTO_apto_exterior then $");
-    expect(texto).toContain("(case when CON_STOCK then 1 else 0 end)");
+    expect(texto).toContain(`(case when CON_STOCK then ${PUNTOS.stock} else 0 end)`);
     expect(params).toContain("reflector led potente");
     expect(params).toContain("^(reflector)");
     expect(params).toContain(3); // 6 × 0,5
@@ -302,8 +302,14 @@ describe("orden de las medidas discretas: el que cumple, antes que el que contra
   });
 
   it("la penalidad y el premio superan por mucho cualquier otra parte del puntaje", () => {
-    const otras = Object.entries(PUNTOS).filter(([k]) => k !== "medidaDiscreta" && k !== "contradiceMedida").reduce((t, [, v]) => t + v, 0);
-    expect(PUNTOS.medidaDiscreta).toBeGreaterThan(10 * otras);
+    const otras = Object.entries(PUNTOS).filter(([k]) => !["medidaDiscreta", "contradiceMedida", "stock"].includes(k)).reduce((t, [, v]) => t + v, 0);
+    expect(PUNTOS.medidaDiscreta).toBeGreaterThan(PUNTOS.stock + 10 * otras);
+  });
+
+  it("el stock es un escalón entre lo textual y la medida: con stock primero, salvo que el otro cumpla la medida", () => {
+    const otras = Object.entries(PUNTOS).filter(([k]) => !["medidaDiscreta", "contradiceMedida", "stock"].includes(k)).reduce((t, [, v]) => t + v, 0);
+    expect(PUNTOS.stock).toBeGreaterThan(3 * otras);
+    expect(PUNTOS.medidaDiscreta).toBeGreaterThan(PUNTOS.stock + 3 * otras);
   });
 
   it("contradecir una clave pesa más que cumplir las cuatro discretas: sin contradicción primero, como orden", () => {

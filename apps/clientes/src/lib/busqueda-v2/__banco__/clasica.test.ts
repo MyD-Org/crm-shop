@@ -42,7 +42,7 @@ describe("ejecutarClasica", () => {
     await ejecutarClasica("lampara", { vista: vistaProduccion(true) }, { tolerante: false });
     const opts = getPaginaCatalogo.mock.calls[0][0];
     expect(opts.soloVisibles).toBe(true);
-    expect(opts.filtros.soloStock).toBe(true);
+    expect(opts.filtros.soloStock).toBe(false);
   });
 
   it("sin vista usa VISTA_ACTUAL", async () => {

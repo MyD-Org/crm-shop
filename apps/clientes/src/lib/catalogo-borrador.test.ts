@@ -8,7 +8,7 @@ import {
   hrefAlQuitarBusqueda,
   limpiarBorrador,
 } from "./catalogo-borrador";
-import { STOCK_INCLUYE_SIN_STOCK, type EstadoCatalogo } from "./catalogo-url";
+import { STOCK_SOLO_CON_STOCK, type EstadoCatalogo } from "./catalogo-url";
 
 const base: EstadoCatalogo = {
   query: undefined,
@@ -18,15 +18,15 @@ const base: EstadoCatalogo = {
   caracteristicas: [],
   orden: "destacados",
   pagina: 1,
-  soloStock: true,
+  soloStock: false,
   vista: "grilla",
 };
 
 describe("cambiarBorrador", () => {
   it("acumula cambios sin navegar: el borrador es un estado completo", () => {
     let b = cambiarBorrador(base, { marcas: ["GENROD"] });
-    b = cambiarBorrador(b, { soloStock: false });
-    expect(b).toEqual({ ...base, marcas: ["GENROD"], soloStock: false });
+    b = cambiarBorrador(b, { soloStock: true });
+    expect(b).toEqual({ ...base, marcas: ["GENROD"], soloStock: true });
   });
 
   it("un cambio con undefined borra el valor (quitar el rango de precio)", () => {
@@ -56,7 +56,7 @@ describe("limpiarBorrador", () => {
       categorias: ["ILUMINACION"],
       marcas: ["GENROD"],
       precioMin: 500,
-      soloStock: false,
+      soloStock: true,
     });
     expect(b).toEqual({
       ...base,
@@ -73,10 +73,10 @@ describe("limpiarBorrador", () => {
 describe("hrefAlAplicar", () => {
   it("scenario MOB-2 aplicar: una sola URL con todo el borrador", () => {
     const b = cambiarBorrador(cambiarBorrador(base, { marcas: ["GENROD"] }), {
-      soloStock: false,
+      soloStock: true,
     });
     expect(hrefAlAplicar(base, b)).toBe(
-      `/catalogo?marca=GENROD&stock=${STOCK_INCLUYE_SIN_STOCK}`
+      `/catalogo?marca=GENROD&stock=${STOCK_SOLO_CON_STOCK}`
     );
   });
 
@@ -99,7 +99,7 @@ describe("hrefAlAplicar", () => {
   });
 
   it("limpiar en el borrador y aplicar borra los filtros de la URL", () => {
-    const estado = { ...base, categorias: ["ILUMINACION"], precioMin: 500, soloStock: false };
+    const estado = { ...base, categorias: ["ILUMINACION"], precioMin: 500, soloStock: true };
     expect(hrefAlAplicar(estado, limpiarBorrador(estado))).toBe("/catalogo");
   });
 
@@ -131,8 +131,8 @@ describe("hrefAlAplicar", () => {
   });
 
   it("volver a sólo con stock desde incluir sin stock quita el parámetro", () => {
-    const estado = { ...base, soloStock: false };
-    expect(hrefAlAplicar(estado, cambiarBorrador(estado, { soloStock: true }))).toBe(
+    const estado = { ...base, soloStock: true };
+    expect(hrefAlAplicar(estado, cambiarBorrador(estado, { soloStock: false }))).toBe(
       "/catalogo"
     );
   });
@@ -216,7 +216,7 @@ describe("categoría en el acto en la hoja (spec R13)", () => {
   };
 
   it("borradorAlElegirCategoria cambia la categoría, descarta las características y conserva el resto", () => {
-    const b = cambiarBorrador(estado, { precioMin: 500, soloStock: false });
+    const b = cambiarBorrador(estado, { precioMin: 500, soloStock: true });
     expect(borradorAlElegirCategoria(b, ["LLAVES"])).toEqual({
       ...b,
       categorias: ["LLAVES"],
@@ -262,24 +262,24 @@ describe("categoría en el acto en la hoja (spec R13)", () => {
 
 describe("hrefAlCambiarStock (el stock se aplica en el acto en la hoja)", () => {
   it("apagar 'Solo con stock' navega sin esperar Aplicar", () => {
-    expect(hrefAlCambiarStock(base, base, { soloStock: false })).toBe(
-      `/catalogo?stock=${STOCK_INCLUYE_SIN_STOCK}`
+    expect(hrefAlCambiarStock(base, base, { soloStock: true })).toBe(
+      `/catalogo?stock=${STOCK_SOLO_CON_STOCK}`
     );
   });
 
   it("lleva el borrador completo: lo que ya se había tocado viaja con el cambio de stock", () => {
     const b = cambiarBorrador(base, { marcas: ["DCK"] });
-    expect(hrefAlCambiarStock(base, b, { soloStock: false })).toBe(
-      `/catalogo?marca=DCK&stock=${STOCK_INCLUYE_SIN_STOCK}`
+    expect(hrefAlCambiarStock(base, b, { soloStock: true })).toBe(
+      `/catalogo?marca=DCK&stock=${STOCK_SOLO_CON_STOCK}`
     );
   });
 
   it("elegir un local navega con el local", () => {
-    expect(hrefAlCambiarStock(base, base, { retiroEn: "igz", soloStock: true })).toBe("/catalogo?retiro=igz");
+    expect(hrefAlCambiarStock(base, base, { retiroEn: "igz", soloStock: false })).toBe("/catalogo?retiro=igz");
   });
 
   it("sin cambios respecto de la URL no navega", () => {
-    expect(hrefAlCambiarStock(base, base, { soloStock: true })).toBeNull();
+    expect(hrefAlCambiarStock(base, base, { soloStock: false })).toBeNull();
   });
 });
 

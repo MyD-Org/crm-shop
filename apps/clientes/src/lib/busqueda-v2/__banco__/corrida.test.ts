@@ -73,7 +73,7 @@ describe("correr: armado del reporte", () => {
 
   it("la vista de producción se declara como tal", async () => {
     const { json } = await correr(opciones({ vista: vistaProduccion(true), produccion: true }), deps());
-    expect(json.cabecera.vista).toEqual({ variante: "produccion", soloVisibles: true, soloStock: true });
+    expect(json.cabecera.vista).toEqual({ variante: "produccion", soloVisibles: true, soloStock: false });
   });
 
   it("tubería sin Jev: el modo queda 'no aplica'", async () => {

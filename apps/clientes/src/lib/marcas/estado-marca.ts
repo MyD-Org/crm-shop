@@ -24,7 +24,7 @@ export function estadoCatalogoDeMarca(params: Params): EstadoCatalogo {
 export function hrefMarcaConEstado(slug: string, estado: EstadoCatalogo, linea?: string): string {
   // El orden y la forma de cada parámetro son los de `/catalogo`; sólo cambia cómo se escribe el stock.
   const deCatalogo = new URL(
-    hrefCatalogo({ ...estado, marcas: [], query: undefined, ia: undefined, soloStock: true }),
+    hrefCatalogo({ ...estado, marcas: [], query: undefined, ia: undefined, soloStock: false }),
     "https://x.example",
   ).searchParams;
   const sp = new URLSearchParams();

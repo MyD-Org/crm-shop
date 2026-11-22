@@ -1936,7 +1936,8 @@ function ordenDestacadosSql(
 }
 
 /**
- * ORDER BY según el criterio elegido. Sin búsqueda el default es `destacados`
+ * ORDER BY según el criterio elegido (después de "con stock primero", ver `ordenDe`). Sin
+ * búsqueda el default es `destacados`
  * (ver `ordenDestacadosSql`); `nombre` es el alfabético.
  * El desempate por nombre mantiene la paginación estable (sin él, dos productos
  * del mismo precio pueden intercambiarse entre páginas).
@@ -1955,7 +1956,29 @@ const desempateRelevancia = (disp?: ContextoDisponibilidad, categorias?: string[
   asc(crmCatalogo.name),
 ];
 
+/**
+ * Con stock primero, en TODOS los órdenes: los sin stock se muestran (el filtro "Solo con stock"
+ * viene apagado) pero siempre después de los que tienen, incluso de los destacados a mano. Misma
+ * regla que el filtro (`conStock`): no inventariable y a pedido cuentan como con stock. Con el
+ * filtro prendido todos tienen stock y la clave sobra. Excepción: la búsqueda con plan, donde coincidir con la
+ * medida pedida pesa más que el stock (ver `puntajeBusqueda`).
+ */
 function ordenDe(
+  orden: OrdenCatalogo,
+  filtros: FiltrosCatalogo,
+  disp?: ContextoDisponibilidad,
+  destacados?: ContextoDestacados,
+  modalidades: readonly VentaSinStock[] = [],
+) {
+  const propio = ordenPropio(orden, filtros, disp, destacados, modalidades);
+  if (filtros.soloStock) return propio;
+  // Búsqueda con plan: el stock ya es un escalón del puntaje (`PUNTOS.stock`), por debajo de la medida
+  // pedida. Un diferencial 2x40 exacto sin stock va antes que uno de otra medida con stock.
+  if (orden === "relevancia" && textoDe(filtros).plan) return propio;
+  return [sql`(case when ${conStock(disp, modalidades)} then 0 else 1 end) asc`, ...propio];
+}
+
+function ordenPropio(
   orden: OrdenCatalogo,
   filtros: FiltrosCatalogo,
   disp?: ContextoDisponibilidad,

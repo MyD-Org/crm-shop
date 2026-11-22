@@ -95,10 +95,13 @@ describe('filtro "solo con stock" (SQL-1)', () => {
   });
 
 
-  it("el estado por defecto de la URL (sin parámetros) filtra por stock", async () => {
+  it("el estado por defecto de la URL (sin parámetros) no filtra por stock: lo usa para ordenar", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: filtrosDeEstado(leerEstado({})) });
-    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(2);
-    for (const { sql } of sinLecturaDelArbol(grabadora.consultas)) expect(sql).toMatch(STOCK);
+    const [conteo, pagina] = sinLecturaDelArbol(grabadora.consultas);
+    expect(conteo.sql).not.toMatch(STOCK);
+    const orden = pagina.sql.slice(pagina.sql.indexOf(" order by "));
+    expect(pagina.sql.slice(0, pagina.sql.indexOf(" order by "))).not.toMatch(STOCK);
+    expect(orden).toMatch(/^ order by \(case when /);
   });
 
 
@@ -183,8 +186,9 @@ describe("orden por defecto (SQL-5): destacados", () => {
     expect(orden).toContain("array_position(");
     expect(orden).toContain("jsonb_array_length(");
     expect(orden).toMatch(/"catalog_products_shop"\."name" asc, "catalog_products_shop"\."alegra_id" asc limit/);
-    // Los destacados del admin (`catalog_overlay.orden`) van antes que todo lo automático.
-    expect(orden).toMatch(/^ order by \("public"\."catalog_overlay"\."orden" is null\) asc, "public"\."catalog_overlay"\."orden" asc, first_value\(/);
+    // Con stock primero, incluso antes de los destacados del admin (`catalog_overlay.orden`), que
+    // van antes que todo lo automático.
+    expect(orden).toMatch(/^ order by \(case when .* end\) asc, \("public"\."catalog_overlay"\."orden" is null\) asc, "public"\."catalog_overlay"\."orden" asc, first_value\(/);
   });
 
   it("los destacados manuales sólo se leen con orden=destacados", async () => {
@@ -197,6 +201,18 @@ describe("orden por defecto (SQL-5): destacados", () => {
   it("orden=nombre sigue siendo el alfabético, sin leer el árbol", async () => {
     await getPaginaCatalogo({ soloVisibles: false, orden: "nombre" });
     expect(grabadora.consultas).toHaveLength(2);
+    expect(grabadora.consultas[1].sql).toMatch(/order by \(case when .* end\) asc, "catalog_products_shop"\."name" asc limit/);
+  });
+
+  it("con stock primero en todos los órdenes; con 'Solo con stock' prendido la clave sobra", async () => {
+    for (const orden of ["nombre", "precio-asc", "precio-desc", "relevancia", "destacados"] as const) {
+      grabadora.consultas.length = 0;
+      await getPaginaCatalogo({ soloVisibles: false, orden });
+      const pagina = sinLecturaDelArbol(grabadora.consultas)[1];
+      expect(pagina.sql.slice(pagina.sql.indexOf(" order by "))).toMatch(/^ order by \(case when .* then 0 else 1 end\) asc, /);
+    }
+    grabadora.consultas.length = 0;
+    await getPaginaCatalogo({ soloVisibles: false, orden: "nombre", filtros: { soloStock: true } });
     expect(grabadora.consultas[1].sql).toMatch(/order by "catalog_products_shop"\."name" asc limit/);
   });
 

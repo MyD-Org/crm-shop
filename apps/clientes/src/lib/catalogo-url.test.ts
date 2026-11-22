@@ -3,7 +3,7 @@ import {
   ORDENES,
   ORDEN_DEFAULT,
   SOLO_STOCK_DEFAULT,
-  STOCK_INCLUYE_SIN_STOCK,
+  STOCK_SOLO_CON_STOCK,
   IA_DESACTIVADA,
   cambiosDeRango,
   cambiosDePotencia,
@@ -36,7 +36,7 @@ const base: EstadoCatalogo = {
   caracteristicas: [],
   orden: "destacados",
   pagina: 1,
-  soloStock: true,
+  soloStock: false,
   vista: "grilla",
 };
 
@@ -150,7 +150,7 @@ describe("lectura de la query string", () => {
         pagina: "2",
         precio_min: "500",
         precio_max: "50000",
-        stock: STOCK_INCLUYE_SIN_STOCK,
+        stock: STOCK_SOLO_CON_STOCK,
         vista: "lista",
       })
     ).toEqual({
@@ -163,7 +163,7 @@ describe("lectura de la query string", () => {
       pagina: 2,
       precioMin: 500,
       precioMax: 50000,
-      soloStock: false,
+      soloStock: true,
       vista: "lista",
     });
   });
@@ -185,22 +185,28 @@ describe("lectura de la query string", () => {
     expect(estado.vista).toBe("grilla");
   });
 
-  it("sólo con stock es el default: sin parámetro, el filtro está prendido", () => {
-    expect(SOLO_STOCK_DEFAULT).toBe(true);
-    expect(leerEstado({}).soloStock).toBe(true);
+  it("incluir sin stock es el default: sin parámetro, el filtro está apagado", () => {
+    expect(SOLO_STOCK_DEFAULT).toBe(false);
+    expect(leerEstado({}).soloStock).toBe(false);
   });
 
-  it("el filtro sólo se apaga con el valor explícito de incluir sin stock", () => {
-    expect(STOCK_INCLUYE_SIN_STOCK).toBe("todos");
-    expect(leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK }).soloStock).toBe(false);
-    expect(leerEstado({ stock: [STOCK_INCLUYE_SIN_STOCK, "1"] }).soloStock).toBe(false);
-    expect(leerEstado({ stock: "0" }).soloStock).toBe(true);
-    expect(leerEstado({ stock: "true" }).soloStock).toBe(true);
+  it("el filtro sólo se prende con el valor explícito (o el stock=1 de los links viejos)", () => {
+    expect(STOCK_SOLO_CON_STOCK).toBe("solo");
+    expect(leerEstado({ stock: STOCK_SOLO_CON_STOCK }).soloStock).toBe(true);
+    expect(leerEstado({ stock: [STOCK_SOLO_CON_STOCK, "todos"] }).soloStock).toBe(true);
+    expect(leerEstado({ stock: "0" }).soloStock).toBe(false);
+    expect(leerEstado({ stock: "true" }).soloStock).toBe(false);
   });
 
-  it("un link viejo con stock=1 sigue funcionando y se normaliza sin el parámetro", () => {
+  it("un link viejo con stock=1 prende el filtro y se normaliza a stock=solo", () => {
     const estado = leerEstado({ stock: "1", pagina: "2" });
     expect(estado.soloStock).toBe(true);
+    expect(hrefCatalogo(estado)).toBe("/catalogo?stock=solo&pagina=2");
+  });
+
+  it("un link viejo con stock=todos es el default nuevo y se normaliza sin el parámetro", () => {
+    const estado = leerEstado({ stock: "todos", pagina: "2" });
+    expect(estado.soloStock).toBe(false);
     expect(hrefCatalogo(estado)).toBe("/catalogo?pagina=2");
   });
 
@@ -256,13 +262,13 @@ describe("armado de URLs", () => {
         caracteristicas: [],
         precioMin: 500,
         precioMax: 50000,
-        soloStock: false,
+        soloStock: true,
         orden: "precio-asc",
         vista: "lista",
         pagina: 2,
       })
     ).toBe(
-      `/catalogo?categoria=ILUMINACION&marca=GENROD&precio_min=500&precio_max=50000&stock=${STOCK_INCLUYE_SIN_STOCK}&orden=precio-asc&vista=lista&pagina=2`
+      `/catalogo?categoria=ILUMINACION&marca=GENROD&precio_min=500&precio_max=50000&stock=${STOCK_SOLO_CON_STOCK}&orden=precio-asc&vista=lista&pagina=2`
     );
   });
 
@@ -292,14 +298,14 @@ describe("armado de URLs", () => {
     expect(hrefCon({ ...base, pagina: 7 }, { orden: "precio-asc" })).toBe(
       "/catalogo?orden=precio-asc"
     );
-    expect(hrefCon({ ...base, pagina: 7 }, { soloStock: false })).toBe(
-      `/catalogo?stock=${STOCK_INCLUYE_SIN_STOCK}`
+    expect(hrefCon({ ...base, pagina: 7 }, { soloStock: true })).toBe(
+      `/catalogo?stock=${STOCK_SOLO_CON_STOCK}`
     );
   });
 
   it("sólo con stock prendido (el default) no viaja en la URL", () => {
-    expect(hrefCatalogo({ ...base, soloStock: true })).toBe("/catalogo");
-    expect(hrefCon({ ...base, soloStock: false }, { soloStock: true })).toBe("/catalogo");
+    expect(hrefCatalogo({ ...base, soloStock: false })).toBe("/catalogo");
+    expect(hrefCon({ ...base, soloStock: true }, { soloStock: false })).toBe("/catalogo");
   });
 
   it("cambiar de vista conserva la página si el llamador la pasa explícita", () => {
@@ -411,7 +417,7 @@ describe("hrefCanonico", () => {
         marcas: ["GENROD"],
         precioMin: 500,
         precioMax: 900,
-        soloStock: false,
+        soloStock: true,
         orden: "precio-desc",
       })
     ).toBe("/catalogo");
@@ -419,14 +425,14 @@ describe("hrefCanonico", () => {
 });
 
 describe("filtrosDeEstado", () => {
-  it("sin parámetros, la consulta pide sólo productos con stock", () => {
-    expect(filtrosDeEstado(leerEstado({})).soloStock).toBe(true);
+  it("sin parámetros, la consulta no filtra por stock", () => {
+    expect(filtrosDeEstado(leerEstado({})).soloStock).toBe(false);
   });
 
-  it("con incluir sin stock, la consulta no filtra por stock", () => {
+  it("con solo con stock, la consulta pide sólo productos con stock", () => {
     expect(
-      filtrosDeEstado(leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK })).soloStock
-    ).toBe(false);
+      filtrosDeEstado(leerEstado({ stock: STOCK_SOLO_CON_STOCK })).soloStock
+    ).toBe(true);
   });
 
   it("pasa categorías, marcas y precio tal cual y NUNCA el texto (la consulta se la pasa la page al motor)", () => {
@@ -447,7 +453,7 @@ describe("filtrosDeEstado", () => {
       atributos: [],
       precioMin: 500,
       precioMax: 900,
-      soloStock: true,
+      soloStock: false,
     });
   });
 });
@@ -457,14 +463,14 @@ describe("URL del browser contra el estado que renderizó el servidor", () => {
 
   it("lee la query string del browser con las mismas reglas que la page", () => {
     expect(
-      estadoDeBusqueda(sp("q=led&categoria=Hogar&marca=KING&marca=AKAI&stock=todos&pagina=2"))
+      estadoDeBusqueda(sp("q=led&categoria=Hogar&marca=KING&marca=AKAI&stock=solo&pagina=2"))
     ).toEqual({
       ...base,
       query: "led",
       orden: "relevancia",
       categorias: ["Hogar"],
       marcas: ["KING", "AKAI"],
-      soloStock: false,
+      soloStock: true,
       pagina: 2,
     });
     expect(estadoDeBusqueda(sp(""))).toEqual(base);
@@ -670,16 +676,16 @@ describe("filtro 'Con stock en <local>' (?retiro=)", () => {
     expect(leerEstado({}).retiroEn).toBeUndefined();
   });
 
-  it("viaja en la URL después de stock y se lee igual desde el browser", () => {
-    const estado = { ...leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK }), retiroEn: "igz" };
-    expect(hrefCatalogo(estado)).toBe("/catalogo?stock=todos&retiro=igz");
+  it("viaja en la URL sin stock (va implícito) y se lee igual desde el browser", () => {
+    const estado = { ...leerEstado({ stock: STOCK_SOLO_CON_STOCK }), retiroEn: "igz" };
+    expect(hrefCatalogo(estado)).toBe("/catalogo?retiro=igz");
     expect(estadoDeBusqueda(new URLSearchParams("retiro=igz")).retiroEn).toBe("igz");
     expect(hrefCatalogo(leerEstado({}))).toBe("/catalogo");
   });
 
-  it("implica 'solo con stock' aunque la URL diga stock=todos", () => {
-    expect(filtrosDeEstado(leerEstado({ retiro: "igz", stock: STOCK_INCLUYE_SIN_STOCK })).soloStock).toBe(true);
-    expect(filtrosDeEstado(leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK })).soloStock).toBe(false);
+  it("implica 'solo con stock' aunque la URL no lo diga", () => {
+    expect(filtrosDeEstado(leerEstado({ retiro: "igz" })).soloStock).toBe(true);
+    expect(filtrosDeEstado(leerEstado({})).soloStock).toBe(false);
   });
 
   it("no forma parte del canonical", () => {

@@ -7,7 +7,7 @@
  */
 import type { CatalogFilters } from "@myd-org/ai-widget";
 import {
-  STOCK_INCLUYE_SIN_STOCK,
+  STOCK_SOLO_CON_STOCK,
   estadoDeBusqueda,
   hrefCatalogo,
   leerEstado,
@@ -44,8 +44,8 @@ export const ATRIBUTO_PEEK = "data-chat-peek";
 /**
  * Filtros del agente → estado del catálogo, con las MISMAS reglas que la URL
  * (`leerEstado`): lo inválido se descarta (atributo desconocido, precio
- * negativo, orden raro). `in_stock_only: false` incluye los sin stock; sin el
- * campo, el default ("Solo con stock").
+ * negativo, orden raro). `in_stock_only: true` prende "Solo con stock"; sin el
+ * campo o en `false`, el default (todos, los sin stock al final).
  */
 export function estadoDeFiltros(f: CatalogFilters): EstadoCatalogo {
   return leerEstado({
@@ -56,7 +56,7 @@ export function estadoDeFiltros(f: CatalogFilters): EstadoCatalogo {
     precio_min: f.price_min != null ? String(f.price_min) : undefined,
     precio_max: f.price_max != null ? String(f.price_max) : undefined,
     orden: f.sort,
-    stock: f.in_stock_only === false ? STOCK_INCLUYE_SIN_STOCK : undefined,
+    stock: f.in_stock_only === true ? STOCK_SOLO_CON_STOCK : undefined,
   });
 }
 

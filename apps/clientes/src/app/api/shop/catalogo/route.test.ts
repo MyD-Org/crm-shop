@@ -72,10 +72,10 @@ beforeEach(() => {
 });
 
 describe("GET /api/shop/catalogo", () => {
-  it("sólo con stock, como el Enter (el catálogo llega con su default): el desplegable y el Enter dan el mismo conjunto", async () => {
+  it("con el default del catálogo (sin filtrar stock), como el Enter: el desplegable y el Enter dan el mismo conjunto", async () => {
     respuestas.plan = [prod("1")];
     await pedir("?q=panel+de+interior&limit=8");
-    expect(stocks).toEqual([true]);
+    expect(stocks).toEqual([false]);
   });
 
   it("devuelve el array de productos tal cual, sin envoltorio", async () => {

@@ -74,7 +74,7 @@ export function CatalogoClient({
    */
   filtrosSinBusqueda?: boolean;
   /**
-   * La búsqueda dio 0 con "Solo con stock" (el default), pero incluyendo los sin stock daría esto:
+   * La búsqueda dio 0 con "Solo con stock" prendido, pero incluyendo los sin stock daría esto:
    * el "sin resultados" lo avisa y ofrece verlos. 0 = no aplica.
    */
   sinStock?: number;

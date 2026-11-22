@@ -53,18 +53,22 @@ export function quitarBusqueda(): Partial<EstadoCatalogo> {
 const ORDEN_ALIAS_VIEJO = "ventas";
 
 /**
- * "Solo con stock" viene PRENDIDO por defecto (decisión de producto): sin el
- * parámetro, el catálogo muestra sólo lo que tiene disponibilidad. Apagarlo
- * es lo que viaja en la URL, con un valor explícito (`?stock=todos`).
+ * "Solo con stock" viene APAGADO por defecto (decisión de producto, 2026-11): el
+ * catálogo muestra todo, con los productos con stock primero y los sin stock al
+ * final (el orden lo resuelve `ordenDe` en catalog.ts). Prenderlo es lo que
+ * viaja en la URL (`?stock=solo`).
  *
- * Los links viejos con `?stock=1` (cuando el filtro era opt-in) siguen
- * resolviendo: cualquier valor distinto de `todos` es el default, así que
- * se normalizan a la URL sin el parámetro.
+ * Links viejos: `?stock=1` (cuando el filtro era opt-in) también lo prende;
+ * `?stock=todos` (cuando venía prendido) es el default nuevo y se normaliza a la
+ * URL sin el parámetro.
  */
-export const SOLO_STOCK_DEFAULT = true;
+export const SOLO_STOCK_DEFAULT = false;
 
-/** Valor de `?stock=` que apaga "Solo con stock" (incluye productos sin stock). */
-export const STOCK_INCLUYE_SIN_STOCK = "todos";
+/** Valor de `?stock=` que prende "Solo con stock" (oculta los productos sin stock). */
+export const STOCK_SOLO_CON_STOCK = "solo";
+
+/** Valores de `?stock=` de links viejos que también prenden el filtro. */
+const STOCK_SOLO_LEGADO = new Set([STOCK_SOLO_CON_STOCK, "1"]);
 
 /** Cómo se muestra la página de resultados. */
 export const VISTAS = ["grilla", "lista"] as const;
@@ -106,8 +110,8 @@ export interface EstadoCatalogo {
   potenciaMin?: number;
   potenciaMax?: number;
   /**
-   * Sólo productos con disponibilidad. Default `true` (sin parámetro);
-   * `?stock=todos` lo apaga. Ver `SOLO_STOCK_DEFAULT`.
+   * Sólo productos con disponibilidad. Default `false` (sin parámetro);
+   * `?stock=solo` lo prende. Ver `SOLO_STOCK_DEFAULT`.
    */
   soloStock: boolean;
   /**
@@ -213,11 +217,12 @@ export function comoPrecio(v: ParamCrudo): number | undefined {
 }
 
 /**
- * `stock=todos` exactamente apaga el filtro; cualquier otra cosa (incluido el
- * `stock=1` de los links viejos) es el default.
+ * `stock=solo` (o el `stock=1` de los links viejos) prende el filtro; cualquier
+ * otra cosa (incluido el `stock=todos` de cuando venía prendido) es el default.
  */
 function comoSoloStock(v: ParamCrudo): boolean {
-  return primero(v) === STOCK_INCLUYE_SIN_STOCK ? false : SOLO_STOCK_DEFAULT;
+  const s = primero(v);
+  return s != null && STOCK_SOLO_LEGADO.has(s) ? true : SOLO_STOCK_DEFAULT;
 }
 
 /** Slug de local: minúsculas, dígitos y guiones. Cualquier otra cosa se ignora. */
@@ -384,7 +389,8 @@ export function hrefCatalogo(estado: EstadoCatalogo): string {
   if (estado.precioMax != null) sp.set("precio_max", String(estado.precioMax));
   if (estado.potenciaMin != null) sp.set("potencia_min", String(estado.potenciaMin));
   if (estado.potenciaMax != null) sp.set("potencia_max", String(estado.potenciaMax));
-  if (estado.soloStock !== SOLO_STOCK_DEFAULT) sp.set("stock", STOCK_INCLUYE_SIN_STOCK);
+  // Con un local, "Solo con stock" va implícito (`filtrosDeEstado`): `retiro` alcanza.
+  if (estado.soloStock !== SOLO_STOCK_DEFAULT && !estado.retiroEn) sp.set("stock", STOCK_SOLO_CON_STOCK);
   if (estado.retiroEn) sp.set("retiro", estado.retiroEn);
   if (estado.orden !== ordenPorDefecto(estado.query)) sp.set("orden", estado.orden);
   if (estado.vista !== VISTA_DEFAULT) sp.set("vista", estado.vista);
@@ -499,7 +505,7 @@ export function hrefCanonico(estado: EstadoCatalogo): string {
  * Filtros que la page le pasa a la consulta (`getPaginaCatalogo` /
  * `getFacetas`), SIN texto: la consulta (`estado.query`) se la pasa la page al motor, que arma el
  * `texto` de cada etapa. Vive acá, puro, para que el default de "Solo con stock"
- * llegue al SQL con test: sin parámetros, `soloStock` es `true`.
+ * llegue al SQL con test: sin parámetros, `soloStock` es `false`.
  */
 export function filtrosDeEstado(estado: EstadoCatalogo): FiltrosSinTexto {
   return {

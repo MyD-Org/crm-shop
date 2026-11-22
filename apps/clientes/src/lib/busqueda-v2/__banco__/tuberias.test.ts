@@ -42,7 +42,7 @@ describe("v2", () => {
     expect(contador).toHaveBeenCalledWith({ soloVisibles: true, soloStock: false, estructurados: true });
     const opts = getPaginaCatalogo.mock.calls[0][0];
     expect(opts.soloVisibles).toBe(true);
-    expect(opts.filtros.soloStock).toBe(true);
+    expect(opts.filtros.soloStock).toBe(false);
   });
 
   it("planDe con plan cacheado: no llama a Entender ni cuenta faltantes", async () => {

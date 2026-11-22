@@ -238,10 +238,10 @@ function etiquetaPrecio(estado: EstadoCatalogo, rango: RangoPrecio | null): stri
 }
 
 /**
- * "Solo con stock" prendido es el default y no se muestra como chip. Apagado
- * sí: el chip "Incluye sin stock" permite volver al default.
+ * "Solo con stock" apagado es el default y no se muestra como chip. Prendido
+ * sí: el chip "Solo con stock" permite volver al default.
  */
-const ETIQUETA_INCLUYE_SIN_STOCK = "Incluye sin stock";
+const ETIQUETA_SOLO_CON_STOCK = "Solo con stock";
 
 /** ¿"Solo con stock" está fuera de su default? (cuenta como filtro activo). */
 const stockFueraDeDefault = (e: Pick<EstadoCatalogo, "soloStock">) =>
@@ -304,13 +304,13 @@ export function chipsActivos(
           ),
         ]
       : stockFueraDeDefault(estado)
-        ? [chip("stock", ETIQUETA_INCLUYE_SIN_STOCK, { soloStock: SOLO_STOCK_DEFAULT })]
+        ? [chip("stock", ETIQUETA_SOLO_CON_STOCK, { soloStock: SOLO_STOCK_DEFAULT })]
         : []),
   ];
 }
 
 /**
- * Cambios que vuelven los filtros a su default ("Solo con stock" prendido).
+ * Cambios que vuelven los filtros a su default ("Solo con stock" apagado).
  * La búsqueda, el orden y la vista no se nombran, así que `hrefCon` los
  * conserva.
  */

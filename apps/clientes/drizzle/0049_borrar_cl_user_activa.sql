@@ -1,0 +1,24 @@
+-- Borra el índice viejo de una vinculación activa por usuario (change `shop-contactos-alegra-mdp`).
+--
+--   cl_user_activa  UNIQUE (clerk_user_id) WHERE estado = 'activa'. Lo reemplazó `cl_user_cuenta_activa`
+--                   (una activa por usuario Y cuenta de Alegra, creado en 0047). Mientras existiera, un
+--                   usuario con un vínculo activo en `principal` no podía tener otro activo en una cuenta
+--                   secundaria (`mdp`), que es justamente lo que permite el change.
+--
+-- Por qué recién ahora: 0047 lo conservó a propósito porque el código anterior a S3 hace
+-- `ON CONFLICT (clerk_user_id) WHERE estado = 'activa'` y, sin este índice, vincular fallaría ("there is
+-- no unique or exclusion constraint matching the ON CONFLICT specification"). El código de S3 (#985)
+-- apunta su ON CONFLICT a (clerk_user_id, alegra_account), así que ya no lo necesita.
+--
+-- ORDEN EN PROD: aplicar recién cuando el código de S3 (#985) esté deployado en main. Si se aplica antes,
+-- el código viejo que siga sirviendo tráfico rompe al vincular. Aplicarla antes de activar una cuenta
+-- secundaria en cualquier despliegue (S5). En staging, con S3 ya deployado, se puede aplicar al mergear.
+--
+-- Segura con datos: sólo borra un índice; no toca filas. Los datos existentes ya cumplen el índice que
+-- queda (como mucho una activa por usuario, en `principal`).
+--
+-- Reversa (a mano, en una migración nueva, append-only; nunca editar ésta), sólo si no hay dos vínculos
+-- activos del mismo usuario en cuentas distintas (si los hay, el CREATE falla):
+--   CREATE UNIQUE INDEX "cl_user_activa" ON "shop"."client_links" USING btree ("clerk_user_id")
+--     WHERE "shop"."client_links"."estado" = 'activa';
+DROP INDEX IF EXISTS "shop"."cl_user_activa";

@@ -1,0 +1,22 @@
+-- Pedido con la cuenta de Alegra del cliente (change `shop-contactos-alegra-mdp`, rebanada S4).
+--
+--   orders.cliente_cuenta  cuenta de Alegra del despliegue donde se hizo el pedido: `principal` o el
+--                          slug de una cuenta secundaria del tenant (`mdp`). Es la cuenta a la que
+--                          pertenece `cliente_codigo` (los ids de Alegra no son únicos entre cuentas).
+--                          "Mis pedidos" filtra por código Y cuenta; el CRM reusa `cliente_codigo` al
+--                          facturar sólo si la cuenta que factura es ésta.
+--
+-- ADITIVA y segura con datos: DEFAULT constante (metadata-only en PG >= 11), sin backfill. Todo pedido
+-- anterior queda en `principal`, que es la única cuenta que existía en el Shop. El código anterior a
+-- esta migración sigue funcionando (no nombra la columna y el default la completa). El CHECK se valida
+-- sobre filas que ya tienen todas `principal`.
+--
+-- Esta migración tiene que correr ANTES de desplegar el código (db:migrate no corre en el deploy), y
+-- ANTES de cargar `SHOP_CUENTA_ALEGRA` distinto de `principal` en cualquier despliegue.
+--
+-- Reversa (a mano, en una migración nueva, append-only; nunca editar ésta), sólo después de sacar el
+-- código y de que el CRM deje de leer la columna:
+--   ALTER TABLE "shop"."orders" DROP CONSTRAINT "orders_cliente_cuenta_check";
+--   ALTER TABLE "shop"."orders" DROP COLUMN "cliente_cuenta";
+ALTER TABLE "shop"."orders" ADD COLUMN "cliente_cuenta" text DEFAULT 'principal' NOT NULL;--> statement-breakpoint
+ALTER TABLE "shop"."orders" ADD CONSTRAINT "orders_cliente_cuenta_check" CHECK ("shop"."orders"."cliente_cuenta" ~ '^[a-z0-9][a-z0-9-]{0,39}$');

@@ -57,6 +57,7 @@ import { urlSitioMail } from "./mail-layout";
 import { armarMailCodigoVinculacion, urlLogoMarca } from "./vinculacion-mail";
 import { getMarca } from "./marca";
 import { permitirAsync } from "./rate-limit";
+import { shopCuentaAlegra } from "./cuenta-alegra";
 
 /** Ventana de validez del código. */
 const VIGENCIA_MIN = 10;
@@ -133,11 +134,11 @@ function snapshotDelContacto(c: ContactoVinculable | null) {
 
 /**
  * Los inserts de vínculos activos apuntan el `on conflict` al índice del
- * usuario (`cl_user_activa`): la carrera del mismo usuario consigo mismo es
- * inocua y se absorbe.
+ * usuario y la cuenta (`cl_user_cuenta_activa`): la carrera del mismo usuario
+ * consigo mismo es inocua y se absorbe.
  */
 const conflictoDelUsuario = {
-  target: clientLinks.clerkUserId,
+  target: [clientLinks.clerkUserId, clientLinks.alegraAccount],
   where: sql`"estado" = 'activa'`,
 };
 
@@ -192,7 +193,9 @@ export async function intentarVinculacionPorEmail(
   if (!email) return null;
   const db = getDb();
 
-  // ¿Ya se resolvió antes? Una sola query indexada (`cl_usuario_fecha`).
+  // ¿Ya se resolvió antes EN LA CUENTA DE ESTE DESPLIEGUE? Una sola query
+  // indexada (`cl_usuario_fecha`). Lo de otra cuenta de Alegra no cuenta: su id
+  // es de otra empresa acá, así que se busca de nuevo en esta cuenta.
   //  - Un vínculo activo: no hay nada que hacer.
   //  - Uno revocado (lo desvinculó un admin desde el CRM): se respeta, el
   //    automático nunca vuelve a vincularlo solo.
@@ -200,7 +203,7 @@ export async function intentarVinculacionPorEmail(
   const previos = await db
     .select({ estado: clientLinks.estado })
     .from(clientLinks)
-    .where(eq(clientLinks.clerkUserId, clerkUserId));
+    .where(and(eq(clientLinks.clerkUserId, clerkUserId), eq(clientLinks.alegraAccount, shopCuentaAlegra())));
   if (previos.length > 0) {
     if (previos.some((p) => p.estado !== "sin_coincidencia")) return null;
     return reintentarDesdeElEspejo(clerkUserId, email);
@@ -241,6 +244,7 @@ export async function intentarVinculacionPorEmail(
         alegraContactId: clientes.length === 0 ? "" : "ambiguo",
         estado: "sin_coincidencia",
         metodo: "email_verificado",
+        alegraAccount: shopCuentaAlegra(),
       })
       .onConflictDoNothing();
     return null;
@@ -259,7 +263,7 @@ export async function intentarVinculacionPorEmail(
    * `identidadActual()` corre en el layout, en la página y en las rutas de API
    * —que Next ejecuta en paralelo—. En el primer request de un usuario con
    * match, dos de esas llamadas ven "no existe" y las dos insertan: el índice
-   * único parcial `cl_user_activa` hace tirar a la segunda y el usuario se come
+   * único parcial `cl_user_cuenta_activa` hace tirar a la segunda y el usuario se come
    * un 500 justo en su primer login.
    *
    * Que gane cualquiera de las dos es indistinto: insertan lo mismo. Quien
@@ -281,6 +285,7 @@ async function insertarVinculoPorEmail(
       ...snapshotDelContacto(contacto),
       estado: "activa",
       metodo: "email_verificado",
+      alegraAccount: shopCuentaAlegra(),
     })
     .onConflictDoNothing(conflictoDelUsuario);
 
@@ -398,11 +403,18 @@ export async function solicitarVinculacion(
     };
   }
 
-  // --- ¿Ya tiene una vinculación activa? ---
+  // --- ¿Ya tiene una vinculación activa en la cuenta de este despliegue? ---
+  const cuenta = shopCuentaAlegra();
   const [yaVinculado] = await db
     .select({ id: clientLinks.id })
     .from(clientLinks)
-    .where(and(eq(clientLinks.clerkUserId, clerkUserId), eq(clientLinks.estado, "activa")))
+    .where(
+      and(
+        eq(clientLinks.clerkUserId, clerkUserId),
+        eq(clientLinks.estado, "activa"),
+        eq(clientLinks.alegraAccount, cuenta),
+      ),
+    )
     .limit(1);
 
   if (yaVinculado) {
@@ -463,6 +475,7 @@ export async function solicitarVinculacion(
     codeHash: hashCodigo(clerkUserId, codigo),
     destinoMasked,
     expiresAt,
+    alegraAccount: cuenta,
   });
 
   const marca = await getMarca();
@@ -526,7 +539,10 @@ async function validarCodigo(
     .orderBy(desc(linkOtps.createdAt))
     .limit(1);
 
-  if (!otp) {
+  // Un código pedido en otra cuenta de Alegra (antes de cambiar la cuenta del
+  // despliegue) apunta a un contacto de otra empresa en esta: no sirve, y se
+  // responde igual que si no hubiera código pendiente.
+  if (!otp || otp.alegraAccount !== shopCuentaAlegra()) {
     return { ok: false, detalle: "No hay ningún código pendiente. Pida uno nuevo." };
   }
 
@@ -683,6 +699,7 @@ export async function confirmarVinculacion(
         alegraContactId: otp.alegraContactId,
         ...snapshotDelContacto(contacto),
         metodo: "otp_email",
+        alegraAccount: otp.alegraAccount,
       })
       .onConflictDoNothing(conflictoDelUsuario)
       .returning({ id: clientLinks.id });

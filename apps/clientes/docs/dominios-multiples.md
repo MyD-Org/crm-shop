@@ -115,6 +115,17 @@ lee sólo en `src/lib/cuenta-alegra.ts`:
 CRM (credenciales de `alegra_cuentas`, que usa el sync y la facturación) y el env del proyecto del
 Shop que opera con esa cuenta (`ALEGRA_TOKEN_MDP`). Actualizar los dos y redesplegar el Shop.
 
+**Vínculos y pedidos por cuenta** (rebanadas S3 y S4, migraciones 0047 y 0048 del Shop):
+
+- `client_links.alegra_account` y `link_otps.alegra_account` (default `principal`): el Shop lee y
+  escribe sólo los vínculos de la cuenta de su despliegue. Un vínculo de otra cuenta queda inerte (no
+  se revoca): el usuario se vuelve a buscar por email en el espejo de esta cuenta. La unicidad es una
+  vinculación activa por (usuario, cuenta) (`cl_user_cuenta_activa`). Un código de vinculación pedido
+  en otra cuenta no confirma.
+- `orders.cliente_cuenta` (default `principal`): el pedido guarda siempre la cuenta del despliegue.
+  "Mis pedidos" (y detalle, PDF, comprobantes: todo lo que pasa por `esDeSuDueno`) filtra el código
+  del cliente por código **y** cuenta; la llave por usuario de Clerk no cambia.
+
 **Orden de activación**: hoy sólo está la resolución de la cuenta y sus credenciales (rebanada S1).
 Las lecturas del espejo de contactos, los vínculos y los pedidos por cuenta llegan en S2, S3 y S4.
 **No cargar `SHOP_CUENTA_ALEGRA` con un valor distinto de `principal` hasta que S1, S2, S3 y S4 estén

@@ -1,12 +1,14 @@
 import { createContactRaw, findContactByIdentifier, type AlegraContactInput } from "./alegra"
 import { crearContacto } from "./contactos"
+import { claveCuenta, codigoClienteEnCuenta } from "./pedido-cliente-cuenta"
 import type { TenantConfig } from "./tenants"
 
 // Contacto de Alegra del cliente de un pedido en la cuenta con la que se factura (change
-// `sucursales-igz-mdp`, rebanada D). `orders.cliente_codigo` es el id del contacto en la cuenta
-// PRINCIPAL; en una secundaria ese id no existe y NUNCA se reutiliza: se busca por documento y, si
-// no está, se crea. Crear en una secundaria NO escribe el espejo de contactos (que es el padrón de
-// la principal del tenant): un contacto de otra cuenta lo ensuciaría.
+// `sucursales-igz-mdp`, rebanada D; `shop-contactos-alegra-mdp`, D8). `orders.cliente_codigo` es el
+// id del contacto en la cuenta del pedido (`orders.cliente_cuenta`); en otra cuenta ese id NUNCA se
+// reutiliza: se busca por documento y, si no está, se crea. Crear en una secundaria NO escribe el
+// espejo de contactos (el write-through del CRM es de la principal): un contacto de otra cuenta lo
+// ensuciaría.
 
 // Condición de IVA del Shop (`orders.facturacion_condicion_iva`) → la de Alegra. Mismo mapeo que
 // `apps/clientes/src/lib/contacto-alegra.ts`. Sin dato se usa consumidor final: algunas cuentas de
@@ -55,15 +57,17 @@ export async function crearContactoEnCuenta(
 }
 
 /**
- * Contacto del pedido en la cuenta. Principal: el `cliente_codigo` del pedido. Otra cuenta: por
- * documento o creado. Devuelve `null` si no hay forma de identificarlo (sin documento ni nombre).
+ * Contacto del pedido en la cuenta. Cuenta del pedido: su `cliente_codigo`. Otra cuenta (o sin
+ * código): por documento o creado. Devuelve `null` si no hay forma de identificarlo (sin documento
+ * ni nombre).
  */
 export async function contactoDelPedidoEnCuenta(
   config: TenantConfig,
-  pedido: PedidoParaContacto,
-  cuentaPrincipal: boolean,
+  pedido: PedidoParaContacto & { clienteCuenta: string },
+  cuenta: { principal: boolean; slug: string },
 ): Promise<{ alegraId: string; esNuevo: boolean } | null> {
-  if (cuentaPrincipal && pedido.clienteCodigo) return { alegraId: pedido.clienteCodigo, esNuevo: false }
+  const codigo = codigoClienteEnCuenta(pedido, claveCuenta(cuenta))
+  if (codigo) return { alegraId: codigo, esNuevo: false }
   const documento = pedido.facturacionNroDoc?.trim()
   if (documento) {
     const existente = await findContactByIdentifier(config, documento)
@@ -71,6 +75,6 @@ export async function contactoDelPedidoEnCuenta(
   }
   const nombre = pedido.facturacionRazonSocial?.trim() || pedido.contactoNombre
   if (!nombre) return null
-  const creado = await crearContactoEnCuenta(config, contactoInputDelPedido(pedido), cuentaPrincipal)
+  const creado = await crearContactoEnCuenta(config, contactoInputDelPedido(pedido), cuenta.principal)
   return { alegraId: creado.alegraId, esNuevo: true }
 }

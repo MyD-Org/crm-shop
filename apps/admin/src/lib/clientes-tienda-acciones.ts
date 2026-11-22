@@ -13,7 +13,14 @@ import { patronBusqueda } from "@/lib/clientes-tienda-repo"
 // Reglas de este archivo:
 //  - `tenantId` es SIEMPRE el primer argumento y sale del guard. `shop.client_links` no tiene
 //    tenant: el usuario se verifica contra `shop.clientes` del tenant (y no eliminado) y el
-//    contacto contra `alegra_contacts` del tenant, cuenta principal, activo y de tipo cliente.
+//    contacto contra `alegra_contacts` del tenant, en la cuenta de Alegra elegida, activo y de
+//    tipo cliente.
+//  - Cuenta de Alegra del vínculo (`client_links.alegra_account`, 0047 del Shop; change
+//    `shop-contactos-alegra-mdp`, D9): 'principal' o el slug de una cuenta secundaria ACTIVA del
+//    tenant (`alegra_cuentas`). La elige el operador; se valida acá, nunca se confía en el body.
+//    Cada despliegue del Shop sólo lee los vínculos de su cuenta: uno en la cuenta equivocada
+//    queda inerte (fail-closed).
+//  - La excepción de acceso a Facturación sigue siendo de la cuenta principal (follow-up).
 //  - `actor` ({id, name}) sale de la fila fresca de admin_users (guard), nunca del body.
 //  - Resultados como uniones discriminadas (patrón `registrarPagoManual`); la ruta los traduce.
 //  - Logs de una línea en JSON con ids y el actor: nunca emails ni razones sociales.
@@ -37,6 +44,16 @@ export interface ContactoParaVincular {
 export const CLERK_USER_ID_RE = /^user_[A-Za-z0-9]+$/
 /** Id de contacto de Alegra (numérico en la cuenta real; `ct-1` en el mock). */
 export const ALEGRA_ID_RE = /^[A-Za-z0-9-]{1,40}$/
+/** Clave de cuenta de Alegra: mismo CHECK que `client_links.alegra_account` en el Shop. */
+export const CUENTA_ALEGRA_RE = /^[a-z0-9][a-z0-9-]{0,39}$/
+
+export interface CuentaParaVincular {
+  /** 'principal' o el slug de la secundaria (lo que se guarda en `alegra_account`). */
+  clave: string
+  nombre: string
+}
+
+const NOMBRE_CUENTA_PRINCIPAL = "Cuenta principal"
 
 export const BUSCAR_CONTACTOS_LIMITE = 10
 export const BUSCAR_CONTACTOS_Q_MIN = 2
@@ -54,11 +71,44 @@ function tipoCuenta(v: unknown): "corriente" | "contado" | null {
 }
 
 /**
- * Buscador del diálogo "Vincular": clientes activos de la cuenta principal del tenant por
- * razón social, CUIT (desde 3 dígitos, ignorando guiones) o cualquier email de `emails_norm`
- * (incluye personas asociadas). Lee la VISTA para devolver el acceso con la regla del Shop.
+ * Cuentas de Alegra en las que se puede vincular: la principal (siempre, primero) y las
+ * secundarias activas del tenant.
  */
-export async function buscarContactosParaVincular(tenantId: string, q: string): Promise<ContactoParaVincular[]> {
+export async function listarCuentasParaVincular(tenantId: string): Promise<CuentaParaVincular[]> {
+  const filas = (await getDb().execute(sql`
+    SELECT slug, nombre, principal FROM public.alegra_cuentas
+    WHERE tenant_id = ${tenantId} AND (principal OR activa)
+    ORDER BY principal DESC, nombre, slug
+  `)) as unknown as { slug: string; nombre: string; principal: boolean }[]
+  const principal = filas.find((f) => f.principal)
+  return [
+    { clave: CUENTA_ALEGRA_PRINCIPAL, nombre: principal?.nombre || NOMBRE_CUENTA_PRINCIPAL },
+    ...filas.filter((f) => !f.principal).map((f) => ({ clave: f.slug, nombre: f.nombre })),
+  ]
+}
+
+/** ¿`cuenta` es la principal o una secundaria activa del tenant? */
+export async function esCuentaDelTenant(tenantId: string, cuenta: string): Promise<boolean> {
+  if (cuenta === CUENTA_ALEGRA_PRINCIPAL) return true
+  if (!CUENTA_ALEGRA_RE.test(cuenta)) return false
+  const [c] = (await getDb().execute(sql`
+    SELECT 1 AS ok FROM public.alegra_cuentas
+    WHERE tenant_id = ${tenantId} AND slug = ${cuenta} AND NOT principal AND activa
+  `)) as unknown as { ok: number }[]
+  return Boolean(c)
+}
+
+/**
+ * Buscador del diálogo "Vincular": clientes activos de la cuenta `cuenta` del tenant (default la
+ * principal; la ruta ya la validó con `esCuentaDelTenant`) por razón social, CUIT (desde 3
+ * dígitos, ignorando guiones) o cualquier email de `emails_norm` (incluye personas asociadas).
+ * Lee la VISTA para devolver el acceso con la regla del Shop.
+ */
+export async function buscarContactosParaVincular(
+  tenantId: string,
+  q: string,
+  cuenta: string = CUENTA_ALEGRA_PRINCIPAL,
+): Promise<ContactoParaVincular[]> {
   const texto = q.trim().slice(0, BUSCAR_CONTACTOS_Q_MAX)
   if (texto.length < BUSCAR_CONTACTOS_Q_MIN) return []
   const patron = patronBusqueda(texto)
@@ -71,7 +121,7 @@ export async function buscarContactosParaVincular(tenantId: string, q: string): 
     SELECT v.alegra_id, v.name, v.identification, v.email, v.tipo_cuenta, v.acceso_facturacion
     FROM public.alegra_contacts_shop v
     WHERE v.tenant_id = ${tenantId}
-      AND v.alegra_account = ${CUENTA_ALEGRA_PRINCIPAL}
+      AND v.alegra_account = ${cuenta}
       AND v.status = 'active'
       AND 'client' = ANY(v.types)
       AND (v.name ILIKE ${patron}
@@ -104,7 +154,9 @@ export type VincularResult =
   | { kind: "ok"; cambio: boolean; razonSocial: string | null }
   /** Usuario inexistente, eliminado o de otro tenant: la ruta responde el 404 del guard. */
   | { kind: "not_found" }
-  /** El contacto no es un cliente activo de la cuenta principal del tenant. */
+  /** La cuenta no es la principal ni una secundaria activa del tenant. */
+  | { kind: "cuenta_invalida" }
+  /** El contacto no es un cliente activo de esa cuenta de Alegra del tenant. */
   | { kind: "contacto_invalido" }
   /** Ya tiene un vínculo activo a OTRO contacto. `razonSocial` null si no es de este tenant. */
   | { kind: "ya_vinculado"; razonSocial: string | null }
@@ -113,29 +165,52 @@ type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0]
 
 interface VinculoActivo {
   alegra_contact_id: string
+  alegra_account: string
   razon_social: string | null
 }
 
 /**
- * Razón social de un vínculo activo para el 409, sólo si su contacto es de ESTE tenant:
- * `client_links` no tiene tenant y el mismo usuario de Clerk podría estar en otra tienda.
+ * Razón social de un vínculo activo para el 409, sólo si su contacto es de ESTE tenant (en la
+ * cuenta del vínculo): `client_links` no tiene tenant y el mismo usuario de Clerk podría estar en
+ * otra tienda.
  */
 async function razonSocialDelTenant(tx: Tx, tenantId: string, activo: VinculoActivo): Promise<string | null> {
   const [c] = (await tx.execute(sql`
     SELECT name FROM public.alegra_contacts
-    WHERE tenant_id = ${tenantId} AND alegra_account = ${CUENTA_ALEGRA_PRINCIPAL}
+    WHERE tenant_id = ${tenantId} AND alegra_account = ${activo.alegra_account}
       AND alegra_id = ${activo.alegra_contact_id}
   `)) as unknown as { name: string }[]
   return c ? c.name : null
 }
 
-async function vinculoActivo(tx: Tx, clerkUserId: string): Promise<VinculoActivo | undefined> {
-  const [l] = (await tx.execute(sql`
-    SELECT alegra_contact_id, razon_social FROM shop.client_links
+/**
+ * Vínculos activos del usuario, primero el de `cuenta`. Hoy hay a lo sumo uno en total: el Shop
+ * conserva el índice viejo `cl_user_activa` (un activo por usuario) junto al nuevo
+ * `cl_user_cuenta_activa` (uno por usuario y cuenta) hasta una migración futura. Por eso un
+ * activo en OTRA cuenta también impide vincular: el INSERT chocaría con `cl_user_activa`.
+ */
+async function vinculosActivos(tx: Tx, clerkUserId: string, cuenta: string): Promise<VinculoActivo[]> {
+  return (await tx.execute(sql`
+    SELECT alegra_contact_id, alegra_account, razon_social FROM shop.client_links
     WHERE clerk_user_id = ${clerkUserId} AND estado = 'activa'
+    ORDER BY (alegra_account = ${cuenta}) DESC, created_at DESC
     FOR UPDATE
   `)) as unknown as VinculoActivo[]
-  return l
+}
+
+/** Mismo contacto en la misma cuenta ⇒ ok sin cambios; cualquier otro activo ⇒ ya_vinculado. */
+async function resolverActivo(
+  tx: Tx,
+  tenantId: string,
+  activo: VinculoActivo,
+  cuenta: string,
+  alegraContactId: string,
+): Promise<VincularResult> {
+  const razonSocial = await razonSocialDelTenant(tx, tenantId, activo)
+  if (activo.alegra_account === cuenta && activo.alegra_contact_id === alegraContactId) {
+    return { kind: "ok", cambio: false, razonSocial }
+  }
+  return { kind: "ya_vinculado", razonSocial }
 }
 
 /**
@@ -152,18 +227,21 @@ async function bloquearUsuario(tx: Tx, tenantId: string, clerkUserId: string): P
 }
 
 /**
- * Vincula a mano un usuario de la tienda a un contacto de Alegra (confirmación explícita en la
- * UI). Guarda el mismo snapshot que el Shop (`snapshotDelContacto`): razón social, CUIT, lista
- * de precios (null si Alegra la marca no activa, regla `idPriceListUsable`) y tipo de cuenta.
- * Mismo contacto ⇒ ok sin cambios. Otro activo ⇒ ya_vinculado. Una carrera que igual choque
- * con `cl_user_activa` (23505) se relee y se resuelve igual.
+ * Vincula a mano un usuario de la tienda a un contacto de Alegra de la cuenta `cuenta`
+ * (confirmación explícita en la UI). Guarda el mismo snapshot que el Shop
+ * (`snapshotDelContacto`): razón social, CUIT, lista de precios (null si Alegra la marca no
+ * activa, regla `idPriceListUsable`) y tipo de cuenta, más la cuenta. Mismo contacto y cuenta ⇒
+ * ok sin cambios. Otro activo ⇒ ya_vinculado. Una carrera que igual choque con los índices
+ * únicos parciales (23505) se relee y se resuelve igual.
  */
 export async function vincularUsuario(
   tenantId: string,
   clerkUserId: string,
   alegraContactId: string,
   actor: Actor,
+  cuenta: string = CUENTA_ALEGRA_PRINCIPAL,
 ): Promise<VincularResult> {
+  if (!(await esCuentaDelTenant(tenantId, cuenta))) return { kind: "cuenta_invalida" }
   const resultado = await getDb()
     .transaction(async (tx): Promise<VincularResult> => {
       if (!(await bloquearUsuario(tx, tenantId, clerkUserId))) return { kind: "not_found" }
@@ -171,7 +249,7 @@ export async function vincularUsuario(
       const [contacto] = (await tx.execute(sql`
         SELECT name, identification, price_list_id, price_list_status, tipo_cuenta
         FROM public.alegra_contacts
-        WHERE tenant_id = ${tenantId} AND alegra_account = ${CUENTA_ALEGRA_PRINCIPAL}
+        WHERE tenant_id = ${tenantId} AND alegra_account = ${cuenta}
           AND alegra_id = ${alegraContactId} AND status = 'active' AND 'client' = ANY(types)
       `)) as unknown as {
         name: string
@@ -182,13 +260,8 @@ export async function vincularUsuario(
       }[]
       if (!contacto) return { kind: "contacto_invalido" }
 
-      const activo = await vinculoActivo(tx, clerkUserId)
-      if (activo) {
-        if (activo.alegra_contact_id === alegraContactId) {
-          return { kind: "ok", cambio: false, razonSocial: contacto.name }
-        }
-        return { kind: "ya_vinculado", razonSocial: await razonSocialDelTenant(tx, tenantId, activo) }
-      }
+      const [activo] = await vinculosActivos(tx, clerkUserId, cuenta)
+      if (activo) return resolverActivo(tx, tenantId, activo, cuenta, alegraContactId)
 
       const idPriceList =
         contacto.price_list_id && (!contacto.price_list_status || contacto.price_list_status === "active")
@@ -196,9 +269,9 @@ export async function vincularUsuario(
           : null
       await tx.execute(sql`
         INSERT INTO shop.client_links
-          (clerk_user_id, alegra_contact_id, razon_social, cuit, id_price_list, tipo_cuenta,
-           estado, metodo, vinculado_por, vinculado_por_nombre)
-        VALUES (${clerkUserId}, ${alegraContactId}, ${contacto.name}, ${contacto.identification},
+          (clerk_user_id, alegra_contact_id, alegra_account, razon_social, cuit, id_price_list,
+           tipo_cuenta, estado, metodo, vinculado_por, vinculado_por_nombre)
+        VALUES (${clerkUserId}, ${alegraContactId}, ${cuenta}, ${contacto.name}, ${contacto.identification},
                 ${idPriceList}, ${tipoCuenta(contacto.tipo_cuenta)}, 'activa', 'operador',
                 ${actor.id}, ${actor.name})
       `)
@@ -206,26 +279,28 @@ export async function vincularUsuario(
     })
     .catch(async (err: unknown) => {
       // Carrera contra otro camino que no toma el lock de shop.clientes (p. ej. el auto-vínculo
-      // del Shop): el índice parcial `cl_user_activa` rechazó el segundo activo. Se relee.
+      // del Shop): un índice único parcial (`cl_user_cuenta_activa` o el viejo `cl_user_activa`)
+      // rechazó el segundo activo. Se relee.
       if ((err as { code?: string })?.code !== "23505") throw err
       return getDb().transaction(async (tx): Promise<VincularResult> => {
-        const activo = await vinculoActivo(tx, clerkUserId)
-        if (activo?.alegra_contact_id === alegraContactId) {
-          return { kind: "ok", cambio: false, razonSocial: await razonSocialDelTenant(tx, tenantId, activo) }
-        }
-        return { kind: "ya_vinculado", razonSocial: activo ? await razonSocialDelTenant(tx, tenantId, activo) : null }
+        const [activo] = await vinculosActivos(tx, clerkUserId, cuenta)
+        if (!activo) return { kind: "ya_vinculado", razonSocial: null }
+        return resolverActivo(tx, tenantId, activo, cuenta, alegraContactId)
       })
     })
 
   if (resultado.kind === "ok" && resultado.cambio) {
-    log("shop_cliente_vinculado", { tenant: tenantId, clerkUserId, alegraId: alegraContactId }, actor)
+    log("shop_cliente_vinculado", { tenant: tenantId, clerkUserId, cuenta, alegraId: alegraContactId }, actor)
   }
   return resultado
 }
 
 export type DesvincularResult = { kind: "ok"; cambio: boolean } | { kind: "not_found" }
 
-/** Revoca el vínculo activo (estado 'revocada' + revoked_at + quién). Nunca DELETE. */
+/**
+ * Revoca el vínculo activo (estado 'revocada' + revoked_at + quién). Nunca DELETE. Revoca el de
+ * cualquier cuenta: mientras exista `cl_user_activa` hay a lo sumo uno.
+ */
 export async function desvincularUsuario(tenantId: string, clerkUserId: string, actor: Actor): Promise<DesvincularResult> {
   const resultado = await getDb().transaction(async (tx): Promise<DesvincularResult & { alegraId?: string }> => {
     if (!(await bloquearUsuario(tx, tenantId, clerkUserId))) return { kind: "not_found" }

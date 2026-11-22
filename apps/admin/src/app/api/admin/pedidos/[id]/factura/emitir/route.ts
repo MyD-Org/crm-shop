@@ -204,7 +204,7 @@ export async function GET(req: Request, { params }: IdParams) {
           listTaxes: () => listTaxes(cfg),
           existeItemEnCuenta: async (itemId) => (await getItemsLive(cfg, [itemId])).length > 0,
         },
-        { cuentaPrincipal: res.cuenta.principal },
+        { cuenta: res.cuenta },
       )
     } catch (err) {
       return errorAlegra(err, ctx)
@@ -332,7 +332,7 @@ export async function POST(req: Request, { params }: IdParams) {
         listTaxes: async () => taxes,
         existeItemEnCuenta: async (itemId) => (await getItemsLive(config, [itemId])).length > 0,
       },
-      { cuentaPrincipal: cuenta.principal },
+      { cuenta },
     )
   } catch (err) {
     return errorAlegra(err, ctx)

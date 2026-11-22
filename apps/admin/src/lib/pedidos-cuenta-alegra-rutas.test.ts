@@ -106,6 +106,7 @@ const pedido = (sucursal: "igz" | "mdp", over: Record<string, unknown> = {}) => 
   sucursal,
   sucursalRegla: null,
   clienteCodigo: "55",
+  clienteCuenta: "principal",
   clienteEmail: "ana@cliente.example",
   facturaAlegraId: null,
   facturaNumero: null,
@@ -187,6 +188,47 @@ describe("vincular remito (POST): lee el remito en Alegra", () => {
     getRemisionPorId.mockResolvedValue(null)
     await vincular()
     expect(tokenUsado(getRemisionPorId)).toBe(TOKEN_MDP)
+  })
+})
+
+describe("cliente_codigo sólo vale en la cuenta del pedido (orders.cliente_cuenta)", () => {
+  const facturaDeOtro = { alegraId: "7040", numero: "0001-00007040", fecha: "2026-11-01", total: 121, estado: "open", clienteAlegraId: "99", clienteNombre: "Otro" }
+  const vincularFactura_ = () => facturaRoute.POST(post({ alegraId: "7040" }), params)
+  const previewRemito = async () => (await remitoEmitir.GET(get(), params)).json() as Promise<{ avisos: string[] }>
+
+  it("vincular factura: pedido de la principal facturado por la principal ⇒ exige el mismo cliente (como hoy)", async () => {
+    getPedido.mockResolvedValue(encontrado(pedido("igz")))
+    getFacturaPorId.mockResolvedValue(facturaDeOtro)
+    const res = await vincularFactura_()
+    expect(res.status).toBe(422)
+    expect(((await res.json()) as { code: string }).code).toBe("factura_otro_cliente")
+    expect(vincularFactura).not.toHaveBeenCalled()
+  })
+
+  it("vincular factura: pedido de la principal con factura de MDP ⇒ el código no se compara", async () => {
+    getPedido.mockResolvedValue(encontrado(pedido("mdp")))
+    getFacturaPorId.mockResolvedValue(facturaDeOtro)
+    vincularFactura.mockResolvedValue({ kind: "conflicto" })
+    await vincularFactura_()
+    expect(vincularFactura).toHaveBeenCalled()
+  })
+
+  it("vincular factura: pedido de la cuenta mdp con factura de MDP ⇒ exige el mismo cliente", async () => {
+    getPedido.mockResolvedValue(encontrado(pedido("mdp", { clienteCuenta: "mdp" })))
+    getFacturaPorId.mockResolvedValue(facturaDeOtro)
+    const res = await vincularFactura_()
+    expect(((await res.json()) as { code: string }).code).toBe("factura_otro_cliente")
+  })
+
+  it("remito: sin código en la cuenta del pedido ⇒ bloqueo; en otra cuenta ⇒ se busca o crea", async () => {
+    getPedido.mockResolvedValue(encontrado(pedido("igz", { clienteCodigo: null })))
+    expect((await previewRemito()).avisos.some((a) => a.includes("facture el pedido primero"))).toBe(true)
+
+    getPedido.mockResolvedValue(encontrado(pedido("mdp", { clienteCodigo: null, clienteCuenta: "mdp" })))
+    expect((await previewRemito()).avisos.some((a) => a.includes("facture el pedido primero"))).toBe(true)
+
+    getPedido.mockResolvedValue(encontrado(pedido("mdp", { clienteCodigo: null })))
+    expect((await previewRemito()).avisos.some((a) => a.includes("facture el pedido primero"))).toBe(false)
   })
 })
 

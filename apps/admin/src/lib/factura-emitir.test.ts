@@ -22,6 +22,7 @@ const pedido = (over: Partial<PedidoRow> = {}): PedidoRow =>
     id: "11111111-1111-4111-8111-111111111111",
     numero: 123,
     clienteCodigo: null,
+    clienteCuenta: "principal",
     clienteEmail: "ana@cliente.example",
     contactoNombre: "Ana Compradora",
     facturacionTipoDoc: null,
@@ -218,6 +219,42 @@ describe("resolverPreviewEmision", () => {
     const preview = await resolverPreviewEmision(pedido({ clienteCodigo: "ct-1" }), [item()], d)
     expect(preview.contacto).toEqual({ alegraId: "ct-1", esNuevo: false, nombre: "Ana Compradora" })
     expect(d.findContactByIdentifier).not.toHaveBeenCalled()
+  })
+
+  it("pedido de la cuenta mdp facturado por la principal: no reusa el código, busca por documento", async () => {
+    const d = deps({ findContactByIdentifier: vi.fn(async () => ({ alegraId: "ct-77" })) })
+    const preview = await resolverPreviewEmision(
+      pedido({ clienteCodigo: "123", clienteCuenta: "mdp", facturacionNroDoc: "20111222333" }),
+      [item()],
+      d,
+      { cuenta: { principal: true, slug: "principal" } },
+    )
+    expect(preview.contacto.alegraId).toBe("ct-77")
+    expect(d.findContactByIdentifier).toHaveBeenCalledWith("20111222333")
+  })
+
+  it("pedido de la cuenta mdp facturado por mdp: reusa el código", async () => {
+    const d = deps()
+    const preview = await resolverPreviewEmision(
+      pedido({ clienteCodigo: "123", clienteCuenta: "mdp" }),
+      [item()],
+      d,
+      { cuenta: { principal: false, slug: "mdp" } },
+    )
+    expect(preview.contacto).toMatchObject({ alegraId: "123", esNuevo: false })
+    expect(d.findContactByIdentifier).not.toHaveBeenCalled()
+  })
+
+  it("pedido de la principal facturado por mdp: no reusa el código (como antes con secundarias)", async () => {
+    const d = deps()
+    const preview = await resolverPreviewEmision(
+      pedido({ clienteCodigo: "123", facturacionNroDoc: "20111222333" }),
+      [item()],
+      d,
+      { cuenta: { principal: false, slug: "mdp" } },
+    )
+    expect(preview.contacto).toMatchObject({ alegraId: null, esNuevo: true })
+    expect(d.findContactByIdentifier).toHaveBeenCalledWith("20111222333")
   })
 
   it("sin cliente_codigo y findContactByIdentifier encuentra: usa ese, esNuevo false", async () => {

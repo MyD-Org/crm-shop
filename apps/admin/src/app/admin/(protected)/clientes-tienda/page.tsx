@@ -5,6 +5,7 @@ import {
   listarClientesTienda,
   type ClienteTiendaDto,
 } from "@/lib/clientes-tienda-repo"
+import { listarCuentasParaVincular, type CuentaParaVincular } from "@/lib/clientes-tienda-acciones"
 import { ClientesTiendaShell } from "@/components/admin/clientes-tienda/ClientesTiendaShell"
 
 export const dynamic = "force-dynamic"
@@ -27,8 +28,14 @@ export default async function ClientesTiendaPage() {
   let items: ClienteTiendaDto[] = []
   let total = 0
   let error = ""
+  // Cuentas de Alegra para el selector del diálogo "Vincular". Si fallan se ofrece sólo la
+  // principal (el comportamiento de siempre).
+  let cuentas: CuentaParaVincular[] = [{ clave: "principal", nombre: "Cuenta principal" }]
   try {
-    ;({ items, total } = await listarClientesTienda(guard.tenantId))
+    ;[{ items, total }, cuentas] = await Promise.all([
+      listarClientesTienda(guard.tenantId),
+      listarCuentasParaVincular(guard.tenantId).catch(() => cuentas),
+    ])
   } catch (err) {
     const e = err as { name?: unknown; code?: unknown }
     console.error(
@@ -52,6 +59,7 @@ export default async function ClientesTiendaPage() {
         initialError={error}
         pageSize={CLIENTES_TIENDA_DEFAULT_LIMIT}
         puedeGestionar
+        cuentas={cuentas}
       />
     </div>
   )

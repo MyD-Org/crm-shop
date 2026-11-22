@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Alert, Button, Field, SearchInput } from "@myd-org/ui"
-import type { ContactoParaVincular } from "@/lib/clientes-tienda-acciones"
-import { etiquetaTipoCuenta, mensajeDeError } from "./logica"
+import { Alert, Button, Field, SearchInput, Select } from "@myd-org/ui"
+import type { ContactoParaVincular, CuentaParaVincular } from "@/lib/clientes-tienda-acciones"
+import { etiquetaTipoCuenta, hayVariasCuentas, mensajeDeError } from "./logica"
 
 // Buscador del paso "Vincular" del detalle de un cliente de la tienda: busca clientes activos
-// de Alegra del tenant (GET /api/admin/contactos-alegra, sólo admin+) y devuelve el elegido.
+// de Alegra del tenant en la cuenta elegida (GET /api/admin/contactos-alegra, sólo admin+) y
+// devuelve el elegido. Con más de una cuenta de Alegra muestra el selector de cuenta (la cuenta
+// es estado del detalle: el POST de vincular la manda).
 // No guarda nada: la confirmación y el POST los hace ClienteTiendaDetalle. `import type` para
 // no arrastrar getDb al bundle del cliente.
 
@@ -15,10 +17,13 @@ const Q_MIN = 2
 const ERROR_BUSQUEDA = "No se pudieron buscar los clientes de Alegra. Inténtelo nuevamente."
 
 interface Props {
+  cuentas: CuentaParaVincular[]
+  cuenta: string
+  onCambiarCuenta: (cuenta: string) => void
   onElegir: (contacto: ContactoParaVincular) => void
 }
 
-export function VincularContacto({ onElegir }: Props) {
+export function VincularContacto({ cuentas, cuenta, onCambiarCuenta, onElegir }: Props) {
   const [q, setQ] = useState("")
   const [resultados, setResultados] = useState<ContactoParaVincular[] | null>(null)
   const [buscando, setBuscando] = useState(false)
@@ -31,12 +36,11 @@ export function VincularContacto({ onElegir }: Props) {
     if (debounce.current) clearTimeout(debounce.current)
   }, [])
 
-  async function buscar(texto: string) {
+  async function buscar(texto: string, enCuenta: string) {
     const id = ++ultima.current
     setBuscando(true)
-    const res = await fetch(`/api/admin/contactos-alegra?q=${encodeURIComponent(texto)}`, { cache: "no-store" }).catch(
-      () => null,
-    )
+    const params = new URLSearchParams({ q: texto, cuenta: enCuenta })
+    const res = await fetch(`/api/admin/contactos-alegra?${params.toString()}`, { cache: "no-store" }).catch(() => null)
     const body: unknown = res ? await res.json().catch(() => null) : null
     if (id !== ultima.current) return
     setBuscando(false)
@@ -61,11 +65,29 @@ export function VincularContacto({ onElegir }: Props) {
       setError("")
       return
     }
-    debounce.current = setTimeout(() => void buscar(texto), DEBOUNCE_MS)
+    debounce.current = setTimeout(() => void buscar(texto, cuenta), DEBOUNCE_MS)
+  }
+
+  function cambiarCuenta(valor: string) {
+    if (valor === cuenta || !cuentas.some((c) => c.clave === valor)) return
+    onCambiarCuenta(valor)
+    if (debounce.current) clearTimeout(debounce.current)
+    const texto = q.trim()
+    if (texto.length >= Q_MIN) void buscar(texto, valor)
   }
 
   return (
     <div className="flex flex-col gap-3">
+      {hayVariasCuentas(cuentas) && (
+        <Field label="Cuenta de Alegra" hint="Seleccione la cuenta de Alegra en la que está el cliente.">
+          <Select
+            aria-label="Cuenta de Alegra"
+            value={cuenta}
+            onValueChange={cambiarCuenta}
+            options={cuentas.map((c) => ({ value: c.clave, label: c.nombre }))}
+          />
+        </Field>
+      )}
       <Field label="Cliente de Alegra" hint="Busque por razón social, CUIT o email (al menos 2 caracteres).">
         <SearchInput
           placeholder="Buscar cliente de Alegra"

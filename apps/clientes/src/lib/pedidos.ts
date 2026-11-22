@@ -54,6 +54,7 @@ import {
 import { avisarCobro } from "./pedido-avisos";
 import { esPagoEnLinea, slugsPagoEnLinea } from "./medios-pago";
 import { shopTenantId } from "./tenant";
+import { shopCuentaAlegra } from "./cuenta-alegra";
 import { sitioOrigenDeEntorno } from "./sitio-origen";
 import type { Asignacion, EntradaAsignacion } from "./sucursales";
 import { EnvioCambioError, armarEnvioPedido, horarioDeDetalle, origenCompatible, vistaEnvioDePedido, type EnvioDetalle } from "./envio-snapshot";
@@ -396,6 +397,9 @@ export async function crearPedido(
         idempotencyKey: datos.idempotencyKey ?? null,
         clerkUserId: cliente.clerkUserId,
         clienteCodigo: cliente.codigo ?? null,
+        // Cuenta de Alegra de este despliegue, SIEMPRE (también sin cliente vinculado): es la cuenta
+        // a la que pertenece `cliente_codigo`, y de la que "Mis pedidos" toma la llave del código.
+        clienteCuenta: shopCuentaAlegra(),
         clienteRazonSocial: cliente.razonSocial ?? null,
         clienteCuit: cliente.cuit ?? null,
         clienteEmail: cliente.email ?? null,
@@ -890,7 +894,12 @@ function esDeSuDueno(dueno: DuenoPedidos) {
     condiciones.push(eq(orders.clerkUserId, dueno.clerkUserId));
   }
   if (dueno.clienteCodigo) {
-    condiciones.push(eq(orders.clienteCodigo, dueno.clienteCodigo));
+    // El código del cliente vale SÓLO en su cuenta de Alegra: los ids no son únicos entre cuentas, y
+    // el contacto 123 de una cuenta es otra empresa en la otra. Sin esto, un cliente vinculado en un
+    // despliegue vería los pedidos de otro cliente con el mismo id en otra cuenta.
+    condiciones.push(
+      and(eq(orders.clienteCodigo, dueno.clienteCodigo), eq(orders.clienteCuenta, shopCuentaAlegra())),
+    );
   }
   if (dueno.invitadoOrderId) {
     // Un pedido de invitado SIN dueño: uno con cuenta (clerk_user_id o cliente_codigo) o hecho con

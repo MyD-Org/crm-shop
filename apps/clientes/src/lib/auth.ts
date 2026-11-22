@@ -26,6 +26,7 @@ import { nombrePila } from "./nombre-pila";
 import { esRolAdmin } from "./rol-admin";
 import { programarReclamoInvitado } from "./reclamo-invitado";
 import { sessionOptions, type SessionData } from "./session";
+import { shopCuentaAlegra } from "./cuenta-alegra";
 
 /** Datos comerciales de un cliente ya resuelto. */
 export interface ClienteComercial {
@@ -78,7 +79,11 @@ async function sesionCrm(): Promise<SessionData | null> {
   }
 }
 
-/** Vinculación activa de un usuario de Clerk, si tiene. */
+/**
+ * Vinculación activa de un usuario de Clerk EN LA CUENTA DE ALEGRA DE ESTE
+ * DESPLIEGUE, si tiene. Un vínculo de otra cuenta queda inerte: su
+ * `alegra_contact_id` es de otra empresa en la cuenta de este despliegue.
+ */
 async function vinculacionDe(clerkUserId: string) {
   const [fila] = await getDb()
     .select()
@@ -87,6 +92,7 @@ async function vinculacionDe(clerkUserId: string) {
       and(
         eq(clientLinks.clerkUserId, clerkUserId),
         eq(clientLinks.estado, "activa"),
+        eq(clientLinks.alegraAccount, shopCuentaAlegra()),
       ),
     )
     .limit(1);

@@ -99,20 +99,40 @@ export const clientLinks = shop.table(
     vinculadoPorNombre: text("vinculado_por_nombre"),
     revocadoPor: uuid("revocado_por"),
     revocadoPorNombre: text("revocado_por_nombre"),
+    /**
+     * Cuenta de Alegra a la que pertenece `alegra_contact_id` (migración 0047, change
+     * `shop-contactos-alegra-mdp`): `principal` o el slug de una cuenta secundaria del tenant
+     * (`mdp`). Los ids de Alegra NO son únicos entre cuentas: el contacto 123 de una cuenta es otra
+     * empresa en la otra. El Shop lee y escribe sólo los vínculos de la cuenta de su despliegue
+     * (`shopCuentaAlegra()`); los de otra cuenta quedan inertes (no se revocan). Filas anteriores a
+     * la 0047 = `principal`.
+     */
+    alegraAccount: text("alegra_account").notNull().default("principal"),
   },
   (t) => [
-    // Un usuario puede tener UNA sola vinculación activa, pero sí varias
-    // revocadas en el historial. De ahí el índice parcial: un unique común
-    // impediría re-vincular después de una revocación.
+    // Un usuario puede tener UNA sola vinculación activa POR CUENTA de Alegra,
+    // pero sí varias revocadas en el historial. De ahí el índice parcial: un
+    // unique común impediría re-vincular después de una revocación. Un usuario
+    // con un vínculo `principal` activo podrá tener además uno activo en otra
+    // cuenta (el de otro despliegue).
+    uniqueIndex("cl_user_cuenta_activa")
+      .on(t.clerkUserId, t.alegraAccount)
+      .where(sql`${t.estado} = 'activa'`),
+    // Viejo índice de una activa por usuario. Se conserva a propósito: el código
+    // anterior a S3 hace `ON CONFLICT (clerk_user_id) WHERE estado = 'activa'` y
+    // sin este índice vincular falla hasta el deploy. Mientras exista, un usuario
+    // sigue teniendo una sola activa en total. Se borra en una migración aparte,
+    // con S3 ya en prod y antes de activar una cuenta secundaria (S5).
     uniqueIndex("cl_user_activa")
       .on(t.clerkUserId)
       .where(sql`${t.estado} = 'activa'`),
+    check("client_links_alegra_account_check", sql`${t.alegraAccount} ~ '^[a-z0-9][a-z0-9-]{0,39}$'`),
     // Un cliente de Alegra sí puede tener varios usuarios activos (la misma
     // persona con dos emails, varias personas de una empresa): cada uno pasó
     // por el código al email de Alegra. `cl_contacto_activa` se borró en 0014.
     index("cl_contacto").on(t.alegraContactId),
     // Último vínculo de cada usuario en cualquier estado (el listado "Clientes
-    // de la tienda" del CRM). `cl_user_activa` es parcial y no sirve para eso.
+    // de la tienda" del CRM). `cl_user_cuenta_activa` es parcial y no sirve para eso.
     index("cl_usuario_fecha").on(t.clerkUserId, t.createdAt),
   ],
 );
@@ -220,6 +240,11 @@ export const linkOtps = shop.table(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Cuenta de Alegra del contacto del código (migración 0047). Un código pedido en una cuenta
+     * no sirve para confirmar en otra: el id del contacto sería de otra empresa.
+     */
+    alegraAccount: text("alegra_account").notNull().default("principal"),
   },
   (t) => [
     index("lo_user").on(t.clerkUserId, t.createdAt),
@@ -273,6 +298,15 @@ export const orders = shop.table(
      * cada visitante, que es exactamente lo que no queremos.
      */
     clienteCodigo: text("cliente_codigo"),
+    /**
+     * Cuenta de Alegra del despliegue donde se hizo el pedido (migración 0048, change
+     * `shop-contactos-alegra-mdp`): `principal` o el slug de una secundaria (`mdp`). Es la cuenta a
+     * la que pertenece `cliente_codigo` (los ids de Alegra no son únicos entre cuentas). La escribe
+     * SIEMPRE el Shop con `shopCuentaAlegra()`, también sin cliente vinculado. "Mis pedidos" filtra
+     * por código Y cuenta; el CRM la usa para decidir si reusa `cliente_codigo` al facturar.
+     * Pedidos anteriores a la 0048 = `principal`.
+     */
+    clienteCuenta: text("cliente_cuenta").notNull().default("principal"),
     clienteRazonSocial: text("cliente_razon_social"),
     clienteCuit: text("cliente_cuit"),
     clienteEmail: text("cliente_email"),
@@ -613,6 +647,7 @@ export const orders = shop.table(
       "orders_sitio_origen_check",
       sql`${t.sitioOrigen} is null or ${t.sitioOrigen} ~ '^https?://[^/[:space:]]+$'`,
     ),
+    check("orders_cliente_cuenta_check", sql`${t.clienteCuenta} ~ '^[a-z0-9][a-z0-9-]{0,39}$'`),
     check(
       "orders_envio_confirmado_check",
       sql`${t.envioEntregaConfirmada} is null or ${t.envioConfirmadoEn} is not null`,

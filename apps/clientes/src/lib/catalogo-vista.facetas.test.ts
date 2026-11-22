@@ -21,7 +21,7 @@ const base: EstadoCatalogo = {
   caracteristicas: [],
   orden: "destacados",
   pagina: 1,
-  soloStock: true,
+  soloStock: false,
   vista: "grilla",
 };
 

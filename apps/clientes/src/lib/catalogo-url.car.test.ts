@@ -19,7 +19,7 @@ const base: EstadoCatalogo = {
   caracteristicas: [],
   orden: "destacados",
   pagina: 1,
-  soloStock: true,
+  soloStock: false,
   vista: "grilla",
 };
 
@@ -61,7 +61,7 @@ describe("características por tipo (?car=, change catalogo-filtros-ux)", () => 
     expect(estadoConCambios(e, { query: "llave" }).caracteristicas).toEqual([]);
     expect(estadoConCambios(e, { marcas: ["MARCA"] }).caracteristicas).toEqual(["polos:2"]);
     expect(estadoConCambios(e, { precioMax: 100 }).caracteristicas).toEqual(["polos:2"]);
-    expect(estadoConCambios(e, { soloStock: false }).caracteristicas).toEqual(["polos:2"]);
+    expect(estadoConCambios(e, { soloStock: true }).caracteristicas).toEqual(["polos:2"]);
     expect(estadoConCambios(e, { pagina: 3 }).caracteristicas).toEqual(["polos:2"]);
   });
 

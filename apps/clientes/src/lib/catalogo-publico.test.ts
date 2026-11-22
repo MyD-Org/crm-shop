@@ -261,7 +261,7 @@ describe("con `agrupar` (flag variantes-selector): viaja como argumento; apagado
     expect(cat.getFacetas).toHaveBeenCalledWith({}, false, undefined, true);
     expect(cat.getProducto).toHaveBeenCalledWith("42", { soloVisibles: false, agrupar: true });
     expect(cat.getCategorias).toHaveBeenCalledWith(false, undefined, true);
-    expect(cat.getFacetaCategorias).toHaveBeenCalledWith({ soloStock: true }, false, undefined, true);
+    expect(cat.getFacetaCategorias).toHaveBeenCalledWith({ soloStock: false }, false, undefined, true);
   });
 
   it("los destacados lo pasan a la página y a los SKUs; el sitemap, al catálogo", async () => {
@@ -289,7 +289,7 @@ describe("categoriasTotalesPublicas (total fijo de cada categoría del panel)", 
   it("sale de la caché compartida (tag catalogo) con el default de stock y sin otro filtro", async () => {
     cat.getFacetaCategorias.mockResolvedValue([{ label: "ILUMINACION", count: 7, nivel: 1 }]);
     expect(await categoriasTotalesPublicas(true)).toEqual([{ label: "ILUMINACION", count: 7, nivel: 1 }]);
-    expect(cat.getFacetaCategorias).toHaveBeenCalledWith({ soloStock: true }, true);
+    expect(cat.getFacetaCategorias).toHaveBeenCalledWith({ soloStock: false }, true);
     expect(cacheTagMock).toHaveBeenCalledWith("catalogo");
     expect(cacheLifeMock).toHaveBeenCalledWith("catalogo");
   });

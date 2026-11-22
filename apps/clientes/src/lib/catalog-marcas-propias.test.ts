@@ -29,7 +29,12 @@ async function principal(filtros: FiltrosCatalogo): Promise<ConsultaGrabada> {
 }
 
 /** Lo que va después del `where` (el `select` sí lee `mostrar_marca` para la card). */
-const whereDe = (c: ConsultaGrabada) => c.sql.slice(c.sql.indexOf(" where "));
+// Sólo el WHERE: el ORDER BY lleva "con stock primero" (la misma expresión) aunque no se filtre.
+const whereDe = (c: ConsultaGrabada) => {
+  const desde = c.sql.slice(c.sql.indexOf(" where "));
+  const orden = desde.indexOf(" order by ");
+  return orden >= 0 ? desde.slice(0, orden) : desde;
+};
 
 const CONDICION_STOCK = / end\) > 0\)/;
 

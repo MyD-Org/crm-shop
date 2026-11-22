@@ -9,7 +9,7 @@ import { COOKIE_RESUMEN, valorCookieResumen } from "@/lib/busqueda-v2/resumen";
 import { planParaBuscar } from "@/lib/busqueda-v2/servidor";
 
 /**
- * GET /buscar?q=…[&stock=todos] → 307 a la URL final del catálogo (spec
+ * GET /buscar?q=…[&stock=solo] → 307 a la URL final del catálogo (spec
  * búsqueda v2). Sólo al ENVIAR una búsqueda (header, inicio, "sin
  * resultados"), nunca al tipear. Entiende la consulta (caché, o Entender con
  * Jev en paralelo con el conteo clásico) y redirige ANTES de renderizar: la

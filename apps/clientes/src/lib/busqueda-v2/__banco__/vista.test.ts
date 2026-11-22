@@ -12,14 +12,14 @@ describe("vista del banco", () => {
   });
 
   it("vistaProduccion(true): soloVisibles y el stock por defecto del Shop (sin `stock`)", () => {
-    expect(vistaProduccion(true)).toEqual({ soloVisibles: true, soloStock: true });
+    expect(vistaProduccion(true)).toEqual({ soloVisibles: true, soloStock: false });
     const estado = estadoBase("lampara", vistaProduccion(true));
-    expect(estado.soloStock).toBe(true);
-    expect(filtrosDeEstado(estado).soloStock).toBe(true);
+    expect(estado.soloStock).toBe(false);
+    expect(filtrosDeEstado(estado).soloStock).toBe(false);
   });
 
   it("vistaProduccion(false): sin soloVisibles pero con el stock por defecto", () => {
-    expect(vistaProduccion(false)).toEqual({ soloVisibles: false, soloStock: true });
+    expect(vistaProduccion(false)).toEqual({ soloVisibles: false, soloStock: false });
   });
 
   it("con búsqueda el orden es relevancia", () => {

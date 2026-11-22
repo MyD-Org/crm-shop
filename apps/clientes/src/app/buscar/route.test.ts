@@ -48,10 +48,10 @@ describe("GET /buscar", () => {
       },
       msJev: 500,
     });
-    const r = await pedir("q=reflector+para+el+patio&stock=todos", { "x-forwarded-for": "203.0.113.7, 10.0.0.1" });
+    const r = await pedir("q=reflector+para+el+patio&stock=solo", { "x-forwarded-for": "203.0.113.7, 10.0.0.1" });
     expect(r.status).toBe(307);
     expect(r.headers.get("location")).toBe(
-      "https://tienda.example/catalogo?q=reflector+para+el+patio&stock=todos&ia=1",
+      "https://tienda.example/catalogo?q=reflector+para+el+patio&stock=solo&ia=1",
     );
     expect(r.headers.get("cache-control")).toBe("private, no-store");
     expect(r.cookies.get("busqueda_resumen")?.value).toContain('"intencion":"producto"');
@@ -60,9 +60,9 @@ describe("GET /buscar", () => {
 
   it("flag apagado: 307 a la búsqueda clásica, sin plan ni cookie", async () => {
     habilitada.mockResolvedValue(false);
-    const r = await pedir("q=foco&stock=todos");
+    const r = await pedir("q=foco&stock=solo");
     expect(r.status).toBe(307);
-    expect(r.headers.get("location")).toBe("https://tienda.example/catalogo?q=foco&stock=todos");
+    expect(r.headers.get("location")).toBe("https://tienda.example/catalogo?q=foco&stock=solo");
     expect(r.cookies.get("busqueda_resumen")).toBeUndefined();
     expect(planParaBuscar).not.toHaveBeenCalled();
   });
@@ -75,7 +75,7 @@ describe("GET /buscar", () => {
 
   it("el conteo clásico sale del motor: la consulta y los filtros del estado, sin texto", async () => {
     planParaBuscar.mockResolvedValue(null);
-    await pedir("q=reflector+exterior&stock=todos");
+    await pedir("q=reflector+exterior&stock=solo");
     expect(contarConsulta).toHaveBeenCalledWith({
       consulta: "reflector exterior",
       filtros: expect.not.objectContaining({ busqueda: expect.anything(), texto: expect.anything() }),

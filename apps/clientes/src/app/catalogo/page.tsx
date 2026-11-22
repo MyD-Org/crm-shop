@@ -125,8 +125,8 @@ async function CatalogoResultados({ searchParams }: Props) {
   };
   const disp = dispLocal ?? dispGeneral;
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
-  // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
-  // defecto (ver `SOLO_STOCK_DEFAULT`).
+  // qué grupo excluye en cada conteo. "Solo con stock" viene apagado por
+  // defecto (ver `SOLO_STOCK_DEFAULT`): los sin stock salen al final (`ordenDe`).
   // Sin el flag `busqueda-ia`, el panel queda como siempre: sin la faceta de
   // características (ni su consulta).
   const porTipo = filtrosPorTipo(conCar, estado.caracteristicas);
@@ -211,9 +211,9 @@ async function CatalogoResultados({ searchParams }: Props) {
         )
       : pagina.facetas;
 
-  // "Solo con stock" es el default de la tienda y la búsqueda lo respeta (nunca lo apaga sola). Si
-  // la búsqueda da 0 con stock, se cuenta lo que daría incluyendo los sin stock: el "sin
-  // resultados" lo avisa y deja verlos (apagarlo es elección de la persona).
+  // Si la persona prendió "Solo con stock", la búsqueda lo respeta (nunca lo apaga sola). Si da 0
+  // con stock, se cuenta lo que daría incluyendo los sin stock: el "sin resultados" lo avisa y deja
+  // verlos (apagarlo es elección de la persona).
   const sinStock =
     pagina.total === 0 && estado.query?.trim() && pedido.filtros.soloStock && !estado.retiroEn
       ? (await buscarEnShop({ ...pedido, filtros: { ...pedido.filtros, soloStock: false }, pagina: 1 }, contexto)).total
@@ -317,7 +317,7 @@ async function busquedaInteligente(
         )
       : [],
     // Una búsqueda que no pasó por `/buscar` (o se pidió tal cual) puede entenderse ahora.
-    ...(estado.ia ? {} : { relacionadosHref: hrefBuscar(q, !estado.soloStock) }),
+    ...(estado.ia ? {} : { relacionadosHref: hrefBuscar(q, estado.soloStock) }),
   };
 }
 

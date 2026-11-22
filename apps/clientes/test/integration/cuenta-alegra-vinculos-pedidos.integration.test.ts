@@ -67,21 +67,33 @@ describe("0047 client_links / link_otps por cuenta", () => {
     expect(o.alegra_account).toBe("principal");
   });
 
-  it("un usuario puede tener un vínculo activo por cuenta, pero no dos en la misma", async () => {
+  it("mientras exista cl_user_activa, un usuario tiene una sola activa en total", async () => {
     await vinculo("user_a", "123", "principal");
-    await expect(vinculo("user_a", "123", "mdp")).resolves.toBeDefined();
-    await expect(vinculo("user_a", "456", "mdp")).rejects.toThrow();
     await expect(vinculo("user_a", "789", "principal")).rejects.toThrow();
+    // El índice viejo (una activa por usuario) sigue vivo hasta la migración que lo borra (S5).
+    await expect(vinculo("user_a", "123", "mdp")).rejects.toThrow();
     // Revocados no cuentan para la unicidad.
     await expect(vinculo("user_a", "999", "mdp", "revocada")).resolves.toBeDefined();
   });
 
-  it("el índice viejo no existe y el nuevo es parcial sobre (usuario, cuenta)", async () => {
+  it("conviven el índice viejo y el nuevo, los dos parciales", async () => {
     const idx = await q(sql`
       select indexname, indexdef from pg_indexes
-      where schemaname = 'shop' and tablename = 'client_links' and indexname in ('cl_user_activa', 'cl_user_cuenta_activa')`);
-    expect(idx.map((i) => i.indexname)).toEqual(["cl_user_cuenta_activa"]);
-    expect(String(idx[0].indexdef)).toMatch(/UNIQUE INDEX .*\(clerk_user_id, alegra_account\) WHERE \(estado = 'activa'::text\)/);
+      where schemaname = 'shop' and tablename = 'client_links' and indexname in ('cl_user_activa', 'cl_user_cuenta_activa')
+      order by indexname`);
+    expect(idx.map((i) => i.indexname)).toEqual(["cl_user_activa", "cl_user_cuenta_activa"]);
+    expect(String(idx[0].indexdef)).toMatch(/UNIQUE INDEX .*\(clerk_user_id\) WHERE \(estado = 'activa'::text\)/);
+    expect(String(idx[1].indexdef)).toMatch(/UNIQUE INDEX .*\(clerk_user_id, alegra_account\) WHERE \(estado = 'activa'::text\)/);
+  });
+
+  it("el ON CONFLICT del código anterior a S3 (sólo usuario) sigue funcionando", async () => {
+    await vinculo("user_d", "123", null);
+    const r = await getDb().execute(sql`
+      insert into shop.client_links (clerk_user_id, alegra_contact_id, estado, metodo)
+      values ('user_d', '456', 'activa', 'email_verificado')
+      on conflict ("clerk_user_id") where "estado" = 'activa' do nothing
+      returning id`);
+    expect(r.length).toBe(0);
   });
 
   it("el CHECK rechaza una cuenta con formato inválido", async () => {

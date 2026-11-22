@@ -713,6 +713,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "cl_user_activa": {
+          "name": "cl_user_activa",
+          "columns": [
+            {
+              "expression": "clerk_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"shop\".\"client_links\".\"estado\" = 'activa'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},

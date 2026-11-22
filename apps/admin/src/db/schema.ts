@@ -1520,6 +1520,27 @@ export const catalogAtributos = pgTable(
   (t) => [primaryKey({ name: "catalog_atributos_pk", columns: [t.tenantId, t.alegraId, t.clave] })],
 )
 
+// Datos de envío por producto: peso y medidas de la UNIDAD DE VENTA EMBALADA, unidad mínima y unidades por
+// caja master. Para calcular el envío más adelante; hoy NO se muestran en la tienda (sin GRANT a shop_app).
+// Tabla aparte del overlay: escribirla no dispara el delta hacia el Shop. Migración 0107.
+export const catalogDatosEnvio = pgTable(
+  "catalog_datos_envio",
+  {
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    alegraId: text("alegra_id").notNull(),
+    pesoKg: numeric("peso_kg", { precision: 10, scale: 3 }),
+    altoCm: numeric("alto_cm", { precision: 8, scale: 2 }),
+    anchoCm: numeric("ancho_cm", { precision: 8, scale: 2 }),
+    largoCm: numeric("largo_cm", { precision: 8, scale: 2 }),
+    unidadMinima: integer("unidad_minima"),
+    unidadesPorCaja: integer("unidades_por_caja"),
+    // 'coresa' | 'manual'
+    fuente: text("fuente").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ name: "catalog_datos_envio_pk", columns: [t.tenantId, t.alegraId] })],
+)
+
 // Nombre que el admin le da a cada canal de entrada del inbox (un número de WhatsApp por
 // sucursal, la cuenta de Instagram...). `channel_account_id` es el id de la cuenta en ai-api,
 // sin FK entre bases. Sin fila, la solapa del inbox muestra el teléfono o el nombre del canal.

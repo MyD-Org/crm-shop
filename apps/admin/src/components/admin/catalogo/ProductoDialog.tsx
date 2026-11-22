@@ -27,6 +27,7 @@ import { AYUDA_VISIBLE_EN } from "./ayudas"
 import { estadoAlegraTexto } from "./inactivos"
 import { FotosProducto } from "./FotosProducto"
 import { VideosProducto } from "./VideosProducto"
+import { DatosEnvioProducto } from "./DatosEnvioProducto"
 import { FichaTecnicaProducto } from "./FichaTecnicaProducto"
 import { AtributosProducto } from "./AtributosProducto"
 import { formularioDeOrden, ordenDeFormulario } from "./destacado"
@@ -387,6 +388,8 @@ export function ProductoDialog({ producto, categorias, tags, modalidades, sucurs
         <FichaTecnicaProducto alegraId={producto.alegraId} ficha={fichaTecnica} onCambio={setFichaTecnica} />
 
         {!esPadre && <AtributosProducto alegraId={producto.alegraId} tieneFicha={fichaTecnica !== null} />}
+
+        {!esPadre && <DatosEnvioProducto alegraId={producto.alegraId} />}
       </div>
     </Dialog>
   )

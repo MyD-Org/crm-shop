@@ -722,6 +722,13 @@
       "when": 1795000000000,
       "tag": "0106_admin_users_secciones_permitidas",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1795100000000,
+      "tag": "0107_catalog_datos_envio",
+      "breakpoints": true
     }
   ]
 }

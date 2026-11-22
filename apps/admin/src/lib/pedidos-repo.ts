@@ -1716,7 +1716,8 @@ export function toEnvioZonaDto(
 export interface PedidoDetalleDto extends PedidoListaDto {
   /** Regla que asignó la sucursal, congelada al crear el pedido (null = anterior a las zonas). */
   sucursalRegla: ReglaAplicada | null
-  cliente: { codigo: string | null; razonSocial: string | null; cuit: string | null; email: string | null }
+  /** `cuenta`: cuenta de Alegra a la que pertenece `codigo` (`orders.cliente_cuenta`). */
+  cliente: { codigo: string | null; cuenta: string; razonSocial: string | null; cuit: string | null; email: string | null }
   contacto: { nombre: string; telefono: string }
   entrega: { tipo: string; ciudad: string | null; direccion: string | null }
   facturacion: {
@@ -1867,6 +1868,7 @@ export function toPedidoDetalleDto(
     sucursalRegla: row.sucursalRegla ?? null,
     cliente: {
       codigo: row.clienteCodigo,
+      cuenta: row.clienteCuenta,
       razonSocial: row.clienteRazonSocial,
       cuit: row.clienteCuit,
       email: row.clienteEmail,

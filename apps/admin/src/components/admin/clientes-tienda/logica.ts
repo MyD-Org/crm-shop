@@ -12,6 +12,7 @@ import type {
   FiltroPedidos,
   FiltroVinculo,
 } from "@/lib/clientes-tienda-repo"
+import type { CuentaParaVincular } from "@/lib/clientes-tienda-acciones"
 
 export interface FiltrosLista {
   q: string
@@ -128,17 +129,47 @@ export interface AccionesCliente {
  *    corriente no se le ofrece (ya tiene acceso); con el contacto inactivo o fuera del espejo
  *    tampoco (la API lo rechazaría).
  *  - Quitar acceso: hay excepción vigente, aunque el contacto esté inactivo.
+ *  - Dar y quitar acceso sólo con un vínculo de la cuenta principal: la excepción de acceso a
+ *    Facturación es de la principal (su API busca el contacto ahí; el mismo id en otra cuenta
+ *    es otro cliente).
  */
 export function accionesDisponibles(c: ClienteTiendaDto, puedeGestionar: boolean): AccionesCliente {
   const ninguna = { vincular: false, desvincular: false, darAcceso: false, quitarAcceso: false }
   if (!puedeGestionar) return ninguna
   if (c.vinculo.estado !== "vinculado" || !c.vinculo.alegraContactId) return { ...ninguna, vincular: true }
+  const principal = (c.vinculo.cuenta ?? CUENTA_PRINCIPAL) === CUENTA_PRINCIPAL
   return {
     ...ninguna,
     desvincular: true,
-    darAcceso: !c.excepcionVigente && c.tipoCuenta === "contado",
-    quitarAcceso: c.excepcionVigente,
+    darAcceso: principal && !c.excepcionVigente && c.tipoCuenta === "contado",
+    quitarAcceso: principal && c.excepcionVigente,
   }
+}
+
+// ───────────────────────── Cuenta de Alegra del vínculo ─────────────────────────
+
+const CUENTA_PRINCIPAL = "principal"
+
+/**
+ * Cuenta que el diálogo "Vincular" propone: la del último vínculo del usuario (cualquier estado;
+ * un usuario de un sitio que lee otra cuenta ya tiene fila en esa cuenta tras su primer ingreso)
+ * si sigue entre las elegibles; si no, la principal.
+ */
+export function cuentaPorDefecto(c: ClienteTiendaDto, cuentas: CuentaParaVincular[]): string {
+  const ultima = c.vinculo.cuenta
+  return ultima && cuentas.some((x) => x.clave === ultima) ? ultima : CUENTA_PRINCIPAL
+}
+
+/** Hay que mostrar el selector de cuenta: el tenant tiene más de una cuenta de Alegra. */
+export const hayVariasCuentas = (cuentas: CuentaParaVincular[]): boolean => cuentas.length > 1
+
+/**
+ * Nombre de la cuenta del vínculo para mostrar junto al contacto. null si no hay vínculo o si el
+ * tenant tiene una sola cuenta (no aporta nada). Sin nombre en `alegra_cuentas`, la clave cruda.
+ */
+export function etiquetaCuentaVinculo(c: ClienteTiendaDto, variasCuentas: boolean): string | null {
+  if (!variasCuentas || !c.vinculo.cuenta) return null
+  return c.vinculo.cuentaNombre || c.vinculo.cuenta
 }
 
 export const textoConfirmarVincular = (razonSocial: string): string =>

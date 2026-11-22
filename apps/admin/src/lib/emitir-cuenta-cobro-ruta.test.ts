@@ -89,6 +89,7 @@ const pedido = (over: Record<string, unknown> = {}) => ({
   sucursal: "mdp",
   sucursalRegla: null,
   clienteCodigo: "55",
+  clienteCuenta: "principal",
   clienteEmail: "ana@cliente.example",
   facturaAlegraId: null,
   facturaNumero: null,

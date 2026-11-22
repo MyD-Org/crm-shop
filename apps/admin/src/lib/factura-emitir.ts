@@ -1,5 +1,6 @@
 import type { AlegraInvoiceLineInput, AlegraNumberTemplate, AlegraTax } from "./alegra"
 import { envioDePedido } from "./envio-snapshot"
+import { CUENTA_CLAVE_PRINCIPAL, claveCuenta, codigoClienteEnCuenta } from "./pedido-cliente-cuenta"
 import type { PedidoItemRow, PedidoRow } from "./pedidos-repo"
 
 // "Emitir factura" (detalle de pedido del admin, rebanada B): lógica pura para armar el preview
@@ -311,7 +312,7 @@ export async function resolverPreviewEmision(
   pedido: PedidoRow,
   items: PedidoItemRow[],
   deps: ResolverPreviewEmisionDeps,
-  opts: { cuentaPrincipal?: boolean } = {},
+  opts: { cuenta?: { principal: boolean; slug: string } } = {},
 ): Promise<PreviewEmisionFactura> {
   const numeracionesCrudas = await deps.listNumberTemplates()
   const numeraciones = numeracionesCrudas.filter(
@@ -320,10 +321,12 @@ export async function resolverPreviewEmision(
   const numeracionSugeridaId = elegirNumeracionPorDefecto(numeraciones, { tieneCuit: tieneCuit(pedido) })
   const numeracionSugerida = numeraciones.find((n) => n.alegraId === numeracionSugeridaId) ?? null
 
-  // `cliente_codigo` es el id del contacto en la cuenta PRINCIPAL: en otra cuenta no existe, así
-  // que se busca por documento (o se crea), nunca se reutiliza ese id (design D6).
-  const esPrincipal = opts.cuentaPrincipal ?? true
-  let contactoAlegraId: string | null = esPrincipal ? pedido.clienteCodigo : null
+  // `cliente_codigo` es el id del contacto en la cuenta del pedido (`cliente_cuenta`): en otra
+  // cuenta no existe (o es otro cliente), así que se busca por documento (o se crea), nunca se
+  // reutiliza ese id (design D6 de sucursales-igz-mdp, D8 de shop-contactos-alegra-mdp). Sin
+  // cuenta explícita se factura con la principal.
+  const clave = opts.cuenta ? claveCuenta(opts.cuenta) : CUENTA_CLAVE_PRINCIPAL
+  let contactoAlegraId: string | null = codigoClienteEnCuenta(pedido, clave)
   let esNuevo = false
   if (!contactoAlegraId) {
     const documento = pedido.facturacionNroDoc?.trim()

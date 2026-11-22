@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const CUENTA_MDP = { id: "tenant-a", alegraEmail: "mdp@cliente.example", alegraToken: "t-mdp", alegraMock: false }
 
 const state = vi.hoisted(() => ({
-  pedido: { id: "p1", estado: "pendiente", facturaAlegraId: null, clienteCodigo: "55", sucursal: "mdp", sucursalRegla: null } as Record<string, unknown>,
+  pedido: { id: "p1", estado: "pendiente", facturaAlegraId: null, clienteCodigo: "55", clienteCuenta: "principal", sucursal: "mdp", sucursalRegla: null } as Record<string, unknown>,
   cuenta: null as unknown,
 }))
 const getFacturaPorId = vi.fn()

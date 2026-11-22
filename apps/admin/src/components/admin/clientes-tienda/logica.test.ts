@@ -3,6 +3,9 @@ import type { ClienteTiendaDto } from "@/lib/clientes-tienda-repo"
 import {
   FILTROS_INICIALES,
   accionesDisponibles,
+  cuentaPorDefecto,
+  etiquetaCuentaVinculo,
+  hayVariasCuentas,
   mensajeDeError,
   textoConfirmarDarAcceso,
   textoConfirmarDesvincular,
@@ -111,7 +114,15 @@ describe("acciones de admin (R4a)", () => {
     nombre: "Ana",
     email: "ana@cliente.example",
     altaEn: null,
-    vinculo: { estado: "vinculado", metodo: "operador", alegraContactId: "101", razonSocial: "Contado SA", desde: null },
+    vinculo: {
+      estado: "vinculado",
+      metodo: "operador",
+      alegraContactId: "101",
+      cuenta: "principal",
+      cuentaNombre: "Casa central",
+      razonSocial: "Contado SA",
+      desde: null,
+    },
     tipoCuenta: "contado",
     acceso: "no",
     excepcionVigente: false,
@@ -150,6 +161,33 @@ describe("acciones de admin (R4a)", () => {
 
   it.each(["sin_vincular", "sin_coincidencia", "ambiguo", "revocado"] as const)("%s ⇒ sólo vincular", (estado) => {
     expect(accionesDisponibles(con({}, { estado }), true)).toEqual({ ...ninguna, vincular: true })
+  })
+
+  it("vínculo de una cuenta secundaria ⇒ sin dar ni quitar acceso (la excepción es de la principal)", () => {
+    expect(accionesDisponibles(con({}, { cuenta: "mdp" }), true)).toEqual({ ...ninguna, desvincular: true })
+    expect(accionesDisponibles(con({ excepcionVigente: true }, { cuenta: "mdp" }), true).quitarAcceso).toBe(false)
+  })
+
+  const cuentas = [
+    { clave: "principal", nombre: "Casa central" },
+    { clave: "mdp", nombre: "Mar del Plata" },
+  ]
+
+  it("cuentaPorDefecto: la del último vínculo si es elegible; si no, la principal", () => {
+    expect(cuentaPorDefecto(con({}, { estado: "revocado", cuenta: "mdp" }), cuentas)).toBe("mdp")
+    expect(cuentaPorDefecto(con({}, { estado: "sin_coincidencia", cuenta: "mdp" }), cuentas)).toBe("mdp")
+    expect(cuentaPorDefecto(con({}, { estado: "sin_vincular", cuenta: null }), cuentas)).toBe("principal")
+    // Cuenta dada de baja (ya no es elegible) ⇒ principal.
+    expect(cuentaPorDefecto(con({}, { cuenta: "vieja" }), cuentas)).toBe("principal")
+  })
+
+  it("etiqueta de la cuenta del vínculo sólo si el tenant tiene varias cuentas", () => {
+    expect(hayVariasCuentas(cuentas)).toBe(true)
+    expect(hayVariasCuentas(cuentas.slice(0, 1))).toBe(false)
+    expect(etiquetaCuentaVinculo(con({}, { cuenta: "mdp", cuentaNombre: "Mar del Plata" }), true)).toBe("Mar del Plata")
+    expect(etiquetaCuentaVinculo(con({}, { cuenta: "mdp", cuentaNombre: null }), true)).toBe("mdp")
+    expect(etiquetaCuentaVinculo(base, false)).toBeNull()
+    expect(etiquetaCuentaVinculo(con({}, { cuenta: null }), true)).toBeNull()
   })
 
   it("textos de confirmación en usted, con la razón social", () => {

@@ -2,12 +2,13 @@ import { describe, it, expect, beforeEach, afterAll, vi } from "vitest"
 import { NextRequest } from "next/server"
 import { and, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
-import { alegraContacts, contactosAccesoFacturacion } from "@/db/schema"
+import { alegraContacts, alegraCuentas, contactosAccesoFacturacion } from "@/db/schema"
 import { shopClientLinks } from "@/db/shop-schema"
 import { invalidateTenantRegistry } from "@/lib/tenants"
 import {
   buscarContactosParaVincular,
   desvincularUsuario,
+  listarCuentasParaVincular,
   otorgarAcceso,
   quitarAcceso,
   vincularUsuario,
@@ -575,5 +576,138 @@ describe("clientes de la tienda: API de acciones", () => {
       expect(larga.status).toBe(400)
       expect(await larga.json()).toEqual({ error: "La búsqueda es demasiado larga.", code: "invalid" })
     })
+  })
+})
+
+// ───────────── Cuenta de Alegra del vínculo (shop-contactos-alegra-mdp, D9) ─────────────
+
+describe("clientes de la tienda: cuenta de Alegra del vínculo", () => {
+  let adminA: string
+
+  beforeEach(async () => {
+    await truncateAll()
+    await seedTenant(TENANT_A)
+    await seedTenant(TENANT_B)
+    adminA = await seedOperator(TENANT_A, { role: "admin", name: "Admin Ejemplo" })
+    invalidateTenantRegistry()
+    login(adminA)
+    await getDb()
+      .insert(alegraCuentas)
+      .values([
+        { tenantId: TENANT_A, slug: "principal", nombre: "Casa central", principal: true },
+        { tenantId: TENANT_A, slug: "mdp", nombre: "Mar del Plata", alegraMock: true },
+        { tenantId: TENANT_A, slug: "vieja", nombre: "Cuenta dada de baja", alegraMock: true, activa: false },
+        { tenantId: TENANT_B, slug: "ajena", nombre: "De otro tenant", alegraMock: true },
+      ])
+    await seedShopCliente(TENANT_A, { clerkUserId: "user_m1" })
+    // Mismo id de contacto en las dos cuentas: son dos clientes distintos.
+    await seedContacto(TENANT_A, "201", { name: "Luz Principal SA" })
+    await seedContacto(TENANT_A, "201", {
+      name: "Luz Costa SRL",
+      corriente: true,
+      extra: { alegraAccount: "mdp", identification: "30-72222222-0" },
+    })
+  })
+
+  afterAll(async () => {
+    await truncateAll()
+  })
+
+  it("cuentas elegibles: la principal primero y las secundarias activas del tenant", async () => {
+    expect(await listarCuentasParaVincular(TENANT_A)).toEqual([
+      { clave: "principal", nombre: "Casa central" },
+      { clave: "mdp", nombre: "Mar del Plata" },
+    ])
+    // Sin fila principal en alegra_cuentas se ofrece igual, con nombre genérico.
+    expect(await listarCuentasParaVincular(TENANT_B)).toEqual([
+      { clave: "principal", nombre: "Cuenta principal" },
+      { clave: "ajena", nombre: "De otro tenant" },
+    ])
+  })
+
+  it("el buscador lee la cuenta pedida (default principal)", async () => {
+    expect((await buscarContactosParaVincular(TENANT_A, "luz")).map((c) => c.nombre)).toEqual(["Luz Principal SA"])
+    expect((await buscarContactosParaVincular(TENANT_A, "luz", "mdp")).map((c) => c.nombre)).toEqual(["Luz Costa SRL"])
+  })
+
+  it("vincular en mdp guarda alegra_account 'mdp' con el snapshot del contacto de MDP", async () => {
+    const r = await vincularUsuario(TENANT_A, "user_m1", "201", ACTOR, "mdp")
+    expect(r).toEqual({ kind: "ok", cambio: true, razonSocial: "Luz Costa SRL" })
+    const [link] = await linksDe("user_m1")
+    expect(link).toMatchObject({
+      alegraAccount: "mdp",
+      alegraContactId: "201",
+      razonSocial: "Luz Costa SRL",
+      tipoCuenta: "corriente",
+      estado: "activa",
+      metodo: "operador",
+    })
+    // Repetir: sin cambios.
+    expect(await vincularUsuario(TENANT_A, "user_m1", "201", ACTOR, "mdp")).toEqual({
+      kind: "ok",
+      cambio: false,
+      razonSocial: "Luz Costa SRL",
+    })
+  })
+
+  it("sin cuenta: principal, como siempre", async () => {
+    await vincularUsuario(TENANT_A, "user_m1", "201", ACTOR)
+    const [link] = await linksDe("user_m1")
+    expect(link).toMatchObject({ alegraAccount: "principal", razonSocial: "Luz Principal SA" })
+  })
+
+  it.each(["vieja", "ajena", "inexistente", "MDP"])(
+    "cuenta %s (inactiva, de otro tenant o inválida) ⇒ cuenta_invalida",
+    async (cuenta) => {
+      expect(await vincularUsuario(TENANT_A, "user_m1", "201", ACTOR, cuenta)).toEqual({ kind: "cuenta_invalida" })
+      expect(await linksDe("user_m1")).toEqual([])
+    },
+  )
+
+  it("con un activo en otra cuenta ⇒ ya_vinculado (el Shop conserva un activo por usuario)", async () => {
+    await seedClientLink("user_m1", { alegraContactId: "201", alegraAccount: "principal" })
+    expect(await vincularUsuario(TENANT_A, "user_m1", "201", ACTOR, "mdp")).toEqual({
+      kind: "ya_vinculado",
+      razonSocial: "Luz Principal SA",
+    })
+  })
+
+  it("el listado une el espejo y el nombre de la cuenta por la cuenta del vínculo", async () => {
+    await seedClientLink("user_m1", { alegraContactId: "201", alegraAccount: "mdp", razonSocial: "Snapshot" })
+    const { items } = await listarClientesTienda(TENANT_A)
+    expect(items[0].vinculo).toMatchObject({
+      estado: "vinculado",
+      cuenta: "mdp",
+      cuentaNombre: "Mar del Plata",
+      razonSocial: "Luz Costa SRL",
+    })
+    expect(items[0]).toMatchObject({ tipoCuenta: "corriente", acceso: "corriente" })
+  })
+
+  it("el listado con un vínculo principal muestra el contacto de la principal", async () => {
+    await seedClientLink("user_m1", { alegraContactId: "201" })
+    const { items } = await listarClientesTienda(TENANT_A)
+    expect(items[0].vinculo).toMatchObject({ cuenta: "principal", cuentaNombre: "Casa central", razonSocial: "Luz Principal SA" })
+    expect(items[0].tipoCuenta).toBe("contado")
+  })
+
+  it("API: cuenta con formato inválido o ajena ⇒ 400 en usted; mdp ⇒ 200", async () => {
+    const mala = await vincular("user_m1", { alegraContactId: "201", cuenta: "MDP!" })
+    expect(mala.status).toBe(400)
+    expect(await mala.json()).toEqual({ error: "Seleccione una cuenta de Alegra válida.", code: "cuenta_invalida" })
+    const ajena = await vincular("user_m1", { alegraContactId: "201", cuenta: "ajena" })
+    expect(ajena.status).toBe(400)
+    const ok = await vincular("user_m1", { alegraContactId: "201", cuenta: "mdp" })
+    expect(ok.status).toBe(200)
+    expect(await ok.json()).toEqual({ cambio: true, razonSocial: "Luz Costa SRL" })
+  })
+
+  it("API: el buscador acepta la cuenta y rechaza una ajena", async () => {
+    const res = await buscarRoute.GET(req(`/api/admin/contactos-alegra?q=luz&cuenta=mdp`))
+    expect(res.status).toBe(200)
+    expect((await res.json()).items.map((c: { nombre: string }) => c.nombre)).toEqual(["Luz Costa SRL"])
+    const ajena = await buscarRoute.GET(req(`/api/admin/contactos-alegra?q=luz&cuenta=ajena`))
+    expect(ajena.status).toBe(400)
+    expect(await ajena.json()).toEqual({ error: "Seleccione una cuenta de Alegra válida.", code: "cuenta_invalida" })
   })
 })

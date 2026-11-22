@@ -1,4 +1,5 @@
 import { cargarContextoCuentaFactura, configDeCuentaRow, resolverParaPedido, MSG_SIN_CUENTA_FACTURA } from "./pedido-factura-cuenta-repo"
+import { claveCuenta } from "./pedido-cliente-cuenta"
 import type { PedidoRow } from "./pedidos-repo"
 import { getTenantByIdFromDb, type TenantConfig } from "./tenants"
 
@@ -12,7 +13,8 @@ import { getTenantByIdFromDb, type TenantConfig } from "./tenants"
 const MSG_SIN_CONFIG = "No se pudo consultar Alegra para esta empresa. Inténtelo nuevamente en unos minutos."
 
 export type ConfigAlegraPedido =
-  | { ok: true; config: TenantConfig; cuentaSlug: string }
+  /** `cuentaClave`: 'principal' o el slug de la secundaria (la clave de `orders.cliente_cuenta`). */
+  | { ok: true; config: TenantConfig; cuentaSlug: string; cuentaClave: string }
   | { ok: false; status: number; code: string; error: string }
 
 export async function configAlegraDelPedido(tenantId: string, pedido: Pick<PedidoRow, "id" | "sucursal" | "sucursalRegla">): Promise<ConfigAlegraPedido> {
@@ -26,7 +28,7 @@ export async function configAlegraDelPedido(tenantId: string, pedido: Pick<Pedid
   const cuenta = deLaFactura ?? resolverParaPedido(pedido, ctx).cuenta
   if (!cuenta) return { ok: false, status: 422, code: "sin_cuenta", error: MSG_SIN_CUENTA_FACTURA }
   try {
-    return { ok: true, config: configDeCuentaRow(base, cuenta), cuentaSlug: cuenta.slug }
+    return { ok: true, config: configDeCuentaRow(base, cuenta), cuentaSlug: cuenta.slug, cuentaClave: claveCuenta(cuenta) }
   } catch (err) {
     return { ok: false, status: 422, code: "cuenta_sin_credenciales", error: err instanceof Error ? err.message : MSG_SIN_CONFIG }
   }

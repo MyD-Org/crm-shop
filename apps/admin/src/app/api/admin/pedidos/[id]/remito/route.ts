@@ -2,6 +2,7 @@ import { AlegraRateLimitError, buscarRemisionesPorNumero, getRemisionPorId, type
 import { adminNotFoundResponse, requireSeccion } from "@/lib/admin-route-guard"
 import { nombreDocumentoAlegra, resolverRemito, validarRemision } from "@/lib/remito"
 import { desvincularRemito, getPedido, toPedidoDetalleDto, vincularRemito, type PedidoRow, type RemitoResult } from "@/lib/pedidos-repo"
+import { codigoClienteEnCuenta } from "@/lib/pedido-cliente-cuenta"
 import { configAlegraDelPedido } from "@/lib/pedido-cuenta-alegra"
 import { puedeVerCostos } from "@/lib/secciones"
 
@@ -98,7 +99,8 @@ export async function GET(req: Request, { params }: IdParams) {
     if (!cfg.ok) return fail(cfg.status, cfg.code, cfg.error)
     const config = cfg.config
 
-    const clienteCodigo = found.pedido.clienteCodigo
+    // El código del cliente sólo se compara si es de la cuenta con la que se busca (D8).
+    const clienteCodigo = codigoClienteEnCuenta(found.pedido, cfg.cuentaClave)
     let resultado
     try {
       resultado = await resolverRemito(numero, clienteCodigo, {

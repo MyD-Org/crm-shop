@@ -17,6 +17,7 @@ import {
   type FacturaResult,
   type PedidoRow,
 } from "@/lib/pedidos-repo"
+import { codigoClienteEnCuenta } from "@/lib/pedido-cliente-cuenta"
 import { configAlegraDelPedido } from "@/lib/pedido-cuenta-alegra"
 import { puedeVerCostos } from "@/lib/secciones"
 
@@ -139,7 +140,8 @@ export async function GET(req: Request, { params }: IdParams) {
     if (!cfg.ok) return fail(cfg.status, cfg.code, cfg.error)
     const config = cfg.config
 
-    const clienteCodigo = found.pedido.clienteCodigo
+    // El código del cliente sólo se compara si es de la cuenta con la que se busca (D8).
+    const clienteCodigo = codigoClienteEnCuenta(found.pedido, cfg.cuentaClave)
     let resultado
     try {
       resultado = await resolverFactura(numero, clienteCodigo, {
@@ -208,7 +210,7 @@ export async function POST(req: Request, { params }: IdParams) {
       return errorAlegra(err, ctx)
     }
     if (!factura) return fail(422, "factura_no_encontrada", MSG.noEncontrada)
-    const validacion = validarFactura(factura, found.pedido.clienteCodigo)
+    const validacion = validarFactura(factura, codigoClienteEnCuenta(found.pedido, cfg.cuentaClave))
     if (!validacion.ok) {
       return fail(422, `factura_${validacion.motivo}`, mensajeInvalida(validacion.motivo, factura))
     }

@@ -13,6 +13,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmCondiciones } from "@/db/crm";
 import { contactoPorId, type ContactoEspejo } from "../contactos-espejo";
+import { esCuentaPrincipal } from "../cuenta-alegra";
 import { shopTenantId } from "../tenant";
 import {
   computeBalance,
@@ -213,8 +214,15 @@ type CondicionesPropias = {
   transporte: { modalidad?: string; observaciones?: string } | null;
 };
 
-/** Fila de `client_commercial_conditions` del cliente, o `null`. Sin mock. */
+/**
+ * Fila de `client_commercial_conditions` del cliente, o `null`. Sin mock.
+ *
+ * Sólo en el despliegue de la cuenta de Alegra principal: la tabla está keyed por `codigocliente`
+ * sin cuenta. En otra cuenta, `null` sin consultar (condiciones sólo de la ficha de Alegra; change
+ * `shop-contactos-alegra-mdp`, D4).
+ */
 async function getCondicionesPropias(codigocliente: string): Promise<CondicionesPropias | null> {
+  if (!esCuentaPrincipal()) return null;
   const [row] = await getDb()
     .select({
       condicionPago: crmCondiciones.condicionPago,

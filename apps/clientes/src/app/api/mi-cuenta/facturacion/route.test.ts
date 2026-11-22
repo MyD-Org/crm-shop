@@ -22,7 +22,6 @@ vi.mock("@/lib/rate-limit", () => ({ permitirAsync: async (...a: unknown[]) => p
 
 let espejo: ContactoFacturacion | null = null;
 vi.mock("@/lib/contactos-espejo", () => ({
-  CUENTA_ALEGRA_PRINCIPAL: "principal",
   facturacionEspejo: async () => espejo,
 }));
 

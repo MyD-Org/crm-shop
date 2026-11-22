@@ -20,6 +20,16 @@ describe("duenioDe", () => {
     expect(duenioDe({ clerkUserId: null, cliente: null })).toBeNull();
     expect(duenioDe({ clerkUserId: "", cliente: { codigocliente: "" } })).toBeNull();
   });
+
+  it("cuenta de Alegra secundaria: el código de cliente no es llave, el dueño es el usuario de Clerk", () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    try {
+      expect(duenioDe({ clerkUserId: "user_1", cliente: { codigocliente: "42" } })).toEqual({ clerkUserId: "user_1" });
+      expect(duenioDe({ clerkUserId: null, cliente: { codigocliente: "42" } })).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 describe("condicionDuenio", () => {

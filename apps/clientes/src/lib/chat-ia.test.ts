@@ -73,6 +73,14 @@ describe("propsChatIa", () => {
     expect((await propsChatIa())?.agentId).toBe("agente-1");
   });
 
+  it("cuenta de Alegra secundaria: el vinculado usa el agente general (sin tools de cuenta)", async () => {
+    setFlag("chat-ia", true);
+    vi.stubEnv("AI_AGENT_ID_CLIENTE", "agente-cliente");
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    identidad.mockResolvedValue({ cliente: { codigocliente: "42" } });
+    expect((await propsChatIa())?.agentId).toBe("agente-1");
+  });
+
   it("sin AI_AGENT_ID_CLIENTE no lee la identidad", async () => {
     setFlag("chat-ia", true);
     identidad.mockReset();

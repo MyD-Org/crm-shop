@@ -37,7 +37,7 @@ import {
   type ContactoFacturacion,
   type DatosContacto,
 } from "./contacto-alegra";
-import { CUENTA_ALEGRA_PRINCIPAL } from "./contactos-espejo";
+import { shopCuentaAlegra } from "./cuenta-alegra";
 import { getPerfilFacturacion, upsertRespaldoVinculado } from "./facturacion-db";
 import { observacionesConEmail } from "./observaciones-contacto";
 import { provinciaCanonica } from "./provincias";
@@ -62,7 +62,7 @@ export type ResultadoEspejo = "ok" | "sin_fila" | "rechazado" | "error";
 export async function escribirEspejo(alegraId: string, contacto: AlegraContact): Promise<ResultadoEspejo> {
   try {
     const filas = (await getDb().execute(
-      sql`select public.shop_contacto_write_through(${shopTenantId()}, ${CUENTA_ALEGRA_PRINCIPAL}, ${alegraId}, ${JSON.stringify(contacto)}::text::jsonb) as resultado`,
+      sql`select public.shop_contacto_write_through(${shopTenantId()}, ${shopCuentaAlegra()}, ${alegraId}, ${JSON.stringify(contacto)}::text::jsonb) as resultado`,
     )) as unknown as { resultado: string }[];
     const resultado = (filas[0]?.resultado ?? "error") as ResultadoEspejo;
     if (resultado !== "ok") console.warn(`[contacto] write-through del contacto ${alegraId}: ${resultado}`);

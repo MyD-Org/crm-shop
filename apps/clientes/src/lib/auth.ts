@@ -21,6 +21,7 @@ import { getDb } from "@/db";
 import { clientLinks } from "@/db/schema";
 import { intentarVinculacionPorEmail } from "./vinculacion";
 import { comercialEspejo } from "./contactos-espejo";
+import { esCuentaPrincipal } from "./cuenta-alegra";
 import { nombrePila } from "./nombre-pila";
 import { esRolAdmin } from "./rol-admin";
 import { programarReclamoInvitado } from "./reclamo-invitado";
@@ -57,9 +58,16 @@ export interface Identidad {
   registradoEn?: number;
 }
 
-/** Sesión heredada del CRM (cookie compartida en .cliente.example). */
+/**
+ * Sesión heredada del CRM (cookie compartida en .cliente.example).
+ *
+ * Sólo en el despliegue de la cuenta de Alegra principal: el `codigocliente` de la cookie es un id
+ * de esa cuenta (el CRM no guarda la cuenta), y en otra cuenta el mismo id es otra persona. Con
+ * `SHOP_CUENTA_ALEGRA` secundaria (o inválida) la cookie se ignora (change `shop-contactos-alegra-mdp`, D4).
+ */
 async function sesionCrm(): Promise<SessionData | null> {
   try {
+    if (!esCuentaPrincipal()) return null;
     const cookieStore = await cookies();
     const s = await getIronSession<SessionData>(cookieStore, sessionOptions);
     return s.isLoggedIn && s.codigocliente ? s : null;

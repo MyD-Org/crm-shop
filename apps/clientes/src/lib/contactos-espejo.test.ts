@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
 
 /**
- * `contactoPorId`: espejo primero, filtrado por tenant del Shop, cuenta
- * principal y fila activa; sin fila, UNA consulta en vivo; si falla, null.
+ * `contactoPorId`: espejo primero, filtrado por tenant del Shop, cuenta de
+ * Alegra del despliegue (default `principal`) y fila activa; sin fila, UNA consulta en vivo; si falla, null.
  */
 
 let grabadora = dbGrabadora();
@@ -71,6 +71,15 @@ describe("contactoPorId", () => {
     expect(consulta.params).toEqual(expect.arrayContaining(["tenant-test", "principal", "42", "active"]));
     // Otro tenant nunca entra: el único tenant de la consulta es el del Shop.
     expect(consulta.params).not.toContain("otro-tenant");
+  });
+
+  it("con SHOP_CUENTA_ALEGRA=mdp filtra por esa cuenta, nunca por la principal", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    grabadora = dbGrabadora(() => [FILA]);
+    await contactoPorId("42");
+    const [consulta] = grabadora.consultas;
+    expect(consulta.params).toEqual(expect.arrayContaining(["tenant-test", "mdp", "42", "active"]));
+    expect(consulta.params).not.toContain("principal");
   });
 
   it("sin fila: una sola consulta en vivo, con el mismo mapeo", async () => {

@@ -1,8 +1,10 @@
 import { contactoPorId } from "@/lib/contactos-espejo";
+import { esCuentaPrincipal } from "@/lib/cuenta-alegra";
 import {
   COMPROBANTES_NO_DISPONIBLE,
   FORMULARIO_INVALIDO,
   HISTORIAL_CAIDO,
+  INFORME_CC_NO_DISPONIBLE,
   INIT_CAIDO,
   LIMITE_DIARIO,
   LIMITE_HORARIO,
@@ -49,12 +51,18 @@ import { shopTenantId } from "@/lib/tenant";
  *
  * El cliente (código, razón social, CUIT, email) sale SIEMPRE de la identidad:
  * lo que venga en el body se ignora.
+ *
+ * Despliegue con cuenta de Alegra secundaria (change `shop-contactos-alegra-mdp`, D4):
+ * `payment_receipts.codigocliente` no guarda la cuenta, así que el informe de cuenta corriente
+ * (sin pedido) y su historial responden 409 `INFORME_CC_NO_DISPONIBLE`, y el comprobante de un
+ * pedido se guarda sin `codigocliente` (dueño = usuario de Clerk).
  */
 const HORA_MS = 60 * 60 * 1000;
 
 export async function GET(request: Request) {
   const guard = await requerirCuentaCorriente();
   if (guard.error) return guard.error;
+  if (!esCuentaPrincipal()) return jsonNoStore({ error: INFORME_CC_NO_DISPONIBLE }, { status: 409 });
   if (!getComprobantesR2()) return jsonNoStore({ error: COMPROBANTES_NO_DISPONIBLE }, { status: 503 });
 
   const start = startSeguro(new URL(request.url).searchParams.get("start"));
@@ -140,9 +148,11 @@ async function informarDePedido(raw: Record<string, unknown>) {
     }
     // El pedido tiene que ser del comprador (su usuario o su cuenta corriente); uno ajeno
     // responde igual que uno inexistente.
+    // Fuera de la cuenta principal el código de cliente no es llave (otra cuenta, otra persona).
+    const principal = esCuentaPrincipal();
     const pedido = await getPedidoParaComprobante(pedidoId, {
       clerkUserId: comprador.clerkUserId,
-      clienteCodigo: comprador.cliente?.codigocliente,
+      clienteCodigo: principal ? comprador.cliente?.codigocliente : undefined,
     });
     if (!pedido) return jsonNoStore({ error: PEDIDO_NO_ENCONTRADO }, { status: 404 });
     const motivo = motivoNoInformable(pedido);
@@ -171,7 +181,7 @@ async function informarDePedido(raw: Record<string, unknown>) {
       r2,
       tenantId,
       {
-        codigocliente: comprador.cliente?.codigocliente ?? null,
+        codigocliente: principal ? (comprador.cliente?.codigocliente ?? null) : null,
         shopOrderId: pedido.id,
         clerkUserId: comprador.clerkUserId,
         razonsocial: datos.razonsocial,
@@ -197,6 +207,7 @@ async function informarDePedido(raw: Record<string, unknown>) {
 async function informarDeCuentaCorriente(raw: unknown) {
   const guard = await requerirCuentaCorriente();
   if (guard.error) return guard.error;
+  if (!esCuentaPrincipal()) return jsonNoStore({ error: INFORME_CC_NO_DISPONIBLE }, { status: 409 });
   const { cliente } = guard;
 
   const r2 = getComprobantesR2();

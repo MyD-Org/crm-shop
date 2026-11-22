@@ -6,6 +6,7 @@ import { accesoFacturacion } from "@/lib/acceso-facturacion";
 import { identidadActual } from "@/lib/auth";
 import { listarDelCliente } from "@/lib/comprobantes/repo";
 import { contactoPorId } from "@/lib/contactos-espejo";
+import { esCuentaPrincipal } from "@/lib/cuenta-alegra";
 import { getPagosPage } from "@/lib/cuenta-corriente/erp-cc";
 import { motivoAlegra } from "@/lib/cuenta-corriente/mensajes";
 import { datosTenant } from "@/lib/cuenta-corriente/tenant-cc";
@@ -22,6 +23,10 @@ import { shopTenantId } from "@/lib/tenant";
  * "Informar pago" sólo con el almacenamiento de comprobantes configurado
  * (CMP-5). Sólo cuenta corriente
  * (`accesoFacturacion`): sin vínculo o de contado ⇒ 404.
+ *
+ * Con cuenta de Alegra secundaria no hay "Informar pago" ni historial de informados: los
+ * comprobantes de cuenta corriente están keyed por `codigocliente` sin cuenta (D4 de
+ * `shop-contactos-alegra-mdp`). El informe por pedido sigue en el detalle del pedido.
  */
 export default async function PagosPage() {
   if (!seccionDesplegada("pagos")) notFound();
@@ -32,7 +37,7 @@ export default async function PagosPage() {
   if (!cliente || !(await accesoFacturacion())) notFound();
 
   const codigo = cliente.codigocliente;
-  const comprobantes = comprobantesR2Config() !== null;
+  const comprobantes = comprobantesR2Config() !== null && esCuentaPrincipal();
   const [paginaR, tenantR, contactoR, comprobantesR] = await Promise.allSettled([
     getPagosPage(codigo),
     datosTenant(),

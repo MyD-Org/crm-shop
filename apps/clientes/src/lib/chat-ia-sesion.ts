@@ -15,9 +15,14 @@
  * ai-api aplica con eso los topes diarios por usuario (`limits_by_tier`). El
  * nivel lo decide el Shop y no ai-api porque sólo el Shop sabe quién es quién;
  * viaja server-to-server con la API key, así que el navegador no lo puede tocar.
+ *
+ * Con cuenta de Alegra secundaria (change `shop-contactos-alegra-mdp`, D4) el vinculado chatea
+ * como `registrado`, sin `crm_token`: el token y `/api/agent/*` del CRM resuelven el
+ * `codigocliente` en la cuenta principal, donde ese id es otra persona.
  */
 import type { Identidad } from "./auth";
 import { mintAgentToken } from "./agent-token";
+import { esCuentaPrincipal } from "./cuenta-alegra";
 
 /** Mensajes `{error}` de `POST /api/ai-token` (en route.ts Next no admite otros exports). */
 export const CHAT_NO_DISPONIBLE = "El chat no está disponible en este momento. Inténtelo de nuevo más tarde.";
@@ -51,7 +56,7 @@ export function sesionChat(
   visitanteId: string,
 ): SesionChat {
   const { cliente, clerkUserId, nombre } = identidad;
-  if (cliente?.codigocliente) {
+  if (cliente?.codigocliente && esCuentaPrincipal()) {
     return {
       external_id: cliente.codigocliente,
       ...(cliente.razonsocial ? { display_name: cliente.razonsocial } : {}),

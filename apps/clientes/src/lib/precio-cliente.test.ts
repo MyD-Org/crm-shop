@@ -121,9 +121,9 @@ describe("con precio privado", () => {
 describe("textos", () => {
   it("aviso con y sin razón social, sin decir cuenta corriente", () => {
     expect(TEXTOS_PRECIOS_CLIENTE.aviso("Cliente de Prueba")).toBe(
-      "Está viendo sus precios de cliente · Cliente de Prueba. Se abonan en efectivo o cheque.",
+      "Precios de cliente para Cliente de Prueba. Pago en efectivo o cheque.",
     );
-    expect(TEXTOS_PRECIOS_CLIENTE.aviso(null)).toBe("Está viendo sus precios de cliente. Se abonan en efectivo o cheque.");
+    expect(TEXTOS_PRECIOS_CLIENTE.aviso(null)).toBe("Precios de cliente. Pago en efectivo o cheque.");
     for (const t of [TEXTOS_PRECIOS_CLIENTE.aviso("X"), TEXTOS_PRECIOS_CLIENTE.etiqueta, TEXTOS_PRECIOS_CLIENTE.checkoutPago]) {
       expect(t.toLowerCase()).not.toContain("cuenta corriente");
     }

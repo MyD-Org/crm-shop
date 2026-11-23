@@ -144,7 +144,7 @@ export function CatalogoProductos({
           // Sin centavos en la card market: "$ 273.761", no "$ 273.760,99".
           price={medioPrimero ? Math.round(medio.precioFinal ?? medio.price) : market ? Math.round(vv.precio) : vv.precio}
           priceNote={vv.nota}
-          oldPrice={vv.esDesde ? undefined : p.oldPrice}
+          oldPrice={vv.esDesde || p.oldPrice == null ? undefined : market ? Math.round(p.oldPrice) : p.oldPrice}
           badge={p.campania ? badgeCampania(p.campania) : (badgePromo(promoDe(p.sku), p) ?? badgeProducto(p))}
           // El slot queda fuera del enlace estirado de la card: no navega.
           // Favorito arriba y compartir debajo, apilados en la esquina de la foto.

@@ -8,6 +8,8 @@ import { BotonFavorito } from "@/components/BotonFavorito";
 import { BotonCompartir } from "@/components/BotonCompartir";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
+import { EtiquetaPrecioCliente } from "@/components/EtiquetaPrecioCliente";
+import { esPrecioDeCliente } from "@/lib/precio-cliente";
 import { fmtPesosEnteros } from "@/lib/format";
 import { rotuloMedio } from "@/lib/precio-medio-texto";
 import type { Product } from "@/data/products";
@@ -142,7 +144,7 @@ export function CatalogoProductos({
           // Sin centavos en la card market: "$ 273.761", no "$ 273.760,99".
           price={medioPrimero ? Math.round(medio.precioFinal ?? medio.price) : market ? Math.round(vv.precio) : vv.precio}
           priceNote={vv.nota}
-          oldPrice={vv.esDesde ? undefined : p.oldPrice}
+          oldPrice={vv.esDesde || p.oldPrice == null ? undefined : market ? Math.round(p.oldPrice) : p.oldPrice}
           badge={p.campania ? badgeCampania(p.campania) : (badgePromo(promoDe(p.sku), p) ?? badgeProducto(p))}
           // El slot queda fuera del enlace estirado de la card: no navega.
           // Favorito arriba y compartir debajo, apilados en la esquina de la foto.
@@ -175,6 +177,7 @@ export function CatalogoProductos({
           installments={
             market ? (
               <>
+                <EtiquetaPrecioCliente producto={p} />
                 {medioPrimero && <span className="block">{fmtPesosEnteros(vv.precio)} con otros medios</span>}
                 {reservarCuotas && (
                   <span className="block min-h-4.5">
@@ -182,8 +185,10 @@ export function CatalogoProductos({
                   </span>
                 )}
               </>
-            ) : reservarCuotas || reservarMedio ? (
+            ) : reservarCuotas || reservarMedio || esPrecioDeCliente(p) ? (
               <>
+                {/* Sólo con su lista privada; sin ella no dibuja nada. */}
+                <EtiquetaPrecioCliente producto={p} />
                 {reservarMedio && (
                   <span className="block min-h-4">
                     <PrecioMedioCard medio={medio} />

@@ -10,6 +10,7 @@
  */
 import type { Product } from "@/data/products";
 import type { PrecioCuenta } from "./precio-cuenta";
+import { precioGeneralTachado, precioPublicoConTransferencia } from "./precio-cliente";
 
 /** Lo que se sabe de un id: precio privado, sin precio en la lista (Consulte) o "rige el público". */
 export type ValorCuenta = PrecioCuenta | null | "publico";
@@ -48,8 +49,9 @@ export function sesionPorCookie(cookie: string): boolean {
 
 /**
  * El producto con el precio de la cuenta aplicado. Con precio privado: `price`/`precioFinal` pasan
- * a ser los de su lista (sin tachar el público: se muestra siempre, aunque sea mayor; salvo que una
- * campaña de precios lo deje más barato, que gana y tacha el privado) y se ocultan
+ * a ser los de su lista (se muestra siempre, aunque sea mayor; si es MENOR que el público con
+ * transferencia, ése va tachado en `oldPrice`: ver `precio-cliente.ts`; salvo que una campaña de
+ * precios lo deje más barato, que gana y tacha el privado) y se ocultan
  * "$X con medio", cuotas y descuentos por medio. Consulte: sin precio (la ficha ya dice "Consulte" y
  * bloquea el agregado). Sin estado devuelve el mismo objeto.
  */
@@ -79,11 +81,17 @@ export function aplicarEstadoPrecio(p: Product, estado: EstadoPrecioCuenta | und
         precioCuenta: "privado",
       };
     }
+    // El público sale del producto TAL COMO VINO del catálogo (antes de pisarle medios y precio).
+    const tachado = precioGeneralTachado(
+      estado.precio.precioFinal ?? privado,
+      precioPublicoConTransferencia(p),
+    );
     return {
       ...p,
       ...sinMedios,
       price: privado,
       precioFinal: estado.precio.precioFinal,
+      ...(tachado != null ? { oldPrice: tachado } : {}),
       precioCuenta: "privado",
     };
   }

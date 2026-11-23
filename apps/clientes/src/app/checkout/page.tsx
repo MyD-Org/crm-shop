@@ -18,6 +18,7 @@ import type { EleccionInicialCheckout } from "@/lib/checkout-ubicacion";
 import type { EleccionUbicacion } from "@/lib/ubicacion";
 import { mediosOfreciblesComprador } from "@/lib/medios-pago-datos";
 import { esCompradorCuentaCorriente, mediosVisiblesPara } from "@/lib/medios-pago";
+import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { idPagoDeRetorno } from "@/lib/pagos/mercadopago-preferencia";
 import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
 import { compraInvitadoHabilitada } from "@/lib/compra-invitado-flag";
@@ -127,6 +128,14 @@ export default async function CheckoutPage({
   // (ni su nombre ni sus instrucciones). El servidor vuelve a validar en `POST /api/pedidos`.
   const esCuentaCorriente = esCompradorCuentaCorriente(cliente);
   const mediosPago = mediosVisiblesPara(mediosOfrecidos, esCuentaCorriente);
+  // Sus precios de cliente (lista online privada): sólo cambia un texto del paso Pago. Si la lectura
+  // falla, el checkout sigue como siempre (la cotización la vuelve a resolver el servidor).
+  const conPreciosDeCliente = esCuentaCorriente
+    ? await listaPrivadaDelComprador().then(Boolean, (err: unknown) => {
+        console.error(`[checkout] no se pudo leer la lista privada: ${err instanceof Error ? err.name : "desconocido"}`);
+        return false;
+      })
+    : false;
   // Con el flag `sucursales`: locales de retiro y zona vigente. null = como siempre.
   const sucursales = await opcionesCheckoutDelVisitante().catch(
     (err: unknown) => {
@@ -196,6 +205,7 @@ export default async function CheckoutPage({
         mediosPago={mediosPago}
         tarjetasMercadoPago={tarjetasMercadoPago}
         esCuentaCorriente={esCuentaCorriente}
+        conPreciosDeCliente={conPreciosDeCliente}
         eleccionInicial={eleccion}
         pedidoReintento={pedidoReintento}
         retornoMercadoPago={retornoMercadoPago}

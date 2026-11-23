@@ -16,6 +16,9 @@ import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
 import { hayCuotasParaModal, mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
+import { esPrecioDeCliente } from "@/lib/precio-cliente";
+import { TEXTOS_PRECIOS_CLIENTE } from "@/lib/precios-cliente-textos";
+import { fmtPrecio } from "@/lib/format";
 import { formatDescripcionProducto, nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { estadoFicha, type TonoFicha } from "@/lib/ficha-venta-sin-stock";
@@ -156,6 +159,9 @@ export function ProductoClient({
     usePreciosCuenta(opciones ? opciones.map((o) => o.id) : [productoLista.id]).get(productoElegido.id),
   );
   const precioPendiente = producto.precioCuenta === "pendiente";
+  // Sus precios de cliente (lista privada), sólo en la ficha de un producto simple: el general con
+  // transferencia tachado arriba (si el suyo es menor) y la etiqueta debajo. Sin lista, nada.
+  const precioDeCliente = !opciones && esPrecioDeCliente(producto);
   const [qty, setQty] = useState(1);
   const { addItem, items: itemsCarrito, count: cantidadCarrito, updateQty, removeItem } = useCart();
   // Mientras hidrata, "no está en el carrito", como en el servidor (ver useHidratado).
@@ -423,6 +429,21 @@ export function ProductoClient({
                 <p className="text-lg font-semibold text-muted">
                   Precio no disponible. Consulte por WhatsApp o por teléfono.
                 </p>
+              ) : precioDeCliente ? (
+                <>
+                  {producto.oldPrice != null && (
+                    <p className="mb-1.5 text-base text-muted tabular-nums">
+                      <span className="sr-only">{TEXTOS_PRECIOS_CLIENTE.precioGeneral}: </span>
+                      <s>{fmtPrecio(producto.oldPrice)}</s>
+                    </p>
+                  )}
+                  <PrecioConImpuestos
+                    price={producto.price}
+                    precioFinal={producto.precioFinal}
+                    preciosMedios={producto.preciosMedios}
+                  />
+                  <p className="mt-1.5 text-sm font-semibold text-accent">{TEXTOS_PRECIOS_CLIENTE.etiqueta}</p>
+                </>
               ) : (
                 <PrecioConImpuestos
                   price={producto.price}

@@ -6,6 +6,7 @@ import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
+import { EtiquetaPrecioCliente } from "@/components/EtiquetaPrecioCliente";
 import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
 import { agotadoSinModalidad } from "@/lib/venta-sin-stock";
@@ -85,6 +86,7 @@ export function ProductoFavCard({ p }: { p: Product }) {
       }
       installments={
         <>
+          <EtiquetaPrecioCliente producto={p} />
           <PrecioMedioCard medio={p.precioMedio} />
           <CuotasCard opcion={mejorCuotaProducto(p.cuotasSinInteres)} />
         </>

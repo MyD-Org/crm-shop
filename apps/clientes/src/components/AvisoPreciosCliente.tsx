@@ -2,7 +2,7 @@ import { connection } from "next/server";
 import { Alert } from "@myd-org/ui";
 import { identidadActual } from "@/lib/auth";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
-import { TEXTOS_PRECIOS_CLIENTE } from "@/lib/precios-cliente-textos";
+import { TEXTOS_PRECIOS_CLIENTE, nombreDelCliente } from "@/lib/precios-cliente-textos";
 
 /** Ícono de etiqueta de precio (trazo, hereda el color del aviso). */
 function IconoEtiqueta() {
@@ -34,27 +34,30 @@ function IconoEtiqueta() {
  */
 export async function AvisoPreciosCliente() {
   await connection();
-  const texto = await textoDelAviso().catch((err: unknown) => {
+  const datos = await datosDelAviso().catch((err: unknown) => {
     console.error(`[aviso-precios-cliente] ${err instanceof Error ? err.name : "desconocido"}`);
     return null;
   });
-  if (!texto) return null;
+  if (!datos) return null;
   return (
     <div className="mx-auto w-full max-w-contenido px-4 pt-3">
       <Alert tone="success">
         <p className="flex items-start gap-2">
           <IconoEtiqueta />
-          <span>{texto}</span>
+          <span>
+            <span className="font-semibold">{TEXTOS_PRECIOS_CLIENTE.aviso}</span>
+            {datos.nombre ? <span> · {datos.nombre}</span> : null}
+          </span>
         </p>
       </Alert>
     </div>
   );
 }
 
-/** El texto del aviso, o `null` sin lista privada. */
-async function textoDelAviso(): Promise<string | null> {
+/** Datos del aviso (nombre del cliente para mostrar), o `null` sin lista privada. */
+async function datosDelAviso(): Promise<{ nombre: string | null } | null> {
   const listaId = await listaPrivadaDelComprador();
   if (!listaId) return null;
   const { cliente } = await identidadActual();
-  return TEXTOS_PRECIOS_CLIENTE.aviso(cliente?.razonsocial);
+  return { nombre: nombreDelCliente(cliente?.razonsocial) };
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Product } from "@/data/products";
 import { esPrecioDeCliente, precioGeneralTachado, precioPublicoConTransferencia } from "./precio-cliente";
 import { aplicarEstadoPrecio } from "./precios-cuenta-estado";
-import { TEXTOS_PRECIOS_CLIENTE } from "./precios-cliente-textos";
+import { TEXTOS_PRECIOS_CLIENTE, nombreDelCliente } from "./precios-cliente-textos";
 
 // Datos inventados.
 const base = {
@@ -119,13 +119,19 @@ describe("con precio privado", () => {
 });
 
 describe("textos", () => {
-  it("aviso con y sin razón social, sin decir cuenta corriente", () => {
-    expect(TEXTOS_PRECIOS_CLIENTE.aviso("Cliente de Prueba")).toBe(
-      "Precios de cliente para Cliente de Prueba",
-    );
-    expect(TEXTOS_PRECIOS_CLIENTE.aviso(null)).toBe("Precios de cliente");
-    for (const t of [TEXTOS_PRECIOS_CLIENTE.aviso("X"), TEXTOS_PRECIOS_CLIENTE.etiqueta, TEXTOS_PRECIOS_CLIENTE.checkoutPago]) {
+  it("aviso sin decir cuenta corriente", () => {
+    expect(TEXTOS_PRECIOS_CLIENTE.aviso).toBe("Precios de cliente aplicados");
+    for (const t of [TEXTOS_PRECIOS_CLIENTE.aviso, TEXTOS_PRECIOS_CLIENTE.etiqueta, TEXTOS_PRECIOS_CLIENTE.checkoutPago]) {
       expect(t.toLowerCase()).not.toContain("cuenta corriente");
     }
+  });
+
+  it("nombreDelCliente: mayúsculas de Alegra a tipo título, siglas y minúsculas intactas", () => {
+    expect(nombreDelCliente("ELECTRICIDAD PEREZ SRL")).toBe("Electricidad Perez SRL");
+    expect(nombreDelCliente("CASA DE LA LUZ S.A.")).toBe("Casa de la Luz S.A.");
+    expect(nombreDelCliente("LED 220 Y CIA")).toBe("Led 220 y Cia");
+    expect(nombreDelCliente("Dalila")).toBe("Dalila");
+    expect(nombreDelCliente("  ")).toBeNull();
+    expect(nombreDelCliente(null)).toBeNull();
   });
 });

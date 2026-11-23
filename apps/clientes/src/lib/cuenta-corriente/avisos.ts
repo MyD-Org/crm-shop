@@ -9,11 +9,17 @@
  * UN aviso (el envío más reciente) y se marcan leídas juntas. El contador cuenta
  * avisos, no filas. Sólo avisos enviados (`status = 'sent'`) de los tipos que
  * el Shop sabe mostrar.
+ *
+ * Sólo en el despliegue de la cuenta de Alegra principal: `notification_log` está keyed por
+ * `codigocliente` sin cuenta, y en otra cuenta el mismo id es otra persona. Fuera de la principal
+ * no hay avisos (lista vacía, contador 0, marcar no hace nada) y no se consulta la tabla
+ * (change `shop-contactos-alegra-mdp`, D4).
  */
 import { cache } from "react";
 import { and, desc, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmAvisos } from "@/db/crm";
+import { esCuentaPrincipal } from "../cuenta-alegra";
 import { shopTenantId } from "../tenant";
 import type { Aviso } from "./vista-avisos";
 
@@ -50,6 +56,7 @@ const visibles = and(
  * `(factura, tipo)`. A lo sumo `limite` avisos.
  */
 export async function listarAvisos(codigocliente: string, limite = AVISOS_LIMITE): Promise<Aviso[]> {
+  if (!esCuentaPrincipal()) return [];
   const filas = await getDb()
     .select({
       id: crmAvisos.id,
@@ -93,6 +100,7 @@ export async function listarAvisos(codigocliente: string, limite = AVISOS_LIMITE
 
 /** Avisos (no filas) sin leer. Una consulta por request (`cache`): la usan el layout y el resumen. */
 export const contarNoLeidos = cache(async function contarNoLeidos(codigocliente: string): Promise<number> {
+  if (!esCuentaPrincipal()) return 0;
   const [fila] = await getDb()
     .select({ n: sql<number>`count(distinct (${crmAvisos.facturaId}, ${crmAvisos.type}))`.mapWith(Number) })
     .from(crmAvisos)
@@ -106,6 +114,7 @@ export const contarNoLeidos = cache(async function contarNoLeidos(codigocliente:
  * `read_at`, y sólo en filas todavía no leídas.
  */
 export async function marcarLeidos(codigocliente: string, ids?: readonly string[]): Promise<void> {
+  if (!esCuentaPrincipal()) return;
   const noLeidas = and(delCliente(codigocliente), isNull(crmAvisos.readAt));
   if (ids === undefined) {
     await getDb().update(crmAvisos).set({ readAt: new Date() }).where(noLeidas);

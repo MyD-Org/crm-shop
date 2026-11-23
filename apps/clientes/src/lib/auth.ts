@@ -21,10 +21,12 @@ import { getDb } from "@/db";
 import { clientLinks } from "@/db/schema";
 import { intentarVinculacionPorEmail } from "./vinculacion";
 import { comercialEspejo } from "./contactos-espejo";
+import { esCuentaPrincipal } from "./cuenta-alegra";
 import { nombrePila } from "./nombre-pila";
 import { esRolAdmin } from "./rol-admin";
 import { programarReclamoInvitado } from "./reclamo-invitado";
 import { sessionOptions, type SessionData } from "./session";
+import { shopCuentaAlegra } from "./cuenta-alegra";
 
 /** Datos comerciales de un cliente ya resuelto. */
 export interface ClienteComercial {
@@ -57,9 +59,16 @@ export interface Identidad {
   registradoEn?: number;
 }
 
-/** Sesión heredada del CRM (cookie compartida en .cliente.example). */
+/**
+ * Sesión heredada del CRM (cookie compartida en .cliente.example).
+ *
+ * Sólo en el despliegue de la cuenta de Alegra principal: el `codigocliente` de la cookie es un id
+ * de esa cuenta (el CRM no guarda la cuenta), y en otra cuenta el mismo id es otra persona. Con
+ * `SHOP_CUENTA_ALEGRA` secundaria (o inválida) la cookie se ignora (change `shop-contactos-alegra-mdp`, D4).
+ */
 async function sesionCrm(): Promise<SessionData | null> {
   try {
+    if (!esCuentaPrincipal()) return null;
     const cookieStore = await cookies();
     const s = await getIronSession<SessionData>(cookieStore, sessionOptions);
     return s.isLoggedIn && s.codigocliente ? s : null;
@@ -70,7 +79,11 @@ async function sesionCrm(): Promise<SessionData | null> {
   }
 }
 
-/** Vinculación activa de un usuario de Clerk, si tiene. */
+/**
+ * Vinculación activa de un usuario de Clerk EN LA CUENTA DE ALEGRA DE ESTE
+ * DESPLIEGUE, si tiene. Un vínculo de otra cuenta queda inerte: su
+ * `alegra_contact_id` es de otra empresa en la cuenta de este despliegue.
+ */
 async function vinculacionDe(clerkUserId: string) {
   const [fila] = await getDb()
     .select()
@@ -79,6 +92,7 @@ async function vinculacionDe(clerkUserId: string) {
       and(
         eq(clientLinks.clerkUserId, clerkUserId),
         eq(clientLinks.estado, "activa"),
+        eq(clientLinks.alegraAccount, shopCuentaAlegra()),
       ),
     )
     .limit(1);

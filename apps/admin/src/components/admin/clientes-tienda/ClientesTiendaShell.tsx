@@ -14,6 +14,7 @@ import {
   type TableColumn,
 } from "@myd-org/ui"
 import type { ClienteTiendaDto } from "@/lib/clientes-tienda-repo"
+import type { CuentaParaVincular } from "@/lib/clientes-tienda-acciones"
 import { textoRango } from "../pedidos/logica"
 import { ClienteTiendaDetalle } from "./ClienteTiendaDetalle"
 import { fmtFechaCliente } from "./format"
@@ -23,10 +24,12 @@ import {
   OPCIONES_PEDIDOS,
   OPCIONES_VINCULO,
   etiquetaAcceso,
+  etiquetaCuentaVinculo,
   etiquetaMetodo,
   etiquetaTipoCuenta,
   etiquetaVinculo,
   hayFiltros,
+  hayVariasCuentas,
   mensajeVacio,
   opcionValida,
   queryDeLista,
@@ -49,7 +52,11 @@ interface Props {
   pageSize: number
   /** admin+ (rol fresco, calculado en el server): muestra las acciones del detalle. */
   puedeGestionar?: boolean
+  /** Cuentas de Alegra del tenant (principal primero) para mostrar y elegir la del vínculo. */
+  cuentas?: CuentaParaVincular[]
 }
+
+const SOLO_PRINCIPAL: CuentaParaVincular[] = [{ clave: "principal", nombre: "Cuenta principal" }]
 
 const ERROR_CARGA = "No se pudieron cargar los clientes de la tienda. Inténtelo nuevamente."
 const DEBOUNCE_MS = 300
@@ -65,7 +72,9 @@ export function ClientesTiendaShell({
   initialError = "",
   pageSize,
   puedeGestionar = false,
+  cuentas = SOLO_PRINCIPAL,
 }: Props) {
+  const variasCuentas = hayVariasCuentas(cuentas)
   const [filtros, setFiltros] = useState<FiltrosLista>(FILTROS_INICIALES)
   const [busqueda, setBusqueda] = useState("")
   const [items, setItems] = useState(initialItems)
@@ -167,6 +176,9 @@ export function ClientesTiendaShell({
         <div className="flex flex-col gap-0.5">
           {c.vinculo.razonSocial && (
             <span className="text-sm" style={{ color: "var(--ink)" }}>{c.vinculo.razonSocial}</span>
+          )}
+          {etiquetaCuentaVinculo(c, variasCuentas) && (
+            <span className="text-xs" style={secundario}>{etiquetaCuentaVinculo(c, variasCuentas)}</span>
           )}
           <div className="flex flex-wrap items-center gap-1">
             <Badge tone={tonoVinculo(c.vinculo.estado)}>{etiquetaVinculo(c.vinculo.estado)}</Badge>
@@ -306,6 +318,7 @@ export function ClientesTiendaShell({
           key={seleccionado.clerkUserId}
           cliente={seleccionado}
           puedeGestionar={puedeGestionar}
+          cuentas={cuentas}
           onClose={() => setSeleccionado(null)}
           onCambio={actualizar}
         />

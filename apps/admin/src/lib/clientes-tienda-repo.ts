@@ -1,6 +1,5 @@
 import { sql, type SQL } from "drizzle-orm"
 import { getDb } from "@/db"
-import { CUENTA_ALEGRA_PRINCIPAL } from "@/lib/alegra-contacts-repo"
 
 // Listado "Clientes de la tienda" del admin: usuarios registrados en el Shop (espejo de Clerk,
 // `shop.clientes`, 0018 del Shop) con su vínculo a Alegra, el acceso a Facturación y sus pedidos.
@@ -12,10 +11,12 @@ import { CUENTA_ALEGRA_PRINCIPAL } from "@/lib/alegra-contacts-repo"
 //  - SQL crudo parametrizado (design D10): LATERAL para el último vínculo y los pedidos. Sólo
 //    lectura: las acciones (vincular, excepción) viven en clientes-tienda-acciones.ts.
 //  - Acceso a Facturación = la MISMA regla que el Shop: vínculo activo + contacto activo de la
-//    cuenta principal del tenant con `acceso_facturacion` en la VISTA `alegra_contacts_shop`
-//    (0039: cuenta corriente O excepción vigente otorgada desde este admin). Una sola definición
-//    de la regla, en SQL. Contacto ausente o inactivo ⇒ "no" (fail-closed). El origen se
-//    deriva: tipo 'corriente' ⇒ "corriente"; si no, "excepcion".
+//    cuenta de Alegra DEL VÍNCULO (`client_links.alegra_account`, 0047 del Shop) con
+//    `acceso_facturacion` en la VISTA `alegra_contacts_shop` (0039: cuenta corriente O excepción
+//    vigente otorgada desde este admin). Una sola definición de la regla, en SQL. Contacto ausente
+//    o inactivo ⇒ "no" (fail-closed). El origen se deriva: tipo 'corriente' ⇒ "corriente"; si
+//    no, "excepcion". Un mismo id de contacto en dos cuentas son dos clientes distintos: el
+//    espejo y la excepción se unen SIEMPRE por (cuenta, id), nunca con la principal fija.
 
 export const CLIENTES_TIENDA_DEFAULT_LIMIT = 25
 export const CLIENTES_TIENDA_MAX_LIMIT = 50
@@ -52,6 +53,10 @@ export interface ClienteTiendaDto {
     estado: EstadoVinculo
     metodo: string | null
     alegraContactId: string | null
+    /** Cuenta de Alegra del vínculo: 'principal' o el slug de la secundaria. null sin vínculo. */
+    cuenta: string | null
+    /** Nombre de esa cuenta (`alegra_cuentas.nombre`); null si no hay vínculo o no se encontró. */
+    cuentaNombre: string | null
     /** Nombre del contacto en el espejo si está activo; si no, el snapshot del vínculo. */
     razonSocial: string | null
     desde: string | null
@@ -76,6 +81,8 @@ interface FilaListado {
   link_estado: string | null
   link_metodo: string | null
   alegra_contact_id: string | null
+  link_cuenta: string | null
+  cuenta_nombre: string | null
   razon_social: string | null
   link_desde: Date | string | null
   tipo_cuenta: string | null
@@ -117,6 +124,8 @@ function aDto(f: FilaListado): ClienteTiendaDto {
       estado,
       metodo: f.link_metodo,
       alegraContactId: conFila ? f.alegra_contact_id || null : null,
+      cuenta: f.link_cuenta,
+      cuentaNombre: f.link_cuenta ? f.cuenta_nombre : null,
       razonSocial: conFila ? f.razon_social : null,
       desde: iso(f.link_desde),
     },
@@ -147,26 +156,34 @@ export async function listarClientesTienda(
 
   // CTE compartida por la página y el conteo. El vínculo que se muestra es el activo si hay
   // uno; si no, el más reciente (cl_usuario_fecha, 0018 del Shop). El contacto sólo se une con
-  // vínculo activo y contacto activo, igual que decide el Shop. `excepcion_vigente` mira la tabla
-  // sin filtrar por status (el índice parcial caf_vigente resuelve el EXISTS).
+  // vínculo activo y contacto activo, igual que decide el Shop, y en la cuenta del vínculo.
+  // `excepcion_vigente` mira la tabla sin filtrar por status (el índice parcial caf_vigente
+  // resuelve el EXISTS). El nombre de la cuenta sale de `alegra_cuentas` ('principal' es la fila
+  // con principal = true, cualquiera sea su slug).
   const base = sql`
     WITH base AS (
       SELECT c.id, c.clerk_user_id, c.nombre, c.email, c.creado_en_clerk,
              l.estado AS link_estado, l.metodo AS link_metodo, l.alegra_contact_id,
+             l.alegra_account AS link_cuenta,
+             (SELECT ac.nombre FROM public.alegra_cuentas ac
+              WHERE ac.tenant_id = c.tenant_id
+                AND CASE WHEN l.alegra_account = 'principal' THEN ac.principal
+                         ELSE NOT ac.principal AND ac.slug = l.alegra_account END
+              LIMIT 1) AS cuenta_nombre,
              coalesce(v.name, l.razon_social) AS razon_social, l.created_at AS link_desde,
              v.tipo_cuenta,
              coalesce(v.acceso_facturacion, false) AS acceso,
              (l.estado = 'activa' AND EXISTS (
                 SELECT 1 FROM public.contactos_acceso_facturacion e
                 WHERE e.tenant_id = c.tenant_id
-                  AND e.alegra_account = ${CUENTA_ALEGRA_PRINCIPAL}
+                  AND e.alegra_account = l.alegra_account
                   AND e.alegra_id = l.alegra_contact_id
                   AND e.revocado_en IS NULL
              )) IS TRUE AS excepcion_vigente,
              o.pedidos, o.ultimo_pedido
       FROM shop.clientes c
       LEFT JOIN LATERAL (
-        SELECT cl.estado, cl.metodo, cl.alegra_contact_id, cl.razon_social, cl.created_at
+        SELECT cl.estado, cl.metodo, cl.alegra_contact_id, cl.alegra_account, cl.razon_social, cl.created_at
         FROM shop.client_links cl
         WHERE cl.clerk_user_id = c.clerk_user_id
         ORDER BY (cl.estado = 'activa') DESC, cl.created_at DESC, cl.id DESC
@@ -175,7 +192,7 @@ export async function listarClientesTienda(
       LEFT JOIN public.alegra_contacts_shop v
         ON l.estado = 'activa'
        AND v.tenant_id = c.tenant_id
-       AND v.alegra_account = ${CUENTA_ALEGRA_PRINCIPAL}
+       AND v.alegra_account = l.alegra_account
        AND v.alegra_id = l.alegra_contact_id
        AND v.status = 'active'
       LEFT JOIN LATERAL (

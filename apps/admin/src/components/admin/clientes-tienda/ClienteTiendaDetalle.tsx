@@ -3,14 +3,17 @@
 import { useState } from "react"
 import { Alert, Badge, Button, Dialog, useToast } from "@myd-org/ui"
 import type { ClienteTiendaDto } from "@/lib/clientes-tienda-repo"
-import type { ContactoParaVincular } from "@/lib/clientes-tienda-acciones"
+import type { ContactoParaVincular, CuentaParaVincular } from "@/lib/clientes-tienda-acciones"
 import { fmtFechaCliente } from "./format"
 import {
   accionesDisponibles,
+  cuentaPorDefecto,
   etiquetaAcceso,
+  etiquetaCuentaVinculo,
   etiquetaMetodo,
   etiquetaTipoCuenta,
   etiquetaVinculo,
+  hayVariasCuentas,
   mensajeDeError,
   textoConfirmarDarAcceso,
   textoConfirmarDesvincular,
@@ -38,6 +41,8 @@ type Paso =
 interface Props {
   cliente: ClienteTiendaDto
   puedeGestionar: boolean
+  /** Cuentas de Alegra del tenant (principal primero). Con una sola no se muestra el selector. */
+  cuentas: CuentaParaVincular[]
   onClose: () => void
   onCambio: () => void
 }
@@ -86,9 +91,13 @@ function Fila({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
-export function ClienteTiendaDetalle({ cliente, puedeGestionar, onClose, onCambio }: Props) {
+export function ClienteTiendaDetalle({ cliente, puedeGestionar, cuentas, onClose, onCambio }: Props) {
   const { toast } = useToast()
   const [paso, setPaso] = useState<Paso>({ tipo: "detalle" })
+  // Cuenta de Alegra en la que se busca y se vincula (D9): la del último vínculo o la principal.
+  const [cuenta, setCuenta] = useState(() => cuentaPorDefecto(cliente, cuentas))
+  const variasCuentas = hayVariasCuentas(cuentas)
+  const cuentaVinculo = etiquetaCuentaVinculo(cliente, variasCuentas)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
 
@@ -113,11 +122,15 @@ export function ClienteTiendaDetalle({ cliente, puedeGestionar, onClose, onCambi
         init: {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ alegraContactId: contacto.alegraId }),
+          body: JSON.stringify({ alegraContactId: contacto.alegraId, cuenta }),
         },
       }
     }
-    if (accion === "desvincular") return { url: usuario, init: { method: "DELETE" } }
+    if (accion === "desvincular") {
+      // Revoca sólo el vínculo mostrado: el de su cuenta de Alegra (otras cuentas no se tocan).
+      const cuentaDelVinculo = encodeURIComponent(cliente.vinculo.cuenta ?? "principal")
+      return { url: `${usuario}?cuenta=${cuentaDelVinculo}`, init: { method: "DELETE" } }
+    }
     if (!alegraId) return null
     const acceso = `/api/admin/contactos-alegra/${encodeURIComponent(alegraId)}/acceso-facturacion`
     return { url: acceso, init: { method: accion === "darAcceso" ? "POST" : "DELETE" } }
@@ -157,7 +170,12 @@ export function ClienteTiendaDetalle({ cliente, puedeGestionar, onClose, onCambi
           </div>
         }
       >
-        <VincularContacto onElegir={(contacto) => ir({ tipo: "confirmar", accion: "vincular", contacto })} />
+        <VincularContacto
+          cuentas={cuentas}
+          cuenta={cuenta}
+          onCambiarCuenta={setCuenta}
+          onElegir={(contacto) => ir({ tipo: "confirmar", accion: "vincular", contacto })}
+        />
       </Dialog>
     )
   }
@@ -242,6 +260,7 @@ export function ClienteTiendaDetalle({ cliente, puedeGestionar, onClose, onCambi
             <Badge tone={tonoVinculo(cliente.vinculo.estado)}>{etiquetaVinculo(cliente.vinculo.estado)}</Badge>
           </span>
         </Fila>
+        {cuentaVinculo && <Fila label="Cuenta de Alegra">{cuentaVinculo}</Fila>}
         {cliente.vinculo.estado === "vinculado" && (
           <Fila label="Método">{etiquetaMetodo(cliente.vinculo.metodo)}</Fila>
         )}

@@ -15,6 +15,8 @@ import {
 // --- Base: grabadora que contesta según la consulta ---------------------------
 let espejo: unknown[][] | Error = [];
 let otpFila: unknown[] | null = null;
+/** Cuenta de Alegra del OTP pendiente (última columna de `link_otps`). */
+let cuentaOtp = "principal";
 /** El contacto ya tiene un vínculo activo de OTRO usuario (no debe importar). */
 let contactoDeOtro = false;
 /** Estados de las filas de `client_links` que ya tiene el usuario. */
@@ -121,8 +123,10 @@ const nuevoUsuario = () => `user_test_${++usuario}`;
 beforeEach(() => {
   vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   vi.stubEnv("OTP_SECRET", "secreto-de-prueba");
+  vi.stubEnv("SHOP_CUENTA_ALEGRA", "");
   espejo = [];
   otpFila = null;
+  cuentaOtp = "principal";
   contactoDeOtro = false;
   vinculosPrevios = [];
   tareasAfter = [];
@@ -231,11 +235,11 @@ describe("intentarVinculacionPorEmail", () => {
     expect(valoresInsertados(insertsEn("client_links")[0])).toMatchObject({ estado: "activa" });
   });
 
-  it("el insert del vínculo absorbe SOLO la carrera del mismo usuario (on conflict a cl_user_activa)", async () => {
+  it("el insert del vínculo absorbe SOLO la carrera del mismo usuario (on conflict a cl_user_cuenta_activa)", async () => {
     espejo = [filaEspejo("42")];
     await intentarVinculacionPorEmail(nuevoUsuario(), "compras@cliente.example");
     expect(insertsEn("client_links")[0].sql).toMatch(
-      /on conflict \("clerk_user_id"\) where "estado" = 'activa' do nothing/,
+      /on conflict \("clerk_user_id","alegra_account"\) where "estado" = 'activa' do nothing/,
     );
   });
 
@@ -287,7 +291,7 @@ describe("intentarVinculacionPorEmail", () => {
       const inserts = insertsEn("client_links");
       expect(inserts).toHaveLength(1);
       expect(valoresInsertados(inserts[0])).toMatchObject({ alegra_contact_id: "42", estado: "activa" });
-      expect(inserts[0].sql).toMatch(/on conflict \("clerk_user_id"\) where "estado" = 'activa' do nothing/);
+      expect(inserts[0].sql).toMatch(/on conflict \("clerk_user_id","alegra_account"\) where "estado" = 'activa' do nothing/);
     });
 
     it("sigue sin match: nada, y NUNCA Alegra en vivo", async () => {
@@ -401,6 +405,7 @@ describe("confirmarVinculacion", () => {
       new Date(ahora + 5 * 60_000).toISOString(),
       null,
       new Date(ahora - 60_000).toISOString(),
+      cuentaOtp,
     ];
   }
 
@@ -566,5 +571,89 @@ describe("formato de la línea de observaciones", () => {
     expect(observacionesConEmail(null, "a@cliente.example", "otro@cliente.example", fecha)).toBe(linea);
     expect(observacionesConEmail("Nota\n\n", null, "otro@cliente.example", fecha)).toBe(`Nota\n${linea}`);
     expect(observacionesConEmail("", "otro@cliente.example", "OTRO@cliente.example", fecha)).toBeNull();
+  });
+});
+
+describe("cuenta de Alegra del despliegue (S3: vínculos por cuenta)", () => {
+  function otpPendiente(usuarioId: string, codigo: string, cuenta: string) {
+    const hash = createHmac("sha256", "secreto-de-prueba").update(`${usuarioId}:${codigo}`).digest("hex");
+    const ahora = Date.now();
+    otpFila = [
+      "00000000-0000-0000-0000-00000000000b",
+      usuarioId,
+      "42",
+      hash,
+      "c***@cliente.example",
+      0,
+      new Date(ahora + 5 * 60_000).toISOString(),
+      null,
+      new Date(ahora - 60_000).toISOString(),
+      cuenta,
+    ];
+  }
+
+  const consultaPrevios = () =>
+    grabadora.consultas.find((c) => c.sql.startsWith('select "estado" from "shop"."client_links"'));
+
+  it("default: el vínculo automático se graba en principal y los previos se buscan en principal", async () => {
+    espejo = [filaEspejo("42")];
+    await intentarVinculacionPorEmail(nuevoUsuario(), "compras@cliente.example");
+    expect(consultaPrevios()?.sql).toMatch(/"client_links"\."alegra_account" = \$\d+/);
+    expect(consultaPrevios()?.params).toContain("principal");
+    expect(valoresInsertados(insertsEn("client_links")[0])).toMatchObject({ alegra_account: "principal" });
+  });
+
+  it("mdp: el vínculo automático se graba con alegra_account 'mdp' y los previos se buscan en mdp", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    espejo = [filaEspejo("42")];
+    const r = await intentarVinculacionPorEmail(nuevoUsuario(), "compras@cliente.example");
+    expect(r).toMatchObject({ alegraContactId: "42" });
+    expect(consultaPrevios()?.params).toContain("mdp");
+    expect(consultaPrevios()?.params).not.toContain("principal");
+    expect(valoresInsertados(insertsEn("client_links")[0])).toMatchObject({
+      alegra_account: "mdp",
+      estado: "activa",
+    });
+  });
+
+  it("mdp sin coincidencia: la marca sin_coincidencia también es de mdp", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    expect(await intentarVinculacionPorEmail(nuevoUsuario(), "nadie@cliente.example")).toBeNull();
+    expect(valoresInsertados(insertsEn("client_links")[0])).toMatchObject({
+      estado: "sin_coincidencia",
+      alegra_account: "mdp",
+    });
+  });
+
+  it("mdp: solicitar busca el vínculo activo en mdp y graba el código con su cuenta", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    espejo = [filaEspejo("42")];
+    await solicitarVinculacion(nuevoUsuario(), "20123456789");
+    const yaVinculado = grabadora.consultas.find(
+      (c) => c.sql.startsWith('select "id" from "shop"."client_links"'),
+    );
+    expect(yaVinculado?.params).toContain("mdp");
+    expect(valoresInsertados(insertsEn("link_otps")[0])).toMatchObject({ alegra_account: "mdp" });
+  });
+
+  it("un código pedido en principal no confirma en mdp: no vincula", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    const u = nuevoUsuario();
+    otpPendiente(u, "123456", "principal");
+    getContacto.mockResolvedValue({ id: "42", name: "Otra Empresa SA" });
+    const r = await confirmarVinculacion(u, "123456");
+    expect(r.ok).toBe(false);
+    expect(insertsEn("client_links")).toHaveLength(0);
+    expect(getContacto).not.toHaveBeenCalled();
+  });
+
+  it("un código de mdp confirma en mdp y el vínculo queda en mdp", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    const u = nuevoUsuario();
+    otpPendiente(u, "123456", "mdp");
+    getContacto.mockResolvedValue({ id: "42", name: "Cliente MDP SA" });
+    const r = await confirmarVinculacion(u, "123456");
+    expect(r).toMatchObject({ ok: true, alegraContactId: "42" });
+    expect(valoresInsertados(insertsEn("client_links")[0])).toMatchObject({ alegra_account: "mdp" });
   });
 });

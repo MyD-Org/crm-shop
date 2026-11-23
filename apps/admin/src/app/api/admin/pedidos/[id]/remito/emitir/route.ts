@@ -4,6 +4,7 @@ import { armarPreviewRemito, lineasParaAlegra, observacionesRemito, puedeEmitirR
 import { armarLineasFactura } from "@/lib/factura-emitir"
 import { asegurarItemsEnCuenta } from "@/lib/alegra-items-cuenta"
 import { contactoDelPedidoEnCuenta } from "@/lib/contacto-en-cuenta"
+import { CUENTA_CLAVE_PRINCIPAL, claveCuenta } from "@/lib/pedido-cliente-cuenta"
 import {
   cargarContextoCuentaFactura,
   comoDestino,
@@ -79,6 +80,11 @@ function errorAlegra(err: unknown, ctx: Record<string, unknown>): Response {
   return fail(502, "alegra_error", MSG.alegra)
 }
 
+/** El remito sale con la cuenta del pedido (o sin cuenta resuelta): su `cliente_codigo` es obligatorio. */
+function exigeCodigoCliente(pedido: PedidoRow, cuenta: { principal: boolean; slug: string } | null | undefined): boolean {
+  return pedido.clienteCuenta === (cuenta ? claveCuenta(cuenta) : CUENTA_CLAVE_PRINCIPAL)
+}
+
 /** Cuenta del remito: la de la factura si ya se emitió por esta vía; si no, la calculada del pedido. */
 async function cuentaDelRemito(tenantId: string, pedido: PedidoRow) {
   const ctx = await cargarContextoCuentaFactura(tenantId, pedido.id)
@@ -99,9 +105,9 @@ export async function GET(req: Request, { params }: IdParams) {
 
     const preview = armarPreviewRemito(found.items)
     const cuenta = await cuentaDelRemito(guard.tenantId, found.pedido)
-    // Con la cuenta principal el remito reusa el contacto de la factura; en otra cuenta se busca o
-    // se crea al emitir, así que `cliente_codigo` no es requisito.
-    const { bloqueo: bloqueoContacto } = cuenta && !cuenta.principal ? { bloqueo: null } : puedeEmitirRemito(found.pedido)
+    // En la cuenta del pedido el remito reusa su `cliente_codigo` (y es requisito); en otra cuenta
+    // se busca o se crea al emitir, así que no lo es (D8). Sin cuenta resuelta: como la principal.
+    const { bloqueo: bloqueoContacto } = exigeCodigoCliente(found.pedido, cuenta) ? puedeEmitirRemito(found.pedido) : { bloqueo: null }
     const avisos = [...preview.avisos, ...(bloqueoContacto ? [bloqueoContacto] : []), ...(cuenta ? [] : [MSG_SIN_CUENTA_FACTURA])]
 
     return Response.json(
@@ -130,7 +136,7 @@ export async function POST(req: Request, { params }: IdParams) {
     const cuenta = await cuentaDelRemito(guard.tenantId, found.pedido)
     if (!cuenta) return fail(422, "sin_cuenta", MSG_SIN_CUENTA_FACTURA)
 
-    if (cuenta.principal) {
+    if (exigeCodigoCliente(found.pedido, cuenta)) {
       const { bloqueo: bloqueoContacto } = puedeEmitirRemito(found.pedido)
       if (bloqueoContacto) return fail(422, "sin_contacto", bloqueoContacto)
     }
@@ -155,7 +161,7 @@ export async function POST(req: Request, { params }: IdParams) {
       const items = await asegurarItemsEnCuenta(guard.tenantId, config, comoDestino(cuenta), armarLineasFactura(found.items).lineas)
       if (!items.ok) return fail(422, "item_en_cuenta", items.error)
       lineas = lineas.map((l) => ({ ...l, alegraItemId: items.ids.get(l.alegraItemId) ?? l.alegraItemId }))
-      const contacto = await contactoDelPedidoEnCuenta(config, found.pedido, cuenta.principal)
+      const contacto = await contactoDelPedidoEnCuenta(config, found.pedido, cuenta)
       if (!contacto) return fail(422, "sin_contacto", "El pedido no tiene datos para dar de alta al cliente en la cuenta de Alegra.")
       contactoId = contacto.alegraId
     } catch (err) {

@@ -43,13 +43,13 @@ beforeEach(() => {
 describe("configAlegraDelPedido", () => {
   it("pedido de una sucursal con cuenta propia usa las credenciales de esa cuenta", async () => {
     const r = await configAlegraDelPedido("tenant-a", pedido("mdp"))
-    expect(r).toMatchObject({ ok: true, cuentaSlug: "mdp" })
+    expect(r).toMatchObject({ ok: true, cuentaSlug: "mdp", cuentaClave: "mdp" })
     if (r.ok) expect(r.config).toMatchObject({ alegraEmail: "mdp@cliente.example", alegraToken: "t-mdp" })
   })
 
   it("pedido de la sucursal con la cuenta principal usa la config base", async () => {
     const r = await configAlegraDelPedido("tenant-a", pedido("igz"))
-    expect(r).toMatchObject({ ok: true, cuentaSlug: "principal" })
+    expect(r).toMatchObject({ ok: true, cuentaSlug: "principal", cuentaClave: "principal" })
     if (r.ok) expect(r.config.alegraToken).toBe("t-principal")
   })
 

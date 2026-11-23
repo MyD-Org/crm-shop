@@ -3,8 +3,8 @@
  * La regla pura está en `lista-cuenta.ts`.
  *
  * Una cuenta corriente con lista de Alegra enlazada a una lista online privada ve y paga ESA
- * lista. La clave del contacto es (tenant, cuenta de Alegra, id): hoy el Shop lee sólo la cuenta
- * `principal` (la de la sucursal MDP queda en precio público hasta que exista el espejo por cuenta).
+ * lista. La clave del contacto es (tenant, cuenta de Alegra, id): el Shop lee la cuenta de Alegra
+ * del despliegue (`shopCuentaAlegra()`), y el enlace de listas se busca en esa misma cuenta.
  *
  * Nunca desde `use cache`: depende de quién pide.
  */
@@ -13,7 +13,8 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmListaMapeo } from "@/db/crm";
 import { identidadActual } from "./auth";
-import { CUENTA_ALEGRA_PRINCIPAL, vinculablePorId } from "./contactos-espejo";
+import { vinculablePorId } from "./contactos-espejo";
+import { shopCuentaAlegra } from "./cuenta-alegra";
 import { resolverListaCuenta } from "./lista-cuenta";
 import { shopTenantId } from "./tenant";
 
@@ -43,7 +44,7 @@ export async function listaPrivadaDeContacto(alegraId: string): Promise<string |
   const contacto = await vinculablePorId(alegraId);
   return resolverListaCuenta(
     contacto ? { tipoCuenta: contacto.tipoCuenta, priceListId: contacto.priceList?.id ?? null } : null,
-    CUENTA_ALEGRA_PRINCIPAL,
+    shopCuentaAlegra(),
     listaMapeada,
   );
 }

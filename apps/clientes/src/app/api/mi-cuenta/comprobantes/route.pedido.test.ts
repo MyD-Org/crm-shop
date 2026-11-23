@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Comprobante de transferencia POR PEDIDO (`POST /api/mi-cuenta/comprobantes` con `pedidoId`),
@@ -228,5 +228,26 @@ describe("POST /api/mi-cuenta/comprobantes con pedidoId", () => {
     void _omit;
     expect((await post({ ...sinPedido, method: "transferencia" })).status).toBe(404);
     expect(crearSubiendo).not.toHaveBeenCalled();
+  });
+});
+
+describe("con pedidoId en un despliegue de cuenta de Alegra secundaria", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("vinculado: el pedido se busca sólo por su usuario y la fila va sin codigocliente", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    usuario++;
+    const user = `user_${usuario}`;
+    identidad.mockResolvedValue({
+      clerkUserId: user,
+      cliente: { codigocliente: "123", razonsocial: "Cliente MDP SRL", cuit: "30123456780", origen: "vinculacion" },
+    });
+    const res = await post(body());
+    expect(res.status).toBe(201);
+    expect(getPedidoParaComprobante).toHaveBeenCalledWith(PEDIDO, { clerkUserId: user, clienteCodigo: undefined });
+    const [, alta] = crearSubiendo.mock.calls[0] as [string, Record<string, unknown>];
+    expect(alta).toMatchObject({ codigocliente: null, shopOrderId: PEDIDO, clerkUserId: user });
   });
 });

@@ -18,6 +18,10 @@
  * leen de acá (rebanada 3 de `espejo-contactos-alegra`): ver `contactosPorEmail`,
  * `contactoPorDocumento` y `vinculablePorId`. Esas tres NO salen a Alegra: el
  * respaldo en vivo, cuando corresponde, lo decide quien llama.
+ *
+ * Toda lectura filtra por la cuenta de Alegra del despliegue (`shopCuentaAlegra()`,
+ * change `shop-contactos-alegra-mdp`): el mismo id en dos cuentas son dos personas.
+ * El respaldo en vivo usa las credenciales de esa misma cuenta (`apiFetch`).
  */
 import { and, arrayContains, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -31,10 +35,8 @@ import {
   type AlegraContact,
 } from "./alegra";
 import type { ContactoFacturacion } from "./contacto-alegra";
+import { shopCuentaAlegra } from "./cuenta-alegra";
 import { shopTenantId } from "./tenant";
-
-/** Cuenta de Alegra dentro del tenant. Hoy siempre una (ver `alegra_account` en el CRM). */
-export const CUENTA_ALEGRA_PRINCIPAL = "principal";
 
 /** Lo que la cuenta corriente necesita saber del contacto. */
 export interface ContactoEspejo {
@@ -82,7 +84,7 @@ async function delEspejo(alegraId: string): Promise<ContactoEspejo | null> {
     .where(
       and(
         eq(crmContactos.tenantId, shopTenantId()),
-        eq(crmContactos.alegraAccount, CUENTA_ALEGRA_PRINCIPAL),
+        eq(crmContactos.alegraAccount, shopCuentaAlegra()),
         eq(crmContactos.alegraId, alegraId),
         // `status` es "visto en la última corrida", no el estado de Alegra: una
         // fila inactiva cuenta como "no está" y va al respaldo en vivo.
@@ -160,7 +162,7 @@ export async function accesoFacturacionEspejo(alegraId: string): Promise<boolean
     .where(
       and(
         eq(crmContactos.tenantId, shopTenantId()),
-        eq(crmContactos.alegraAccount, CUENTA_ALEGRA_PRINCIPAL),
+        eq(crmContactos.alegraAccount, shopCuentaAlegra()),
         eq(crmContactos.alegraId, alegraId),
         eq(crmContactos.status, "active"),
       ),
@@ -195,11 +197,11 @@ export interface ContactoVinculable {
   accesoFacturacion: boolean;
 }
 
-/** Filas activas del tenant del Shop en la cuenta principal. */
+/** Filas activas del tenant del Shop en la cuenta de Alegra del despliegue (`SHOP_CUENTA_ALEGRA`). */
 function activasDelShop() {
   return and(
     eq(crmContactos.tenantId, shopTenantId()),
-    eq(crmContactos.alegraAccount, CUENTA_ALEGRA_PRINCIPAL),
+    eq(crmContactos.alegraAccount, shopCuentaAlegra()),
     eq(crmContactos.status, "active"),
   );
 }

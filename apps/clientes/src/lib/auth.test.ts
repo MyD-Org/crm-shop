@@ -83,3 +83,32 @@ describe("esAdmin", () => {
     await expect(esAdmin()).resolves.toBe(false);
   });
 });
+
+describe("cookie del CRM según la cuenta de Alegra del despliegue", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    authMock.mockResolvedValue({ userId: null });
+    sesionMock.mockResolvedValue({ isLoggedIn: true, codigocliente: "C001" });
+  });
+
+  it("cuenta principal (sin SHOP_CUENTA_ALEGRA): la cookie vale como hoy", async () => {
+    const identidad = await identidadActual();
+    expect(identidad.cliente).toMatchObject({ codigocliente: "C001", origen: "cookie_crm" });
+  });
+
+  it("cuenta secundaria: la cookie válida se ignora y ni se lee", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    const identidad = await identidadActual();
+    expect(identidad.cliente).toBeNull();
+    expect(sesionMock).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  it("SHOP_CUENTA_ALEGRA inválida: fail-closed, sin sesión heredada", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "-mdp");
+    const identidad = await identidadActual();
+    expect(identidad.cliente).toBeNull();
+    vi.unstubAllEnvs();
+  });
+});

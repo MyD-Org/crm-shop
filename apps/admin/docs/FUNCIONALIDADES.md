@@ -952,7 +952,9 @@ factura (y el remito) de un pedido se emiten con las credenciales de UNA cuenta:
   dos empresas queda fuera del sistema. El detalle del pedido y el diálogo lo avisan.
 - **Emitir** (`factura/emitir`): `GET ?cuenta=<slug>` previsualiza otra cuenta, `POST { cuenta }`
   la elige y la guarda. Numeraciones, impuestos, contacto, ítems y la factura salen de ESA cuenta.
-  El `cliente_codigo` del pedido es un id de la principal: en otra cuenta el contacto se busca por
+  El `cliente_codigo` del pedido es un id de la cuenta del pedido (`orders.cliente_cuenta`, 0048
+  del Shop; `src/lib/pedido-cliente-cuenta.ts`): sólo se reusa si se factura con esa misma cuenta;
+  en otra cuenta el contacto se busca por
   documento o se crea (sin escribir el espejo de contactos). `GET .../factura/cuenta` (operator+)
   devuelve la cuenta, el motivo y la auditoría para el detalle.
 - **Ítems**: nunca se manda a Alegra el `alegra_item_id` del pedido tal cual (puede ser el
@@ -1030,7 +1032,8 @@ el estado del pedido, y la factura en Alegra no se toca.
   de la tienda es la única vía para recibir la factura.
 
 - **Validaciones** (`src/lib/factura-vincular.ts`): la factura tiene que existir y no estar en
-  borrador ni anulada. Si el pedido tiene contacto de Alegra (`cliente_codigo`), la factura
+  borrador ni anulada. Si el pedido tiene contacto de Alegra (`cliente_codigo`) de la MISMA cuenta
+  con la que se busca la factura (`codigoClienteEnCuenta`; vale igual para remitos), la factura
   tiene que ser de ese contacto; si es consumidor final, se muestra el nombre del cliente de la
   factura para que el operador confirme. Si la factura ya está vinculada a otro pedido del
   tenant, se avisa (se permite: una factura puede cubrir dos pedidos). Al vincular, el servidor
@@ -1070,8 +1073,14 @@ Facturación (ver "Acciones" abajo). El operador ve el listado y el detalle sin 
   Argentina.
 - **Vínculo mostrado**: el activo si hay; si no, el más reciente (índice `cl_usuario_fecha`).
   `sin_coincidencia` con `alegra_contact_id` `'ambiguo'` ⇒ "Ambiguo"; vacío ⇒ "Sin coincidencia".
+- **Cuenta de Alegra del vínculo** (`client_links.alegra_account`, 0047 del Shop; change
+  `shop-contactos-alegra-mdp`): 'principal' o el slug de una cuenta secundaria. Cada despliegue
+  del Shop sólo usa los vínculos de su cuenta (`SHOP_CUENTA_ALEGRA`). El listado une el espejo,
+  la excepción y el nombre de la cuenta (`alegra_cuentas`) por la cuenta DEL VÍNCULO: el mismo id
+  de contacto en dos cuentas son dos clientes. Con más de una cuenta en el tenant, el nombre de
+  la cuenta se muestra bajo la razón social y en el detalle ("Cuenta de Alegra").
 - **Acceso a Facturación**: la misma regla que el Shop: vínculo activo y contacto **activo** de
-  la cuenta principal del tenant con `acceso_facturacion` en la vista `alegra_contacts_shop`
+  la cuenta del vínculo con `acceso_facturacion` en la vista `alegra_contacts_shop`
   (0039: cuenta corriente O excepción vigente). Origen: `tipo_cuenta = 'corriente'` ⇒ "Por
   cuenta corriente"; si no, "Por excepción". Contacto ausente o inactivo ⇒ tipo de cuenta
   vacío, acceso "No" y la razón social del snapshot del vínculo (fail-closed), aunque tenga una
@@ -1102,13 +1111,18 @@ que devuelve `requireAdminPlus` en todas las rutas admin nuevas (no un 403: así
   "Quitar acceso" hace UPDATE de `revocado_en/por/por_nombre` (el historial queda). El Shop ve el
   efecto en la próxima navegación del usuario, por `alegra_contacts_shop.acceso_facturacion`
   (el Shop empieza a leerla en el cambio siguiente, R4b).
-- **Vincular**: buscador de clientes activos de Alegra del tenant (razón social, CUIT o
-  cualquier email de `emails_norm`) → confirmación → fila en `shop.client_links` con
-  `estado='activa'`, `metodo='operador'`, snapshot del contacto (razón social, CUIT, lista de
-  precios usable, tipo de cuenta) y `vinculado_por/_nombre` (0019 del Shop). Si el usuario ya
-  tiene un vínculo activo a otro contacto ⇒ 409 (hay que desvincular primero); al mismo ⇒ 200
+- **Vincular**: con más de una cuenta de Alegra, selector "Cuenta de Alegra" (la principal y
+  las secundarias activas del tenant; por defecto la del último vínculo del usuario, si no la
+  principal) → buscador de clientes activos de esa cuenta (razón social, CUIT o cualquier email
+  de `emails_norm`) → confirmación → fila en `shop.client_links` con `estado='activa'`,
+  `metodo='operador'`, `alegra_account`, snapshot del contacto (razón social, CUIT, lista de
+  precios usable, tipo de cuenta) y `vinculado_por/_nombre` (0019 del Shop). La cuenta del body
+  se valida contra `alegra_cuentas` del tenant (inválida o ajena ⇒ 400). Si el usuario ya tiene
+  un vínculo activo a otro contacto (de cualquier cuenta: el Shop conserva por ahora el índice
+  `cl_user_activa`, un activo por usuario) ⇒ 409 (hay que desvincular primero); al mismo ⇒ 200
   sin cambios. Dos pedidos simultáneos quedan serializados (`FOR UPDATE` sobre `shop.clientes`)
-  y el índice `cl_user_activa` es la última red.
+  y los índices `cl_user_cuenta_activa` / `cl_user_activa` son la última red. Dar y quitar la
+  excepción de acceso sólo se ofrece con un vínculo de la cuenta principal.
 - **Desvincular**: el activo pasa a `estado='revocada'` con `revoked_at` y `revocado_por/_nombre`.
   Una fila previa (revocada o `sin_coincidencia`) impide que el auto-vínculo por email del Shop
   lo vuelva a vincular solo.

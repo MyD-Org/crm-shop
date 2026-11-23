@@ -143,10 +143,14 @@ describe("clientes de la tienda: repo", () => {
       estado: "sin_vincular",
       metodo: null,
       alegraContactId: null,
+      cuenta: null,
+      cuentaNombre: null,
       razonSocial: null,
       desde: null,
     })
     expect(porId(items, "user_sc").vinculo.estado).toBe("sin_coincidencia")
+    // Sin alegra_account explícito el Shop guarda 'principal'.
+    expect(porId(items, "user_sc").vinculo.cuenta).toBe("principal")
     expect(porId(items, "user_amb").vinculo.estado).toBe("ambiguo")
     const vinc = porId(items, "user_vinc")
     expect(vinc.vinculo.estado).toBe("vinculado")

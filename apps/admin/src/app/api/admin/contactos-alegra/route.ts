@@ -3,11 +3,12 @@ import {
   BUSCAR_CONTACTOS_Q_MAX,
   BUSCAR_CONTACTOS_Q_MIN,
   buscarContactosParaVincular,
+  esCuentaDelTenant,
 } from "@/lib/clientes-tienda-acciones"
 
-// GET /api/admin/contactos-alegra?q= — buscador del diálogo "Vincular" de "Clientes de la
-// tienda": clientes activos de la cuenta principal del tenant por razón social, CUIT o email
-// (hasta 10). Sólo con la sección Clientes de la tienda (`requireSeccion`), que es donde vive el
+// GET /api/admin/contactos-alegra?q=&cuenta= — buscador del diálogo "Vincular" de "Clientes de
+// la tienda": clientes activos de la cuenta de Alegra `cuenta` del tenant ('principal' por
+// defecto; validada contra las del tenant) por razón social, CUIT o email (hasta 10). Sólo con la sección Clientes de la tienda (`requireSeccion`), que es donde vive el
 // diálogo. El tenant sale SÓLO del guard.
 
 const NO_STORE = { "Cache-Control": "private, no-store" }
@@ -19,12 +20,17 @@ export async function GET(req: Request) {
   const guard = await requireSeccion(req, "clientes-tienda")
   if (!guard.ok) return guard.response
 
-  const q = (new URL(req.url).searchParams.get("q") ?? "").trim()
+  const params = new URL(req.url).searchParams
+  const q = (params.get("q") ?? "").trim()
   if (q.length < BUSCAR_CONTACTOS_Q_MIN) return fail(400, "q_corta", "Ingrese al menos 2 caracteres para buscar.")
   if (q.length > BUSCAR_CONTACTOS_Q_MAX) return fail(400, "invalid", "La búsqueda es demasiado larga.")
+  const cuenta = params.get("cuenta") || "principal"
 
   try {
-    const items = await buscarContactosParaVincular(guard.tenantId, q)
+    if (!(await esCuentaDelTenant(guard.tenantId, cuenta))) {
+      return fail(400, "cuenta_invalida", "Seleccione una cuenta de Alegra válida.")
+    }
+    const items = await buscarContactosParaVincular(guard.tenantId, q, cuenta)
     return Response.json({ items }, { headers: NO_STORE })
   } catch (err) {
     const e = err as { name?: unknown; code?: unknown }

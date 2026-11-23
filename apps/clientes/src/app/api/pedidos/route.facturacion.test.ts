@@ -38,7 +38,6 @@ let coincidente: { id: string; priceList: { id: string; name: string; status?: s
 let listaGeneral: string | null = "1";
 const vinculablePorId = vi.fn();
 vi.mock("@/lib/contactos-espejo", () => ({
-  CUENTA_ALEGRA_PRINCIPAL: "principal",
   facturacionEspejo: async () => espejo,
   vinculablePorId: (id: string) => vinculablePorId(id),
   idListaGeneral: async () => listaGeneral,

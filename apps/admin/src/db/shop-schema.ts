@@ -51,6 +51,9 @@ export const shopOrders = shop.table("orders", {
   // --- Cliente (snapshot al momento de comprar) ---
   clerkUserId: text("clerk_user_id"),
   clienteCodigo: text("cliente_codigo"),
+  // Cuenta de Alegra del despliegue donde se hizo el pedido (0048 del Shop): 'principal' o el
+  // slug de la secundaria. `cliente_codigo` es un id de ESA cuenta (ver pedido-cliente-cuenta.ts).
+  clienteCuenta: text("cliente_cuenta").notNull().default("principal"),
   clienteRazonSocial: text("cliente_razon_social"),
   clienteCuit: text("cliente_cuit"),
   clienteEmail: text("cliente_email"),
@@ -304,6 +307,9 @@ export const shopClientLinks = shop.table("client_links", {
   id: uuid("id").primaryKey().defaultRandom(),
   clerkUserId: text("clerk_user_id").notNull(),
   alegraContactId: text("alegra_contact_id").notNull(),
+  // Cuenta de Alegra del contacto (0047 del Shop): 'principal' o el slug de la secundaria. El
+  // Shop sólo usa los vínculos de la cuenta de su despliegue; los de otra cuenta quedan inertes.
+  alegraAccount: text("alegra_account").notNull().default("principal"),
   razonSocial: text("razon_social"),
   cuit: text("cuit"),
   idPriceList: text("id_price_list"),

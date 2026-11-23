@@ -146,3 +146,15 @@ describe("marcarLeidos (AVI-3)", () => {
     expect(c.params).toEqual(expect.arrayContaining(["tenant-test", "42"]));
   });
 });
+
+describe("cuenta de Alegra secundaria (notification_log está keyed sin cuenta)", () => {
+  it("sin avisos, contador 0 y marcar no hace nada: nunca consulta la tabla", async () => {
+    vi.stubEnv("SHOP_CUENTA_ALEGRA", "mdp");
+    grabadora = dbGrabadora(() => [[U1, "987", "5001", "before_due_3", "2026-09-20 02:00:00+00", null]]);
+    expect(await listarAvisos("42")).toEqual([]);
+    expect(await contarNoLeidos("42")).toBe(0);
+    await marcarLeidos("42");
+    await marcarLeidos("42", [U1]);
+    expect(grabadora.consultas).toHaveLength(0);
+  });
+});

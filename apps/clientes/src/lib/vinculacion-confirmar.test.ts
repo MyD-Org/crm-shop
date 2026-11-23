@@ -21,7 +21,14 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 const estado = {
-  otp: null as null | { id: string; alegraContactId: string; codeHash: string; expiresAt: Date; consumedAt: Date | null },
+  otp: null as null | {
+    id: string;
+    alegraContactId: string;
+    codeHash: string;
+    expiresAt: Date;
+    consumedAt: Date | null;
+    alegraAccount: string;
+  },
   intentos: 0,
   vinculos: [] as unknown[],
 };
@@ -107,6 +114,7 @@ beforeEach(() => {
     codeHash: hash("123456"),
     expiresAt: new Date(Date.now() + 60_000),
     consumedAt: null,
+    alegraAccount: "principal",
   };
   estado.intentos = 0;
   estado.vinculos = [];

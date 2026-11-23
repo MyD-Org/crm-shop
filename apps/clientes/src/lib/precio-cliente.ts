@@ -61,3 +61,13 @@ export function precioGeneralTachado(
 export function esPrecioDeCliente(p: Pick<Product, "precioCuenta" | "campania">): boolean {
   return p.precioCuenta === "privado" && !p.campania;
 }
+
+/**
+ * Cuánto menos paga con su precio de cliente respecto del general tachado, en % entero. `null` si
+ * no hay tachado, si el general no es mayor o si redondea a 0 (no se muestra "0% menos").
+ */
+export function porcentajeAhorro(precio: number | null | undefined, general: number | null | undefined): number | null {
+  if (precio == null || general == null || !(general > 0) || !(precio > 0) || precio >= general) return null;
+  const pct = Math.round((1 - precio / general) * 100);
+  return pct >= 1 ? pct : null;
+}

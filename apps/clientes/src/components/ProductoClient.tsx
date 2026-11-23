@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { textoConsultaProducto } from "@/lib/contacto-pedido";
-import { Button, QuantityStepper, Skeleton, VariantSelector, type PaymentLogo } from "@myd-org/ui";
+import { Badge, Button, QuantityStepper, Skeleton, VariantSelector, type PaymentLogo } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { PromoFicha } from "@/components/promociones/PromoFicha";
 import { CampaniaFicha } from "@/components/promociones/CampaniaFicha";
@@ -16,7 +16,7 @@ import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
 import { hayCuotasParaModal, mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
-import { esPrecioDeCliente } from "@/lib/precio-cliente";
+import { esPrecioDeCliente, porcentajeAhorro } from "@/lib/precio-cliente";
 import { TEXTOS_PRECIOS_CLIENTE } from "@/lib/precios-cliente-textos";
 import { fmtPrecio } from "@/lib/format";
 import { formatDescripcionProducto, nombreConMarca } from "@/lib/formato-nombre";
@@ -162,6 +162,9 @@ export function ProductoClient({
   // Sus precios de cliente (lista privada), sólo en la ficha de un producto simple: el general con
   // transferencia tachado arriba (si el suyo es menor) y la etiqueta debajo. Sin lista, nada.
   const precioDeCliente = !opciones && esPrecioDeCliente(producto);
+  const ahorroCliente = precioDeCliente
+    ? porcentajeAhorro(producto.precioFinal ?? producto.price, producto.oldPrice)
+    : null;
   const [qty, setQty] = useState(1);
   const { addItem, items: itemsCarrito, count: cantidadCarrito, updateQty, removeItem } = useCart();
   // Mientras hidrata, "no está en el carrito", como en el servidor (ver useHidratado).
@@ -431,18 +434,22 @@ export function ProductoClient({
                 </p>
               ) : precioDeCliente ? (
                 <>
-                  {producto.oldPrice != null && (
-                    <p className="mb-1.5 text-base text-muted tabular-nums">
-                      <span className="sr-only">{TEXTOS_PRECIOS_CLIENTE.precioGeneral}: </span>
-                      <s>{fmtPrecio(producto.oldPrice)}</s>
-                    </p>
-                  )}
+                  <Badge tone="success" className="mb-2">
+                    {TEXTOS_PRECIOS_CLIENTE.etiqueta}
+                  </Badge>
                   <PrecioConImpuestos
                     price={producto.price}
                     precioFinal={producto.precioFinal}
                     preciosMedios={producto.preciosMedios}
                   />
-                  <p className="mt-1.5 text-sm font-semibold text-accent">{TEXTOS_PRECIOS_CLIENTE.etiqueta}</p>
+                  {producto.oldPrice != null && (
+                    <p className="mt-1.5 text-sm text-muted tabular-nums">
+                      {TEXTOS_PRECIOS_CLIENTE.precioGeneral} <s>{fmtPrecio(producto.oldPrice)}</s>
+                      {ahorroCliente != null ? (
+                        <span className="font-semibold text-success"> · {TEXTOS_PRECIOS_CLIENTE.ahorro(ahorroCliente)}</span>
+                      ) : null}
+                    </p>
+                  )}
                 </>
               ) : (
                 <PrecioConImpuestos

@@ -7,8 +7,10 @@ export const TEXTOS_PRECIOS_CLIENTE = {
   aviso: "Precios de cliente aplicados",
   /** Etiqueta chica bajo el precio en cards y ficha. */
   etiqueta: "Precio de cliente",
-  /** Accesible: lo que se tacha. */
+  /** Rótulo del precio tachado (ficha; en la card es sólo accesible). */
   precioGeneral: "Precio general",
+  /** Ahorro respecto del general tachado. */
+  ahorro: (pct: number) => `${pct}% menos`,
   /** Checkout, paso Pago, bajo el medio "Efectivo o cheque". */
   checkoutPago:
     "Pedido con precios de cliente. Queda a confirmar, sin cobro en la tienda.",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Product } from "@/data/products";
-import { esPrecioDeCliente, precioGeneralTachado, precioPublicoConTransferencia } from "./precio-cliente";
+import { esPrecioDeCliente, porcentajeAhorro, precioGeneralTachado, precioPublicoConTransferencia } from "./precio-cliente";
 import { aplicarEstadoPrecio } from "./precios-cuenta-estado";
 import { TEXTOS_PRECIOS_CLIENTE, nombreDelCliente } from "./precios-cliente-textos";
 
@@ -134,4 +134,19 @@ describe("textos", () => {
     expect(nombreDelCliente("  ")).toBeNull();
     expect(nombreDelCliente(null)).toBeNull();
   });
+
+describe("porcentajeAhorro", () => {
+  it("redondea al entero y sólo cuando su precio es menor", () => {
+    expect(porcentajeAhorro(21498.23, 22358.15)).toBe(4);
+    expect(porcentajeAhorro(80, 100)).toBe(20);
+    expect(porcentajeAhorro(100, 100)).toBeNull();
+    expect(porcentajeAhorro(120, 100)).toBeNull();
+    expect(porcentajeAhorro(99.8, 100)).toBeNull();
+    expect(porcentajeAhorro(100, null)).toBeNull();
+    expect(porcentajeAhorro(null, 100)).toBeNull();
+  });
+  it("texto del ahorro", () => {
+    expect(TEXTOS_PRECIOS_CLIENTE.ahorro(4)).toBe("4% menos");
+  });
+});
 });

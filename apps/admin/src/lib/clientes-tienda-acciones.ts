@@ -184,21 +184,34 @@ async function razonSocialDelTenant(tx: Tx, tenantId: string, activo: VinculoAct
 }
 
 /**
- * Vínculos activos del usuario, primero el de `cuenta`. Hoy hay a lo sumo uno en total: el Shop
- * conserva el índice viejo `cl_user_activa` (un activo por usuario) junto al nuevo
- * `cl_user_cuenta_activa` (uno por usuario y cuenta) hasta una migración futura. Por eso un
- * activo en OTRA cuenta también impide vincular: el INSERT chocaría con `cl_user_activa`.
+ * Vínculo activo del usuario en la cuenta `cuenta` (a lo sumo uno: índice `cl_user_cuenta_activa`
+ * del Shop). Un activo en OTRA cuenta no cuenta: un usuario puede tener uno por cuenta.
  */
 async function vinculosActivos(tx: Tx, clerkUserId: string, cuenta: string): Promise<VinculoActivo[]> {
   return (await tx.execute(sql`
     SELECT alegra_contact_id, alegra_account, razon_social FROM shop.client_links
-    WHERE clerk_user_id = ${clerkUserId} AND estado = 'activa'
-    ORDER BY (alegra_account = ${cuenta}) DESC, created_at DESC
+    WHERE clerk_user_id = ${clerkUserId} AND estado = 'activa' AND alegra_account = ${cuenta}
+    ORDER BY created_at DESC
     FOR UPDATE
   `)) as unknown as VinculoActivo[]
 }
 
-/** Mismo contacto en la misma cuenta ⇒ ok sin cambios; cualquier otro activo ⇒ ya_vinculado. */
+/**
+ * Activo del usuario en cualquier OTRA cuenta. Sólo para el 23505: mientras la base conserve el
+ * índice viejo `cl_user_activa` del Shop (una activa por usuario en total; lo borra la 0049 del
+ * Shop), un activo en otra cuenta rechaza el INSERT y se informa como `ya_vinculado`.
+ */
+async function vinculoActivoEnOtraCuenta(tx: Tx, clerkUserId: string, cuenta: string): Promise<VinculoActivo | null> {
+  const [f] = (await tx.execute(sql`
+    SELECT alegra_contact_id, alegra_account, razon_social FROM shop.client_links
+    WHERE clerk_user_id = ${clerkUserId} AND estado = 'activa' AND alegra_account <> ${cuenta}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `)) as unknown as VinculoActivo[]
+  return f ?? null
+}
+
+/** Mismo contacto ⇒ ok sin cambios; otro contacto en la misma cuenta ⇒ ya_vinculado. */
 async function resolverActivo(
   tx: Tx,
   tenantId: string,
@@ -211,6 +224,15 @@ async function resolverActivo(
     return { kind: "ok", cambio: false, razonSocial }
   }
   return { kind: "ya_vinculado", razonSocial }
+}
+
+/** Camina la cadena de `cause` (drizzle envuelve el error crudo de Postgres en "Failed query")
+ *  buscando 23505 (unique_violation). Mismo patrón que `pedidos-repo.ts`. */
+function esUniqueViolation(err: unknown): boolean {
+  for (let e: unknown = err, i = 0; e && i < 3; e = (e as { cause?: unknown }).cause, i++) {
+    if ((e as { code?: unknown }).code === "23505") return true
+  }
+  return false
 }
 
 /**
@@ -231,8 +253,10 @@ async function bloquearUsuario(tx: Tx, tenantId: string, clerkUserId: string): P
  * (confirmación explícita en la UI). Guarda el mismo snapshot que el Shop
  * (`snapshotDelContacto`): razón social, CUIT, lista de precios (null si Alegra la marca no
  * activa, regla `idPriceListUsable`) y tipo de cuenta, más la cuenta. Mismo contacto y cuenta ⇒
- * ok sin cambios. Otro activo ⇒ ya_vinculado. Una carrera que igual choque con los índices
- * únicos parciales (23505) se relee y se resuelve igual.
+ * ok sin cambios. Otro activo en la misma cuenta ⇒ ya_vinculado; un activo en otra cuenta no
+ * bloquea. Una carrera que igual choque con los índices únicos parciales (23505) se relee y se
+ * resuelve igual; si el choque es con un activo de otra cuenta (índice viejo `cl_user_activa`
+ * todavía en la base) ⇒ ya_vinculado con la razón social de ese vínculo, nunca un 500.
  */
 export async function vincularUsuario(
   tenantId: string,
@@ -278,14 +302,15 @@ export async function vincularUsuario(
       return { kind: "ok", cambio: true, razonSocial: contacto.name }
     })
     .catch(async (err: unknown) => {
-      // Carrera contra otro camino que no toma el lock de shop.clientes (p. ej. el auto-vínculo
-      // del Shop): un índice único parcial (`cl_user_cuenta_activa` o el viejo `cl_user_activa`)
-      // rechazó el segundo activo. Se relee.
-      if ((err as { code?: string })?.code !== "23505") throw err
+      // Un índice único parcial rechazó el activo: `cl_user_cuenta_activa` (carrera contra otro
+      // camino que no toma el lock de shop.clientes, p. ej. el auto-vínculo del Shop) o el viejo
+      // `cl_user_activa` (activo en otra cuenta, mientras la base no tenga la 0049 del Shop). Se relee.
+      if (!esUniqueViolation(err)) throw err
       return getDb().transaction(async (tx): Promise<VincularResult> => {
         const [activo] = await vinculosActivos(tx, clerkUserId, cuenta)
-        if (!activo) return { kind: "ya_vinculado", razonSocial: null }
-        return resolverActivo(tx, tenantId, activo, cuenta, alegraContactId)
+        if (activo) return resolverActivo(tx, tenantId, activo, cuenta, alegraContactId)
+        const otro = await vinculoActivoEnOtraCuenta(tx, clerkUserId, cuenta)
+        return { kind: "ya_vinculado", razonSocial: otro ? await razonSocialDelTenant(tx, tenantId, otro) : null }
       })
     })
 
@@ -298,16 +323,23 @@ export async function vincularUsuario(
 export type DesvincularResult = { kind: "ok"; cambio: boolean } | { kind: "not_found" }
 
 /**
- * Revoca el vínculo activo (estado 'revocada' + revoked_at + quién). Nunca DELETE. Revoca el de
- * cualquier cuenta: mientras exista `cl_user_activa` hay a lo sumo uno.
+ * Revoca el vínculo activo del usuario en la cuenta `cuenta` (estado 'revocada' + revoked_at +
+ * quién). Nunca DELETE. Los activos de otras cuentas no se tocan. La cuenta no se valida contra
+ * las activas del tenant (sólo el formato, en la ruta): un vínculo de una cuenta secundaria ya
+ * desactivada tiene que poder revocarse igual.
  */
-export async function desvincularUsuario(tenantId: string, clerkUserId: string, actor: Actor): Promise<DesvincularResult> {
+export async function desvincularUsuario(
+  tenantId: string,
+  clerkUserId: string,
+  actor: Actor,
+  cuenta: string = CUENTA_ALEGRA_PRINCIPAL,
+): Promise<DesvincularResult> {
   const resultado = await getDb().transaction(async (tx): Promise<DesvincularResult & { alegraId?: string }> => {
     if (!(await bloquearUsuario(tx, tenantId, clerkUserId))) return { kind: "not_found" }
     const filas = (await tx.execute(sql`
       UPDATE shop.client_links
       SET estado = 'revocada', revoked_at = now(), revocado_por = ${actor.id}, revocado_por_nombre = ${actor.name}
-      WHERE clerk_user_id = ${clerkUserId} AND estado = 'activa'
+      WHERE clerk_user_id = ${clerkUserId} AND estado = 'activa' AND alegra_account = ${cuenta}
       RETURNING alegra_contact_id
     `)) as unknown as { alegra_contact_id: string }[]
     return filas.length ? { kind: "ok", cambio: true, alegraId: filas[0].alegra_contact_id } : { kind: "ok", cambio: false }
@@ -315,7 +347,7 @@ export async function desvincularUsuario(tenantId: string, clerkUserId: string, 
 
   if (resultado.kind === "not_found") return resultado
   if (resultado.cambio) {
-    log("shop_cliente_desvinculado", { tenant: tenantId, clerkUserId, alegraId: resultado.alegraId }, actor)
+    log("shop_cliente_desvinculado", { tenant: tenantId, clerkUserId, cuenta, alegraId: resultado.alegraId }, actor)
   }
   return { kind: "ok", cambio: resultado.cambio }
 }

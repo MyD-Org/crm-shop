@@ -16,8 +16,9 @@ import {
 //          → vínculo activo, metodo 'operador', con quién y cuándo, en la cuenta de Alegra
 //            `cuenta` ('principal' por defecto; validada contra las del tenant, nunca confiada).
 //            200 {cambio, razonSocial}.
-//   DELETE /api/admin/clientes-tienda/[clerkUserId]/vinculo
-//          → el activo pasa a 'revocada' (nunca se borra). 200 {cambio}.
+//   DELETE /api/admin/clientes-tienda/[clerkUserId]/vinculo?cuenta=
+//          → el activo de la cuenta `cuenta` ('principal' por defecto; sólo se valida el formato)
+//            pasa a 'revocada' (nunca se borra); los de otras cuentas no se tocan. 200 {cambio}.
 //
 // Sin la sección se recibe el MISMO 404 que devuelve `requireSeccion` en todas las rutas admin
 // nuevas (cuerpo idéntico al de un id inexistente: no hay oráculo de existencia ni de permisos).
@@ -91,9 +92,12 @@ export async function DELETE(req: Request, { params }: Params) {
   const { clerkUserId } = await params
   if (!CLERK_USER_ID_RE.test(clerkUserId)) return adminNotFoundResponse()
 
+  const cuenta = new URL(req.url).searchParams.get("cuenta") ?? "principal"
+  if (!CUENTA_ALEGRA_RE.test(cuenta)) return fail(400, "cuenta_invalida", MSG.cuentaInvalida)
+
   let result: DesvincularResult
   try {
-    result = await desvincularUsuario(guard.tenantId, clerkUserId, { id: guard.user.id, name: guard.user.name })
+    result = await desvincularUsuario(guard.tenantId, clerkUserId, { id: guard.user.id, name: guard.user.name }, cuenta)
   } catch (err) {
     logError("desvincular", guard.tenantId, err)
     return fail(500, "internal", MSG.desvincular)

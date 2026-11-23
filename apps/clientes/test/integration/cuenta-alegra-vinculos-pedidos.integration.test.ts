@@ -14,7 +14,7 @@ import type { Cotizacion, LineaCotizada } from "@/lib/cotizacion";
 import { assertLocalTestDb } from "./db-url";
 
 /**
- * Change `shop-contactos-alegra-mdp`, rebanadas S3 (0047, vínculos por cuenta) y S4 (0048, pedido con
+ * Change `shop-contactos-alegra-mdp`, rebanadas S3 (0047, vínculos por cuenta; 0049 borra el índice viejo) y S4 (0048, pedido con
  * cuenta) contra Postgres REAL (local, datos inventados). Los ids de Alegra no son únicos entre
  * cuentas: el contacto "123" de `principal` y el "123" de `mdp` son empresas distintas.
  */
@@ -44,7 +44,7 @@ afterAll(async () => {
   await getDb().$client.end({ timeout: 5 });
 });
 
-// --- S3: 0047 ----------------------------------------------------------------------------------------
+// --- S3: 0047 + 0049 --------------------------------------------------------------------------------------
 
 const vinculo = (usuario: string, contacto: string, cuenta: string | null, estado = "activa") =>
   cuenta === null
@@ -67,33 +67,27 @@ describe("0047 client_links / link_otps por cuenta", () => {
     expect(o.alegra_account).toBe("principal");
   });
 
-  it("mientras exista cl_user_activa, un usuario tiene una sola activa en total", async () => {
+  it("un usuario puede tener una activa por cuenta, pero no dos en la misma cuenta (0049)", async () => {
     await vinculo("user_a", "123", "principal");
     await expect(vinculo("user_a", "789", "principal")).rejects.toThrow();
-    // El índice viejo (una activa por usuario) sigue vivo hasta la migración que lo borra (S5).
-    await expect(vinculo("user_a", "123", "mdp")).rejects.toThrow();
+    // Sin `cl_user_activa` (borrado en 0049), una activa en otra cuenta convive con la de principal.
+    await expect(vinculo("user_a", "123", "mdp")).resolves.toBeDefined();
+    await expect(vinculo("user_a", "456", "mdp")).rejects.toThrow();
     // Revocados no cuentan para la unicidad.
     await expect(vinculo("user_a", "999", "mdp", "revocada")).resolves.toBeDefined();
+    const activas = await q(sql`
+      select alegra_account from shop.client_links where clerk_user_id = 'user_a' and estado = 'activa'
+      order by alegra_account`);
+    expect(activas.map((f) => f.alegra_account)).toEqual(["mdp", "principal"]);
   });
 
-  it("conviven el índice viejo y el nuevo, los dos parciales", async () => {
+  it("sólo queda el índice parcial por (usuario, cuenta); el viejo por usuario ya no existe", async () => {
     const idx = await q(sql`
       select indexname, indexdef from pg_indexes
       where schemaname = 'shop' and tablename = 'client_links' and indexname in ('cl_user_activa', 'cl_user_cuenta_activa')
       order by indexname`);
-    expect(idx.map((i) => i.indexname)).toEqual(["cl_user_activa", "cl_user_cuenta_activa"]);
-    expect(String(idx[0].indexdef)).toMatch(/UNIQUE INDEX .*\(clerk_user_id\) WHERE \(estado = 'activa'::text\)/);
-    expect(String(idx[1].indexdef)).toMatch(/UNIQUE INDEX .*\(clerk_user_id, alegra_account\) WHERE \(estado = 'activa'::text\)/);
-  });
-
-  it("el ON CONFLICT del código anterior a S3 (sólo usuario) sigue funcionando", async () => {
-    await vinculo("user_d", "123", null);
-    const r = await getDb().execute(sql`
-      insert into shop.client_links (clerk_user_id, alegra_contact_id, estado, metodo)
-      values ('user_d', '456', 'activa', 'email_verificado')
-      on conflict ("clerk_user_id") where "estado" = 'activa' do nothing
-      returning id`);
-    expect(r.length).toBe(0);
+    expect(idx.map((i) => i.indexname)).toEqual(["cl_user_cuenta_activa"]);
+    expect(String(idx[0].indexdef)).toMatch(/UNIQUE INDEX .*\(clerk_user_id, alegra_account\) WHERE \(estado = 'activa'::text\)/);
   });
 
   it("el CHECK rechaza una cuenta con formato inválido", async () => {

@@ -344,6 +344,13 @@
       "when": 1795371390685,
       "tag": "0048_orders_cliente_cuenta",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1795376448231,
+      "tag": "0049_borrar_cl_user_activa",
+      "breakpoints": true
     }
   ]
 }

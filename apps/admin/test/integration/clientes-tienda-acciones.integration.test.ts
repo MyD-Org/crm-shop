@@ -664,12 +664,75 @@ describe("clientes de la tienda: cuenta de Alegra del vínculo", () => {
     },
   )
 
-  it("con un activo en otra cuenta ⇒ ya_vinculado (el Shop conserva un activo por usuario)", async () => {
+  it("sin el índice viejo (0049 del Shop): un activo en otra cuenta no bloquea; uno por cuenta", async () => {
     await seedClientLink("user_m1", { alegraContactId: "201", alegraAccount: "principal" })
     expect(await vincularUsuario(TENANT_A, "user_m1", "201", ACTOR, "mdp")).toEqual({
-      kind: "ya_vinculado",
-      razonSocial: "Luz Principal SA",
+      kind: "ok",
+      cambio: true,
+      razonSocial: "Luz Costa SRL",
     })
+    const activos = (await linksDe("user_m1")).filter((l) => l.estado === "activa").map((l) => l.alegraAccount)
+    expect(activos.sort()).toEqual(["mdp", "principal"])
+    // Otro contacto en una cuenta que ya tiene activo ⇒ ya_vinculado con la razón social de ESA cuenta.
+    await seedContacto(TENANT_A, "202", { name: "Otra Costa SA", extra: { alegraAccount: "mdp" } })
+    expect(await vincularUsuario(TENANT_A, "user_m1", "202", ACTOR, "mdp")).toEqual({
+      kind: "ya_vinculado",
+      razonSocial: "Luz Costa SRL",
+    })
+  })
+
+  it("con el índice viejo cl_user_activa (prod antes de 0049): activo en otra cuenta ⇒ ya_vinculado, no 500", async () => {
+    await getDb().execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS "cl_user_activa" ON "shop"."client_links" ("clerk_user_id")
+      WHERE "estado" = 'activa'`)
+    try {
+      await seedClientLink("user_m1", { alegraContactId: "201", alegraAccount: "principal" })
+      expect(await vincularUsuario(TENANT_A, "user_m1", "201", ACTOR, "mdp")).toEqual({
+        kind: "ya_vinculado",
+        razonSocial: "Luz Principal SA",
+      })
+      const res = await vincular("user_m1", { alegraContactId: "201", cuenta: "mdp" })
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({
+        error: "El usuario ya está vinculado a Luz Principal SA. Desvincúlelo antes de vincularlo a otro cliente.",
+        code: "ya_vinculado",
+      })
+      expect((await linksDe("user_m1")).map((l) => l.alegraAccount)).toEqual(["principal"])
+    } finally {
+      await getDb().execute(sql`DROP INDEX IF EXISTS "shop"."cl_user_activa"`)
+    }
+  })
+
+  it("desvincular revoca sólo el activo de la cuenta elegida", async () => {
+    await seedClientLink("user_m1", { alegraContactId: "201", alegraAccount: "principal" })
+    await seedClientLink("user_m1", { alegraContactId: "201", alegraAccount: "mdp" })
+    expect(await desvincularUsuario(TENANT_A, "user_m1", ACTOR, "mdp")).toEqual({ kind: "ok", cambio: true })
+    const estados = Object.fromEntries((await linksDe("user_m1")).map((l) => [l.alegraAccount, l.estado]))
+    expect(estados).toEqual({ principal: "activa", mdp: "revocada" })
+    // Sin cuenta: principal.
+    expect(await desvincularUsuario(TENANT_A, "user_m1", ACTOR)).toEqual({ kind: "ok", cambio: true })
+    expect(await desvincularUsuario(TENANT_A, "user_m1", ACTOR, "mdp")).toEqual({ kind: "ok", cambio: false })
+  })
+
+  it("API DELETE: ?cuenta= revoca sólo esa; formato inválido ⇒ 400 en usted sin tocar nada", async () => {
+    await seedClientLink("user_m1", { alegraContactId: "201", alegraAccount: "principal" })
+    await seedClientLink("user_m1", { alegraContactId: "201", alegraAccount: "mdp" })
+    const mala = await vinculoRoute.DELETE(
+      req(`/api/admin/clientes-tienda/user_m1/vinculo?cuenta=MDP!`, "DELETE"),
+      ctxUsuario("user_m1"),
+    )
+    expect(mala.status).toBe(400)
+    expect(await mala.json()).toEqual({ error: "Seleccione una cuenta de Alegra válida.", code: "cuenta_invalida" })
+    expect((await linksDe("user_m1")).every((l) => l.estado === "activa")).toBe(true)
+
+    const ok = await vinculoRoute.DELETE(
+      req(`/api/admin/clientes-tienda/user_m1/vinculo?cuenta=mdp`, "DELETE"),
+      ctxUsuario("user_m1"),
+    )
+    expect(ok.status).toBe(200)
+    expect(await ok.json()).toEqual({ cambio: true })
+    const estados = Object.fromEntries((await linksDe("user_m1")).map((l) => [l.alegraAccount, l.estado]))
+    expect(estados).toEqual({ principal: "activa", mdp: "revocada" })
   })
 
   it("el listado une el espejo y el nombre de la cuenta por la cuenta del vínculo", async () => {

@@ -126,7 +126,11 @@ export function ClienteTiendaDetalle({ cliente, puedeGestionar, cuentas, onClose
         },
       }
     }
-    if (accion === "desvincular") return { url: usuario, init: { method: "DELETE" } }
+    if (accion === "desvincular") {
+      // Revoca sólo el vínculo mostrado: el de su cuenta de Alegra (otras cuentas no se tocan).
+      const cuentaDelVinculo = encodeURIComponent(cliente.vinculo.cuenta ?? "principal")
+      return { url: `${usuario}?cuenta=${cuentaDelVinculo}`, init: { method: "DELETE" } }
+    }
     if (!alegraId) return null
     const acceso = `/api/admin/contactos-alegra/${encodeURIComponent(alegraId)}/acceso-facturacion`
     return { url: acceso, init: { method: accion === "darAcceso" ? "POST" : "DELETE" } }

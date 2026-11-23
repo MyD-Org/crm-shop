@@ -113,18 +113,11 @@ export const clientLinks = shop.table(
     // Un usuario puede tener UNA sola vinculación activa POR CUENTA de Alegra,
     // pero sí varias revocadas en el historial. De ahí el índice parcial: un
     // unique común impediría re-vincular después de una revocación. Un usuario
-    // con un vínculo `principal` activo podrá tener además uno activo en otra
+    // con un vínculo `principal` activo puede tener además uno activo en otra
     // cuenta (el de otro despliegue).
+    // El viejo `cl_user_activa` (una activa por usuario en total) se borró en 0049.
     uniqueIndex("cl_user_cuenta_activa")
       .on(t.clerkUserId, t.alegraAccount)
-      .where(sql`${t.estado} = 'activa'`),
-    // Viejo índice de una activa por usuario. Se conserva a propósito: el código
-    // anterior a S3 hace `ON CONFLICT (clerk_user_id) WHERE estado = 'activa'` y
-    // sin este índice vincular falla hasta el deploy. Mientras exista, un usuario
-    // sigue teniendo una sola activa en total. Se borra en una migración aparte,
-    // con S3 ya en prod y antes de activar una cuenta secundaria (S5).
-    uniqueIndex("cl_user_activa")
-      .on(t.clerkUserId)
       .where(sql`${t.estado} = 'activa'`),
     check("client_links_alegra_account_check", sql`${t.alegraAccount} ~ '^[a-z0-9][a-z0-9-]{0,39}$'`),
     // Un cliente de Alegra sí puede tener varios usuarios activos (la misma

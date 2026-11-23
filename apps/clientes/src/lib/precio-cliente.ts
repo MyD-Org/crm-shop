@@ -6,11 +6,10 @@
  * `/api/precios-cuenta`. La comparación se hace en el navegador con esos dos datos, así la lista
  * privada nunca entra en datos públicos ni cacheados.
  *
- * Regla: se tacha el precio público CON TRANSFERENCIA sólo si su precio de cliente es MENOR. Igual o
- * mayor: sin tachado (el privado se muestra igual, es el que se le factura). "Consulte": nada.
+ * Regla: se tacha el precio público MÁS ALTO (decisión de la usuaria, 2026-11-23: el de "otros
+ * medios", la lista de referencia) sólo si su precio de cliente es MENOR. Igual o mayor: sin tachado (el privado se muestra igual, es el que se le factura). "Consulte": nada.
  */
 import type { Product } from "@/data/products";
-import { SLUG_TRANSFERENCIA } from "./cuentas-bancarias";
 
 /** Un precio para exhibir: el final con IVA si se conoce, si no el neto. */
 function exhibido(neto: number | undefined, final: number | undefined): number | undefined {
@@ -19,26 +18,20 @@ function exhibido(neto: number | undefined, final: number | undefined): number |
 }
 
 /**
- * Precio público con transferencia (para exhibir) de un producto TAL COMO VIENE DEL CATÁLOGO
- * PÚBLICO (antes de aplicarle el precio de la cuenta). Si la transferencia tiene una lista más
- * barata, ése; si no, el general (pagar con transferencia cuesta lo mismo que la lista general).
+ * Precio público más alto (para exhibir) de un producto TAL COMO VIENE DEL CATÁLOGO PÚBLICO: el
+ * mayor entre el general y los de cada medio de pago (en un pago). Es el que se tacha. Con una
+ * campaña activa, el de campaña: es lo que paga cualquiera y no se tacha un precio que nadie paga.
  */
-export function precioPublicoConTransferencia(
-  p: Pick<Product, "price" | "precioFinal" | "precioMedio" | "preciosMedios" | "preciosOfflineModal">,
+export function precioPublicoMasAlto(
+  p: Pick<Product, "price" | "precioFinal" | "precioMedio" | "preciosMedios" | "preciosOfflineModal" | "campania">,
 ): number | undefined {
-  const deMedio = [p.precioMedio, ...(p.preciosMedios ?? [])].find(
-    (m) => m != null && m.slug === SLUG_TRANSFERENCIA && m.forma == null,
-  );
-  if (deMedio) {
-    const v = exhibido(deMedio.price, deMedio.precioFinal);
-    if (v != null) return v;
-  }
-  const offline = p.preciosOfflineModal?.find((m) => m.slug === SLUG_TRANSFERENCIA);
-  if (offline) {
-    const v = exhibido(undefined, offline.precioFinal);
-    if (v != null) return v;
-  }
-  return exhibido(p.price, p.precioFinal);
+  if (p.campania) return exhibido(p.price, p.precioFinal);
+  const candidatos = [
+    exhibido(p.price, p.precioFinal),
+    ...[p.precioMedio, ...(p.preciosMedios ?? [])].map((m) => (m ? exhibido(m.price, m.precioFinal) : undefined)),
+    ...(p.preciosOfflineModal ?? []).map((m) => exhibido(undefined, m.precioFinal)),
+  ].filter((v): v is number => v != null);
+  return candidatos.length > 0 ? Math.max(...candidatos) : undefined;
 }
 
 /**

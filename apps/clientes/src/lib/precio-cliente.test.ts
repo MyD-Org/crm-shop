@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Product } from "@/data/products";
-import { esPrecioDeCliente, porcentajeAhorro, precioGeneralTachado, precioPublicoConTransferencia } from "./precio-cliente";
+import { esPrecioDeCliente, porcentajeAhorro, precioGeneralTachado, precioPublicoMasAlto } from "./precio-cliente";
 import { aplicarEstadoPrecio } from "./precios-cuenta-estado";
 import { TEXTOS_PRECIOS_CLIENTE, nombreDelCliente } from "./precios-cliente-textos";
 
@@ -33,36 +33,16 @@ describe("precioGeneralTachado (regla del tachado)", () => {
   });
 });
 
-describe("precioPublicoConTransferencia", () => {
-  it("sin lista de transferencia: el general con IVA", () => {
-    expect(precioPublicoConTransferencia(base)).toBe(1210);
-  });
-  it("con transferencia destacada: ésa", () => {
+describe("precioPublicoMasAlto", () => {
+  it("el mayor entre el general y los medios; con campaña, el de campaña", () => {
+    expect(precioPublicoMasAlto(base)).toBe(1210);
     expect(
-      precioPublicoConTransferencia({
-        ...base,
-        precioMedio: { slug: "transferencia", nombre: "Transferencia", price: 900, precioFinal: 1089 },
-      }),
-    ).toBe(1089);
-  });
-  it("con transferencia en la ficha o en el modal sin cobro en línea", () => {
-    expect(
-      precioPublicoConTransferencia({
-        ...base,
-        preciosMedios: [{ slug: "transferencia", nombre: "T", price: 950, precioFinal: 1149.5 }],
-      }),
-    ).toBe(1149.5);
-    expect(
-      precioPublicoConTransferencia({ ...base, preciosOfflineModal: [{ slug: "transferencia", nombre: "T", precioFinal: 1100 }] }),
-    ).toBe(1100);
-  });
-  it("otro medio destacado (no transferencia): el general", () => {
-    expect(
-      precioPublicoConTransferencia({ ...base, precioMedio: { slug: "efectivo", nombre: "Efectivo", price: 800, precioFinal: 968 } }),
+      precioPublicoMasAlto({ ...base, precioMedio: { slug: "transferencia", nombre: "T", price: 900, precioFinal: 1089 } }),
     ).toBe(1210);
-  });
-  it("sin IVA conocido: el neto", () => {
-    expect(precioPublicoConTransferencia({ ...base, precioFinal: undefined })).toBe(1000);
+    expect(
+      precioPublicoMasAlto({ ...base, preciosMedios: [{ slug: "tarjeta", nombre: "Tarjeta", price: 1100, precioFinal: 1331 }] }),
+    ).toBe(1331);
+    expect(precioPublicoMasAlto({ ...base, precioFinal: undefined })).toBe(1000);
   });
 });
 
@@ -99,16 +79,23 @@ describe("con precio privado", () => {
     expect(esPrecioDeCliente(mayor)).toBe(true);
     expect(mayor.oldPrice).toBeUndefined();
   });
-  it("tacha el precio con transferencia, no el general, si la transferencia es más barata", () => {
+  it("tacha el público más alto (el general, no el de transferencia más barato)", () => {
     const conTransf = {
       ...base,
       precioMedio: { slug: "transferencia", nombre: "Transferencia", price: 900, precioFinal: 1089 },
     } as Product;
-    expect(aplicarEstadoPrecio(conTransf, { tipo: "privado", precio: { price: 800, precioFinal: 968 } }).oldPrice).toBe(1089);
-    // Entre el de transferencia y el general: el suyo no es menor que con transferencia, sin tachado.
+    expect(aplicarEstadoPrecio(conTransf, { tipo: "privado", precio: { price: 800, precioFinal: 968 } }).oldPrice).toBe(1210);
+    // Entre el de transferencia y el general: igual se tacha el general, que es más alto.
     expect(
       aplicarEstadoPrecio(conTransf, { tipo: "privado", precio: { price: 950, precioFinal: 1149.5 } }).oldPrice,
-    ).toBeUndefined();
+    ).toBe(1210);
+  });
+  it("si un medio es más caro que el general, se tacha ése", () => {
+    const conMedioCaro = {
+      ...base,
+      precioMedio: { slug: "tarjeta", nombre: "Tarjeta", price: 1100, precioFinal: 1331 },
+    } as Product;
+    expect(aplicarEstadoPrecio(conMedioCaro, { tipo: "privado", precio: { price: 800, precioFinal: 968 } }).oldPrice).toBe(1331);
   });
   it("si gana una campaña, no es su precio de cliente (se tacha su privado, sin etiqueta)", () => {
     const enCampania = { ...base, price: 128, precioFinal: 154.88, oldPrice: 193.6, campania } as Product;

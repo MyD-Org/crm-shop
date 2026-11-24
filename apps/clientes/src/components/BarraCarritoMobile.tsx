@@ -4,11 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
-import { useCotizacion } from "@/hooks/useCotizacion";
+import { usePreciosCarrito } from "@/hooks/usePreciosCarrito";
 import { MetasCarrito } from "@/components/carrito/MetasCarrito";
 import { metaCuotas } from "@/lib/metas-carrito";
-import type { PagoTransferencia } from "@/lib/pago-transferencia-servidor";
-import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
 import { fmtPrecio } from "@/lib/format";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
@@ -152,43 +150,13 @@ function HojaCarrito({
 }) {
   const carrito = useCart();
   const { items } = carrito;
-  // Precio con transferencia (como /carrito): se pregunta al servidor con qué lista cotizar, porque
-  // depende de quien mira. `undefined` = todavía no se sabe; null = sin precio con transferencia.
-  const [pago, setPago] = useState<PagoTransferencia | undefined>(undefined);
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch("/api/carrito/pago-transferencia", { signal: controller.signal })
-      .then((r) => (r.ok ? r.json() : { pago: null }))
-      .then((d: { pago?: PagoTransferencia }) => setPago(d.pago ?? null))
-      .catch(() => {
-        if (!controller.signal.aborted) setPago(null);
-      });
-    return () => controller.abort();
-  }, []);
-  const { cotizacion, estado, ultimasLineas, ultimoProgresoCuotas } = useCotizacion({
-    entregaTipo: "retiro",
-    conProgresoCuotas: true,
-    activo: pago !== undefined,
-    ...(pago ?? {}),
-  });
-  // Total con los demás medios (precio general), sólo si hay precio con transferencia.
-  const { cotizacion: cotizacionGeneral, estado: estadoGeneral } = useCotizacion({
-    entregaTipo: "retiro",
-    activo: Boolean(pago),
-  });
+  // Precios con IVA (con transferencia si la hay), de la cotización: ver usePreciosCarrito.
+  const { conTransferencia, total, calculando, totalOtrosMedios, conProblemas, ultimoProgresoCuotas, precioLinea, problemaLinea } =
+    usePreciosCarrito({ conProgresoCuotas: true });
   // Cuotas sin interés, igual que en /carrito: «Ya tiene 3 cuotas de $X» y cuánto falta para el
   // próximo escalón. Sin cuotas configuradas, nada.
   const metaDeCuotas = metaCuotas(ultimoProgresoCuotas);
-  const lineaVigente = (id: string) => cotizacion?.lineas.find((l) => l.id === id);
-  const lineaUltima = (id: string) => ultimasLineas?.find((l) => l.id === id);
-  const total = cotizacion ? cotizacion.total : (totalesEstimados(items, ultimasLineas)?.total ?? null);
-  const textoTotal =
-    total !== null ? fmtPrecio(total) : estado === "cargando" || pago === undefined ? "Calculando…" : "A confirmar";
-  const totalOtrosMedios =
-    pago && estadoGeneral === "ok" && cotizacionGeneral && total !== null && cotizacionGeneral.total > total
-      ? cotizacionGeneral.total
-      : null;
-  const conProblemas = !!cotizacion?.hayProblemas;
+  const textoTotal = total !== null ? fmtPrecio(total) : calculando ? "Calculando…" : "A confirmar";
 
   return (
     <div className="fixed inset-0 z-[60]">
@@ -224,8 +192,8 @@ function HojaCarrito({
         <ul className="scroll-fino min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
           {items.map((item) => {
             const nombre = nombreConMarca(item.name, item.brand ? formatMarca(item.brand) : undefined).nombre;
-            const precio = precioLineaCarrito(item.qty, lineaVigente(item.id), lineaUltima(item.id));
-            const problema = lineaVigente(item.id)?.problema;
+            const precio = precioLinea(item.id, item.qty);
+            const problema = problemaLinea(item.id);
             return (
               <li key={item.id} className="flex items-center gap-3 border-b border-border py-3">
                 <Link
@@ -287,7 +255,7 @@ function HojaCarrito({
 
         <div className="flex flex-col gap-3 px-4 pt-4">
           <div className="flex items-baseline justify-between">
-            <span className="text-base font-semibold text-text">{pago ? "Total con transferencia" : "Total"}</span>
+            <span className="text-base font-semibold text-text">{conTransferencia ? "Total con transferencia" : "Total"}</span>
             <span className="text-[22px] font-bold tabular-nums text-text">{textoTotal}</span>
           </div>
           {totalOtrosMedios !== null && (

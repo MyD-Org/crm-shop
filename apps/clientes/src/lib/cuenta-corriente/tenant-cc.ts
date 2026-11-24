@@ -9,9 +9,14 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmTenants } from "@/db/crm";
 import { shopTenantId } from "../tenant";
+import { getMarca } from "../marca";
 
 export interface DatosTenant {
   id: string;
+  /**
+   * Nombre de la tienda para el cliente: el de la marca del sitio si es propia (Luz Atlántica
+   * comparte tenant con Central y no debe decir "Central LED"); si no, el del tenant.
+   */
   nombre: string;
   /** Sólo dígitos, listo para `wa.me/<número>`. `null` = sin WhatsApp cargado. */
   whatsapp: string | null;
@@ -32,10 +37,13 @@ export const datosTenant = cache(async function datosTenant(): Promise<DatosTena
     .where(eq(crmTenants.id, shopTenantId()))
     .limit(1);
   if (!fila) return null;
+  // `getMarca` nunca lanza (cae a la marca de entorno); el catch es por las dudas.
+  const marca = await getMarca().catch(() => null);
+  const nombre = marca && !marca.recursosCentral && marca.nombre.trim() ? marca.nombre.trim() : fila.name;
   const whatsapp = fila.whatsappNumber.replace(/\D/g, "");
   return {
     id: fila.id,
-    nombre: fila.name,
+    nombre,
     whatsapp: whatsapp || null,
     mailComprobantes: fila.receiptsEmail.trim() || null,
   };

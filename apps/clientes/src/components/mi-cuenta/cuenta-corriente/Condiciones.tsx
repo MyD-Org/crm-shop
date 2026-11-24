@@ -79,7 +79,8 @@ export function Condiciones({
 
         <Card title="Lista de precios y descuentos">
           <dl className="flex flex-col gap-3">
-            <Fila label="Lista asignada">{condiciones.listaPrecios ?? SIN_DATOS}</Fila>
+            {/* El nombre interno de la lista (ej. "L5 …") no se muestra: sólo si tiene precios preferenciales. */}
+            <Fila label="Precios">{condiciones.listaPrecios ? "Preferenciales" : "Generales"}</Fila>
             {descuentos.map((d) => (
               <Fila key={d.concepto} label={d.concepto}>
                 <span className="tabular-nums text-success">−{d.porcentaje}%</span>

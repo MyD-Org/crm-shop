@@ -2464,7 +2464,11 @@ export function CheckoutClient({
               <li key={linea.id} className="flex justify-between gap-2 text-sm">
                 <span className={linea.problema ? "text-danger" : "text-muted"}>
                   {nombreConMarca(linea.name, linea.brand ? formatMarca(linea.brand) : undefined).nombre}
-                  <span className="ml-1 text-xs">x{linea.qty}</span>
+                  {!linea.problema && (
+                    <span className="mt-0.5 block text-xs">
+                      {linea.qty} × {fmtPrecio(linea.precioUnitario)}
+                    </span>
+                  )}
                   {!linea.problema && linea.campaniaEtiqueta && (
                     <span className="mt-0.5 block text-xs font-semibold text-success">{frasePrecio(linea.campaniaEtiqueta, true)}</span>
                   )}

@@ -1,7 +1,5 @@
 "use client";
 
-import { useAhoraSi } from "@/components/promociones/reloj";
-import { precioDeReferenciaVigente } from "@/lib/carrito-cliente";
 import { type PointerEvent, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -11,6 +9,7 @@ import { Button } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { fmtPrecio } from "@/lib/format";
 import { useHidratado } from "@/lib/hidratado";
+import { usePreciosCarrito } from "@/hooks/usePreciosCarrito";
 import type { CartItem } from "@/lib/carrito-cliente";
 
 const SIN_ITEMS: CartItem[] = [];
@@ -110,12 +109,11 @@ export function CartPreview({
   // de hidratar se repite lo del servidor (ver useHidratado).
   const hidratado = useHidratado();
   const items = hidratado ? carrito.items : SIN_ITEMS;
-  const total = hidratado ? carrito.total : 0;
-  // Un precio de campaña ya vencido no se muestra: el carrito lo vuelve a cotizar en el servidor.
-  // El reloj sólo corre si alguna línea se agregó con precio de campaña.
-  const ahora = useAhoraSi(hidratado && carrito.items.some((i) => i.precioHasta));
-  const vencido = (item: CartItem) => ahora !== null && !precioDeReferenciaVigente(item, ahora);
-  const hayVencidos = hidratado && carrito.items.some(vencido);
+  // Precios con IVA (con transferencia si la hay), de la cotización, como /carrito y la hoja
+  // mobile: el neto guardado en el carrito no se muestra. Se cotiza sólo con el popover abierto.
+  const { conTransferencia, total, calculando, totalOtrosMedios, precioLinea, problemaLinea } = usePreciosCarrito({
+    activo: open && items.length > 0,
+  });
   const count = hidratado ? carrito.count : 0;
 
   /**
@@ -222,7 +220,10 @@ export function CartPreview({
               </p>
 
               <ul className="scroll-fino max-h-72 space-y-0.5 overflow-y-auto px-2 pb-2">
-                {items.map((item) => (
+                {items.map((item) => {
+                  const precio = precioLinea(item.id, item.qty);
+                  const problema = problemaLinea(item.id);
+                  return (
                   <li key={item.id}>
                     <Link
                       href={`/producto/${item.id}`}
@@ -238,20 +239,35 @@ export function CartPreview({
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-medium text-text">{nombreConMarca(item.name, item.brand ? formatMarca(item.brand) : undefined).nombre}</p>
                         <p className="text-xs text-muted">
-                          {item.qty} u.{vencido(item) ? " · Precio a confirmar" : ` · ${fmt(item.price)} c/u`}
+                          {item.qty} u.
+                          {problema ? <span className="text-danger"> · No disponible</span> : precio && ` · ${fmt(precio.unitario)} c/u`}
                         </p>
                       </div>
-                      {vencido(item) ? null : <p className="shrink-0 text-xs font-bold text-text">{fmt(item.price * item.qty)}</p>}
+                      {problema ? null : precio ? (
+                        <p className="shrink-0 text-xs font-bold tabular-nums text-text">{fmt(precio.total)}</p>
+                      ) : (
+                        <span aria-label="Calculando el precio" className="h-3.5 w-14 shrink-0 animate-pulse rounded bg-elevated" />
+                      )}
                     </Link>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
 
             <div className="border-t border-border px-4 py-3">
-              <div className="mb-3 flex items-center justify-between text-sm">
-                <span className="text-muted">Total</span>
-                <span className="font-extrabold text-text">{hayVencidos ? "A confirmar" : fmt(total)}</span>
+              <div className="mb-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted">{conTransferencia ? "Total con transferencia" : "Total"}</span>
+                  <span className="font-extrabold tabular-nums text-text">
+                    {total !== null ? fmt(total) : calculando ? "Calculando…" : "A confirmar"}
+                  </span>
+                </div>
+                {totalOtrosMedios !== null && (
+                  <p className="mt-0.5 text-right text-xs text-muted">
+                    Con otros medios de pago: <span className="tabular-nums">{fmt(totalOtrosMedios)}</span>
+                  </p>
+                )}
               </div>
               <Link href="/carrito" className="block">
                 <Button className="w-full">Ver carrito</Button>

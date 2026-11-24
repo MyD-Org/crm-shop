@@ -41,9 +41,9 @@ const LISTA_BLANCA = new Set([
   "app/carrito/page.tsx",
   // La misma pregunta, compartida por /carrito y la hoja del carrito del celular (ruta por sesión, sin caché).
   "lib/pago-transferencia-servidor.ts",
-  // Sólo "¿tiene lista privada?", por request (hueco del layout con `connection()`): el aviso de sus
+  // Sólo "¿tiene lista privada?", por request (hueco del header con `connection()`): el chip de
   // precios de cliente. Nunca precios.
-  "components/AvisoPreciosCliente.tsx",
+  "components/HeaderServer.tsx",
   // La misma pregunta en el checkout (página por sesión): el texto del paso Pago.
   "app/checkout/page.tsx",
 ]);

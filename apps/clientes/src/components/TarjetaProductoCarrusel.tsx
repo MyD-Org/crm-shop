@@ -10,6 +10,7 @@ import { PanelOpciones } from "@/components/catalogo/PanelOpciones";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
+import { EtiquetaPrecioCliente } from "@/components/EtiquetaPrecioCliente";
 import { mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
 import { etiquetaStock, mostrarStockEnCard, stockParaCard } from "@/lib/catalogo-vista";
 import { nombreConMarca } from "@/lib/formato-nombre";
@@ -139,6 +140,7 @@ export function TarjetaProductoCarrusel({
         }
         installments={
           <>
+            <EtiquetaPrecioCliente producto={p} />
             <PrecioMedioCard medio={medio} />
             <CuotasCard opcion={vv.esDesde ? null : mejorCuotaProducto(p.cuotasSinInteres)} />
           </>

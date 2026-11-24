@@ -71,6 +71,13 @@ describe("aplicarEstadoPrecio", () => {
     expect(aplicarEstadoPrecio(producto, undefined)).toBe(producto);
   });
 
+  it("precio privado MENOR que el público con transferencia: tacha el público", () => {
+    // El medio "transf" no es transferencia: el público con transferencia es el general (1210).
+    const p = aplicarEstadoPrecio(producto, { tipo: "privado", precio: { price: 800, precioFinal: 968 } });
+    expect(p).toMatchObject({ price: 800, precioFinal: 968, precioCuenta: "privado", oldPrice: 1210 });
+    expect(p.discount).toBeUndefined();
+  });
+
   it("precio privado: reemplaza el precio aunque sea MAYOR, sin tachar y sin medios ni cuotas", () => {
     const p = aplicarEstadoPrecio(producto, { tipo: "privado", precio: { price: 1500, precioFinal: 1815 } });
     expect(p).toMatchObject({ price: 1500, precioFinal: 1815, precioCuenta: "privado" });
@@ -115,10 +122,11 @@ describe("aplicarEstadoPrecio con campaña de precios (decisión B: paga el meno
     expect(p.precioCuenta).toBe("privado");
   });
 
-  it("privado más barato (120): su privado, sin campaña ni tachado", () => {
+  it("privado más barato (120): su privado, sin campaña; tachado el público (el de campaña)", () => {
     const p = aplicarEstadoPrecio(enCampania, { tipo: "privado", precio: { price: 120, precioFinal: 145.2 } });
     expect(p.price).toBe(120);
-    expect(p.oldPrice).toBeUndefined();
+    // Precio de cliente: se tacha el público que ve cualquiera (154,88, el de campaña), no el normal.
+    expect(p.oldPrice).toBe(154.88);
     expect(p.campania).toBeUndefined();
   });
 

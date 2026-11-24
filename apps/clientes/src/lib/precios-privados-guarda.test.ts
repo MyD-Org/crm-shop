@@ -41,6 +41,11 @@ const LISTA_BLANCA = new Set([
   "app/carrito/page.tsx",
   // La misma pregunta, compartida por /carrito y la hoja del carrito del celular (ruta por sesión, sin caché).
   "lib/pago-transferencia-servidor.ts",
+  // Sólo "¿tiene lista privada?", por request (hueco del layout con `connection()`): el aviso de sus
+  // precios de cliente. Nunca precios.
+  "components/AvisoPreciosCliente.tsx",
+  // La misma pregunta en el checkout (página por sesión): el texto del paso Pago.
+  "app/checkout/page.tsx",
 ]);
 
 const todos = archivos(SRC).map((p) => ({ ruta: relative(SRC, p), texto: readFileSync(p, "utf8") }));

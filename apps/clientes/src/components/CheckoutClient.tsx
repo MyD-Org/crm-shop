@@ -9,6 +9,7 @@ import { MetaCuotas } from "@/components/checkout/MetaCuotas";
 import { resumenCuotas, type EleccionCuotas } from "@/lib/cuotas-formulario";
 import { montoPorCuota } from "@/lib/cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
+import { TEXTOS_PRECIOS_CLIENTE } from "@/lib/precios-cliente-textos";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -354,6 +355,11 @@ interface Props {
    */
   esCuentaCorriente?: boolean;
   /**
+   * Cuenta corriente con lista online privada (lo resuelve el server): el paso Pago aclara que los
+   * precios son los suyos y que no se cobra nada en la tienda. Sin lista, el checkout de siempre.
+   */
+  conPreciosDeCliente?: boolean;
+  /**
    * Elección de «Enviar a» del visitante (ya validada en el server): el checkout arranca con esa
    * entrega, local y dirección. null = como siempre.
    */
@@ -454,6 +460,7 @@ export function CheckoutClient({
   mediosPago = [],
   tarjetasMercadoPago,
   esCuentaCorriente = false,
+  conPreciosDeCliente = false,
   eleccionInicial = null,
   pedidoReintento = null,
   retornoMercadoPago = false,
@@ -2343,7 +2350,12 @@ export function CheckoutClient({
                 {!esCuentaCorriente && <p className="mb-4 text-sm text-muted">Cada opción muestra el total que pagará con ese medio.</p>}
                 {esCuentaCorriente ? (
                   // Cuenta corriente: un único medio, sin elección.
-                  <p className="text-sm font-semibold text-text">{textoPagaConMedio(medioSel.nombre)}</p>
+                  <>
+                    <p className="text-sm font-semibold text-text">{textoPagaConMedio(medioSel.nombre)}</p>
+                    {conPreciosDeCliente && (
+                      <p className="mt-1 text-sm text-muted">{TEXTOS_PRECIOS_CLIENTE.checkoutPago}</p>
+                    )}
+                  </>
                 ) : (
                   <div role="radiogroup" aria-label="Medio de pago" className="flex flex-col gap-3">
                     {opcionesPago.map((o) => {

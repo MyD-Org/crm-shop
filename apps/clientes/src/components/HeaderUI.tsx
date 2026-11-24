@@ -20,6 +20,7 @@ import { IconoWhatsapp } from "./IconoWhatsapp";
 import logo from "@/assets/central-led-logo.svg";
 import { altLogo, fuenteLogo, partesNombre } from "@/lib/marca-base";
 import { useMarca } from "./MarcaProvider";
+import { ChipPreciosCliente } from "./ChipPreciosCliente";
 
 function UserIcon() {
   return (
@@ -62,6 +63,8 @@ interface PropsHeader {
    * enfocarlo. Lo resuelve el hueco del header; en el shell, apagado.
    */
   busquedaIa?: boolean;
+  /** Ve precios de su lista online privada: chip "Precios de cliente" junto al "Enviar a". */
+  preciosCliente?: boolean;
   /** "Enviar a" de desktop, en las acciones a la izquierda del usuario. Lo resuelve el servidor. */
   ubicacion?: ReactNode;
   /** El mismo "Enviar a" en una línea, para mobile: debajo del buscador. */
@@ -132,6 +135,7 @@ function HeaderVista({
   navBadge = null,
   navBadgeVisibleOn,
   busquedaIa = false,
+  preciosCliente = false,
   ubicacion,
   ubicacionEnLinea,
   whatsapp = null,
@@ -266,7 +270,12 @@ function HeaderVista({
           <div className="flex w-full flex-col">
             {/* El chat se abre desde el buscador: el widget no tiene burbuja flotante. */}
             {buscador}
-            {ubicacionEnLinea ? <div className="mt-2.5 flex lg:hidden">{ubicacionEnLinea}</div> : null}
+            {ubicacionEnLinea || preciosCliente ? (
+              <div className="mt-2.5 flex items-center justify-between gap-3 lg:hidden">
+                {ubicacionEnLinea}
+                {preciosCliente ? <ChipPreciosCliente /> : null}
+              </div>
+            ) : null}
           </div>
         }
         compactSearch={buscador}
@@ -279,6 +288,11 @@ function HeaderVista({
         actions={
           <>
             {/* En mobile la fila de acciones no tiene lugar: va debajo del buscador. */}
+            {preciosCliente ? (
+              <div className="hidden lg:flex">
+                <ChipPreciosCliente />
+              </div>
+            ) : null}
             {ubicacion ? <div className="hidden lg:flex">{ubicacion}</div> : null}
             {/* Desde lg; debajo, la cuenta va a la izquierda de la marca (mobileStart). */}
             <div className="hidden lg:flex">{cuentaNodo("end")}</div>

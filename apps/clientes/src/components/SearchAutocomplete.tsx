@@ -282,7 +282,7 @@ export function SearchAutocomplete({
           onClick={() => { setOpen(false); setEscaneando(true); }}
           aria-label="Escanear código"
           title="Escanear código"
-          className="flex shrink-0 items-center bg-transparent pl-3 pr-1 text-muted transition-colors hover:text-text"
+          className="flex shrink-0 items-center bg-transparent pl-3 pr-3 text-muted transition-colors hover:text-text lg:pr-1"
         >
           <EscanearIcon />
         </button>
@@ -291,7 +291,8 @@ export function SearchAutocomplete({
         type="button"
         onClick={() => submit()}
         aria-label="Buscar"
-        className="flex shrink-0 items-center gap-2 bg-transparent px-4 text-sm font-medium text-muted transition-colors hover:text-text"
+        // En el celular no va: se busca con la tecla del teclado (enterKeyHint) y el campo gana lugar.
+        className="flex shrink-0 items-center gap-2 bg-transparent px-4 text-sm font-medium text-muted transition-colors hover:text-text max-lg:hidden"
       >
         <SearchIcon />
       </button>

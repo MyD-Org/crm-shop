@@ -23,7 +23,6 @@ import { getMarca } from "@/lib/marca";
 import { metadataDeMarca } from "@/lib/metadata-marca";
 import { urlCanonicaDelSitio } from "@/lib/sitio-url";
 import { BarraCarritoMobile } from "@/components/BarraCarritoMobile";
-import { AvisoPreciosCliente } from "@/components/AvisoPreciosCliente";
 import "./globals.css";
 
 // Fuentes del diseño aprobado, self-hosted vía next/font; la paleta cálida las
@@ -152,10 +151,6 @@ export default async function RootLayout({
                 y parte línea; las redes conservan su ancho a la derecha. */}
             <BarraSuperior anuncio={hayAnuncio ? anuncio.texto : undefined} visibilidad={vAnuncio} redes={redes} whatsapp={numeroWhatsapp} />
             <Header />
-            {/* Sus precios de cliente (lista online privada): hueco por request; sin lista, nada. */}
-            <Suspense fallback={null}>
-              <AvisoPreciosCliente />
-            </Suspense>
             {/* Red de seguridad: una página que lea el request arriba de todo
                 (Mi cuenta, checkout, carrito) queda como hueco entero en vez
                 de romper el prerender. El fallback ocupa el alto de la

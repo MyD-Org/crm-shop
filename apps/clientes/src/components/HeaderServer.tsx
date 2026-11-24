@@ -7,6 +7,7 @@ import { flagsPublicos } from "@/lib/flags-publicos"
 import { accesoFacturacion } from "@/lib/acceso-facturacion"
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag"
 import { identidadActual } from "@/lib/auth"
+import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo"
 import { getContenidoHome, getDatosFooter } from "@/lib/home-datos"
 import { hrefWhatsapp } from "@/data/footer"
 import { visibilidadDe, type NavBadgeContent } from "@/data/home-defaults"
@@ -92,7 +93,7 @@ async function HeaderDinamico({
   // base o los flags (en el prerender no arranca ninguna lectura, y el catch
   // de abajo no confunde el corte del prerender con una base caída).
   await connection()
-  const [identidad, esCuentaCorriente, categorias, busquedaIa] = await Promise.all([
+  const [identidad, esCuentaCorriente, categorias, busquedaIa, preciosCliente] = await Promise.all([
     identidadActual(),
     // Facturas en el menú: sólo cuenta corriente. Una consulta al espejo (base,
     // nunca Alegra) y sólo con vínculo; compartida por request con Mi cuenta.
@@ -110,6 +111,14 @@ async function HeaderDinamico({
     // Búsqueda inteligente en el buscador (flag `busqueda-ia`). Si el flag no
     // responde, el buscador de siempre.
     busquedaIaHabilitada().catch(() => false),
+    // Chip "Precios de cliente": sólo "¿tiene lista online privada?" (la misma decisión que
+    // `/api/precios-cuenta`), nunca precios. Si la base no responde, sin chip.
+    listaPrivadaDelComprador()
+      .then(Boolean)
+      .catch((err: unknown) => {
+        console.error(`[Header] lista privada: ${err instanceof Error ? err.name : "desconocido"}`)
+        return false
+      }),
   ])
 
   return (
@@ -128,6 +137,7 @@ async function HeaderDinamico({
       navBadge={navBadge}
       navBadgeVisibleOn={navBadgeVisibleOn}
       busquedaIa={busquedaIa}
+      preciosCliente={preciosCliente}
       ubicacion={ubicacion}
       ubicacionEnLinea={ubicacionEnLinea}
       whatsapp={whatsapp}

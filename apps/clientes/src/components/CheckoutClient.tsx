@@ -33,6 +33,7 @@ import { VincularClient } from "@/components/VincularClient";
 import { OTRA_DIRECCION, entregaDesdeGuardada, entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
 import {
   cuerpoDeSincronizacion,
+  cpDeSugerencia,
   entregaInicialDeEleccion,
   estadoInicialCheckout,
   sincronizarUbicacion,
@@ -595,6 +596,8 @@ export function CheckoutClient({
   // Con una ubicación precargada la dirección de envío es esa, no el domicilio fiscal.
   const [aOtraDireccion, setAOtraDireccion] = useState(precarga !== null);
   const usarFiscal = aDomicilio && ofrecerFiscal && !aOtraDireccion;
+  // «Otra dirección» todavía sin calle (la localidad puede venir precargada de «Enviar a»).
+  const sinCalleEscrita = !guardada && !usarFiscal && !direccion.trim();
   const ciudadEntrega = usarFiscal && fiscalCiudad ? fiscalCiudad : ciudadElegida;
   const direccionEntrega = usarFiscal && fiscalCalle ? fiscalCalle : direccionElegida;
   // Provincia de entrega: la del domicilio fiscal o de la dirección guardada elegida; si no, la que
@@ -1974,7 +1977,8 @@ export function CheckoutClient({
                         // Solo se pisa lo que la sugerencia trae resuelto.
                         if (s.ciudad) setCiudad(s.ciudad);
                         // El CP de la sugerencia completa el del invitado sólo si todavía está vacío.
-                        if (s.cp) setDatosInv((d) => (d.cp.trim() ? d : { ...d, cp: s.cp }));
+                        const cpSugerido = cpDeSugerencia(s.cp);
+                        if (cpSugerido) setDatosInv((d) => (d.cp.trim() ? d : { ...d, cp: cpSugerido }));
                         const clave = claveProvincia(s.provincia);
                         if (clave) setProvinciaManual(clave);
                       }}
@@ -2007,14 +2011,18 @@ export function CheckoutClient({
                     Esta dirección no tiene una provincia válida. Elija otra dirección o cárguela de nuevo.
                   </p>
                 )}
+                {/* Sin calle escrita todavía (la localidad puede venir precargada de «Enviar a») no se avisa que
+                    falta elegirla de la lista: el campo vacío ya lo pide. */}
                 {envioPorZona && cotizacion && (
-                  <AvisoEnvioZona
-                    envio={cotizacion.envio}
-                    pagaEnLinea={pagaEnLinea}
-                    envioACoordinar={envioACoordinar}
-                    onCoordinar={() => setCoordinarPara(claveDestino)}
-                    onUbicar={() => setCoordinarPara(null)}
-                  />
+                  sinCalleEscrita && cotizacion.envio.sinUbicar ? null : (
+                    <AvisoEnvioZona
+                      envio={cotizacion.envio}
+                      pagaEnLinea={pagaEnLinea}
+                      envioACoordinar={envioACoordinar}
+                      onCoordinar={() => setCoordinarPara(claveDestino)}
+                      onUbicar={() => setCoordinarPara(null)}
+                    />
+                  )
                 )}
                 {cotizacion && !envioDisponible && (
                   <p className="mt-3 flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-xs text-text">

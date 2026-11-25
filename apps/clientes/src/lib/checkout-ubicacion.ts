@@ -12,6 +12,7 @@
  */
 import { OTRA_DIRECCION, eleccionInicial, type DireccionEnvio } from "./direcciones-envio";
 import type { CuerpoEleccion } from "./enviar-a";
+import { normalizarCp } from "./ubicacion";
 
 export type OpcionEntregaCheckout = "retiro" | "domicilio";
 
@@ -42,7 +43,15 @@ export function entregaInicialDeEleccion(
   direccionesGuardadas: number,
 ): { ciudad: string; cp: string } {
   if (eleccion?.tipo !== "envio" || eleccion.direccionId || direccionesGuardadas > 0) return { ciudad: "", cp: "" };
-  return { ciudad: eleccion.localidad?.trim() ?? "", cp: eleccion.cp?.trim() ?? "" };
+  return { ciudad: eleccion.localidad?.trim() ?? "", cp: normalizarCp(eleccion.cp) ?? "" };
+}
+
+/**
+ * Código postal de una sugerencia del autocompletado, sólo si es válido (4 dígitos o CPA): el geocodificador
+ * puede devolver formatos que el formulario después rechazaría. null = no se completa nada.
+ */
+export function cpDeSugerencia(cp: string | null | undefined): string | null {
+  return normalizarCp(cp);
 }
 
 export interface EntradaEstadoInicial {

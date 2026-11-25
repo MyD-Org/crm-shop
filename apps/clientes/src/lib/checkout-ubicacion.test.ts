@@ -3,6 +3,7 @@ import type { DireccionEnvio } from "./direcciones-envio";
 import { OTRA_DIRECCION } from "./direcciones-envio";
 import {
   cuerpoDeSincronizacion,
+  cpDeSugerencia,
   entregaInicialDeEleccion,
   estadoInicialCheckout,
   sincronizarUbicacion,
@@ -147,5 +148,15 @@ describe("entregaInicialDeEleccion", () => {
     expect(entregaInicialDeEleccion({ tipo: "retiro", sucursal: "local-a" }, 0)).toEqual({ ciudad: "", cp: "" });
     expect(entregaInicialDeEleccion(null, 0)).toEqual({ ciudad: "", cp: "" });
     expect(entregaInicialDeEleccion({ tipo: "envio" }, 0)).toEqual({ ciudad: "", cp: "" });
+  });
+});
+
+describe("cpDeSugerencia", () => {
+  it("acepta 4 dígitos o CPA (normalizado) y descarta lo demás", () => {
+    expect(cpDeSugerencia("7600")).toBe("7600");
+    expect(cpDeSugerencia("b 7600-abc")).toBe("B7600ABC");
+    expect(cpDeSugerencia("B7600")).toBeNull();
+    expect(cpDeSugerencia("")).toBeNull();
+    expect(cpDeSugerencia(undefined)).toBeNull();
   });
 });

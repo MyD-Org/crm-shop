@@ -3,7 +3,7 @@ import { and, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { alegraItemRefresh, alegraStockDrenaje, catalogProducts, catalogStockSucursal } from "@/db/schema"
 import type { AlegraProduct } from "@/lib/alegra"
-import { drenarTenant, encolar, limpiarColaCubiertaPorSync, purgarCola } from "@/lib/alegra-stock-cola"
+import { drenarTenant, encolar, leerAlInstante, limpiarColaCubiertaPorSync, MAX_COLA_LECTURA_INMEDIATA, purgarCola } from "@/lib/alegra-stock-cola"
 import { registrarAviso } from "@/lib/alegra-stock-webhook"
 import { upsertProductos } from "@/lib/catalog-products-repo"
 import { crearSucursal } from "@/lib/sucursales-repo"
@@ -116,18 +116,6 @@ describe("drenarTenant", () => {
     const restantes = await cola()
     expect(restantes.map((f) => f.intentos)).toEqual([0, 0])
     expect(restantes.every((f) => f.tomadoHasta === null)).toBe(true)
-  })
-
-  it("lo más nuevo primero: una edición no espera detrás de una carga masiva vieja", async () => {
-    const { dormir } = relojFalso()
-    await encolar(getDb(), A, ["1", "2", "3", "4"], "new-item")
-    await getDb().execute(sql`UPDATE alegra_item_refresh SET pedido_at = now() - interval '1 hour'`)
-    await encolarIds(["9"])
-    alegraTiene({ "1": 1, "2": 2, "3": 3, "4": 4, "9": 9 })
-    const r = await drenarTenant(config, { deadline: Date.now() + 500, dormir })
-    expect(r).toMatchObject({ leidos: 1, corte: "deadline" })
-    expect(pedidosDe("9")).toBe(1)
-    expect((await cola()).map((f) => f.alegraId).sort()).toEqual(["1", "2", "3", "4"])
   })
 
   it("429: corta sin borrar nada; la que chocó suma un intento", async () => {
@@ -283,6 +271,51 @@ describe("purgarCola", () => {
     await getDb().execute(sql`UPDATE alegra_documento_items SET actualizado_at = now() - interval '401 days' WHERE alegra_doc_id = '10'`)
     expect(await purgarCola({ colaHoras: 48, indiceDias: 400 })).toEqual({ cola: 1, indice: 1 })
     expect((await cola()).map((f) => f.alegraId).sort()).toEqual(["2", "3", "4"])
+  })
+})
+
+describe("leerAlInstante", () => {
+  it("lee los ítems del aviso sin esperar su turno: salen de la cola y lo viejo queda", async () => {
+    const { dormir } = relojFalso()
+    await encolar(getDb(), A, ["1", "2", "3"], "new-item")
+    await encolarIds(["9"])
+    alegraTiene({ "1": 1, "2": 2, "3": 3, "9": 9 })
+    const r = await leerAlInstante(config, ["9"], { deadline: Date.now() + 45_000, dormir })
+    expect(r).toMatchObject({ leidos: 1, rafaga: false, corte: "vacia" })
+    expect(pedidosDe("9")).toBe(1)
+    expect(pedidosDe("1")).toBe(0)
+    expect((await producto("9"))?.leidoPor).toBe("webhook")
+    expect((await cola()).map((f) => f.alegraId).sort()).toEqual(["1", "2", "3"])
+    expect(avisarShopMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("ráfaga (cola grande): no lee nada, todo queda para el drenador", async () => {
+    const ids = Array.from({ length: MAX_COLA_LECTURA_INMEDIATA + 1 }, (_, i) => String(i + 1))
+    await encolar(getDb(), A, ids, "new-item")
+    alegraTiene({ "1": 1 })
+    const r = await leerAlInstante(config, ["1"], { deadline: Date.now() + 45_000 })
+    expect(r).toMatchObject({ leidos: 0, rafaga: true })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await cola()).toHaveLength(ids.length)
+  })
+
+  it("respeta el ritmo de 1 request por segundo", async () => {
+    const { esperas, dormir } = relojFalso()
+    await encolarIds(["1", "2", "3"])
+    alegraTiene({ "1": 1, "2": 2, "3": 3 })
+    const r = await leerAlInstante(config, ["1", "2", "3"], { deadline: Date.now() + 45_000, dormir })
+    expect(r.leidos).toBe(3)
+    expect(esperas.every((ms) => ms <= 1000)).toBe(true)
+    expect(esperas.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(1900)
+    expect(await cola()).toHaveLength(0)
+  })
+
+  it("429: corta y lo no leído queda en la cola", async () => {
+    await encolarIds(["1", "2"])
+    fetchMock.mockImplementation(async () => new Response('{"message":"rate"}', { status: 429 }))
+    const r = await leerAlInstante(config, ["1", "2"], { deadline: Date.now() + 45_000, dormir: async () => {} })
+    expect(r.corte).toBe("limite_429")
+    expect(await cola()).toHaveLength(2)
   })
 })
 

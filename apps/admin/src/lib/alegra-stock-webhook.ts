@@ -118,6 +118,8 @@ export interface ResultadoAvisoStock {
   /** Ids del aviso (para el log). */
   items: number
   encolados: number
+  /** Ids que quedaron en la cola (con el prefijo `<slug>:` si es de una secundaria). */
+  ids?: string[]
 }
 
 /** Un borrador no mueve stock: al abrirse llega un `edit-invoice` con status open. */
@@ -154,7 +156,7 @@ export async function registrarAviso(
 
     if (aviso.tipo === "item") {
       const encolados = await encolar(tx, tenantId, aviso.itemIds, evento)
-      return { accion: "encolado", items: aviso.itemIds.length, encolados }
+      return { accion: "encolado", items: aviso.itemIds.length, encolados, ids: aviso.itemIds }
     }
 
     const docId = aviso.docId as string
@@ -177,7 +179,7 @@ export async function registrarAviso(
       // Borrar un borrador no devuelve nada: nunca descontó.
       if (esBorrador(aviso.estado ?? previo?.estado)) return { ...base, accion: "borrador", encolados: 0 }
       if (union.length === 0) return { ...base, accion: "sin_indice", encolados: 0 }
-      return { ...base, accion: "encolado", encolados: await encolar(tx, tenantId, union, evento) }
+      return { ...base, accion: "encolado", encolados: await encolar(tx, tenantId, union, evento), ids: union }
     }
 
     // new/edit: el índice queda con los ítems ACTUALES (uno quitado se re-lee en ESTE aviso).
@@ -195,7 +197,7 @@ export async function registrarAviso(
     if (esBorrador(aviso.estado) && (evento.startsWith("new-") || (previo && esBorrador(previo.estado)))) {
       return { ...base, accion: "borrador", encolados: 0 }
     }
-    return { ...base, accion: "encolado", encolados: await encolar(tx, tenantId, union, evento) }
+    return { ...base, accion: "encolado", encolados: await encolar(tx, tenantId, union, evento), ids: union }
   })
 }
 

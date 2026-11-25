@@ -737,7 +737,11 @@ de crédito): los corrige la sync diaria, que sigue siendo obligatoria.
   (`void`) sí; `edit-*` re-lee la unión de los ítems que el documento tenía y los que tiene
   ahora; `delete-invoice` llega con `items: []` y usa el índice (sin índice →
   `accion=sin_indice`, lo corrige la sync diaria); los avisos de ítems encolan ese id.
-- **Después** (`after`): espera 5 s para juntar ráfagas y drena la cola del tenant (hasta 45 s).
+- **Después** (`after`): lee **al instante** los ítems de este aviso (`leerAlInstante`, hasta 20,
+  1 por segundo) y los saca de la cola: un cambio en Alegra se ve en segundos. Si la cola tiene
+  más de 50 filas (ráfaga de una carga masiva) no lee nada al instante, para no agotar el cupo
+  que comparten el portal y el bot. Después espera 5 s y drena el resto de la cola (hasta 45 s
+  en total).
 - Log por aviso: `[alegra-stock] tenant=… evento=… doc=… accion=… items=… encolados=…`. Nunca
   el cuerpo (las facturas traen datos de clientes), montos ni el token.
 
@@ -748,8 +752,6 @@ de crédito): los corrige la sync diaria, que sigue siendo obligatoria.
 - Un solo drenador por tenant a la vez (lease en `alegra_stock_drenaje`, se libera solo a los
   90 s si la función muere). Ritmo fijo: **1 request por segundo** (≤ 60/min de los 150/min
   que la cuenta comparte con la sync, el portal y el bot).
-- **Lo más nuevo primero** (`ORDER BY pedido_at DESC`): una edición puntual (un nombre, una
-  venta) se lee en segundos aunque haya miles de avisos de una carga masiva esperando.
 - **La sync diaria vacía la cola**: al terminar, por cada cuenta que leyó entera, bien y sin
   quedar parcial, borra los pedidos anteriores a su inicio (ya los cubrió). Una cuenta que
   venía terminada de un cursor anterior no se limpia. Log `[alegra-sync] tenant=… cola_limpiada=…`.

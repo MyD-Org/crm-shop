@@ -9,6 +9,7 @@ import type { MedioPago } from "../medios-pago";
 import { columnasFooter, linksContacto } from "./footer";
 import { DEFAULTS_FOOTER } from "@/data/footer";
 import { bloquesArrepentimiento } from "./arrepentimiento";
+import { metodoDePrueba } from "@/test/envio-metodo";
 
 /** Todo el texto visible de una lista de bloques, en un solo string. */
 function texto(bloques: Bloque[]): string {
@@ -203,6 +204,32 @@ describe("envíos y pagos", () => {
     expect(prendido).toContain("Mercado Pago");
     expect(prendido).toContain("cuotas sin interés");
     expect(texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, medios, cuotas: false }))).not.toContain("cuotas sin interés");
+  });
+
+  it("envío por zona: describe cada método activo con sus tarifas y deja el resto a coordinar", () => {
+    const cfg: ConfigEnvio = {
+      ...CONFIG_ENVIO_DEFAULT,
+      metodos: [
+        metodoDePrueba({
+          nombre: "Envío rápido",
+          sucursalOrigen: "local-a",
+          promesa: "Pedidos confirmados antes del mediodía se entregan en el día",
+          avisoFeriados: "Sin entregas los feriados.",
+        }),
+      ],
+    };
+    const t = texto(bloquesEnviosYPagos({ envio: cfg, medios: [], cuotas: false }));
+    expect(t).toContain("Envío rápido");
+    expect(t).toContain("Pedidos confirmados antes del mediodía se entregan en el día.");
+    expect(t).toContain("Sin entregas los feriados.");
+    expect(t).toContain("si alguno hay que traerlo de otra sucursal");
+    expect(t).toContain("Otros destinos: El envío a domicilio tiene costo a coordinar.");
+    // Inactivo: la página de siempre.
+    const apagado = texto(
+      bloquesEnviosYPagos({ envio: { ...cfg, metodos: [metodoDePrueba({ activo: false })] }, medios: [], cuotas: false }),
+    );
+    expect(apagado).toContain("Envío a domicilio: El envío a domicilio tiene costo a coordinar.");
+    expect(apagado).not.toContain("Otros destinos");
   });
 
   it("cada modalidad lista los medios que le aplican", () => {

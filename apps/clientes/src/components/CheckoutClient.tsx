@@ -18,7 +18,7 @@ import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, S
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { AvisoEnvioZona, FilaEnvioResumen } from "@/components/checkout/EnvioZona";
-import { TEXTOS_ENVIO_ZONA } from "@/lib/envio-zona-textos";
+import { TEXTOS_ENVIO_ZONA, textoPrecioEstimado } from "@/lib/envio-zona-textos";
 import { camposPedidoEnvioZona, destinoParaCotizar, precargaDeUbicacion, type UbicacionElegida } from "@/lib/envio-zona-checkout";
 import { formaInicialDelMedio, pagoParaCotizar } from "@/lib/lista-medio";
 import { ahorroFrente, bajadaOpcion, opcionElegida, opcionesDePago, PIE_CUENTA_MP, textoConfirmar, tituloEnFrase, tituloOpcion, type OpcionPago } from "@/lib/opciones-pago";
@@ -34,6 +34,8 @@ import { VincularClient } from "@/components/VincularClient";
 import { OTRA_DIRECCION, entregaDesdeGuardada, entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
 import {
   cuerpoDeSincronizacion,
+  cpDeSugerencia,
+  entregaInicialDeEleccion,
   estadoInicialCheckout,
   sincronizarUbicacion,
   type EleccionInicialCheckout,
@@ -472,7 +474,11 @@ export function CheckoutClient({
   // Compra como invitado: sus datos (correo, facturación) se cargan acá y viajan en el pedido; nada
   // se guarda en el navegador.
   const invitadoActivo = invitado?.activo === true;
-  const [datosInv, setDatosInv] = useState<DatosInvitado>(DATOS_INVITADO_VACIOS);
+  // El CP de «Enviar a» (si lo hay) arranca cargado: el comprador ya lo dio.
+  const [datosInv, setDatosInv] = useState<DatosInvitado>(() => ({
+    ...DATOS_INVITADO_VACIOS,
+    cp: entregaInicialDeEleccion(eleccionInicial, direccionesGuardadas.length).cp,
+  }));
   const [trampa, setTrampa] = useState("");
   const [erroresInv, setErroresInv] = useState<Record<string, string>>({});
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -523,7 +529,10 @@ export function CheckoutClient({
   const [precarga] = useState(() =>
     precargaDeUbicacion({ eleccion: eleccionInicial, envioPorZona, direccionesGuardadas: direccionesGuardadas.length }),
   );
-  const [ciudad, setCiudad] = useState(precarga?.ciudad ?? "");
+  // Sin «Usar mi ubicación», la localidad elegida en «Enviar a»: además acota el autocompletado de la calle.
+  const [ciudad, setCiudad] = useState(
+    () => precarga?.ciudad ?? entregaInicialDeEleccion(eleccionInicial, direccionesGuardadas.length).ciudad,
+  );
   const [direccion, setDireccion] = useState(precarga?.direccion ?? "");
   // Envío por zona: la sugerencia elegida del autocompletado (trae un token firmado) y si el comprador
   // eligió seguir con el envío a coordinar. La elección de coordinar vale sólo para el destino en que se hizo.
@@ -598,6 +607,8 @@ export function CheckoutClient({
   // Con una ubicación precargada la dirección de envío es esa, no el domicilio fiscal.
   const [aOtraDireccion, setAOtraDireccion] = useState(precarga !== null);
   const usarFiscal = aDomicilio && ofrecerFiscal && !aOtraDireccion;
+  // «Otra dirección» todavía sin calle (la localidad puede venir precargada de «Enviar a»).
+  const sinCalleEscrita = !guardada && !usarFiscal && !direccion.trim();
   const ciudadEntrega = usarFiscal && fiscalCiudad ? fiscalCiudad : ciudadElegida;
   const direccionEntrega = usarFiscal && fiscalCalle ? fiscalCalle : direccionElegida;
   // Provincia de entrega: la del domicilio fiscal o de la dirección guardada elegida; si no, la que
@@ -1875,10 +1886,16 @@ export function CheckoutClient({
 
   // Subtexto de "Envío a domicilio": lo evalúa el servidor (cotización con la provincia de entrega);
   // sin cotización todavía se evalúa acá con la config mostrada, sin el monto.
+  // Con envío por zona, el costo ya resuelto o el anticipado por la localidad («Envío rápido desde $X»), así la
+  // opción no dice «a coordinar» mientras el resumen muestra la tarifa.
   const descripcionEnvio = cotizacion
     ? cotizacion.envio.gratis
       ? "Gratis"
-      : "Costo de envío a coordinar"
+      : cotizacion.envio.costo !== undefined
+        ? fmtPrecio(cotizacion.envio.costo)
+        : cotizacion.envioEstimado
+          ? textoPrecioEstimado(cotizacion.envioEstimado.metodo, cotizacion.envioEstimado.tipo, cotizacion.envioEstimado.precio)
+          : "Costo de envío a coordinar"
     : evaluarEnvio(Number.POSITIVE_INFINITY, provinciaEntrega || null, configEnvio).gratis
       ? "Gratis según el monto de su compra"
       : "Costo de envío a coordinar";
@@ -1970,6 +1987,9 @@ export function CheckoutClient({
                         setDireccion(s.calle);
                         // Solo se pisa lo que la sugerencia trae resuelto.
                         if (s.ciudad) setCiudad(s.ciudad);
+                        // El CP de la sugerencia completa el del invitado sólo si todavía está vacío.
+                        const cpSugerido = cpDeSugerencia(s.cp);
+                        if (cpSugerido) setDatosInv((d) => (d.cp.trim() ? d : { ...d, cp: cpSugerido }));
                         const clave = claveProvincia(s.provincia);
                         if (clave) setProvinciaManual(clave);
                       }}
@@ -1989,7 +2009,7 @@ export function CheckoutClient({
                   </Field>
                   <Field label="Ciudad">
                     <Input
-                      placeholder="Posadas"
+                      placeholder="Ciudad o localidad"
                       value={ciudad}
                       onChange={(e) => setCiudad(e.target.value)}
                     />
@@ -2002,14 +2022,18 @@ export function CheckoutClient({
                     Esta dirección no tiene una provincia válida. Elija otra dirección o cárguela de nuevo.
                   </p>
                 )}
+                {/* Sin calle escrita todavía (la localidad puede venir precargada de «Enviar a») no se avisa que
+                    falta elegirla de la lista: el campo vacío ya lo pide. */}
                 {envioPorZona && cotizacion && (
-                  <AvisoEnvioZona
-                    envio={cotizacion.envio}
-                    pagaEnLinea={pagaEnLinea}
-                    envioACoordinar={envioACoordinar}
-                    onCoordinar={() => setCoordinarPara(claveDestino)}
-                    onUbicar={() => setCoordinarPara(null)}
-                  />
+                  sinCalleEscrita && cotizacion.envio.sinUbicar ? null : (
+                    <AvisoEnvioZona
+                      envio={cotizacion.envio}
+                      pagaEnLinea={pagaEnLinea}
+                      envioACoordinar={envioACoordinar}
+                      onCoordinar={() => setCoordinarPara(claveDestino)}
+                      onUbicar={() => setCoordinarPara(null)}
+                    />
+                  )
                 )}
                 {cotizacion && !envioDisponible && (
                   <p className="mt-3 flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-xs text-text">
@@ -2332,7 +2356,7 @@ export function CheckoutClient({
               >
                 <Input
                   type="tel"
-                  placeholder="+54 376 4000000"
+                  placeholder="Código de área y número"
                   value={telefono}
                   onChange={(e) => setTelefono(e.target.value)}
                 />

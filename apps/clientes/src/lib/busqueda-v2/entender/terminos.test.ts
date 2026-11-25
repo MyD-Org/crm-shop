@@ -102,3 +102,20 @@ describe("terminosDeFrase", () => {
     expect(terminosDeFrase(terminosDe("foco calido e27", new Set(["calido", "e27"])))).toEqual(["foco"]);
   });
 });
+
+describe("frases que resuelven un sustantivo ambiguo", () => {
+  const peso = (q: string, texto: string) => terminosDe(q).find((t) => t.texto === texto)?.peso;
+
+  it("«llave térmica»: la llave es contexto, la térmica y su sinónimo buscan", () => {
+    expect(peso("llave termica", "llave")).toBe(PESO_CONTEXTO);
+    expect(peso("llave termica", "termica")).toBe(1);
+    expect(peso("llave termica", "termomagnet")).toBe(PESO_EXPANSION);
+    expect(peso("llaves termicas 2x20", "llaves")).toBe(PESO_CONTEXTO);
+  });
+
+  it("sin la frase la llave sigue siendo el producto", () => {
+    expect(peso("llave", "llave")).toBe(1);
+    expect(peso("llave de luz", "llave")).toBe(1);
+    expect(peso("termica llave", "llave")).toBe(1);
+  });
+});

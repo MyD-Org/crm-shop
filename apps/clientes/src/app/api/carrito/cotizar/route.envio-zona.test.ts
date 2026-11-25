@@ -25,6 +25,15 @@ vi.mock("@/lib/sucursales-repo", async (importOriginal) => ({
   leerConfigEnvio: (...a: unknown[]) => leerConfigEnvio(...a),
 }));
 vi.mock("@/lib/direcciones-envio-db", () => ({ direccionParaEnvio: (...a: unknown[]) => direccionParaEnvio(...a) }));
+// Disponibilidad por sucursal: apagada salvo en los casos de origen (la respuesta de siempre).
+let dispVisitante: { zona: string; activas: string[]; contarEn: string[]; stockHeredado: string } | undefined;
+let lineasATraer: string[] = [];
+vi.mock("@/lib/zona-servidor", () => ({ dispDelVisitante: async () => dispVisitante }));
+vi.mock("@/lib/disponibilidad-vista", () => ({
+  contextoParaProvincia: async (base: unknown) => base,
+  disponibilidadParaMostrar: async (_ids: unknown, d: unknown) =>
+    d ? { productos: { "1": { servible: true, envio: null, retiro: null } }, locales: [], lineasATraer } : null,
+}));
 
 import { POST } from "./route";
 import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
@@ -69,6 +78,8 @@ beforeEach(() => {
   }));
   direccionParaEnvio.mockReset();
   direccionParaEnvio.mockResolvedValue(null);
+  dispVisitante = undefined;
+  lineasATraer = [];
 });
 
 afterEach(() => vi.unstubAllEnvs());
@@ -135,6 +146,23 @@ describe("POST /api/carrito/cotizar — envío por zona", () => {
       expect(r.total).toBe(1210);
       // La geometría de las zonas nunca viaja en la respuesta.
       expect(JSON.stringify(r)).not.toContain("geometria");
+    });
+
+    it("estimado por localidad con la condición de origen del pedido: sin traslado sí, con traslado no", async () => {
+      const ORIGEN = metodoDePrueba().sucursalOrigen!;
+      dispVisitante = { zona: ORIGEN, activas: [ORIGEN], contarEn: [ORIGEN], stockHeredado: ORIGEN };
+      const sale = await (await pedir({ destino: { localidad: "Ciudad Ejemplo", georefId: "9990012" } })).json();
+      expect(sale.envioEstimado).toMatchObject({ tipo: "desde" });
+      // Hay que traer una línea de otra sucursal: el método no aplica (el pedido tampoco lo cobraría).
+      lineasATraer = ["1"];
+      const aTraer = await (await pedir({ destino: { localidad: "Ciudad Ejemplo", georefId: "9990012" } })).json();
+      expect(aTraer.envioEstimado).toBeUndefined();
+      expect(aTraer.envio).toMatchObject({ aCoordinar: true });
+      // Zona de otra sucursal: tampoco.
+      lineasATraer = [];
+      dispVisitante = { zona: "otra-sede", activas: ["otra-sede"], contarEn: ["otra-sede"], stockHeredado: "otra-sede" };
+      const otra = await (await pedir({ destino: { localidad: "Ciudad Ejemplo", georefId: "9990012" } })).json();
+      expect(otra.envioEstimado).toBeUndefined();
     });
 
     it("con la dirección ubicada no hay estimado (hay costo exacto)", async () => {

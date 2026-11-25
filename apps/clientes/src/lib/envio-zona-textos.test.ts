@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fmtPesosEnteros } from "./format";
 import type { MetodoEnvioTienda as MetodoEnvio } from "./envio-zona-tienda";
-import { TEXTOS_ENVIO_ZONA, estimarEnvioPorLocalidad, estimarEnvioPorPunto, llegadaEstimada, textoCuentaRegresiva, textoLineaLlegada, textoLlegada } from "./envio-zona-textos";
+import { TEXTOS_ENVIO_ZONA, estimarEnvioPorLocalidad, estimarEnvioPorPunto, llegadaEstimada, metodoAtiendeOrigen, textoCuentaRegresiva, textoLineaLlegada, textoLlegada } from "./envio-zona-textos";
 
 // Cuadrado grande alrededor de Mar del Plata ([lon, lat]).
 const CUADRADO = [[[[-58, -39], [-57, -39], [-57, -37.5], [-58, -37.5], [-58, -39]]]];
@@ -213,4 +213,63 @@ describe("textoEntregaPedido", () => {
     const { textoEntregaPedido } = await import("./envio-zona-textos");
     expect(textoEntregaPedido({ entregaEstimada: null, entregaConfirmada: null, medioOnline: true })).toBeNull();
   });
+});
+
+describe("condición de origen en la estimación (misma regla que el pedido)", () => {
+  const conOrigen = metodo({ sucursalOrigen: "local-a" });
+  const PUNTO = { provinciaClave: "buenosaires", localidad: "Mar del Plata", punto: { lat: -38, lon: -57.5, precision: "altura" as const } };
+
+  it("metodoAtiendeOrigen replica la condición de cotizarMetodo", () => {
+    expect(metodoAtiendeOrigen(conOrigen, null)).toBe(true);
+    expect(metodoAtiendeOrigen(conOrigen, { sucursal: "local-a", conTraslado: false })).toBe(true);
+    expect(metodoAtiendeOrigen(conOrigen, { sucursal: "local-a", conTraslado: true })).toBe(false);
+    expect(metodoAtiendeOrigen(conOrigen, { sucursal: "local-b", conTraslado: false })).toBe(false);
+    // Sin sucursal de origen el método no condiciona nada.
+    expect(metodoAtiendeOrigen(metodo(), { sucursal: "local-b", conTraslado: true })).toBe(true);
+  });
+
+  it("por localidad: el producto sale del local del método → se anticipa", () => {
+    expect(estimarEnvioPorLocalidad([conOrigen], MDP, LUNES_11, { sucursal: "local-a", conTraslado: false })).not.toBeNull();
+  });
+
+  it("por localidad: hay que traerlo de otra sucursal → no se anticipa (queda a coordinar)", () => {
+    expect(estimarEnvioPorLocalidad([conOrigen], MDP, LUNES_11, { sucursal: "local-a", conTraslado: true })).toBeNull();
+    expect(estimarEnvioPorLocalidad([conOrigen], MDP, LUNES_11, { sucursal: "local-b", conTraslado: false })).toBeNull();
+  });
+
+  it("por localidad: sin origen conocido (flag apagado) estima igual que antes", () => {
+    expect(estimarEnvioPorLocalidad([conOrigen], MDP, LUNES_11)).toEqual(estimarEnvioPorLocalidad([conOrigen], MDP, LUNES_11, null));
+    expect(estimarEnvioPorLocalidad([conOrigen], MDP, LUNES_11)).not.toBeNull();
+  });
+
+  it("por punto: misma condición de origen", () => {
+    expect(estimarEnvioPorPunto([conOrigen], PUNTO, LUNES_11, { sucursal: "local-a", conTraslado: false })).not.toBeNull();
+    expect(estimarEnvioPorPunto([conOrigen], PUNTO, LUNES_11, { sucursal: "local-a", conTraslado: true })).toBeNull();
+    expect(estimarEnvioPorPunto([conOrigen], PUNTO, LUNES_11)).not.toBeNull();
+  });
+});
+
+describe("metodoAtiendeOrigen: paridad con cotizarMetodo (módulo compartido con el CRM)", async () => {
+  const { metodoDePrueba, puntoDePrueba } = await import("@/test/envio-metodo");
+  const { cotizarMetodo } = await import("./envio-zona");
+  const destino = { provinciaClave: "buenosaires", punto: puntoDePrueba("centro") };
+  const base = metodoDePrueba();
+  const origenes = [
+    null,
+    { sucursal: base.sucursalOrigen, conTraslado: false },
+    { sucursal: base.sucursalOrigen, conTraslado: true },
+    { sucursal: "otra-sede", conTraslado: false },
+    { sucursal: null, conTraslado: false },
+  ];
+  it("el punto de prueba cae en una zona (si no, la paridad sería trivial)", () => {
+    expect(cotizarMetodo(base, destino, { origen: null, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false })).not.toBeNull();
+  });
+  for (const m of [base, metodoDePrueba({ sucursalOrigen: null })]) {
+    for (const origen of origenes) {
+      it(`origen ${JSON.stringify(origen)} con sucursalOrigen=${m.sucursalOrigen}`, () => {
+        const cotiza = cotizarMetodo(m, destino, { origen, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false }) !== null;
+        expect(metodoAtiendeOrigen(m, origen)).toBe(cotiza);
+      });
+    }
+  }
 });

@@ -34,7 +34,8 @@ describe("EntregaProducto: sin elección", () => {
       disponibilidad: { producto: producto({ estado: "sin_stock" }, { estado: "disponible" }), locales },
     });
     const t = texto(h);
-    expect(t).toContain("Retiro gratis en el local Disponible hoy Ver locales");
+    // Sólo un local lo tiene hoy: dice cuántos (sin nombrarlos) para no prometerlo en el local del visitante.
+    expect(t).toContain("Retiro gratis en el local Disponible hoy en 1 local Ver locales");
     expect(t).not.toContain("Local A");
     expect(t).not.toContain("Local B");
     expect(t).toContain("Envío a domicilio");
@@ -133,7 +134,25 @@ describe("EntregaProducto: envío elegido", () => {
     expect(t).toContain("Envío a Calle Ejemplo 123");
     expect(t).toContain("O retírelo gratis en el local");
     expect(t.indexOf("Envío a Calle Ejemplo 123")).toBeLessThan(t.indexOf("O retírelo"));
+    expect(t).toContain("O retírelo gratis en el local Disponible hoy en 1 local Ver locales");
+  });
+
+  it("el local de la zona del visitante lo tiene hoy: «Disponible hoy» a secas", () => {
+    const t = texto(render({ ...props, localDeZona: "sede-b" }));
     expect(t).toContain("O retírelo gratis en el local Disponible hoy Ver locales");
+    expect(t).not.toContain("en 1 local");
+  });
+
+  it("el local de la zona no lo tiene: dice en cuántos locales", () => {
+    expect(texto(render({ ...props, localDeZona: "sede-a" }))).toContain("Disponible hoy en 1 local");
+  });
+
+  it("todos los locales lo tienen hoy: «Disponible hoy» a secas", () => {
+    const t = texto(
+      render({ ...props, disponibilidad: { producto: producto({ estado: "disponible" }, { estado: "disponible" }), locales } }),
+    );
+    expect(t).toContain("O retírelo gratis en el local Disponible hoy Ver locales");
+    expect(t).not.toContain("en 1 local");
   });
 
   it("no nombra ningún local en la ficha (el detalle va en Ver locales)", () => {

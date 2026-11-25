@@ -151,20 +151,37 @@ export function textoPrecioEstimado(nombre: string, tipo: "exacto" | "desde", pr
   return tipo === "desde" ? `${nombre} desde ${fmtPesosEnteros(precio)}` : `${nombre}: ${fmtPesosEnteros(precio)}`;
 }
 
+/** Sucursal que despacha y si alguna línea se trae de otra. null = no se conoce (flag de disponibilidad apagado). */
+export type OrigenEnvio = { sucursal: string | null; conTraslado: boolean } | null;
+
+/**
+ * ¿El método puede despachar desde este origen? La MISMA condición que aplica `cotizarMetodo` al cotizar el
+ * pedido (`envio-zona.ts`): un método con sucursal de origen sólo vale si despacha esa sucursal y nada viene de
+ * otra. Sin origen conocido la condición se ignora, como en el pedido. Así la ficha y el carrito no anticipan
+ * un «Llega hoy» que el checkout después no cobra (producto que hay que traer de otra sucursal).
+ */
+export function metodoAtiendeOrigen(m: Pick<MetodoEnvio, "sucursalOrigen">, origen: OrigenEnvio): boolean {
+  return !(m.sucursalOrigen && origen && (origen.sucursal !== m.sucursalOrigen || origen.conTraslado));
+}
+
 /**
  * Lo que se puede anticipar de un envío por zona sabiendo sólo la LOCALIDAD del visitante (ficha y carrito).
- * Toma el primer método activo (por `orden`) de la provincia que atiende esa localidad; null = ninguno:
- * quedan los textos de siempre. La geometría nunca llega al navegador: esto corre en el servidor.
+ * Toma el primer método activo (por `orden`) de la provincia que atiende esa localidad y puede despachar desde
+ * `origen`; null = ninguno: quedan los textos de siempre. La geometría nunca llega al navegador: esto corre en
+ * el servidor.
  */
 export function estimarEnvioPorLocalidad(
   metodos: MetodoEnvioTienda[] | undefined,
   ubicacion: { localidad: string; provincia: string; id?: string } | null,
   ahora: Date,
+  origen: OrigenEnvio = null,
 ): EstimadoFicha | null {
   if (!ubicacion || !metodos?.length) return null;
   const provincia = claveProvincia(ubicacion.provincia);
   const nombre = claveTexto(ubicacion.localidad);
-  const ordenados = [...metodos].filter((m) => m.activo && m.provinciaClave === provincia).sort((a, b) => a.orden - b.orden);
+  const ordenados = [...metodos]
+    .filter((m) => m.activo && m.provinciaClave === provincia && metodoAtiendeOrigen(m, origen))
+    .sort((a, b) => a.orden - b.orden);
   for (const m of ordenados) {
     const loc = m.localidades?.find((l) => (ubicacion.id && l.georefId === ubicacion.id) || (nombre && l.nombreNorm === nombre));
     if (!loc) continue;
@@ -187,17 +204,19 @@ export function estimarEnvioPorLocalidad(
 /**
  * Tarifa EXACTA de un punto ya verificado por el servidor (ficha y carrito con «Usar mi ubicación»): la zona
  * que lo contiene, por el primer método activo (por `orden`) que lo resuelve con las mismas reglas que el
- * pedido. null = ninguna zona lo alcanza: costo a coordinar. La geometría nunca llega al navegador.
+ * pedido (incluida la condición de origen). null = ninguna zona lo alcanza: costo a coordinar. La geometría
+ * nunca llega al navegador.
  */
 export function estimarEnvioPorPunto(
   metodos: MetodoEnvioTienda[] | undefined,
   destino: DestinoEnvio,
   ahora: Date,
+  origen: OrigenEnvio = null,
 ): EstimadoFicha | null {
   if (!destino.punto || !metodos?.length) return null;
   const ordenados = [...metodos].filter((m) => m.activo).sort((a, b) => a.orden - b.orden);
   for (const m of ordenados) {
-    const r = cotizarMetodo(m, destino, { origen: null, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false });
+    const r = cotizarMetodo(m, destino, { origen, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false });
     if (!r) continue;
     const llegada = llegadaEstimada(horarioDeMetodo(m), ahora, true, m.horarioEntrega);
     return {

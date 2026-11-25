@@ -94,7 +94,7 @@ export function FormularioInvitado({
           <Input
             type="tel"
             autoComplete="tel"
-            placeholder="+54 376 4000000"
+            placeholder="Código de área y número"
             value={datos.telefono}
             onChange={(e) => onCambiar({ telefono: e.target.value })}
           />

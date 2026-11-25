@@ -4,7 +4,7 @@ import { TEXTOS_UBICACION, envioFichaSegunUbicacion } from "@/lib/ubicacion";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { ubicacionExactaVerificada } from "@/lib/ubicacion-exacta";
 import { claveProvincia } from "@/lib/sucursales";
-import { estimarEnvioPorLocalidad, estimarEnvioPorPunto } from "@/lib/envio-zona-textos";
+import { estimarEnvioPorLocalidad, estimarEnvioPorPunto, type OrigenEnvio } from "@/lib/envio-zona-textos";
 import { fmtPesosEnteros } from "@/lib/format";
 import { CartelEnvioRapido } from "@/components/envio/CartelEnvioRapido";
 import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
@@ -25,10 +25,17 @@ import type { LineaDisponibilidad } from "@/lib/disponibilidad-textos";
 export async function EnvioProductoUbicacion({
   configEnvio,
   plazo = null,
+  origen = null,
 }: {
   configEnvio: ConfigEnvio;
   /** Plazo del envío (flag `disponibilidad-sucursal`): sólo se muestra si se sabe dónde está. */
   plazo?: LineaDisponibilidad | null;
+  /**
+   * Origen del envío de este producto (`origenDeEnvioProducto`, flag `disponibilidad-sucursal`): un método por
+   * zona que despacha desde otra sucursal, o un producto que hay que traer, no se anticipa (el checkout tampoco
+   * lo cobraría). null = no se conoce: la estimación de siempre.
+   */
+  origen?: OrigenEnvio;
 }) {
   await connection();
   let resuelta;
@@ -50,8 +57,8 @@ export async function EnvioProductoUbicacion({
     ? ubicacionExactaVerificada(resuelta.eleccion, claveProvincia(resuelta.ubicacion?.provincia) || null)
     : null;
   const zona = exacta
-    ? estimarEnvioPorPunto(configEnvio.metodos, exacta.destino, new Date())
-    : estimarEnvioPorLocalidad(configEnvio.metodos, resuelta.ubicacion, new Date());
+    ? estimarEnvioPorPunto(configEnvio.metodos, exacta.destino, new Date(), origen)
+    : estimarEnvioPorLocalidad(configEnvio.metodos, resuelta.ubicacion, new Date(), origen);
   if (zona) {
     return (
       <>

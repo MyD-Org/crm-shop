@@ -258,12 +258,13 @@ export async function POST(req: Request) {
           leerDireccion: direccionParaEnvio,
         })
       : { provinciaClave: provincia || null };
+    const origen = origenDeEnvio(disp, disponibilidad);
     const plan = planEnvio({
       config: configEnvio,
       provincia: provinciaTexto,
       entregaTipo,
       destino: destinoEnvio,
-      origen: origenDeEnvio(disp, disponibilidad),
+      origen,
     });
     const opcionesCotizar = {
       soloVisibles,
@@ -510,6 +511,8 @@ export async function POST(req: Request) {
               ? { localidad: destinoEnvio.localidad, provincia: provinciaTexto, id: destinoEnvio.georefId ?? undefined }
               : null,
             new Date(),
+            // Mismo origen que el plan: con líneas a traer de otra sucursal el método no se anticipa.
+            origen,
           )
         : null;
 

@@ -54,6 +54,9 @@ function eleccionParaCheckout(e: EleccionUbicacion, conZona: boolean): EleccionI
       tipo: "envio",
       direccionId: e.direccion?.id,
       provincia: e.provincia ?? undefined,
+      // Para arrancar la ciudad y el CP de «otra dirección» con lo que ya eligió en «Enviar a».
+      ...(e.localidad ? { localidad: e.localidad } : {}),
+      ...(e.cp ? { cp: e.cp } : {}),
       ...(x
         ? { exacta: { calle: x.calle, localidad: e.localidad, ...(x.cp ? { cp: x.cp } : {}), geoToken: x.geoToken, precision: x.precision } }
         : {}),

@@ -19,7 +19,7 @@
 import { raizPlural } from "../../catalogo-busqueda";
 import { deterministico, palabrasCategoria, tokensDe } from "../../busqueda-inteligente/deterministico";
 import type { NodoArbol } from "../../busqueda-inteligente/tipos";
-import { PESO_EXPANSION, expansiones } from "./sinonimos";
+import { PESO_EXPANSION, expansiones, resueltasPorFrase } from "./sinonimos";
 import { CONTEXTO, esLugar, terminosDe } from "./terminos";
 
 /** Lugares que sugieren "apto exterior" sin pedirlo. */
@@ -86,7 +86,10 @@ function vivas(arbol: NodoArbol[]): NodoArbol[] {
 
 export function candidatos(consultaNorm: string, arbol: NodoArbol[]): CandidatosDiccionario {
   const det = deterministico(consultaNorm, arbol);
-  const tokens = tokensDe(consultaNorm).filter((t) => !det.absorbidos.has(t)).map(raizPlural);
+  // Una palabra resuelta por su frase («llave» en «llave térmica») no es el sustantivo: no propone su categoría.
+  const todos = tokensDe(consultaNorm).filter((t) => !det.absorbidos.has(t)).map(raizPlural);
+  const resueltas = resueltasPorFrase(todos);
+  const tokens = todos.filter((t) => !resueltas.has(t));
   const conExpansiones = new Set([...tokens, ...expansiones(tokens, consultaNorm).map(raizPlural)]);
   // El sustantivo principal no cuenta si es contexto: "luz" no hace candidata a "Luces de emergencia".
   // Un sustantivo AMBIGUO cuenta sólo si se escribió: "tecla" se expande a "interruptor" para

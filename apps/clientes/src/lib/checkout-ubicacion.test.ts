@@ -3,6 +3,7 @@ import type { DireccionEnvio } from "./direcciones-envio";
 import { OTRA_DIRECCION } from "./direcciones-envio";
 import {
   cuerpoDeSincronizacion,
+  entregaInicialDeEleccion,
   estadoInicialCheckout,
   sincronizarUbicacion,
 } from "./checkout-ubicacion";
@@ -126,5 +127,25 @@ describe("sincronizarUbicacion", () => {
     await expect(sincronizarUbicacion(rota as unknown as typeof fetch, { direccionId: D1 })).resolves.toBeUndefined();
     const mala = vi.fn().mockResolvedValue({ ok: false, status: 404 });
     await expect(sincronizarUbicacion(mala as unknown as typeof fetch, { direccionId: D1 })).resolves.toBeUndefined();
+  });
+});
+
+describe("entregaInicialDeEleccion", () => {
+  it("envío elegido por localidad: la ciudad y el CP arrancan cargados", () => {
+    expect(entregaInicialDeEleccion({ tipo: "envio", localidad: " Ciudad Ejemplo ", cp: "1000" }, 0)).toEqual({
+      ciudad: "Ciudad Ejemplo",
+      cp: "1000",
+    });
+  });
+
+  it("con dirección guardada elegida o con direcciones guardadas no se precarga nada", () => {
+    expect(entregaInicialDeEleccion({ tipo: "envio", direccionId: "d1", localidad: "Ciudad Ejemplo" }, 0)).toEqual({ ciudad: "", cp: "" });
+    expect(entregaInicialDeEleccion({ tipo: "envio", localidad: "Ciudad Ejemplo" }, 2)).toEqual({ ciudad: "", cp: "" });
+  });
+
+  it("retiro, sin elección o sin localidad: vacío", () => {
+    expect(entregaInicialDeEleccion({ tipo: "retiro", sucursal: "local-a" }, 0)).toEqual({ ciudad: "", cp: "" });
+    expect(entregaInicialDeEleccion(null, 0)).toEqual({ ciudad: "", cp: "" });
+    expect(entregaInicialDeEleccion({ tipo: "envio" }, 0)).toEqual({ ciudad: "", cp: "" });
   });
 });

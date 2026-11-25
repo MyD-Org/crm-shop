@@ -135,6 +135,7 @@ export default async function ProductoPage({ params }: Props) {
         producto={producto}
         configEnvio={configEnvioPublica(configEnvio)}
         localElegido={localElegido}
+        localDeZona={dispEntrega?.zona ?? null}
         quedanPromo={quedanPromo}
         slugDestacadoPromo={mediosPrecio?.destacado?.slug}
         avisoReingreso={avisoReingreso}

@@ -248,3 +248,28 @@ describe("condición de origen en la estimación (misma regla que el pedido)", (
     expect(estimarEnvioPorPunto([conOrigen], PUNTO, LUNES_11)).not.toBeNull();
   });
 });
+
+describe("metodoAtiendeOrigen: paridad con cotizarMetodo (módulo compartido con el CRM)", async () => {
+  const { metodoDePrueba, puntoDePrueba } = await import("@/test/envio-metodo");
+  const { cotizarMetodo } = await import("./envio-zona");
+  const destino = { provinciaClave: "buenosaires", punto: puntoDePrueba("centro") };
+  const base = metodoDePrueba();
+  const origenes = [
+    null,
+    { sucursal: base.sucursalOrigen, conTraslado: false },
+    { sucursal: base.sucursalOrigen, conTraslado: true },
+    { sucursal: "otra-sede", conTraslado: false },
+    { sucursal: null, conTraslado: false },
+  ];
+  it("el punto de prueba cae en una zona (si no, la paridad sería trivial)", () => {
+    expect(cotizarMetodo(base, destino, { origen: null, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false })).not.toBeNull();
+  });
+  for (const m of [base, metodoDePrueba({ sucursalOrigen: null })]) {
+    for (const origen of origenes) {
+      it(`origen ${JSON.stringify(origen)} con sucursalOrigen=${m.sucursalOrigen}`, () => {
+        const cotiza = cotizarMetodo(m, destino, { origen, subtotalSinIva: 0, gratisTienda: false, gratisCupon: false }) !== null;
+        expect(metodoAtiendeOrigen(m, origen)).toBe(cotiza);
+      });
+    }
+  }
+});

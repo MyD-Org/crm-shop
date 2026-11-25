@@ -104,6 +104,7 @@ export function EntregaProducto({
   detallePorLocal,
   ubicacionConocida = true,
   localElegido = null,
+  localDeZona = null,
   envioElegido = null,
   consultaWhatsapp,
   aPedido,
@@ -125,6 +126,11 @@ export function EntregaProducto({
   ubicacionConocida?: boolean;
   /** Local de retiro elegido en "Enviar a" (slug). Se muestra primero, con su estado, aunque no tenga stock. */
   localElegido?: string | null;
+  /**
+   * Sucursal de la zona del visitante (slug). Si SU local tiene el producto hoy, el retiro resumido dice
+   * «Disponible hoy» a secas; si no (o no se sabe), cuántos locales lo tienen.
+   */
+  localDeZona?: string | null;
   /** Destino del envío elegido en "Enviar a" ("Calle 123" o la localidad). Se muestra primero. */
   envioElegido?: string | null;
   /** Ficha: mensaje precargado del WhatsApp de los locales (qué producto se consulta). */
@@ -174,11 +180,12 @@ export function EntregaProducto({
   const mejor = locales[0];
   const estadoMejor = mejor && retiro ? estadoDe(mejor) : null;
   // Con varios locales y no todos con el producto hoy, "Disponible hoy en 1 local" (el detalle, en Ver
-  // locales): un "Disponible hoy" a secas se lee como si fuera en el local del visitante. Sin nombrar
-  // locales, como decide el estilo "Ver sucursales".
+  // locales): un "Disponible hoy" a secas se lee como si fuera en el local del visitante. Si el local de
+  // su zona lo tiene, sí va a secas. Sin nombrar locales, como decide el estilo "Ver sucursales".
   const hoyDisponibles = retiro ? locales.filter((l) => retiro[l.slug]?.estado === "disponible").length : 0;
+  const enSuLocal = Boolean(localDeZona && retiro?.[localDeZona]?.estado === "disponible");
   const textoMejor =
-    estadoMejor && retiro?.[mejor.slug]?.estado === "disponible" && hoyDisponibles < locales.length
+    estadoMejor && retiro?.[mejor.slug]?.estado === "disponible" && hoyDisponibles < locales.length && !enSuLocal
       ? TEXTOS_UBICACION.disponibleHoyEnLocales(hoyDisponibles)
       : estadoMejor?.texto;
   const retiroResumido = mejor && estadoMejor && (

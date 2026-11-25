@@ -137,6 +137,16 @@ describe("EntregaProducto: envío elegido", () => {
     expect(t).toContain("O retírelo gratis en el local Disponible hoy en 1 local Ver locales");
   });
 
+  it("el local de la zona del visitante lo tiene hoy: «Disponible hoy» a secas", () => {
+    const t = texto(render({ ...props, localDeZona: "sede-b" }));
+    expect(t).toContain("O retírelo gratis en el local Disponible hoy Ver locales");
+    expect(t).not.toContain("en 1 local");
+  });
+
+  it("el local de la zona no lo tiene: dice en cuántos locales", () => {
+    expect(texto(render({ ...props, localDeZona: "sede-a" }))).toContain("Disponible hoy en 1 local");
+  });
+
   it("todos los locales lo tienen hoy: «Disponible hoy» a secas", () => {
     const t = texto(
       render({ ...props, disponibilidad: { producto: producto({ estado: "disponible" }, { estado: "disponible" }), locales } }),

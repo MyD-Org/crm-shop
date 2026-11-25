@@ -1,7 +1,7 @@
 import { after } from "next/server"
 import { getTenantByIdFromDb } from "@/lib/tenants"
 import { esEventoStock, registrarAviso, tokenWebhookStockValido } from "@/lib/alegra-stock-webhook"
-import { drenarTenant } from "@/lib/alegra-stock-cola"
+import { drenarTenant, leerAlInstante } from "@/lib/alegra-stock-cola"
 import { leerCuerpo, loguearClavesUnaVez, motivoError } from "@/lib/alegra-webhook-comun"
 
 // POST /api/webhooks/alegra/stock/<tenant>/<evento>/<token>
@@ -14,8 +14,9 @@ import { leerCuerpo, loguearClavesUnaVez, motivoError } from "@/lib/alegra-webho
 //   del de contactos), comparado en tiempo constante. El tenant sale del PATH.
 // - ANTES de responder, el aviso se registra en la base (índice documento→ítems + cola): si la
 //   función muere después, el cron de drenaje lo barre igual. Si la base falla → 500.
-// - DESPUÉS (`after`): espera unos segundos para juntar ráfagas y drena la cola del tenant con
-//   GET /items/{id} a ritmo fijo. La respuesta nunca espera a Alegra.
+// - DESPUÉS (`after`): lee AL INSTANTE los ítems de este aviso (salvo ráfaga, ver leerAlInstante)
+//   y luego espera unos segundos y drena el resto de la cola con GET /items/{id} a ritmo fijo.
+//   La respuesta nunca espera a Alegra.
 // - Logs: tenant, evento, id del documento, acción y conteos. Nunca el cuerpo (las facturas
 //   traen datos de clientes), montos ni el token.
 
@@ -71,6 +72,16 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
 
   if (r.encolados > 0) {
     after(async () => {
+      // Primero los ítems de ESTE aviso, al instante (salvo ráfaga: ver leerAlInstante).
+      try {
+        const ri = await leerAlInstante(config, r.ids ?? [], { deadline: inicio + PRESUPUESTO_MS })
+        console.log(
+          `[alegra-stock/inmediata] tenant=${config.id} leidos=${ri.leidos} inactivos=${ri.inactivos} errores=${ri.errores} rafaga=${ri.rafaga} corte=${ri.corte}`,
+        )
+      } catch (err) {
+        console.error(`[alegra-stock/inmediata] tenant=${config.id} error=${motivoError(err)}`)
+      }
+      // Después, lo que haya en la cola (otros avisos, el resto de una factura grande).
       await dormir(DEBOUNCE_MS)
       try {
         await drenarTenant(config, { deadline: inicio + PRESUPUESTO_MS })

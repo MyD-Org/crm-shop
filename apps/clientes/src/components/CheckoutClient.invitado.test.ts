@@ -145,11 +145,23 @@ describe("carrito", () => {
 
   it("flag apagado: el cartel de siempre; encendido: «Está comprando como invitado» + botones Ingresar y Crear cuenta", () => {
     expect(carrito).toContain("Inicie sesión para completar su compra.");
-    expect(carrito).toContain("{TEXTOS_INVITADO.carritoTitulo}");
-    expect(carrito).toContain("{TEXTOS_INVITADO.botonIngresar}");
-    expect(carrito).toContain("{TEXTOS_INVITADO.botonRegistrarse}");
+    expect(carrito).toContain('<AvisoInvitado volverA="/carrito"');
+    const aviso = leer("components/AvisoInvitado.tsx");
+    expect(aviso).toContain("{T.carritoTitulo}");
+    expect(aviso).toContain("{T.botonIngresar}");
+    expect(aviso).toContain("{T.botonRegistrarse}");
     expect(carrito).toContain("compraInvitado = false,");
     const pagina = leer("app/carrito/page.tsx");
     expect(pagina).toContain("!(clerkUserId || cliente) && (await compraInvitadoHabilitada())");
+  });
+
+  it("carrito y checkout muestran el MISMO aviso de invitado (un solo componente, sin copias)", () => {
+    const formulario = leer("components/FormularioInvitado.tsx");
+    expect(carrito).toContain('<AvisoInvitado volverA="/carrito"');
+    expect(formulario).toContain('<AvisoInvitado volverA="/checkout"');
+    // Nadie más arma el aviso a mano: los textos sólo se usan dentro de AvisoInvitado.
+    for (const fuente of [carrito, formulario]) {
+      expect(fuente).not.toMatch(/carritoTitulo|botonIngresar|botonRegistrarse/);
+    }
   });
 });

@@ -25,7 +25,7 @@ import { hrefCompartido, MENSAJE_CARRITO } from "@/lib/carrito-compartido";
 import { topeCantidad } from "@/lib/catalogo-vista";
 import { TEXTO_CARRITO_A_CONFIRMAR } from "@/lib/venta-sin-stock";
 import { BotonIniciarCompra } from "@/components/carrito/BotonIniciarCompra";
-import { TEXTOS_INVITADO } from "@/lib/invitado-textos";
+import { AvisoInvitado } from "@/components/AvisoInvitado";
 import { BloquePiedra } from "@/components/piedra/BloquePiedra";
 import { CampoCupon } from "@/components/checkout/CampoCupon";
 import { LineaCupon } from "@/components/checkout/LineaCupon";
@@ -368,30 +368,19 @@ export function CarritoClient({
           </div>
         </div>
 
-        {(!conSesion || estado === "no_auth") && (
-          <div className="mb-6 rounded-[20px] border border-border bg-elevated p-4 text-sm">
-            {compraInvitado ? (
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="font-semibold text-text">{TEXTOS_INVITADO.carritoTitulo}</p>
-                <div className="flex shrink-0 gap-2">
-                  <Button variant="outline" size="sm" href={rutaIngreso("/carrito")}>
-                    {TEXTOS_INVITADO.botonIngresar}
-                  </Button>
-                  <Button variant="outline" size="sm" href={`/registro?redirect_url=${encodeURIComponent("/carrito")}`}>
-                    {TEXTOS_INVITADO.botonRegistrarse}
-                  </Button>
-                </div>
-              </div>
-            ) : (
+        {(!conSesion || estado === "no_auth") &&
+          (compraInvitado ? (
+            <AvisoInvitado volverA="/carrito" className="mb-6" />
+          ) : (
+            <div className="mb-6 rounded-[20px] border border-border bg-elevated p-4 text-sm">
               <p className="text-muted">
                 Inicie sesión para completar su compra.{" "}
                 <Link href={rutaIngreso("/carrito")} className="font-semibold text-primary hover:underline">
                   Iniciar sesión
                 </Link>
               </p>
-            )}
-          </div>
-        )}
+            </div>
+          ))}
 
         {cotizacion?.listaPrivada && (
           <div className="mb-6 flex items-start gap-3 rounded-[20px] border border-accent/30 bg-accent/5 p-4 text-sm">

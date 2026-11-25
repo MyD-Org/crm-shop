@@ -12,9 +12,7 @@ export const TEXTOS_INVITADO = {
   telefonoAyuda: "Con código de área. Lo usamos para coordinar la entrega.",
   tituloFacturacion: "Facturación",
   consumidorFinal: "Consumidor final",
-  consumidorFinalDescripcion: "Factura B a su nombre, con su DNI",
   facturaA: "Factura A",
-  facturaADescripcion: "Con el CUIT de su empresa o su monotributo",
   dni: "DNI",
   cuit: "CUIT",
   razonSocial: "Razón social",
@@ -33,6 +31,8 @@ export const TEXTOS_INVITADO = {
   verificacionPendiente: "Estamos verificando que usted es una persona. Aguarde un instante.",
   verificacionFallida: "No pudimos verificar la solicitud. Recargue la página e inténtelo nuevamente.",
   ingresar: "Ya tengo cuenta, ingresar",
+  /** Justo después de ingresar, mientras se carga el checkout con la cuenta. */
+  cargandoCuenta: "Cargando los datos de su cuenta…",
   avisoCarrito: "Puede completar su compra sin crear una cuenta.",
   carritoTitulo: "Está comprando como invitado",
   botonIngresar: "Ingresar",

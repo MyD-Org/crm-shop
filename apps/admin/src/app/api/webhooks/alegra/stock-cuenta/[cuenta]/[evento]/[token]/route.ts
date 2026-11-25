@@ -4,7 +4,7 @@ import { getDb } from "@/db"
 import { alegraCuentas } from "@/db/schema"
 import { getTenantByIdFromDb } from "@/lib/tenants"
 import { esEventoStock, registrarAviso, tokenWebhookStockCuentaValido } from "@/lib/alegra-stock-webhook"
-import { drenarTenant } from "@/lib/alegra-stock-cola"
+import { drenarTenant, leerAlInstante } from "@/lib/alegra-stock-cola"
 import { leerCuerpo, loguearClavesUnaVez, motivoError } from "@/lib/alegra-webhook-comun"
 
 // POST /api/webhooks/alegra/stock-cuenta/<cuentaId>/<evento>/<token>
@@ -76,6 +76,16 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
 
   if (r.encolados > 0) {
     after(async () => {
+      // Primero los ítems de ESTE aviso, al instante (salvo ráfaga: ver leerAlInstante).
+      try {
+        const ri = await leerAlInstante(config, r.ids ?? [], { deadline: inicio + PRESUPUESTO_MS })
+        console.log(
+          `[alegra-stock-cuenta/inmediata] tenant=${config.id} cuenta=${cuenta.slug} leidos=${ri.leidos} inactivos=${ri.inactivos} errores=${ri.errores} rafaga=${ri.rafaga} corte=${ri.corte}`,
+        )
+      } catch (err) {
+        console.error(`[alegra-stock-cuenta/inmediata] tenant=${config.id} cuenta=${cuenta.slug} error=${motivoError(err)}`)
+      }
+      // Después, lo que haya en la cola (otros avisos, el resto de una factura grande).
       await dormir(DEBOUNCE_MS)
       try {
         await drenarTenant(config, { deadline: inicio + PRESUPUESTO_MS })

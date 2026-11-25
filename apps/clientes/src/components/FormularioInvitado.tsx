@@ -1,6 +1,7 @@
 "use client";
 
 import { Field, Input, Select } from "@myd-org/ui";
+import { AvisoInvitado } from "@/components/AvisoInvitado";
 import { CAMPO_TRAMPA } from "@/lib/arrepentimiento";
 import { PROVINCIAS_AR } from "@/lib/provincias";
 import { TEXTOS_INVITADO as T } from "@/lib/invitado-textos";
@@ -27,12 +28,10 @@ type Cambiar = (parcial: Partial<DatosInvitado>) => void;
 function OpcionModo({
   marcada,
   titulo,
-  descripcion,
   onElegir,
 }: {
   marcada: boolean;
   titulo: string;
-  descripcion: string;
   onElegir: () => void;
 }) {
   return (
@@ -46,7 +45,6 @@ function OpcionModo({
       }`}
     >
       <span className="block text-sm font-semibold text-text">{titulo}</span>
-      <span className="block text-xs text-muted">{descripcion}</span>
     </button>
   );
 }
@@ -68,6 +66,7 @@ export function FormularioInvitado({
   const esFacturaA = datos.modo === "factura_a";
   return (
     <div className="space-y-5">
+      <AvisoInvitado volverA="/checkout" />
       <p className="text-sm text-muted">{T.introDatos}</p>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={T.email} error={errores.email}>
@@ -108,13 +107,11 @@ export function FormularioInvitado({
           <OpcionModo
             marcada={!esFacturaA}
             titulo={T.consumidorFinal}
-            descripcion={T.consumidorFinalDescripcion}
             onElegir={() => onCambiar({ modo: "consumidor_final" })}
           />
           <OpcionModo
             marcada={esFacturaA}
             titulo={T.facturaA}
-            descripcion={T.facturaADescripcion}
             onElegir={() => onCambiar({ modo: "factura_a" })}
           />
         </div>

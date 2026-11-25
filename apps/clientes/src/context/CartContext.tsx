@@ -24,6 +24,7 @@ import {
   type CartItem,
 } from "@/lib/carrito-cliente";
 import { crearMotorCarrito, type MotorCarrito } from "@/lib/carrito-sync";
+import { vistaDeServidor } from "./carrito-hidratacion";
 import { itemDe } from "@/lib/tracking/eventos";
 import { track } from "@/lib/tracking/track";
 
@@ -286,8 +287,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+const sinSuscripcion = () => () => {};
+
 export function useCart() {
   const ctx = useContext(CartContext);
   if (!ctx) throw new Error("useCart must be used inside CartProvider");
-  return ctx;
+  // Mientras ESTE componente se hidrata, el mismo carrito que pintó el servidor
+  // (ver vistaDeServidor): un consumidor dentro de un <Suspense> se hidrata
+  // después del provider, cuando el contexto ya trae lo de localStorage.
+  const hidratado = useSyncExternalStore(
+    sinSuscripcion,
+    () => true,
+    () => false,
+  );
+  return hidratado ? ctx : vistaDeServidor(ctx);
 }

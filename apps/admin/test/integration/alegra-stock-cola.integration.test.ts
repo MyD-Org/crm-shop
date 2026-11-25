@@ -3,7 +3,7 @@ import { and, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { alegraItemRefresh, alegraStockDrenaje, catalogProducts, catalogStockSucursal } from "@/db/schema"
 import type { AlegraProduct } from "@/lib/alegra"
-import { drenarTenant, encolar, purgarCola } from "@/lib/alegra-stock-cola"
+import { drenarTenant, encolar, limpiarColaCubiertaPorSync, purgarCola } from "@/lib/alegra-stock-cola"
 import { registrarAviso } from "@/lib/alegra-stock-webhook"
 import { upsertProductos } from "@/lib/catalog-products-repo"
 import { crearSucursal } from "@/lib/sucursales-repo"
@@ -116,6 +116,18 @@ describe("drenarTenant", () => {
     const restantes = await cola()
     expect(restantes.map((f) => f.intentos)).toEqual([0, 0])
     expect(restantes.every((f) => f.tomadoHasta === null)).toBe(true)
+  })
+
+  it("lo más nuevo primero: una edición no espera detrás de una carga masiva vieja", async () => {
+    const { dormir } = relojFalso()
+    await encolar(getDb(), A, ["1", "2", "3", "4"], "new-item")
+    await getDb().execute(sql`UPDATE alegra_item_refresh SET pedido_at = now() - interval '1 hour'`)
+    await encolarIds(["9"])
+    alegraTiene({ "1": 1, "2": 2, "3": 3, "4": 4, "9": 9 })
+    const r = await drenarTenant(config, { deadline: Date.now() + 500, dormir })
+    expect(r).toMatchObject({ leidos: 1, corte: "deadline" })
+    expect(pedidosDe("9")).toBe(1)
+    expect((await cola()).map((f) => f.alegraId).sort()).toEqual(["1", "2", "3", "4"])
   })
 
   it("429: corta sin borrar nada; la que chocó suma un intento", async () => {
@@ -271,6 +283,38 @@ describe("purgarCola", () => {
     await getDb().execute(sql`UPDATE alegra_documento_items SET actualizado_at = now() - interval '401 days' WHERE alegra_doc_id = '10'`)
     expect(await purgarCola({ colaHoras: 48, indiceDias: 400 })).toEqual({ cola: 1, indice: 1 })
     expect((await cola()).map((f) => f.alegraId).sort()).toEqual(["2", "3", "4"])
+  })
+})
+
+describe("limpiarColaCubiertaPorSync", () => {
+  it("borra lo pedido antes del inicio de la sync en las cuentas indicadas; lo posterior queda", async () => {
+    await encolarIds(["1", "2", "mdp:7", "igz2:8"])
+    await getDb().execute(sql`UPDATE alegra_item_refresh SET pedido_at = now() - interval '1 hour'`)
+    const inicio = new Date()
+    await encolarIds(["3", "mdp:9"])
+    expect(await limpiarColaCubiertaPorSync(A, { principal: true, slugs: ["mdp"] }, inicio)).toBe(3)
+    expect((await cola()).map((f) => f.alegraId).sort()).toEqual(["3", "igz2:8", "mdp:9"])
+  })
+
+  it("sólo secundarias: no toca la principal", async () => {
+    await encolarIds(["1", "mdp:7"])
+    const inicio = new Date(Date.now() + 1000)
+    expect(await limpiarColaCubiertaPorSync(A, { principal: false, slugs: ["mdp"] }, inicio)).toBe(1)
+    expect((await cola()).map((f) => f.alegraId)).toEqual(["1"])
+  })
+
+  it("ninguna cuenta: no borra nada", async () => {
+    await encolarIds(["1"])
+    expect(await limpiarColaCubiertaPorSync(A, { principal: false, slugs: [] }, new Date(Date.now() + 1000))).toBe(0)
+    expect(await cola()).toHaveLength(1)
+  })
+
+  it("otro tenant no se toca", async () => {
+    await seedTenant("tenant-b")
+    await encolar(getDb(), "tenant-b", ["1"], "edit-item")
+    expect(await limpiarColaCubiertaPorSync(A, { principal: true, slugs: [] }, new Date(Date.now() + 1000))).toBe(0)
+    const [n] = await getDb().select().from(alegraItemRefresh).where(eq(alegraItemRefresh.tenantId, "tenant-b"))
+    expect(n?.alegraId).toBe("1")
   })
 })
 

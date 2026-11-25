@@ -748,6 +748,11 @@ de crédito): los corrige la sync diaria, que sigue siendo obligatoria.
 - Un solo drenador por tenant a la vez (lease en `alegra_stock_drenaje`, se libera solo a los
   90 s si la función muere). Ritmo fijo: **1 request por segundo** (≤ 60/min de los 150/min
   que la cuenta comparte con la sync, el portal y el bot).
+- **Lo más nuevo primero** (`ORDER BY pedido_at DESC`): una edición puntual (un nombre, una
+  venta) se lee en segundos aunque haya miles de avisos de una carga masiva esperando.
+- **La sync diaria vacía la cola**: al terminar, por cada cuenta que leyó entera, bien y sin
+  quedar parcial, borra los pedidos anteriores a su inicio (ya los cubrió). Una cuenta que
+  venía terminada de un cursor anterior no se limpia. Log `[alegra-sync] tenant=… cola_limpiada=…`.
 - 404 → el producto queda `status='inactive'` (la fila no se borra). 429 → corta y deja todo
   en la cola. Otro error → `ultimo_error` (`alegra_http_500`, `db_…`) y se reintenta en el
   próximo drenaje; a los 5 intentos se descarta (`accion=descartado`) y lo corrige la sync.

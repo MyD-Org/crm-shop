@@ -129,8 +129,12 @@ interface FilaTomada {
 }
 
 /**
- * Toma hasta `lote` filas libres (las más viejas primero) y las marca tomadas por LEASE_SEG,
+ * Toma hasta `lote` filas libres (las MÁS NUEVAS primero) y las marca tomadas por LEASE_SEG,
  * sumando un intento. `SKIP LOCKED`: si otro proceso tiene una fila bloqueada, la saltea.
+ *
+ * Más nuevas primero: una edición puntual (un nombre, una venta) no espera detrás de miles de
+ * avisos de una carga masiva. Lo viejo que no se llegue a leer lo cubre la sync diaria, que al
+ * terminar limpia la cola (`limpiarColaCubiertaPorSync`).
  */
 async function tomarLote(tenantId: string, lote: number): Promise<FilaTomada[]> {
   const filas = await getDb().execute(sql`
@@ -139,7 +143,7 @@ async function tomarLote(tenantId: string, lote: number): Promise<FilaTomada[]> 
     FROM (
       SELECT tenant_id, alegra_id FROM alegra_item_refresh
       WHERE tenant_id = ${tenantId} AND (tomado_hasta IS NULL OR tomado_hasta < now())
-      ORDER BY pedido_at
+      ORDER BY pedido_at DESC
       LIMIT ${lote}
       FOR UPDATE SKIP LOCKED
     ) libres
@@ -147,7 +151,7 @@ async function tomarLote(tenantId: string, lote: number): Promise<FilaTomada[]> 
     RETURNING r.alegra_id, r.intentos, r.pedido_at
   `)
   return (filas as unknown as { alegra_id: string; intentos: number; pedido_at: string }[])
-    .sort((a, b) => new Date(a.pedido_at).getTime() - new Date(b.pedido_at).getTime())
+    .sort((a, b) => new Date(b.pedido_at).getTime() - new Date(a.pedido_at).getTime())
     .map((f) => ({ alegraId: f.alegra_id, intentos: Number(f.intentos) - 1 }))
 }
 
@@ -322,6 +326,37 @@ export async function drenarTenant(
     `[alegra-stock/drenar] tenant=${tenantId} leidos=${r.leidos} inactivos=${r.inactivos} errores=${r.errores} requests=${r.requests} pendientes=${r.pendientes} corte=${r.corte} ms=${Date.now() - inicio}`,
   )
   return r
+}
+
+/**
+ * La sync COMPLETA de una cuenta terminó bien: leyó todos sus ítems después de `inicio`, así que
+ * los pedidos anteriores ya están cubiertos y se borran (si no, una carga masiva deja miles de
+ * filas que el drenador tarda días en leer). Los posteriores a `inicio` quedan: el ítem pudo
+ * cambiar después de que la sync lo leyera.
+ *
+ * `principal`: ids sin ":"; `slugs`: ids `<slug>:<id>` de esas cuentas secundarias.
+ */
+export async function limpiarColaCubiertaPorSync(
+  tenantId: string,
+  cuentas: { principal: boolean; slugs: string[] },
+  inicio: Date,
+): Promise<number> {
+  const filtros = [
+    ...(cuentas.principal ? [sql`position(':' in ${alegraItemRefresh.alegraId}) = 0`] : []),
+    ...cuentas.slugs.map((slug) => sql`${alegraItemRefresh.alegraId} LIKE ${`${slug.replace(/[\\%_]/g, "\\$&")}:%`}`),
+  ]
+  if (filtros.length === 0) return 0
+  const borradas = await getDb()
+    .delete(alegraItemRefresh)
+    .where(
+      and(
+        eq(alegraItemRefresh.tenantId, tenantId),
+        lt(alegraItemRefresh.pedidoAt, inicio),
+        or(...filtros),
+      ),
+    )
+    .returning({ alegraId: alegraItemRefresh.alegraId })
+  return borradas.length
 }
 
 /**

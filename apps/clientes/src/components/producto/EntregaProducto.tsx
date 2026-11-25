@@ -107,6 +107,7 @@ export function EntregaProducto({
   envioElegido = null,
   consultaWhatsapp,
   aPedido,
+  envioEnResumen = false,
 }: {
   configEnvio: ConfigEnvio;
   provincia?: string | null;
@@ -133,6 +134,11 @@ export function EntregaProducto({
    * (flag apagado): se muestra como única línea de plazo. Con `disponibilidad`, el plazo sale del motor.
    */
   aPedido?: string;
+  /**
+   * Carrito: el resumen ya muestra el envío por zona (costo o «desde $X» y la llegada). La fila «Envío a
+   * domicilio» de abajo se omite para no repetirlo con otro texto («Costo de envío a coordinar»).
+   */
+  envioEnResumen?: boolean;
 }) {
   const retiro = disponibilidad?.producto.retiro;
   // Primero el local elegido y, después, el que mejor sirve: lo primero que se lee es lo que importa.
@@ -167,9 +173,17 @@ export function EntregaProducto({
   // detalle de cada uno en un popup. Con un solo local, su "Ver local" de siempre.
   const mejor = locales[0];
   const estadoMejor = mejor && retiro ? estadoDe(mejor) : null;
+  // Con varios locales y no todos con el producto hoy, "Disponible hoy en 1 local" (el detalle, en Ver
+  // locales): un "Disponible hoy" a secas se lee como si fuera en el local del visitante. Sin nombrar
+  // locales, como decide el estilo "Ver sucursales".
+  const hoyDisponibles = retiro ? locales.filter((l) => retiro[l.slug]?.estado === "disponible").length : 0;
+  const textoMejor =
+    estadoMejor && retiro?.[mejor.slug]?.estado === "disponible" && hoyDisponibles < locales.length
+      ? TEXTOS_UBICACION.disponibleHoyEnLocales(hoyDisponibles)
+      : estadoMejor?.texto;
   const retiroResumido = mejor && estadoMejor && (
     <div className="mt-1.5 flex items-baseline justify-between gap-3" data-retiro-resumido>
-      <span className={`font-semibold ${CLASE_TONO[estadoMejor.tono]}`}>{estadoMejor.texto}</span>
+      <span className={`font-semibold ${CLASE_TONO[estadoMejor.tono]}`}>{textoMejor}</span>
       {locales.length > 1 ? <VerLocales locales={locales.map((l) => ({ local: l, estado: estadoDe(l) }))} textoWhatsapp={consultaWhatsapp} /> : verLocal(mejor)}
     </div>
   );
@@ -254,7 +268,7 @@ export function EntregaProducto({
           </ul>
         )}
       </Fila>
-      {textoEnvio && (
+      {textoEnvio && !envioEnResumen && (
         <Fila icono={<IconoEnvio />} titulo="Envío a domicilio">
           {envioUbicacion ? (
             // El slot de la ficha decide texto y plazo según la ubicación.

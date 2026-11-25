@@ -143,6 +143,27 @@ const CLAVES_FRASE = Object.keys(SINONIMOS).filter((k) => k.includes(" "));
  * en singular o frase), sus términos del catálogo, sin repetir lo que ya está
  * en la consulta. En el orden de la consulta.
  */
+/**
+ * Frases en las que un sustantivo AMBIGUO (ver `diccionario.ts`) queda resuelto por la palabra que lo
+ * acompaña y deja de nombrar su propia familia: en «llave térmica» la llave es la termomagnética, no la de
+ * luz ni la de ajuste. Clave: la frase normalizada en singular; valor: las palabras que, dentro de ella, son
+ * sólo contexto (no recuperan como producto ni proponen su categoría). El resto de la frase y su sinónimo
+ * siguen buscando como siempre.
+ */
+export const FRASES_QUE_RESUELVEN: Readonly<Record<string, readonly string[]>> = {
+  "llave termica": ["llave"],
+};
+
+/** Palabras (en singular) que la consulta usa sólo como calificador por una de `FRASES_QUE_RESUELVEN`. */
+export function resueltasPorFrase(tokensSingular: readonly string[]): Set<string> {
+  const texto = ` ${tokensSingular.join(" ")} `;
+  const salida = new Set<string>();
+  for (const [frase, palabras] of Object.entries(FRASES_QUE_RESUELVEN)) {
+    if (texto.includes(` ${frase} `)) for (const p of palabras) salida.add(p);
+  }
+  return salida;
+}
+
 export function expansiones(tokensSingular: readonly string[], consultaNorm: string): string[] {
   const texto = ` ${consultaNorm} `;
   const claves = [

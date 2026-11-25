@@ -95,6 +95,7 @@ export function ProductoClient({
   envioUbicacion,
   envioUbicacionPorId,
   localElegido,
+  localDeZona = null,
   envioElegido,
   relacionados = null,
   rutaCategorias = [],
@@ -135,6 +136,8 @@ export function ProductoClient({
   envioUbicacion?: ReactNode;
   /** Local de retiro elegido en "Enviar a" (slug): la ficha lo muestra primero. */
   localElegido?: string | null;
+  /** Sucursal de la zona del visitante (slug, flag `disponibilidad-sucursal`): su local en el retiro resumido. */
+  localDeZona?: string | null;
   /** Destino del envío elegido en "Enviar a" (calle o localidad): la ficha lo muestra primero. */
   envioElegido?: string | null;
   /** "Más de <categoría>", armado en el server (va en su propio Suspense). */
@@ -529,6 +532,7 @@ export function ProductoClient({
                   : disponibilidad
               }
               localElegido={localElegido}
+              localDeZona={localDeZona}
               envioElegido={envioElegido}
               consultaWhatsapp={textoConsultaProducto(nombreParaMostrar, producto.sku)}
               aPedido={esAPedido(producto) ? producto.ventaSinStock!.texto : undefined}

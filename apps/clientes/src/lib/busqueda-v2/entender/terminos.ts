@@ -23,7 +23,7 @@
 import { raizPlural } from "../../catalogo-busqueda";
 import { PALABRAS_VACIAS } from "../../busqueda-inteligente/residuo";
 import { tokensDe } from "../../busqueda-inteligente/deterministico";
-import { PESO_EXPANSION, expansiones } from "./sinonimos";
+import { PESO_EXPANSION, expansiones, resueltasPorFrase } from "./sinonimos";
 
 export const PESO_CONTEXTO = 0.3;
 export const PESO_MEDIDA = 0.4;
@@ -112,6 +112,8 @@ export interface Termino {
  */
 export function terminosDe(consultaNorm: string, absorbidos: ReadonlySet<string> = new Set()): Termino[] {
   const tokens = tokensDe(consultaNorm);
+  // «llave térmica»: la llave es sólo calificador (no recupera llaves de luz ni de ajuste).
+  const resueltas = resueltasPorFrase(tokens.map(raizPlural));
   const salida = new Map<string, number>();
   const poner = (texto: string, peso: number) => salida.set(texto, Math.max(peso, salida.get(texto) ?? 0));
   let objetoDeVerbo = false;
@@ -128,7 +130,7 @@ export function terminosDe(consultaNorm: string, absorbidos: ReadonlySet<string>
       continue;
     }
     if (t.length < LARGO_MINIMO) continue;
-    if (CONTEXTO.has(t) || CONTEXTO.has(raiz) || objetoDeVerbo) {
+    if (CONTEXTO.has(t) || CONTEXTO.has(raiz) || objetoDeVerbo || resueltas.has(raiz)) {
       objetoDeVerbo = false;
       poner(t, PESO_CONTEXTO);
       continue;

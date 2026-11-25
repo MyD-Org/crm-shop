@@ -671,6 +671,14 @@ export function CarritoClient({
               disponibilidad={resumenEntrega ? { producto: resumenEntrega.producto, locales: cotizacion!.disponibilidad!.locales } : undefined}
               detallePorLocal={resumenEntrega?.detallePorLocal}
               ubicacionConocida={ubicacionConocida ?? provincia !== null}
+              // El envío por zona ya está en el resumen (costo o «desde $X» y la llegada): sin repetirlo. Sólo si el
+              // pedido sale sin demora: con una línea a traer o a pedido, la fila de abajo tiene el plazo real.
+              envioEnResumen={Boolean(
+                confirmado &&
+                  entregaTipo === "envio" &&
+                  (cotizacion?.envio.costo !== undefined || cotizacion?.envioEstimado) &&
+                  (!resumenEntrega?.producto.envio || resumenEntrega.producto.envio.estado === "disponible"),
+              )}
             />
           </FadeScroll>
         </div>

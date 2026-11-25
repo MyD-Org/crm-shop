@@ -29,3 +29,44 @@ describe("EnvioProductoUbicacion con retiro elegido", () => {
     expect(h).not.toContain("Despacho");
   });
 });
+
+describe("EnvioProductoUbicacion con envío por zona y condición de origen", () => {
+  const configConMetodo = async () => {
+    const { metodoDePrueba } = await import("@/test/envio-metodo");
+    const m = metodoDePrueba({ provinciaClave: "buenosaires" });
+    const loc = m.localidades![0];
+    return { config: { ...CONFIG_ENVIO_DEFAULT, metodos: [{ ...m, nombre: "Envío rápido" }] }, m, loc };
+  };
+
+  it("producto disponible en el local que despacha: anticipa el método", async () => {
+    const { config, m, loc } = await configConMetodo();
+    resuelta = { ubicacion: { localidad: loc.etiqueta ?? "", provincia: "Buenos Aires", id: loc.georefId }, eleccion: { tipo: "envio" } };
+    const h = await EnvioProductoUbicacion({
+      configEnvio: config,
+      plazo: { texto: "Disponible", tono: "ok" },
+      origen: { sucursal: m.sucursalOrigen, conTraslado: false },
+    });
+    expect(texto(renderToStaticMarkup(h))).toContain("Envío rápido");
+  });
+
+  it("producto a traer de otra sucursal: no promete el método; costo a coordinar y el plazo real", async () => {
+    const { config, m, loc } = await configConMetodo();
+    resuelta = { ubicacion: { localidad: loc.etiqueta ?? "", provincia: "Buenos Aires", id: loc.georefId }, eleccion: { tipo: "envio" } };
+    const h = await EnvioProductoUbicacion({
+      configEnvio: config,
+      plazo: { texto: "Disponible en 7 días", tono: "demora" },
+      origen: { sucursal: m.sucursalOrigen, conTraslado: true },
+    });
+    const t = texto(renderToStaticMarkup(h));
+    expect(t).not.toContain("Envío rápido");
+    expect(t).not.toContain("Llega");
+    expect(t).toContain("Disponible en 7 días");
+  });
+
+  it("sin origen conocido (flag de disponibilidad apagado): como siempre", async () => {
+    const { config, loc } = await configConMetodo();
+    resuelta = { ubicacion: { localidad: loc.etiqueta ?? "", provincia: "Buenos Aires", id: loc.georefId }, eleccion: { tipo: "envio" } };
+    const h = await EnvioProductoUbicacion({ configEnvio: config });
+    expect(texto(renderToStaticMarkup(h))).toContain("Envío rápido");
+  });
+});

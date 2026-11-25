@@ -26,6 +26,16 @@ describe("candidatos del diccionario", () => {
     expect(candidatos("calefactor para el baño", arbol).categorias).toContain("Calefacción y cortinas de aire");
   });
 
+  it("«llave térmica»: la llave está resuelta por la frase y no propone Llaves; la térmica sí propone lo suyo", () => {
+    const c = candidatos("llave termica", arbol).categorias;
+    expect(c).not.toContain("Llaves, tomas y accesorios");
+    // Lo mismo que «térmica» sola.
+    expect(c).toEqual(candidatos("termica", arbol).categorias);
+    expect(candidatos("llaves termicas", arbol).categorias).not.toContain("Llaves, tomas y accesorios");
+    // Sin la frase, «llave» escrita sigue proponiendo su categoría.
+    expect(candidatos("llave de luz", arbol).categorias).toContain("Llaves, tomas y accesorios");
+  });
+
   it("el sustantivo escrito sí la propone", () => {
     expect(candidatos("interruptor 2x20", arbol).categorias).toContain("Interruptores termomagnéticos");
     expect(candidatos("extractor para baño", arbol).categorias).toContain("Extractores de aire");

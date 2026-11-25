@@ -6,6 +6,10 @@ vi.mock("@/lib/flags-publicos", () => ({
 }));
 vi.mock("@/lib/institucional/datos", () => ({ getPaginasPublicadas: vi.fn(async () => []) }));
 vi.mock("@/lib/marcas/marcas-datos", () => ({ getPaginasMarcaPublicadas: vi.fn(async () => []) }));
+vi.mock("@/lib/catalogo-seo", async (orig) => ({
+  ...(await orig<typeof import("@/lib/catalogo-seo")>()),
+  categoriasIndexables: vi.fn(async () => ["Paneles"]),
+}));
 
 import sitemap from "./sitemap";
 
@@ -25,6 +29,8 @@ describe("sitemap", () => {
     expect(urls.length).toBeGreaterThan(0);
     expect(urls.every((u) => u.startsWith("https://cliente.example"))).toBe(true);
     expect(urls).toContain("https://cliente.example/producto/1");
+    // Las páginas de categoría, con su ruta canónica.
+    expect(urls).toContain("https://cliente.example/catalogo?categoria=Paneles");
   });
 
   it("principal (CANONICAL igual a SITE) idéntico al caso sin CANONICAL", async () => {

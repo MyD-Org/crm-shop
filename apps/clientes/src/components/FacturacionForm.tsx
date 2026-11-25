@@ -459,7 +459,7 @@ export function FacturacionForm({
               type="tel"
               value={form.telefono ?? ""}
               onChange={(e) => set("telefono", e.target.value)}
-              placeholder="+54 376 4000000"
+              placeholder="Código de área y número"
             />
           </Field>
         )}
@@ -650,7 +650,7 @@ export function FacturacionForm({
             type="tel"
             value={form.telefono ?? ""}
             onChange={(e) => set("telefono", e.target.value)}
-            placeholder="+54 376 4000000"
+            placeholder="Código de área y número"
           />
         </Field>
         )}
@@ -776,7 +776,7 @@ function TelefonoContactoForm({
               setTelefono(e.target.value);
               setError("");
             }}
-            placeholder="+54 376 4000000"
+            placeholder="Código de área y número"
           />
         </Field>
       </div>

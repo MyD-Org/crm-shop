@@ -12,6 +12,7 @@
  */
 import { OTRA_DIRECCION, eleccionInicial, type DireccionEnvio } from "./direcciones-envio";
 import type { CuerpoEleccion } from "./enviar-a";
+import { normalizarCp } from "./ubicacion";
 
 export type OpcionEntregaCheckout = "retiro" | "domicilio";
 
@@ -25,6 +26,32 @@ export interface EleccionInicialCheckout {
   provincia?: string;
   /** «Usar mi ubicación» con el envío por zona: dirección ya verificada (token vigente) para precargar. */
   exacta?: { calle: string; localidad: string; cp?: string; geoToken: string; precision: "altura" | "calle" };
+  /** Localidad elegida en «Enviar a» (texto). Para arrancar la ciudad de «otra dirección». */
+  localidad?: string;
+  /** Código postal de la elección, si se conoce. */
+  cp?: string;
+}
+
+/**
+ * Ciudad y código postal con que arranca «otra dirección» a partir de la elección de «Enviar a»: el comprador
+ * ya dijo adónde se envía y no tiene que volver a escribirlo (además, la ciudad acota el autocompletado de la
+ * calle a su localidad). Sólo con envío elegido, sin dirección guardada elegida y sin direcciones guardadas:
+ * con una guardada el formulario no se usa. Vacío = como siempre.
+ */
+export function entregaInicialDeEleccion(
+  eleccion: EleccionInicialCheckout | null | undefined,
+  direccionesGuardadas: number,
+): { ciudad: string; cp: string } {
+  if (eleccion?.tipo !== "envio" || eleccion.direccionId || direccionesGuardadas > 0) return { ciudad: "", cp: "" };
+  return { ciudad: eleccion.localidad?.trim() ?? "", cp: normalizarCp(eleccion.cp) ?? "" };
+}
+
+/**
+ * Código postal de una sugerencia del autocompletado, sólo si es válido (4 dígitos o CPA): el geocodificador
+ * puede devolver formatos que el formulario después rechazaría. null = no se completa nada.
+ */
+export function cpDeSugerencia(cp: string | null | undefined): string | null {
+  return normalizarCp(cp);
 }
 
 export interface EntradaEstadoInicial {

@@ -18,6 +18,7 @@ import type { DestinoEnvio } from "./envio-zona";
 import { verificarGeo } from "./geo-token";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import type { DisponibilidadParaMostrar } from "./disponibilidad-vista";
+import type { DisponibilidadEnvio } from "./sucursales-disponibilidad";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const GEOREF_ID = /^\d{1,12}$/;
@@ -135,6 +136,20 @@ export function origenDeEnvio(
 ): { sucursal: string | null; conTraslado: boolean } | null {
   if (!disp) return null;
   return { sucursal: disp.zona, conTraslado: (disponibilidad?.lineasATraer?.length ?? 0) > 0 };
+}
+
+/**
+ * Origen del envío de UN producto (ficha): el equivalente de `origenDeEnvio` para un carrito con sólo esa
+ * línea. La sucursal es la de la zona del visitante; hay traslado si la línea se trae de otra sucursal
+ * (`a_traer`). Una línea que no se puede enviar (sin stock, oculta) tampoco tiene método que anticipar.
+ * null = no se conoce (flag `disponibilidad-sucursal` apagado): la ficha estima como siempre.
+ */
+export function origenDeEnvioProducto(
+  disp: Pick<ContextoDisponibilidad, "zona"> | undefined,
+  envio: DisponibilidadEnvio | null | undefined,
+): { sucursal: string | null; conTraslado: boolean } | null {
+  if (!disp || !envio) return null;
+  return { sucursal: disp.zona, conTraslado: envio.estado !== "disponible" && envio.estado !== "por_pedido" };
 }
 
 export interface PlanEnvio {

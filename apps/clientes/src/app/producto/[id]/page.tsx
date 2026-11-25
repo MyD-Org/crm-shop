@@ -26,6 +26,7 @@ import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { estadoEnvio } from "@/lib/disponibilidad-textos";
 import { urlCanonicaDelSitio } from "@/lib/sitio-url";
 import { EnvioProductoUbicacion } from "@/components/producto/EnvioProductoUbicacion";
+import { origenDeEnvioProducto } from "@/lib/envio-plan";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -102,6 +103,9 @@ export default async function ProductoPage({ params }: Props) {
       <EnvioProductoUbicacion
         configEnvio={configEnvio}
         plazo={disponibilidad?.productos[id]?.envio ? estadoEnvio(disponibilidad.productos[id].envio!) : null}
+        // Misma condición de origen que el checkout: un producto que hay que traer de otra sucursal no
+        // anticipa el método por zona («Llega hoy») que después no se cobra.
+        origen={origenDeEnvioProducto(dispEntrega, disponibilidad?.productos[id]?.envio)}
       />
     </Suspense>
   );
@@ -131,6 +135,8 @@ export default async function ProductoPage({ params }: Props) {
         producto={producto}
         configEnvio={configEnvioPublica(configEnvio)}
         localElegido={localElegido}
+        // Sólo con envío elegido: sin ubicación la zona es la sucursal predeterminada, no la del visitante.
+        localDeZona={eleccion?.tipo === "envio" ? (dispEntrega?.zona ?? null) : null}
         quedanPromo={quedanPromo}
         slugDestacadoPromo={mediosPrecio?.destacado?.slug}
         avisoReingreso={avisoReingreso}

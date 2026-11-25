@@ -6,6 +6,7 @@ import { getPaginasMarcaPublicadas } from "@/lib/marcas/marcas-datos";
 import { rutasSitemapMarcas } from "@/lib/marcas/vista-marca";
 import { baseDelSitio, entradasSitemap } from "@/lib/seo";
 import { esSitioSecundarioDelEntorno, urlCanonicaDelSitio } from "@/lib/sitio-url";
+import { categoriasIndexables, rutaDeCategoria } from "@/lib/catalogo-seo";
 
 /**
  * Páginas públicas + una ficha por producto publicado (mismo criterio que el
@@ -18,10 +19,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const sitio = urlCanonicaDelSitio();
   if (!baseDelSitio(sitio)) return [];
   const { soloVisibles, variantes } = await flagsPublicos();
-  const [ids, paginas, marcas] = await Promise.all([
+  const [ids, paginas, marcas, categorias] = await Promise.all([
     variantes ? idsProductosPublicos(soloVisibles, true) : idsProductosPublicos(soloVisibles),
     getPaginasPublicadas(),
     getPaginasMarcaPublicadas(),
+    // Las páginas de categoría (indexables, con canonical propio): Google las encuentra sin depender del menú.
+    categoriasIndexables(),
   ]);
-  return entradasSitemap(sitio, ids, [...paginas.map((p) => p.href), ...rutasSitemapMarcas(marcas)]);
+  return entradasSitemap(sitio, ids, [
+    ...paginas.map((p) => p.href),
+    ...rutasSitemapMarcas(marcas),
+    ...categorias.map(rutaDeCategoria),
+  ]);
 }

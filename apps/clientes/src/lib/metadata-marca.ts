@@ -58,7 +58,10 @@ export function metadataDeMarca(
     // Base de las URLs absolutas de metadata (canonical). Por entorno: el repo no lleva el
     // dominio. Sin la variable, las páginas omiten el canonical.
     metadataBase: entorno.siteUrl ? new URL(entorno.siteUrl) : undefined,
-    title: marca.titulo,
+    // Las páginas con título propio (ficha, Envíos y pagos…) llevan el nombre de la tienda detrás: en Google y
+    // en la pestaña se ve de quién es. La home y las que no definen título usan `titulo` tal cual. Las páginas
+    // de marca usan `absolute` (ya traen su propio formato).
+    title: { default: marca.titulo, template: `%s | ${marca.nombre}` },
     description: marca.descripcion,
     // La imagen va absoluta y con el origen PROPIO (`propioUrl`), no con `metadataBase` (canónico).
     // La dibuja src/app/imagen-para-compartir/route.tsx. Sin `propioUrl`, no se manda imagen.

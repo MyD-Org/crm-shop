@@ -3,6 +3,7 @@ import { firmarGeo } from "./geo-token";
 import {
   leerDestinoBody,
   origenDeEnvio,
+  origenDeEnvioProducto,
   planEnvio,
   resolverDestinoEnvio,
   type DireccionGuardada,
@@ -241,5 +242,40 @@ describe("origenDeEnvio", () => {
 
   it("contexto sin disponibilidad calculada (falló): sólo la zona", () => {
     expect(origenDeEnvio({ zona: "igz" } as never, null)).toEqual({ sucursal: "igz", conTraslado: false });
+  });
+});
+
+describe("origenDeEnvioProducto", () => {
+  const disp = { zona: "local-a" };
+
+  it("sin contexto o sin disponibilidad de envío: desconocido (la ficha estima como siempre)", () => {
+    expect(origenDeEnvioProducto(undefined, { estado: "disponible", origen: "local-a", demoraDias: null })).toBeNull();
+    expect(origenDeEnvioProducto(disp, null)).toBeNull();
+    expect(origenDeEnvioProducto(disp, undefined)).toBeNull();
+  });
+
+  it("disponible en la zona: sale de ese local sin traslado", () => {
+    expect(origenDeEnvioProducto(disp, { estado: "disponible", origen: "local-a", demoraDias: null })).toEqual({
+      sucursal: "local-a",
+      conTraslado: false,
+    });
+  });
+
+  it("a traer de otra sucursal: con traslado (como `lineasATraer` del pedido)", () => {
+    expect(origenDeEnvioProducto(disp, { estado: "a_traer", origen: "local-b", demoraDias: 7 })).toEqual({
+      sucursal: "local-a",
+      conTraslado: true,
+    });
+  });
+
+  it("venta sin stock por modalidad: igual que el pedido, sin traslado", () => {
+    expect(origenDeEnvioProducto(disp, { estado: "por_pedido", origen: "local-a", demoraDias: 0 })).toEqual({
+      sucursal: "local-a",
+      conTraslado: false,
+    });
+  });
+
+  it("no se puede enviar (sin stock): ningún método que anticipar", () => {
+    expect(origenDeEnvioProducto(disp, { estado: "sin_stock", origen: null, demoraDias: null })?.conTraslado).toBe(true);
   });
 });

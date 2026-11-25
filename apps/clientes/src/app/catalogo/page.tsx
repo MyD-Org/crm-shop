@@ -13,6 +13,7 @@ import {
   type ParamCrudo,
 } from "@/lib/catalogo-url";
 import { completarMarcas, indexable } from "@/lib/catalogo-vista";
+import { categoriasIndexables, metadataDeCategoria } from "@/lib/catalogo-seo";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servidor";
@@ -64,7 +65,11 @@ export async function generateMetadata({
 }: Props): Promise<Metadata> {
   const [params, conBusquedaIa] = await Promise.all([searchParams, busquedaIaHabilitada()]);
   const estado = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
+  // Página de UNA categoría indexable y que existe: título y descripción propios (si no, la de la tienda).
+  const categoria = indexable(estado) && estado.categorias.length === 1 ? estado.categorias[0] : null;
+  const propia = categoria && (await categoriasIndexables()).includes(categoria) ? metadataDeCategoria(categoria, estado.pagina) : {};
   return {
+    ...propia,
     robots: { index: indexable(estado), follow: true },
     ...(urlCanonicaDelSitio()
       ? { alternates: { canonical: hrefCanonico(estado) } }

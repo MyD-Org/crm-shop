@@ -135,7 +135,8 @@ export default async function ProductoPage({ params }: Props) {
         producto={producto}
         configEnvio={configEnvioPublica(configEnvio)}
         localElegido={localElegido}
-        localDeZona={dispEntrega?.zona ?? null}
+        // Sólo con envío elegido: sin ubicación la zona es la sucursal predeterminada, no la del visitante.
+        localDeZona={eleccion?.tipo === "envio" ? (dispEntrega?.zona ?? null) : null}
         quedanPromo={quedanPromo}
         slugDestacadoPromo={mediosPrecio?.destacado?.slug}
         avisoReingreso={avisoReingreso}

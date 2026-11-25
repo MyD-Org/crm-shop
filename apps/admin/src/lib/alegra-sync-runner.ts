@@ -1,5 +1,6 @@
 import type { TenantConfig } from "./tenants"
 import { syncTenant, type EventoProgreso, type SyncTenantResult } from "./alegra-sync-tenant"
+import { limpiarColaCubiertaPorSync } from "./alegra-stock-cola"
 
 // Lógica del runner de la sync programada (scripts/alegra-sync.ts), separada del script para poder
 // testearla: parseo de args, resumen sin secretos y la corrida completa de cada tenant en un solo
@@ -128,6 +129,31 @@ export function logDeProgreso(
   }
 }
 
+/**
+ * Borra de la cola de re-lectura lo que la sync ya cubrió: cada cuenta (principal o secundaria)
+ * que esta corrida leyó entera, terminó bien y no quedó parcial. Best-effort: si falla, la
+ * cola se drena igual.
+ */
+async function limpiarCola(
+  tenantId: string,
+  r: SyncTenantResult,
+  terminadas: Set<string>,
+  inicio: Date,
+  log?: (linea: string) => void,
+) {
+  if (r.continuar) return
+  const principal = terminadas.has("principal") && r.parcial !== true
+  const slugs = (r.cuentas ?? [])
+    .filter((c) => c.ok && c.parcial !== true && terminadas.has(c.cuenta))
+    .map((c) => c.cuenta)
+  try {
+    const n = await limpiarColaCubiertaPorSync(tenantId, { principal, slugs }, inicio)
+    ;(log ?? console.log)(`[alegra-sync] tenant=${tenantId} cola_limpiada=${n}`)
+  } catch (err) {
+    console.warn(`[alegra-sync] tenant=${tenantId} limpiar cola falló: ${err instanceof Error ? err.name : "error"}`)
+  }
+}
+
 /** Sincroniza COMPLETAS (principal + secundarias) las cuentas de cada tenant, de a uno. */
 export async function correrSync(
   configs: TenantConfig[],
@@ -136,7 +162,18 @@ export async function correrSync(
   const resumenes: ResumenTenant[] = []
   for (const cfg of configs) {
     let r: SyncTenantResult
-    const onProgreso = logDeProgreso(cfg.id, opts.log)
+    const log = logDeProgreso(cfg.id, opts.log)
+    // Cuentas que esta corrida leyó ENTERAS (de su inicio a su fin). Una que venía terminada de un
+    // cursor anterior no cuenta: se leyó antes de `inicio`. Se mira el evento porque el resultado
+    // final pasa a ok:false para todo el tenant cuando falla una secundaria.
+    const empezadas = new Set<string>()
+    const terminadas = new Set<string>()
+    const onProgreso = (e: EventoProgreso) => {
+      if (e.tipo === "cuenta-inicio") empezadas.add(e.cuenta)
+      else if (e.tipo === "cuenta-fin" && e.ok && empezadas.has(e.cuenta)) terminadas.add(e.cuenta)
+      log(e)
+    }
+    const inicio = new Date()
     try {
       r = await syncTenant(cfg, "cron", { aceptarBaja: opts.aceptarBaja, onProgreso })
       for (let v = 1; r.continuar && v < MAX_VUELTAS; v++) {
@@ -147,6 +184,7 @@ export async function correrSync(
       console.error(`[alegra-sync] tenant=${cfg.id} error: ${err instanceof Error ? err.name : "error"}`)
       r = { ok: false, itemsSynced: 0, categoriesSynced: 0, error: "sync_failed" }
     }
+    await limpiarCola(cfg.id, r, terminadas, inicio, opts.log)
     resumenes.push(resumir(cfg.id, r))
   }
   return { resumenes, exitCode: resumenes.some(hayProblema) ? 1 : 0 }

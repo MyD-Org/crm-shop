@@ -9,7 +9,8 @@ const state = vi.hoisted(() => ({
   tenant: null as Record<string, unknown> | null,
   registrados: [] as { tenant: string; evento: string; payload: unknown }[],
   drenados: [] as { tenant: string; deadline: number }[],
-  resultado: { accion: "encolado", docId: "10", items: 2, encolados: 2 } as Record<string, unknown>,
+  inmediatos: [] as { tenant: string; ids: string[]; antesDeDrenar: boolean }[],
+  resultado: { accion: "encolado", docId: "10", items: 2, encolados: 2, ids: ["5", "7"] } as Record<string, unknown>,
   falla: false,
 }))
 
@@ -33,6 +34,10 @@ vi.mock("@/lib/alegra-stock-webhook", async (importOriginal) => ({
 }))
 
 vi.mock("@/lib/alegra-stock-cola", () => ({
+  leerAlInstante: async (config: { id: string }, ids: string[]) => {
+    state.inmediatos.push({ tenant: config.id, ids, antesDeDrenar: state.drenados.length === 0 })
+    return { leidos: ids.length, inactivos: 0, errores: 0, requests: ids.length, pendientes: 0, corte: "vacia", rafaga: false }
+  },
   drenarTenant: async (config: { id: string }, opts: { deadline: number }) => {
     state.drenados.push({ tenant: config.id, deadline: opts.deadline })
     return { leidos: 2, inactivos: 0, errores: 0, requests: 2, pendientes: 0, corte: "vacia" }
@@ -76,8 +81,9 @@ beforeEach(() => {
   state.pendientes = []
   state.registrados = []
   state.drenados = []
+  state.inmediatos = []
   state.falla = false
-  state.resultado = { accion: "encolado", docId: "10", items: 2, encolados: 2 }
+  state.resultado = { accion: "encolado", docId: "10", items: 2, encolados: 2, ids: ["5", "7"] }
   state.tenant = { id: "tenant-a", alegraMock: false, alegraToken: "token-de-prueba" }
 })
 
@@ -105,6 +111,27 @@ describe("POST /api/webhooks/alegra/stock/[tenant]/[evento]/[token]", () => {
     // Deadline ~45 s desde que llegó el aviso (dentro del maxDuration de 60 s).
     expect(state.drenados[0].deadline - antes).toBeLessThanOrEqual(45_000)
     expect(state.drenados[0].deadline - antes).toBeGreaterThan(40_000)
+  })
+
+  it("lee al instante los ítems del aviso, antes de drenar la cola", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {})
+    await llamar("tenant-a", "edit-item", tokenWebhookStock("tenant-a")!, "{}")
+    expect(state.inmediatos).toHaveLength(0)
+    await correrAfter()
+    expect(state.inmediatos).toEqual([{ tenant: "tenant-a", ids: ["5", "7"], antesDeDrenar: true }])
+    expect(state.drenados).toHaveLength(1)
+  })
+
+  it("si la lectura inmediata tira, igual drena la cola", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {})
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    state.resultado = { ...state.resultado, ids: undefined }
+    const cola = await import("@/lib/alegra-stock-cola")
+    vi.spyOn(cola, "leerAlInstante").mockRejectedValueOnce(new Error("base caída"))
+    await llamar("tenant-a", "edit-item", tokenWebhookStock("tenant-a")!, "{}")
+    await correrAfter()
+    expect(error.mock.calls.flat().join(" ")).toContain("[alegra-stock/inmediata] tenant=tenant-a error=")
+    expect(state.drenados).toHaveLength(1)
   })
 
   it("el log no tiene cuerpo, montos, cliente ni token", async () => {

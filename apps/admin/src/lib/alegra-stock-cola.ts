@@ -194,6 +194,101 @@ function esperar(ms: number) {
 }
 
 /**
+ * Lee UN ítem de Alegra y lo escribe en el catálogo (principal o cuenta secundaria según el id).
+ * Suma a `r` leídos / inactivos / requests. Tira los errores de Alegra (429 incluido) y de la base.
+ */
+async function leerItem(config: TenantConfig, alegraId: string, leidoAt: Date, r: ResultadoDrenaje): Promise<void> {
+  const tenantId = config.id
+  if (partirIdDeCola(alegraId)) {
+    // Ítem de una cuenta SECUNDARIA (id `<slug>:<id>`): se lee de SU cuenta, con SUS
+    // credenciales (alegra-stock-cuenta.ts). La principal nunca lo consulta.
+    const res = await refrescarItemDeCuenta(config, alegraId, leidoAt, {
+      reintentos429: REINTENTOS_429,
+      onRequest: () => r.requests++,
+    })
+    if (res === "baja") r.inactivos++
+    else if (res !== "ignorado") r.leidos++
+    return
+  }
+  const producto = await getItemParaEspejo(config, alegraId, {
+    reintentos429: REINTENTOS_429,
+    onRequest: () => r.requests++,
+  })
+  if (producto) {
+    await upsertProductos(tenantId, [producto], { leidoAt, leidoPor: "webhook" })
+    // Y el stock de las sucursales que usan la principal (si no, esperan a la sync).
+    await escribirStockPrincipal(tenantId, getDb(), { alegraIds: [alegraId], origen: "webhook" })
+    // Un cambio de nombre llega por acá en minutos: sus atributos también (tolerante).
+    await sincronizarAtributosDeNombre(tenantId, [producto], "webhook")
+    r.leidos++
+  } else {
+    await marcarItemInactivo(tenantId, alegraId, leidoAt)
+    r.inactivos++
+  }
+}
+
+/** Con más filas que esto en la cola hay una ráfaga (carga masiva): el aviso no lee al instante. */
+export const MAX_COLA_LECTURA_INMEDIATA = 50
+/** Ítems que un aviso lee al instante (una factura grande deja el resto al drenador). */
+export const MAX_ITEMS_LECTURA_INMEDIATA = 20
+
+/**
+ * Lectura INMEDIATA de los ítems de un aviso, sin esperar su turno en la cola: un cambio en
+ * Alegra (un nombre, una venta) se ve en el catálogo en segundos. Cada ítem leído sale de la cola;
+ * lo que no se lee (ráfaga, tope, deadline, 429, error) queda en ella para el drenador.
+ *
+ * - Ráfaga: si la cola del tenant tiene más de MAX_COLA_LECTURA_INMEDIATA filas no lee nada. Una
+ *   carga masiva manda miles de avisos a la vez; leerlos todos en paralelo agotaría el cupo de
+ *   Alegra que comparten el portal y el bot. Esos los lee el drenador a su ritmo.
+ * - Mismo ritmo que el drenador: 1 request por segundo.
+ */
+export async function leerAlInstante(
+  config: TenantConfig,
+  ids: string[],
+  opts: { deadline: number; ritmoMs?: number; dormir?: (ms: number) => Promise<void> },
+): Promise<ResultadoDrenaje & { rafaga: boolean }> {
+  const ritmoMs = opts.ritmoMs ?? 1000
+  const dormir = opts.dormir ?? esperar
+  const r: ResultadoDrenaje & { rafaga: boolean } = { leidos: 0, inactivos: 0, errores: 0, requests: 0, pendientes: 0, corte: "vacia", rafaga: false }
+  const unicos = [...new Set(ids)].slice(0, MAX_ITEMS_LECTURA_INMEDIATA)
+  if (unicos.length === 0) return r
+  if ((await pendientesDe(config.id)) > MAX_COLA_LECTURA_INMEDIATA) {
+    r.rafaga = true
+    return r
+  }
+  let ultimoInicio = -Infinity
+  for (const alegraId of unicos) {
+    const espera = Math.max(0, ultimoInicio + ritmoMs - Date.now())
+    if (Date.now() + espera >= opts.deadline) {
+      r.corte = "deadline"
+      break
+    }
+    if (espera > 0) await dormir(espera)
+    ultimoInicio = Date.now()
+    const leidoAt = new Date()
+    try {
+      await leerItem(config, alegraId, leidoAt, r)
+      await cerrarLeida(config.id, alegraId, leidoAt)
+    } catch (err) {
+      if (err instanceof AlegraRateLimitError) {
+        r.corte = "limite_429"
+        break
+      }
+      r.errores++
+      await anotarError(config.id, alegraId, motivoError(err)).catch(() => {})
+    }
+  }
+  if (r.leidos + r.inactivos > 0) {
+    try {
+      await avisarShop(config.id)
+    } catch (err) {
+      console.warn(`[alegra-stock/inmediata] tenant=${config.id} aviso al Shop falló: ${err instanceof Error ? err.name : "error"}`)
+    }
+  }
+  return r
+}
+
+/**
  * Drena la cola de un tenant hasta vaciarla, llegar al `deadline` (epoch ms) o recibir un 429.
  * Nunca tira por un error de Alegra (queda en el resultado); sí si la base falla.
  */
@@ -250,32 +345,7 @@ export async function drenarTenant(
           }
           const leidoAt = new Date()
           try {
-            if (partirIdDeCola(f.alegraId)) {
-              // Ítem de una cuenta SECUNDARIA (id `<slug>:<id>`): se lee de SU cuenta, con SUS
-              // credenciales (alegra-stock-cuenta.ts). La principal nunca lo consulta.
-              const res = await refrescarItemDeCuenta(config, f.alegraId, leidoAt, {
-                reintentos429: REINTENTOS_429,
-                onRequest: () => r.requests++,
-              })
-              if (res === "baja") r.inactivos++
-              else if (res !== "ignorado") r.leidos++
-            } else {
-              const producto = await getItemParaEspejo(config, f.alegraId, {
-                reintentos429: REINTENTOS_429,
-                onRequest: () => r.requests++,
-              })
-              if (producto) {
-                await upsertProductos(tenantId, [producto], { leidoAt, leidoPor: "webhook" })
-                // Y el stock de las sucursales que usan la principal (si no, esperan a la sync).
-                await escribirStockPrincipal(tenantId, getDb(), { alegraIds: [f.alegraId], origen: "webhook" })
-                // Un cambio de nombre llega por acá en minutos: sus atributos también (tolerante).
-                await sincronizarAtributosDeNombre(tenantId, [producto], "webhook")
-                r.leidos++
-              } else {
-                await marcarItemInactivo(tenantId, f.alegraId, leidoAt)
-                r.inactivos++
-              }
-            }
+            await leerItem(config, f.alegraId, leidoAt, r)
             await cerrarLeida(tenantId, f.alegraId, leidoAt)
           } catch (err) {
             const motivo = motivoError(err)
@@ -322,6 +392,37 @@ export async function drenarTenant(
     `[alegra-stock/drenar] tenant=${tenantId} leidos=${r.leidos} inactivos=${r.inactivos} errores=${r.errores} requests=${r.requests} pendientes=${r.pendientes} corte=${r.corte} ms=${Date.now() - inicio}`,
   )
   return r
+}
+
+/**
+ * La sync COMPLETA de una cuenta terminó bien: leyó todos sus ítems después de `inicio`, así que
+ * los pedidos anteriores ya están cubiertos y se borran (si no, una carga masiva deja miles de
+ * filas que el drenador tarda días en leer). Los posteriores a `inicio` quedan: el ítem pudo
+ * cambiar después de que la sync lo leyera.
+ *
+ * `principal`: ids sin ":"; `slugs`: ids `<slug>:<id>` de esas cuentas secundarias.
+ */
+export async function limpiarColaCubiertaPorSync(
+  tenantId: string,
+  cuentas: { principal: boolean; slugs: string[] },
+  inicio: Date,
+): Promise<number> {
+  const filtros = [
+    ...(cuentas.principal ? [sql`position(':' in ${alegraItemRefresh.alegraId}) = 0`] : []),
+    ...cuentas.slugs.map((slug) => sql`${alegraItemRefresh.alegraId} LIKE ${`${slug.replace(/[\\%_]/g, "\\$&")}:%`}`),
+  ]
+  if (filtros.length === 0) return 0
+  const borradas = await getDb()
+    .delete(alegraItemRefresh)
+    .where(
+      and(
+        eq(alegraItemRefresh.tenantId, tenantId),
+        lt(alegraItemRefresh.pedidoAt, inicio),
+        or(...filtros),
+      ),
+    )
+    .returning({ alegraId: alegraItemRefresh.alegraId })
+  return borradas.length
 }
 
 /**

@@ -28,12 +28,10 @@ type Cambiar = (parcial: Partial<DatosInvitado>) => void;
 function OpcionModo({
   marcada,
   titulo,
-  descripcion,
   onElegir,
 }: {
   marcada: boolean;
   titulo: string;
-  descripcion: string;
   onElegir: () => void;
 }) {
   return (
@@ -47,7 +45,6 @@ function OpcionModo({
       }`}
     >
       <span className="block text-sm font-semibold text-text">{titulo}</span>
-      <span className="block text-xs text-muted">{descripcion}</span>
     </button>
   );
 }
@@ -110,13 +107,11 @@ export function FormularioInvitado({
           <OpcionModo
             marcada={!esFacturaA}
             titulo={T.consumidorFinal}
-            descripcion={T.consumidorFinalDescripcion}
             onElegir={() => onCambiar({ modo: "consumidor_final" })}
           />
           <OpcionModo
             marcada={esFacturaA}
             titulo={T.facturaA}
-            descripcion={T.facturaADescripcion}
             onElegir={() => onCambiar({ modo: "factura_a" })}
           />
         </div>

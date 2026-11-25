@@ -31,6 +31,8 @@ export const TEXTOS_INVITADO = {
   verificacionPendiente: "Estamos verificando que usted es una persona. Aguarde un instante.",
   verificacionFallida: "No pudimos verificar la solicitud. Recargue la página e inténtelo nuevamente.",
   ingresar: "Ya tengo cuenta, ingresar",
+  /** Justo después de ingresar, mientras se carga el checkout con la cuenta. */
+  cargandoCuenta: "Cargando los datos de su cuenta…",
   avisoCarrito: "Puede completar su compra sin crear una cuenta.",
   carritoTitulo: "Está comprando como invitado",
   botonIngresar: "Ingresar",

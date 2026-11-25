@@ -22,7 +22,7 @@ describe("metadataDeMarca — Central sin cambios", () => {
   it("sin dominio ni verificación", () => {
     expect(metadataDeMarca(MARCA_POR_DEFECTO, {})).toEqual({
       metadataBase: undefined,
-      title: "Central LED — Tienda Online",
+      title: { default: "Central LED — Tienda Online", template: "%s | Central LED" },
       description:
         "Iluminación, materiales eléctricos, herramientas y mucho más en Puerto Iguazú, Misiones. Stock en tiempo real.",
       icons: ICONOS,
@@ -35,7 +35,7 @@ describe("metadataDeMarca — Central sin cambios", () => {
       metadataDeMarca(MARCA_POR_DEFECTO, { siteUrl: "https://tienda.example", facebookToken: "abc123" }),
     ).toEqual({
       metadataBase: new URL("https://tienda.example"),
-      title: "Central LED — Tienda Online",
+      title: { default: "Central LED — Tienda Online", template: "%s | Central LED" },
       description:
         "Iluminación, materiales eléctricos, herramientas y mucho más en Puerto Iguazú, Misiones. Stock en tiempo real.",
       icons: ICONOS,
@@ -74,7 +74,7 @@ describe("metadataDeMarca — tienda con marca propia", () => {
   it("título y descripción propios, sin rastro de Central", () => {
     const m = resolverMarca({ base: "generica", nombre: "Tienda Uno" });
     const meta = metadataDeMarca(m, {});
-    expect(meta.title).toBe("Tienda Uno — Tienda Online");
+    expect(meta.title).toEqual({ default: "Tienda Uno — Tienda Online", template: "%s | Tienda Uno" });
     expect(JSON.stringify(meta)).not.toMatch(/central|iguaz/i);
     expect(meta.icons).toEqual({ icon: [{ url: "/images/generica/icon.svg", type: "image/svg+xml" }] });
   });

@@ -71,7 +71,7 @@ describe("sin fugas de Central en el sitio con marca propia", () => {
     expect(s.logoHeader.fuente).toBe("texto");
     expect(s.logoMail).toBeNull();
     expect(s.avatarChat).toBeNull();
-    expect(s.metadata.title).toBe("Tienda B — Tienda Online");
+    expect(s.metadata.title).toEqual({ default: "Tienda B — Tienda Online", template: "%s | Tienda B" });
   });
 });
 
@@ -124,7 +124,7 @@ describe("el sitio principal queda igual que hoy", () => {
       expect(s.logoHeader.fuente).toBe("central");
       expect(s.logoMail).toBe("https://tienda-b.example/images/central-led/logo-mail.png");
       expect(s.avatarChat).toBe("/images/central-led/avatar.jpg");
-      expect(s.metadata.title).toBe("Central LED — Tienda Online");
+      expect(s.metadata.title).toEqual({ default: "Central LED — Tienda Online", template: "%s | Central LED" });
     }
   });
 });

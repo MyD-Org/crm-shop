@@ -13,6 +13,7 @@ import { TEXTOS_PRECIOS_CLIENTE } from "@/lib/precios-cliente-textos";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, Stepper, type PaymentLogo } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
@@ -563,6 +564,16 @@ export function CheckoutClient({
   // que falten).
   const seccionFacturacion = !facturacion.vinculado && !invitadoActivo;
   const router = useRouter();
+
+  // Volver de «Ingresar» al checkout puede mostrar la versión de invitado que el router tenía
+  // guardada: si el server la armó como invitado pero ya hay sesión, se pide de nuevo.
+  const { isSignedIn } = useAuth();
+  // Mientras llega la versión con sesión no se muestra el formulario de invitado (con su «Ingresar»):
+  // quien acaba de ingresar vería que «no lo tomó».
+  const actualizandoSesion = invitadoActivo && isSignedIn === true;
+  useEffect(() => {
+    if (actualizandoSesion) router.refresh();
+  }, [actualizandoSesion, router]);
 
   // Envío al domicilio fiscal: con el envío a domicilio activo, sin direcciones guardadas
   // y con el domicilio fiscal dentro de la zona, se ofrece por defecto y se
@@ -2278,14 +2289,22 @@ export function CheckoutClient({
             <section className="rounded-[20px] border border-border/50 bg-surface p-5">
               {cabeceraPasos}
               <h2 className="mb-4 font-display text-2xl font-medium text-text">{TEXTOS_INVITADO.tituloDatos}</h2>
-              <FormularioInvitado
-                datos={datosInv}
-                errores={erroresInv}
-                onCambiar={cambiarDatosInvitado}
-                trampa={trampa}
-                onTrampa={setTrampa}
-              />
-              <NavPaso error={errorPaso} onContinuar={continuarDesdeInvitado} total={cotizacion?.total} />
+              {actualizandoSesion ? (
+                <p role="status" className="py-8 text-center text-sm text-muted">
+                  {TEXTOS_INVITADO.cargandoCuenta}
+                </p>
+              ) : (
+                <>
+                  <FormularioInvitado
+                    datos={datosInv}
+                    errores={erroresInv}
+                    onCambiar={cambiarDatosInvitado}
+                    trampa={trampa}
+                    onTrampa={setTrampa}
+                  />
+                  <NavPaso error={errorPaso} onContinuar={continuarDesdeInvitado} total={cotizacion?.total} />
+                </>
+              )}
             </section>
           )}
 

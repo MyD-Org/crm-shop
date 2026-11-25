@@ -12,11 +12,46 @@ import {
   type EntregaTipo,
 } from "@/lib/envio";
 import { SLUG_MERCADOPAGO, mediosParaModalidad, type MedioPago } from "@/lib/medios-pago";
+import { fmtPesosEnteros } from "@/lib/format";
+import type { MetodoEnvio } from "@/lib/envio-zona";
 import type { Bloque } from "./comun";
 
 function listar(items: readonly string[]): string {
   if (items.length <= 1) return items.join("");
   return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
+}
+
+const conPunto = (t: string) => (/[.!?]$/.test(t) ? t : `${t}.`);
+
+/**
+ * Un párrafo por método de envío por zona activo (flag `envio-por-zona`; sin él `envio.metodos` no existe):
+ * nombre, localidades que atiende, tarifa de cada zona, la promesa y el aviso de feriados que cargó el comercio.
+ * Sin geometría: sólo nombres y precios. Vacío si no hay métodos activos con zonas.
+ */
+function parrafosMetodos(metodos: readonly MetodoEnvio[] | undefined): string[] {
+  return (metodos ?? [])
+    .filter((m) => m.activo && m.zonas.some((z) => z.activa))
+    .sort((a, b) => a.orden - b.orden)
+    .map((m) => {
+      const vistas = new Set<string>();
+      const zonas = m.zonas
+        .filter((z) => z.activa)
+        .sort((a, b) => a.precio - b.precio)
+        .filter((z) => (vistas.has(z.nombre) ? false : (vistas.add(z.nombre), true)))
+        .map((z) => `${z.nombre}: ${fmtPesosEnteros(z.precio)}`);
+      const lugares = [
+        ...new Set((m.localidades ?? []).map((l) => (l.etiqueta ?? "").split(" — ")[0].trim()).filter(Boolean)),
+      ];
+      const donde = lugares.length ? ` a ${listar(lugares)}` : "";
+      // Con sucursal de origen, el método sólo vale si el pedido sale completo de ese local (como al cobrarlo).
+      const origen = m.sucursalOrigen
+        ? "Vale para pedidos con todos sus productos disponibles en el local que despacha; si alguno hay que traerlo de otra sucursal, el envío se coordina aparte"
+        : "";
+      return [`${m.nombre}${donde}. ${conPunto(listar(zonas))}`, m.promesa.trim(), m.avisoFeriados.trim(), origen]
+        .filter(Boolean)
+        .map(conPunto)
+        .join(" ");
+    });
 }
 
 const PAGO_A_COORDINAR = `${PAGO_LABEL.a_coordinar}: una vez confirmado el pedido, el comercio se comunicará con usted para acordar el medio de pago.`;
@@ -31,13 +66,20 @@ function mediosDe(tipo: EntregaTipo, medios: readonly MedioPago[]): string {
  * Sin medios aplicables a ninguna modalidad, el pago se coordina con un asesor.
  */
 export function bloquesEnviosYPagos(ctx: { envio: ConfigEnvio; medios: readonly MedioPago[]; cuotas: boolean }): Bloque[] {
+  const metodos = parrafosMetodos(ctx.envio.metodos);
   const entregas: Bloque = ctx.envio.domicilioActivo
     ? {
         titulo: "Entregas",
-        parrafos: [
-          `${ENTREGA_LABEL.envio}: ${textoRegla(ctx.envio)}`,
-          `Una vez confirmado el pedido, el comercio se comunicará con usted para coordinar la entrega.`,
-        ],
+        parrafos: metodos.length
+          ? [
+              ...metodos,
+              `Otros destinos: ${textoRegla(ctx.envio)}`,
+              `En esos casos, una vez confirmado el pedido, el comercio se comunicará con usted para coordinar la entrega.`,
+            ]
+          : [
+              `${ENTREGA_LABEL.envio}: ${textoRegla(ctx.envio)}`,
+              `Una vez confirmado el pedido, el comercio se comunicará con usted para coordinar la entrega.`,
+            ],
       }
     : {
         titulo: "Entregas",
@@ -62,7 +104,7 @@ export function bloquesEnviosYPagos(ctx: { envio: ConfigEnvio; medios: readonly 
             return lista ? `${cuando}: ${lista}.` : `${cuando}: el pago se coordina con un asesor una vez confirmado el pedido.`;
           }),
           ...(ctx.cuotas && conMp
-            ? ["Las cuotas sin interés disponibles con tarjeta de crédito se informan antes de confirmar la compra."]
+            ? ["Con tarjeta de crédito, las cuotas sin interés disponibles para su tarjeta se eligen al ingresarla, antes de pagar."]
             : []),
         ],
       }

@@ -87,6 +87,9 @@ export function resolverFacturacionInvitado(
   }
 
   const aDomicilio = entrega.tipo === "envio";
+  // Consumidor final que retira en el local: sin domicilio. La factura B a consumidor final no lo exige
+  // (ARCA, RG 5700/2025: sólo el documento, y desde $ 10.000.000) y el CRM no lo manda a Alegra.
+  const pideDomicilio = esFacturaA || aDomicilio;
   const provinciaTexto = aDomicilio ? (entrega.provincia ?? "") : texto(f.domicilioProvincia, 80);
   const datos: DatosLeidos & { pais: string } = {
     pais: "AR",
@@ -94,10 +97,10 @@ export function resolverFacturacionInvitado(
     nroDoc: normalizarDoc(tipoDoc, texto(f.nroDoc, 30)),
     razonSocial: texto(f.razonSocial, 120) || (esFacturaA ? "" : texto(nombreContacto, 120)),
     condicionIva,
-    domicilioCalle: aDomicilio ? texto(entrega.calle, 200) : texto(f.domicilioCalle, 200),
-    domicilioCiudad: aDomicilio ? texto(entrega.ciudad, 80) : texto(f.domicilioCiudad, 80),
-    domicilioProvincia: provinciaCanonica(provinciaTexto) ?? provinciaTexto,
-    domicilioCp: texto(f.domicilioCp, 10).toUpperCase(),
+    domicilioCalle: !pideDomicilio ? "" : aDomicilio ? texto(entrega.calle, 200) : texto(f.domicilioCalle, 200),
+    domicilioCiudad: !pideDomicilio ? "" : aDomicilio ? texto(entrega.ciudad, 80) : texto(f.domicilioCiudad, 80),
+    domicilioProvincia: !pideDomicilio ? "" : (provinciaCanonica(provinciaTexto) ?? provinciaTexto),
+    domicilioCp: !pideDomicilio ? "" : texto(f.domicilioCp, 10).toUpperCase(),
   };
 
   const errores = validarFacturacion({
@@ -111,7 +114,9 @@ export function resolverFacturacionInvitado(
     domicilioProvincia: datos.domicilioProvincia,
     domicilioCp: datos.domicilioCp,
   });
-  if (!datos.domicilioCp) errores.domicilioCp = "Ingrese el código postal.";
+  if (!pideDomicilio) {
+    for (const campo of ["domicilioCalle", "domicilioCiudad", "domicilioProvincia", "domicilioCp"]) delete errores[campo];
+  } else if (!datos.domicilioCp) errores.domicilioCp = "Ingrese el código postal.";
   else if (!CP_ARGENTINO.test(datos.domicilioCp)) errores.domicilioCp = "Ingrese un código postal válido.";
 
   const campos = Object.keys(errores);

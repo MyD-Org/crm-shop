@@ -79,11 +79,29 @@ describe("resolverFacturacionInvitado", () => {
     if (!r.ok) expect(r.campos).toEqual(["domicilioCp"]);
   });
 
-  it("retiro: el domicilio fiscal viene en el mismo bloque, con provincia canónica", () => {
-    const sin = resolverFacturacionInvitado(consumidor, RETIRO, "Ana");
+  it("retiro con consumidor final: no pide domicilio y no guarda el que llegue (RG 5700/2025)", () => {
+    const sinNada = resolverFacturacionInvitado({ modo: "consumidor_final", nroDoc: "30.123.456" }, RETIRO, "Ana");
+    expect(sinNada).toMatchObject({ ok: true, nroDoc: "30123456" });
+    const conDomicilio = resolverFacturacionInvitado(
+      { ...consumidor, domicilioCalle: "Av. Siempreviva 742", domicilioCiudad: "Mar del Plata", domicilioProvincia: "buenos aires" },
+      RETIRO,
+      "Ana",
+    );
+    expect(conDomicilio.ok && conDomicilio.datos).toMatchObject({
+      domicilioCalle: "",
+      domicilioCiudad: "",
+      domicilioProvincia: "",
+      domicilioCp: "",
+    });
+    // El DNI se sigue pidiendo.
+    expect(resolverFacturacionInvitado({ modo: "consumidor_final", nroDoc: "" }, RETIRO, "Ana").ok).toBe(false);
+  });
+
+  it("retiro con factura A: el domicilio fiscal viene en el mismo bloque, con provincia canónica", () => {
+    const sin = resolverFacturacionInvitado(facturaA, RETIRO, "Ana");
     expect(sin.ok).toBe(false);
     const r = resolverFacturacionInvitado(
-      { ...consumidor, domicilioCalle: "Av. Siempreviva 742", domicilioCiudad: "Mar del Plata", domicilioProvincia: "buenos aires" },
+      { ...facturaA, domicilioCalle: "Av. Siempreviva 742", domicilioCiudad: "Mar del Plata", domicilioProvincia: "buenos aires" },
       RETIRO,
       "Ana",
     );

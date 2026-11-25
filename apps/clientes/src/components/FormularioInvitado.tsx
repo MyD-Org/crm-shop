@@ -12,7 +12,8 @@ import type { DatosInvitado } from "@/lib/invitado-form";
  * el estado vive en `CheckoutClient` y se pierde al recargar (sin cookie ni almacenamiento).
  *
  * - `FormularioInvitado`: paso «Sus datos» (correo dos veces, nombre, teléfono, facturación).
- * - `DomicilioInvitado`: paso de entrega (código postal; en un retiro, el domicilio de facturación).
+ * - `DomicilioInvitado`: paso de entrega (código postal; en un retiro con factura A, el domicilio de
+ *   facturación; consumidor final que retira: nada).
  */
 
 const CONDICIONES = [
@@ -167,6 +168,8 @@ export function DomicilioInvitado({
   /** Con envío, el domicilio fiscal es el de la entrega: sólo falta el código postal. */
   aDomicilio: boolean;
 }) {
+  // Consumidor final que retira en el local: no se pide domicilio (misma regla que el servidor).
+  if (!aDomicilio && datos.modo !== "factura_a") return null;
   return (
     <div className="mt-4 space-y-4">
       {!aDomicilio && (

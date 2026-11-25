@@ -64,8 +64,14 @@ describe("facturación del invitado", () => {
     expect(erroresFacturacionInvitado({ ...a, nroDoc: "20123456780" }, envio)?.campo).toBe("nroDoc");
   });
 
-  it("en retiro el domicilio de facturación viaja en el mismo bloque", () => {
-    const d = { ...base, calle: "San Martín 100", ciudad: "Posadas", provincia: "Misiones" };
+  it("en retiro, consumidor final completa sin domicilio", () => {
+    expect(erroresFacturacionInvitado({ ...base, cp: "" }, retiro)).toBeNull();
+    expect(invitadoCompleto({ ...base, cp: "" }, retiro)).toBe(true);
+  });
+
+  it("en retiro con factura A el domicilio de facturación viaja en el mismo bloque", () => {
+    const facturaA = { ...base, modo: "factura_a" as const, nroDoc: CUIT, razonSocial: "Empresa de Prueba SA", condicionIva: "monotributo" };
+    const d = { ...facturaA, calle: "San Martín 100", ciudad: "Posadas", provincia: "Misiones" };
     expect(cuerpoFacturacionInvitado(d, retiro)).toMatchObject({
       domicilioCalle: "San Martín 100",
       domicilioCiudad: "Posadas",
@@ -73,8 +79,8 @@ describe("facturación del invitado", () => {
       domicilioCp: "3300",
     });
     expect(erroresFacturacionInvitado(d, retiro)).toBeNull();
-    // Sin domicilio no se factura.
-    expect(erroresFacturacionInvitado({ ...base }, retiro)).not.toBeNull();
+    // Factura A sin domicilio no se factura.
+    expect(erroresFacturacionInvitado(facturaA, retiro)).not.toBeNull();
   });
 
   it("código postal vacío o inválido", () => {

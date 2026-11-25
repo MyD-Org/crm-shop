@@ -1,6 +1,7 @@
 "use client";
 
 import { Field, Input, Select } from "@myd-org/ui";
+import { AvisoInvitado } from "@/components/AvisoInvitado";
 import { CAMPO_TRAMPA } from "@/lib/arrepentimiento";
 import { PROVINCIAS_AR } from "@/lib/provincias";
 import { TEXTOS_INVITADO as T } from "@/lib/invitado-textos";
@@ -68,6 +69,7 @@ export function FormularioInvitado({
   const esFacturaA = datos.modo === "factura_a";
   return (
     <div className="space-y-5">
+      <AvisoInvitado volverA="/checkout" />
       <p className="text-sm text-muted">{T.introDatos}</p>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={T.email} error={errores.email}>

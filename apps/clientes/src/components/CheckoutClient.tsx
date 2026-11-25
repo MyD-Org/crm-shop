@@ -13,6 +13,7 @@ import { TEXTOS_PRECIOS_CLIENTE } from "@/lib/precios-cliente-textos";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, Stepper, type PaymentLogo } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
@@ -563,6 +564,13 @@ export function CheckoutClient({
   // que falten).
   const seccionFacturacion = !facturacion.vinculado && !invitadoActivo;
   const router = useRouter();
+
+  // Volver de «Ingresar» al checkout puede mostrar la versión de invitado que el router tenía
+  // guardada: si el server la armó como invitado pero ya hay sesión, se pide de nuevo.
+  const { isSignedIn } = useAuth();
+  useEffect(() => {
+    if (invitadoActivo && isSignedIn) router.refresh();
+  }, [invitadoActivo, isSignedIn, router]);
 
   // Envío al domicilio fiscal: con el envío a domicilio activo, sin direcciones guardadas
   // y con el domicilio fiscal dentro de la zona, se ofrece por defecto y se

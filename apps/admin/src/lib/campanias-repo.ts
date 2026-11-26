@@ -236,12 +236,8 @@ export async function guardarCampania(
     if (fin.getTime() <= ahora.getTime()) {
       throw new PreciosOnlineError(422, "fin_pasado", "La fecha de fin debe ser posterior al momento actual.")
     }
-    const choque = await choqueDe(tx, tenantId, e.inicio, e.fin, id)
-    if (choque) {
-      throw new PreciosOnlineError(409, "campania_superpuesta", `Las fechas se superponen con la campaña "${choque.nombre}".`, {
-        choque,
-      })
-    }
+    // Varias campañas pueden estar activas a la vez. Si un producto queda en más de una, rige la
+    // que empezó primero (orden de `campanias_online`, el mismo en el Shop y en el carrito).
     const valores = { nombre: e.nombre, etiqueta: e.etiqueta || e.nombre, inicio, fin }
     let campaniaId = id
     if (campaniaId) {
@@ -304,7 +300,7 @@ export async function previsualizarCampania(
       if (exceptoId) await cargar(tx, tenantId, exceptoId) // 404 si no es del tenant
       await validarCategorias(tx, tenantId, e.reglas)
       const choque = await choqueDe(tx, tenantId, e.inicio, e.fin, exceptoId)
-      // La previa no se cruza con el choque: se mide en una campaña temporal sin otras alrededor.
+      // `choque` es sólo un aviso (no bloquea): otra campaña con fechas superpuestas.
       let campaniaId = exceptoId
       const valores = { nombre: e.nombre, etiqueta: e.etiqueta || e.nombre, inicio: new Date(e.inicio), fin: new Date(e.fin) }
       if (campaniaId) {

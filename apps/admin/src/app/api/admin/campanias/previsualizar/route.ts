@@ -7,7 +7,7 @@ import { puedeVerCostos, sinCampos } from "@/lib/secciones"
 
 // POST /api/admin/campanias/previsualizar — { campania, exceptoId? } -> { previa }: productos
 // alcanzados, cuántos quedan por debajo del costo, una muestra normal -> campaña por lista y el
-// choque de fechas con otra campaña (si lo hay). No guarda nada. Con la sección (sin ella -> 404). Sin
+// aviso de otra campaña con fechas superpuestas (si la hay; no bloquea). No guarda nada. Con la sección (sin ella -> 404). Sin
 // permiso de costos (`puedeVerCostos`) la muestra no incluye `costo` (el conteo `bajoCosto` sí).
 
 export async function POST(req: Request) {

@@ -50,7 +50,7 @@ Acciones disponibles:
 | Eliminar | Programada | Se borra |
 | Ver | Terminada | Sólo lectura, para historial |
 
-**Sin superposición (v1, decisión mía):** dos campañas del mismo tenant no pueden tener ventanas que se pisen. El CRM lo valida al guardar. Black Friday y Cyber Monday pegadas sí se pueden (fin de una = inicio de la otra).
+**Superposición (2026-11-26, reemplaza la regla v1 «sin superposición»):** varias campañas del mismo tenant pueden estar activas a la vez. Si un producto queda en más de una, rige la que empezó primero (desempate por id): es el orden de `campanias_online`, que ya usaban el Shop, el carrito y la grilla. La vista previa avisa (sin bloquear) cuando las fechas se pisan con otra campaña.
 
 ## Reglas de precio
 
@@ -82,7 +82,7 @@ Tablas nuevas en `public` (migración del CRM; ver la nota de numeración más a
 
 - **`campanias`**: `id uuid`, `tenant_id`, `nombre`, `etiqueta`, `inicio timestamptz`, `fin timestamptz`, `creado_por`, timestamps.
   - CHECK `fin > inicio`.
-  - Exclusión de superposición por tenant: `EXCLUDE USING gist (tenant_id WITH =, tstzrange(inicio, fin) WITH &&)` o validación equivalente.
+  - Sin exclusión de superposición (ver «Superposición»: las campañas pueden convivir).
 - **`campania_reglas`**: `campania_id`, `tipo` (`producto` | `marca` | `categoria`), `alegra_id` | `marca` (normalizada `lower(btrim())`) | `categoria_id`, `pct smallint` (0–90). Índice único por campaña y objetivo.
 - **Columna nueva en `catalog_products`**: `campanias_online jsonb`. Es un arreglo con las campañas **no terminadas** que alcanzan al producto, cada una así:
 

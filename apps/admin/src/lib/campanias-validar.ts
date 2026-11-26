@@ -1,5 +1,5 @@
 // Validación pura de una campaña de precios (spec 2026-10-28-campanias-precios-design.md). Lo que
-// depende de la base (choque de fechas, estado actual, fin en el futuro al crear) lo valida
+// depende de la base (estado actual, fin en el futuro al crear) lo valida
 // `campanias-repo.ts` dentro de la transacción. Textos en usted: se muestran tal cual en el admin.
 
 export type AlcanceRegla =

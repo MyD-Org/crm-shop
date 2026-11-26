@@ -79,15 +79,16 @@ describe("guardarCampania", () => {
     expect(hist[0]).toMatchObject({ tipo: "campania", objeto: `campania:${id}`, usuario: ACTOR.email })
   })
 
-  it("rechaza una campaña que se superpone con otra; contiguas se pueden", async () => {
+  it("permite campañas superpuestas; si un producto está en las dos, primero va la que empezó antes", async () => {
     const ahora = await ahoraDb()
-    await guardarCampania(T, entrada(ahora, { inicio: horas(ahora, 1), fin: horas(ahora, 10) }), ACTOR)
-    const e = await rechaza(guardarCampania(T, entrada(ahora, { inicio: horas(ahora, 5), fin: horas(ahora, 20) }), ACTOR))
-    expect(e.status).toBe(409)
-    expect(e.message).toContain("Black Friday")
-    await expect(
-      guardarCampania(T, entrada(ahora, { nombre: "Cyber Monday", inicio: horas(ahora, 10), fin: horas(ahora, 20) }), ACTOR),
-    ).resolves.toMatchObject({ id: expect.any(String) })
+    const { id: antes } = await guardarCampania(T, entrada(ahora, { inicio: horas(ahora, -2), fin: horas(ahora, 10) }), ACTOR)
+    const { id: despues } = await guardarCampania(
+      T,
+      entrada(ahora, { nombre: "Cyber Monday", inicio: horas(ahora, -1), fin: horas(ahora, 20) }),
+      ACTOR,
+    )
+    expect(despues).not.toBe(antes)
+    expect((await campaniasDe("1"))?.map((e) => e.id)).toEqual([antes, despues])
   })
 
   it("al crear, el fin tiene que estar en el futuro", async () => {

@@ -6,25 +6,40 @@ import { fmtPrecioCorto } from "@/lib/format";
 import { esUltimas, fechaCortaAR, frasePrecio } from "@/lib/promociones/promo";
 import { CuentaRegresiva } from "./CuentaRegresiva";
 import { UnidadesPromo } from "./piezas";
+import { useAhora } from "./reloj";
+
+/** Días antes del fin desde los que la ficha muestra la fecha y la cuenta regresiva. */
+export const DIAS_AVISO_FIN = 7;
+
+/**
+ * ¿Se muestra el fin de la campaña? Sólo cuando falta poco: una campaña larga (o "sin fecha", cargada
+ * con un fin lejano) no anuncia cuándo termina. Sin reloj (servidor e hidratación) no se muestra.
+ */
+export function mostrarFin(fin: string, ahora: number | null): boolean {
+  if (ahora === null) return false;
+  return Date.parse(fin) - ahora <= DIAS_AVISO_FIN * 24 * 60 * 60 * 1000;
+}
 
 /**
  * Bloque de una campaña de precios en la ficha (spec apps/admin/docs/superpowers/specs/
  * 2026-10-28-campanias-precios-design.md), con el diseño del de la promo de la home: la etiqueta,
- * "Termina el …", nuestro precio habitual tachado con el % en verde, las unidades que quedan (si la
+ * "Termina el …" (sólo en los últimos días, ver `mostrarFin`), nuestro precio habitual tachado con el % en verde, las unidades que quedan (si la
  * regla tiene límite) y la cuenta regresiva. El precio grande ya es el de campaña (`producto.price`).
  * Al terminar la campaña la página se refresca: el precio vuelve al normal sin recargar a mano.
  */
 export function CampaniaFicha({ producto }: { producto: Product }) {
   const router = useRouter();
+  const ahora = useAhora();
   const c = producto.campania;
   if (!c) return null;
   // Sin stock en la tienda manda el stock: nunca "quedan N" sobre algo que no se puede comprar.
   const quedan = producto.stock === "out" ? 0 : c.quedan;
+  const conFin = mostrarFin(c.fin, ahora);
   return (
     <div data-campania={c.id} className="mt-4 flex flex-col gap-3 rounded-xl border border-black/10 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">{c.etiqueta}</span>
-        <span className="text-sm text-text">Termina el {fechaCortaAR(c.fin)}</span>
+        {conFin ? <span className="text-sm text-text">Termina el {fechaCortaAR(c.fin)}</span> : null}
       </div>
       {producto.oldPrice ? (
         <p className="flex flex-wrap items-center gap-2 text-sm text-muted">
@@ -50,7 +65,7 @@ export function CampaniaFicha({ producto }: { producto: Product }) {
           <p className="text-sm font-semibold text-text">Agotadas las unidades a {frasePrecio(c.etiqueta)}</p>
         )
       ) : null}
-      <CuentaRegresiva fin={c.fin} className="text-sm text-text" onFin={() => router.refresh()} />
+      {conFin ? <CuentaRegresiva fin={c.fin} className="text-sm text-text" onFin={() => router.refresh()} /> : null}
     </div>
   );
 }

@@ -4,7 +4,10 @@ import type { CampaniaProducto, Product } from "@/data/products";
 import { badgeCampania } from "./PromoProvider";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
-const { CampaniaFicha } = await import("./CampaniaFicha");
+// Reloj fijo: 26/11/2026 12:00 (Argentina). BF termina el 30/11 23:59, a 4 días.
+const reloj = vi.hoisted(() => ({ ahora: Date.parse("2026-11-26T15:00:00.000Z") as number | null }));
+vi.mock("./reloj", () => ({ useAhora: () => reloj.ahora }));
+const { CampaniaFicha, mostrarFin } = await import("./CampaniaFicha");
 
 // Campañas de precios en cards y ficha (spec 2026-10-28-campanias-precios-design.md). Datos inventados.
 
@@ -29,6 +32,13 @@ describe("CampaniaFicha", () => {
     expect(t).toContain("Precio habitual");
     expect(t).toContain("20 % de descuento");
     expect(t).toContain("Termina el 30/11");
+  });
+
+  it("campaña larga: no anuncia el fin ni la cuenta regresiva", () => {
+    const lejana = { ...BF, fin: "2027-06-30T02:59:00.000Z" };
+    const t = texto(renderToStaticMarkup(<CampaniaFicha producto={{ ...producto, campania: lejana }} />));
+    expect(t).toContain("20 % de descuento");
+    expect(t).not.toContain("Termina");
   });
 
   it("con límite chico: un punto por unidad (2 libres de 5) y la urgencia", () => {
@@ -57,5 +67,16 @@ describe("CampaniaFicha", () => {
 
   it("sin campaña no dibuja nada", () => {
     expect(renderToStaticMarkup(<CampaniaFicha producto={{ ...producto, campania: undefined }} />)).toBe("");
+  });
+});
+
+describe("mostrarFin", () => {
+  const ahora = Date.parse("2026-11-26T15:00:00.000Z");
+  it("dentro de los 7 días, sí; más lejos, no", () => {
+    expect(mostrarFin("2026-12-03T14:00:00.000Z", ahora)).toBe(true);
+    expect(mostrarFin("2026-12-03T16:00:00.000Z", ahora)).toBe(false);
+  });
+  it("sin reloj (servidor), no", () => {
+    expect(mostrarFin("2026-11-27T00:00:00.000Z", null)).toBe(false);
   });
 });

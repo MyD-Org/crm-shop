@@ -1714,6 +1714,8 @@ export const campanias = pgTable(
     etiqueta: text("etiqueta").notNull(),
     inicio: timestamp("inicio", { withTimezone: true }).notNull(),
     fin: timestamp("fin", { withTimezone: true }).notNull(),
+    // 0108: el cliente ve «Hasta agotar stock» en vez del fin (que sigue rigiendo la ventana).
+    hastaAgotarStock: boolean("hasta_agotar_stock").notNull().default(false),
     creadoPor: text("creado_por"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

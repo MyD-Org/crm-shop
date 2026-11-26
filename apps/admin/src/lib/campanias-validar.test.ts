@@ -22,6 +22,14 @@ describe("validarCampania", () => {
     expect(r.valor.reglas[0].alcance).toEqual({ tipo: "marca", marca: "acme" })
   })
 
+  it("hastaAgotarStock: false por defecto, true si se manda y error si no es booleano", () => {
+    const sin = validarCampania(base)
+    expect(sin.ok && sin.valor.hastaAgotarStock).toBe(false)
+    const con = validarCampania({ ...base, hastaAgotarStock: true })
+    expect(con.ok && con.valor.hastaAgotarStock).toBe(true)
+    expect(errores({ ...base, hastaAgotarStock: "sí" })).toContain("Indique si la campaña es hasta agotar stock.")
+  })
+
   it("fin igual al inicio es un error", () => {
     expect(errores({ ...base, fin: base.inicio })).toContain("La fecha de fin debe ser posterior al inicio.")
   })

@@ -91,6 +91,27 @@ describe("guardarCampania", () => {
     expect((await campaniasDe("1"))?.map((e) => e.id)).toEqual([antes, despues])
   })
 
+  it("guarda «Hasta agotar stock», lo lee el admin y lo expone campanias_shop (lo que lee el Shop)", async () => {
+    const ahora = await ahoraDb()
+    const { id } = await guardarCampania(T, entrada(ahora, { hastaAgotarStock: true }), ACTOR)
+    expect((await leerCampania(T, id))?.hastaAgotarStock).toBe(true)
+    expect((await listarCampanias(T)).find((c) => c.id === id)?.hastaAgotarStock).toBe(true)
+    const vista = (await getDb().execute(
+      sql`SELECT hasta_agotar_stock FROM campanias_shop WHERE id = ${id}`,
+    )) as unknown as { hasta_agotar_stock: boolean }[]
+    expect(vista[0].hasta_agotar_stock).toBe(true)
+
+    // Editar sin la casilla la apaga (el fin interno sigue igual).
+    await guardarCampania(T, entrada(ahora, { inicio: (await leerCampania(T, id))!.inicio }), ACTOR, id)
+    expect((await leerCampania(T, id))?.hastaAgotarStock).toBe(false)
+  })
+
+  it("sin la casilla, la campaña no es hasta agotar stock", async () => {
+    const ahora = await ahoraDb()
+    const { id } = await guardarCampania(T, entrada(ahora), ACTOR)
+    expect((await leerCampania(T, id))?.hastaAgotarStock).toBe(false)
+  })
+
   it("al crear, el fin tiene que estar en el futuro", async () => {
     const ahora = await ahoraDb()
     const e = await rechaza(guardarCampania(T, entrada(ahora, { inicio: horas(ahora, -10), fin: horas(ahora, -1) }), ACTOR))

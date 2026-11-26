@@ -99,12 +99,11 @@ describe("/api/admin/campanias", () => {
     expect((await json(res)).errores).toContain("Agregue al menos una regla.")
   })
 
-  it("POST con choque de fechas: 409", async () => {
+  it("POST con fechas superpuestas a otra campaña: 201 (conviven)", async () => {
     const ahora = await ahoraDb()
     await lista.POST(req("/api/admin/campanias", { body: cuerpo(ahora) }))
     const res = await lista.POST(req("/api/admin/campanias", { body: cuerpo(ahora, { nombre: "Otra" }) }))
-    expect(res.status).toBe(409)
-    expect((await json(res)).code).toBe("campania_superpuesta")
+    expect(res.status).toBe(201)
   })
 
   it("PUT de una terminada: 409; DELETE de una programada: 204; terminar una activa: 200", async () => {

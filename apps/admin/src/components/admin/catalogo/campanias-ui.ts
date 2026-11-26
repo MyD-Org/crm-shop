@@ -118,7 +118,8 @@ export const TEXTOS_CAMPANIAS = {
     n === 1 ? "1 producto quedaría por debajo del costo." : `${n} productos quedarían por debajo del costo.`,
   confirmarBajoCosto: (n: number) =>
     `Hay ${n === 1 ? "1 producto que quedaría" : `${n} productos que quedarían`} por debajo del costo. ¿Desea guardar igual?`,
-  choque: (nombre: string) => `Las fechas se superponen con la campaña "${nombre}". Cambie las fechas para poder guardar.`,
+  choque: (nombre: string) =>
+    `Convive con la campaña "${nombre}". Si un producto está en las dos, rige la que empezó primero.`,
   muestra: "Muestra",
   normal: "Normal",
   conCampania: "Con campaña",

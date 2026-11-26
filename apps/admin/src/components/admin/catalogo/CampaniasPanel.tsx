@@ -255,7 +255,7 @@ export function CampaniasPanel({ categorias }: Props) {
             </Button>
             <Button
               onClick={() => (previaVigente && previaVigente.bajoCosto > 0 ? setConfirmarBajoCosto(true) : guardar())}
-              disabled={ocupado || !previaVigente || previaVigente.choque !== null}
+              disabled={ocupado || !previaVigente}
             >
               {TX.guardar}
             </Button>
@@ -413,7 +413,7 @@ export function CampaniasPanel({ categorias }: Props) {
 function VistaPrevia({ previa }: { previa: PreviaCampania }) {
   return (
     <div className="flex flex-col gap-2">
-      {previa.choque && <Alert tone="danger">{TX.choque(previa.choque.nombre)}</Alert>}
+      {previa.choque && <Alert tone="neutral">{TX.choque(previa.choque.nombre)}</Alert>}
       <Alert tone={previa.bajoCosto > 0 ? "warning" : "neutral"}>
         {TX.productosAlcanzados(previa.productos)}
         {previa.bajoCosto > 0 && ` ${TX.bajoCosto(previa.bajoCosto)}`}

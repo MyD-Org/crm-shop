@@ -5,7 +5,7 @@ import { NO_STORE, leerJson, respuestaDeError } from "@/lib/precios-online-http"
 
 // GET  /api/admin/campanias — { campanias } con estado (programada / activa / terminada) y productos.
 // POST /api/admin/campanias — { nombre, etiqueta?, inicio, fin, reglas } -> 201 { id }. 400 si no
-// valida; 409 `campania_superpuesta` si las fechas se pisan con otra; 422 si el fin ya pasó.
+// valida; 422 si el fin ya pasó.
 // Con la sección (sin ella -> 404). Tenant = el del guard.
 
 export async function GET(req: Request) {

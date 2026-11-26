@@ -75,17 +75,29 @@ export function usePromoProducto(sku: string | undefined): InfoPromoProducto | n
  * transferencia, mezclarlos confundiría.
  */
 /**
- * Badge de una campaña de precios en las cards (spec 2026-10-28-campanias-precios-design.md): la
- * etiqueta (navy) y el % contra nuestro precio normal en verde, igual que `badgePromo`. Nunca el
- * `discount` del ProductCard, que lo pinta en rojo (el rojo es sólo para la urgencia).
+ * Badge de una campaña de precios en las cards (spec 2026-10-28-campanias-precios-design.md;
+ * diseño «A · color de la marca», 2026-11-26): una pestaña pegada a la esquina de la foto con la
+ * etiqueta y, al lado, el % contra nuestro precio normal, los dos en el acento de cada piel
+ * (terracota en Luz Atlántica, azul en Central Led). Va con `badgePlacement="corner"` y
+ * `highlight="accent"` en el ProductCard (ver `propsCardCampania`). Nunca el `discount` del
+ * ProductCard ni rojo: no es color de la marca.
  */
 export function badgeCampania(c: CampaniaProducto): ReactNode {
   return (
-    <span className="flex flex-col items-start gap-1">
-      <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white">{c.etiqueta}</span>
-      <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-bold text-success">{c.pct} % de descuento</span>
+    <span className="flex items-start gap-1.5">
+      <span className="rounded-br-2xl bg-accent px-3 py-1.5 font-display text-[11px] font-extrabold uppercase tracking-wider text-white sm:text-xs">
+        {c.etiqueta}
+      </span>
+      <span className="mt-1.5 rounded-lg bg-accent-soft px-1.5 py-0.5 font-display text-xs font-extrabold text-accent sm:text-sm">
+        −{c.pct} %<span className="sr-only"> de descuento</span>
+      </span>
     </span>
   );
+}
+
+/** Props del ProductCard para un producto en campaña: card resaltada y badge en la esquina. */
+export function propsCardCampania(c: CampaniaProducto | null | undefined) {
+  return c ? ({ highlight: "accent", badgePlacement: "corner" } as const) : {};
 }
 
 export function badgePromo(info: InfoPromoProducto | null, producto: Pick<Product, "price" | "precioFinal" | "precioMedio">): ReactNode {

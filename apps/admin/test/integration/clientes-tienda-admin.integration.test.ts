@@ -7,6 +7,7 @@ import {
   CLIENTES_TIENDA_DEFAULT_LIMIT,
   CLIENTES_TIENDA_MAX_LIMIT,
   listarClientesTienda,
+  listarTiendasClientes,
   type ClienteTiendaDto,
 } from "@/lib/clientes-tienda-repo"
 import {
@@ -283,6 +284,37 @@ describe("clientes de la tienda: repo", () => {
 
     it("'todos' es sin filtro", async () => {
       expect((await listar({ vinculo: "todos", acceso: "todos", pedidos: "todos" })).total).toBe(4)
+    })
+  })
+
+  describe("tienda de origen (0050 del Shop)", () => {
+    const SITIO_A = "https://www.tienda-a.example"
+    const SITIO_B = "https://www.tienda-b.example"
+    beforeEach(async () => {
+      await seedShopCliente(TENANT_A, { clerkUserId: "user_sa", sitioOrigen: SITIO_A, creadoEnClerk: alta(3) })
+      await seedShopCliente(TENANT_A, { clerkUserId: "user_sb", sitioOrigen: SITIO_B, creadoEnClerk: alta(2) })
+      await seedShopCliente(TENANT_A, { clerkUserId: "user_s0", creadoEnClerk: alta(1) })
+      await seedShopCliente(TENANT_B, { clerkUserId: "user_sx", sitioOrigen: "https://otra.example" })
+    })
+
+    it("cada fila trae su tienda; sin dato, null", async () => {
+      const r = await listar()
+      expect(r.items.map((c) => [c.clerkUserId, c.tienda])).toEqual([
+        ["user_sa", SITIO_A],
+        ["user_sb", SITIO_B],
+        ["user_s0", null],
+      ])
+    })
+
+    it("filtra por tienda y se combina con los demás filtros", async () => {
+      const r = await listar({ tienda: SITIO_B })
+      expect(ids(r.items)).toEqual(["user_sb"])
+      expect(r.total).toBe(1)
+      expect((await listar({ tienda: SITIO_B, pedidos: "con" })).total).toBe(0)
+    })
+
+    it("las tiendas del filtro son las del tenant, sin repetir", async () => {
+      expect(await listarTiendasClientes(TENANT_A)).toEqual([SITIO_A, SITIO_B])
     })
   })
 

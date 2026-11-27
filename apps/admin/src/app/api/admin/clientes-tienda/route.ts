@@ -4,10 +4,11 @@ import {
   FILTROS_ACCESO,
   FILTROS_PEDIDOS,
   FILTROS_VINCULO,
+  SITIO_ORIGEN_RE,
   listarClientesTienda,
 } from "@/lib/clientes-tienda-repo"
 
-// GET /api/admin/clientes-tienda?q=&vinculo=&acceso=&pedidos=&start=&limit= — usuarios
+// GET /api/admin/clientes-tienda?q=&vinculo=&acceso=&pedidos=&tienda=&start=&limit= — usuarios
 // registrados en la tienda del tenant de la sesión, con su vínculo, acceso a Facturación y
 // pedidos. Sólo lectura, sólo con la sección Clientes de la tienda (`requireSeccion`). El tenant sale SÓLO del
 // guard. Misma convención que /api/admin/pedidos: `{items,total}`, `start`/`limit`, errores
@@ -36,6 +37,11 @@ export async function GET(req: Request) {
   const pedidos = filtro(url.searchParams.get("pedidos"), FILTROS_PEDIDOS)
   if (!pedidos) return invalid("El filtro de pedidos es inválido")
 
+  // tienda: "todas" (o ausente) o el origen de un sitio (`https://host`).
+  const tiendaParam = url.searchParams.get("tienda")
+  const tienda = tiendaParam === null || tiendaParam === "todas" ? undefined : tiendaParam
+  if (tienda !== undefined && !SITIO_ORIGEN_RE.test(tienda)) return invalid("El filtro de tienda es inválido")
+
   const q = (url.searchParams.get("q") ?? "").trim()
   if (q.length > CLIENTES_TIENDA_Q_MAX) return invalid("La búsqueda es demasiado larga")
 
@@ -51,7 +57,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const { items, total } = await listarClientesTienda(guard.tenantId, { q, vinculo, acceso, pedidos, start, limit })
+    const { items, total } = await listarClientesTienda(guard.tenantId, { q, vinculo, acceso, pedidos, tienda, start, limit })
     return Response.json({ items, total }, { headers: NO_STORE })
   } catch (err) {
     // Falla ruidosa (500 + log), nunca una lista vacía que parezca "no hay clientes". Al log va

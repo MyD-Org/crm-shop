@@ -351,6 +351,13 @@
       "when": 1795376448231,
       "tag": "0049_borrar_cl_user_activa",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795786832347,
+      "tag": "0050_clientes_sitio_origen",
+      "breakpoints": true
     }
   ]
 }

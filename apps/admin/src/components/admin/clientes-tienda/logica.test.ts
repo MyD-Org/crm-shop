@@ -18,7 +18,9 @@ import {
   etiquetaMetodo,
   etiquetaTipoCuenta,
   etiquetaVinculo,
+  etiquetaTienda,
   hayFiltros,
+  opcionesTienda,
   mensajeVacio,
   queryDeLista,
   tonoAcceso,
@@ -28,17 +30,33 @@ import {
 describe("queryDeLista", () => {
   it("manda los filtros explícitos y omite la búsqueda vacía", () => {
     const qs = new URLSearchParams(queryDeLista({ ...FILTROS_INICIALES, start: 0, limit: 25 }))
-    expect(Object.fromEntries(qs)).toEqual({ vinculo: "todos", acceso: "todos", pedidos: "todos", start: "0", limit: "25" })
+    expect(Object.fromEntries(qs)).toEqual({
+      vinculo: "todos",
+      acceso: "todos",
+      pedidos: "todos",
+      tienda: "todas",
+      start: "0",
+      limit: "25",
+    })
   })
 
   it("recorta la búsqueda y la codifica", () => {
     const qs = new URLSearchParams(
-      queryDeLista({ q: "  ana@cliente.example ", vinculo: "vinculados", acceso: "con", pedidos: "con", start: 50, limit: 25 }),
+      queryDeLista({
+        q: "  ana@cliente.example ",
+        vinculo: "vinculados",
+        acceso: "con",
+        pedidos: "con",
+        tienda: "https://www.tienda-b.example",
+        start: 50,
+        limit: 25,
+      }),
     )
     expect(qs.get("q")).toBe("ana@cliente.example")
     expect(qs.get("vinculo")).toBe("vinculados")
     expect(qs.get("acceso")).toBe("con")
     expect(qs.get("pedidos")).toBe("con")
+    expect(qs.get("tienda")).toBe("https://www.tienda-b.example")
     expect(qs.get("start")).toBe("50")
   })
 
@@ -100,6 +118,7 @@ describe("filtros y estado vacío", () => {
     expect(hayFiltros({ ...FILTROS_INICIALES, q: "   " })).toBe(false)
     expect(hayFiltros({ ...FILTROS_INICIALES, q: "ana" })).toBe(true)
     expect(hayFiltros({ ...FILTROS_INICIALES, pedidos: "con" })).toBe(true)
+    expect(hayFiltros({ ...FILTROS_INICIALES, tienda: "https://tienda-b.example" })).toBe(true)
   })
 
   it("mensaje vacío según haya filtros", () => {
@@ -114,6 +133,7 @@ describe("acciones de admin (R4a)", () => {
     nombre: "Ana",
     email: "ana@cliente.example",
     altaEn: null,
+    tienda: null,
     vinculo: {
       estado: "vinculado",
       metodo: "operador",
@@ -211,5 +231,21 @@ describe("acciones de admin (R4a)", () => {
     expect(mensajeDeError(500, { error: "detalle" }, "Genérico.")).toBe("Genérico.")
     expect(mensajeDeError(null, null, "Genérico.")).toBe("Genérico.")
     expect(mensajeDeError(404, { error: "" }, "Genérico.")).toBe("Genérico.")
+  })
+})
+
+describe("tienda de origen", () => {
+  it("etiquetaTienda: host sin www; sin dato, guion", () => {
+    expect(etiquetaTienda("https://www.tienda-b.example")).toBe("tienda-b.example")
+    expect(etiquetaTienda("https://cliente.example")).toBe("cliente.example")
+    expect(etiquetaTienda(null)).toBe("—")
+  })
+
+  it("opcionesTienda: todas primero y cada sitio con su host", () => {
+    expect(opcionesTienda(["https://cliente.example", "https://www.tienda-b.example"])).toEqual([
+      { value: "todas", label: "Todas las tiendas" },
+      { value: "https://cliente.example", label: "cliente.example" },
+      { value: "https://www.tienda-b.example", label: "tienda-b.example" },
+    ])
   })
 })

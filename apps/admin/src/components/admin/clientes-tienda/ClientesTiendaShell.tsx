@@ -26,12 +26,14 @@ import {
   etiquetaAcceso,
   etiquetaCuentaVinculo,
   etiquetaMetodo,
+  etiquetaTienda,
   etiquetaTipoCuenta,
   etiquetaVinculo,
   hayFiltros,
   hayVariasCuentas,
   mensajeVacio,
   opcionValida,
+  opcionesTienda,
   queryDeLista,
   tonoAcceso,
   tonoVinculo,
@@ -54,6 +56,8 @@ interface Props {
   puedeGestionar?: boolean
   /** Cuentas de Alegra del tenant (principal primero) para mostrar y elegir la del vínculo. */
   cuentas?: CuentaParaVincular[]
+  /** Tiendas (sitios) con usuarios. Con más de una se muestran la columna y el filtro. */
+  tiendas?: string[]
 }
 
 const SOLO_PRINCIPAL: CuentaParaVincular[] = [{ clave: "principal", nombre: "Cuenta principal" }]
@@ -73,8 +77,11 @@ export function ClientesTiendaShell({
   pageSize,
   puedeGestionar = false,
   cuentas = SOLO_PRINCIPAL,
+  tiendas = [],
 }: Props) {
   const variasCuentas = hayVariasCuentas(cuentas)
+  const variasTiendas = tiendas.length > 1
+  const opcionesDeTienda = opcionesTienda(tiendas)
   const [filtros, setFiltros] = useState<FiltrosLista>(FILTROS_INICIALES)
   const [busqueda, setBusqueda] = useState("")
   const [items, setItems] = useState(initialItems)
@@ -162,6 +169,17 @@ export function ClientesTiendaShell({
       className: "text-xs",
       render: (c) => <span style={{ color: "var(--ink-soft)" }}>{c.email ?? "—"}</span>,
     },
+    ...(variasTiendas
+      ? [
+          {
+            key: "tienda",
+            header: "Tienda",
+            hideBelow: "md",
+            className: "text-xs",
+            render: (c) => <span style={{ color: "var(--ink-soft)" }}>{etiquetaTienda(c.tienda)}</span>,
+          } satisfies TableColumn<ClienteTiendaDto>,
+        ]
+      : []),
     {
       key: "alta",
       header: "Alta",
@@ -232,6 +250,18 @@ export function ClientesTiendaShell({
           onClear={limpiarBusqueda}
           maxLength={100}
         />
+        {variasTiendas && (
+          <Select
+            className="w-full sm:w-52"
+            aria-label="Filtrar por tienda"
+            value={filtros.tienda}
+            onValueChange={(v) => {
+              const valor = opcionValida(opcionesDeTienda, v)
+              if (valor && valor !== filtros.tienda) aplicar({ tienda: valor })
+            }}
+            options={opcionesDeTienda}
+          />
+        )}
         <Select
           className="w-full sm:w-48"
           aria-label="Filtrar por vínculo"

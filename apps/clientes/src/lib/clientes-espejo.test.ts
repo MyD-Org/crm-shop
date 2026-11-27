@@ -95,14 +95,18 @@ describe("registrarUsuarioClerk / eliminarUsuarioClerk", () => {
 
   it("llama a shop.clientes_upsert_clerk con el tenant recibido y devuelve su resultado", async () => {
     resultado = "actualizado";
-    const r = await registrarUsuarioClerk("tenant-x", datosDeUsuarioClerk(usuario()));
+    const r = await registrarUsuarioClerk("tenant-x", datosDeUsuarioClerk(usuario()), "https://tienda-b.example");
     expect(r).toBe("actualizado");
     expect(grabadora.consultas).toHaveLength(1);
     const [c] = grabadora.consultas;
     expect(c.sql).toMatch(/select shop\.clientes_upsert_clerk\(/);
     expect(c.params.slice(0, 4)).toEqual(["tenant-x", "user_abc123", "ana@cliente.example", "Ana Pérez"]);
     // Las fechas viajan como ISO y se castean en SQL.
-    expect(c.params.slice(4)).toEqual([new Date(CREADO).toISOString(), new Date(ACTUALIZADO).toISOString()]);
+    expect(c.params.slice(4)).toEqual([
+      new Date(CREADO).toISOString(),
+      new Date(ACTUALIZADO).toISOString(),
+      "https://tienda-b.example",
+    ]);
   });
 
   it("llama a shop.clientes_eliminar_clerk con tenant e id", async () => {
@@ -117,7 +121,7 @@ describe("registrarUsuarioClerk / eliminarUsuarioClerk", () => {
     grabadora = dbGrabadora(() => {
       throw new Error("conexión caída");
     });
-    await expect(registrarUsuarioClerk("tenant-x", datosDeUsuarioClerk(usuario()))).rejects.toThrow();
+    await expect(registrarUsuarioClerk("tenant-x", datosDeUsuarioClerk(usuario()), null)).rejects.toThrow();
   });
 });
 

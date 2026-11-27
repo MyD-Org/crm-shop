@@ -1306,6 +1306,12 @@ export const clientes = shop.table(
     /** El mismo email en minúsculas y sin espacios, para buscar. */
     emailNorm: text("email_norm"),
     nombre: text("nombre"),
+    /**
+     * Tienda donde se registró (0050): origen del despliegue (`NEXT_PUBLIC_SITE_URL`
+     * normalizada, como `orders.sitio_origen`). Cada dominio tiene su instancia de Clerk, así
+     * que el usuario es de un solo sitio. null = fila anterior a 0050 sin backfill.
+     */
+    sitioOrigen: text("sitio_origen"),
     creadoEnClerk: timestamp("creado_en_clerk", { withTimezone: true }),
     actualizadoEnClerk: timestamp("actualizado_en_clerk", { withTimezone: true }).notNull(),
     eliminadoEn: timestamp("eliminado_en", { withTimezone: true }),
@@ -1323,6 +1329,7 @@ export const clientes = shop.table(
       "sc_eliminado_sin_datos",
       sql`${t.eliminadoEn} IS NULL OR (${t.email} IS NULL AND ${t.emailNorm} IS NULL AND ${t.nombre} IS NULL)`,
     ),
+    check("sc_sitio_origen", sql`${t.sitioOrigen} is null or ${t.sitioOrigen} ~ '^https?://[^/[:space:]]+$'`),
   ],
 );
 

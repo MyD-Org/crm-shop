@@ -3,6 +3,7 @@ import { accesoSeccion } from "@/lib/secciones-acceso"
 import {
   CLIENTES_TIENDA_DEFAULT_LIMIT,
   listarClientesTienda,
+  listarTiendasClientes,
   type ClienteTiendaDto,
 } from "@/lib/clientes-tienda-repo"
 import { listarCuentasParaVincular, type CuentaParaVincular } from "@/lib/clientes-tienda-acciones"
@@ -31,10 +32,13 @@ export default async function ClientesTiendaPage() {
   // Cuentas de Alegra para el selector del diálogo "Vincular". Si fallan se ofrece sólo la
   // principal (el comportamiento de siempre).
   let cuentas: CuentaParaVincular[] = [{ clave: "principal", nombre: "Cuenta principal" }]
+  // Tiendas (sitios) con usuarios, para la columna y el filtro. Si falla, no se muestran.
+  let tiendas: string[] = []
   try {
-    ;[{ items, total }, cuentas] = await Promise.all([
+    ;[{ items, total }, cuentas, tiendas] = await Promise.all([
       listarClientesTienda(guard.tenantId),
       listarCuentasParaVincular(guard.tenantId).catch(() => cuentas),
+      listarTiendasClientes(guard.tenantId).catch(() => tiendas),
     ])
   } catch (err) {
     const e = err as { name?: unknown; code?: unknown }
@@ -60,6 +64,7 @@ export default async function ClientesTiendaPage() {
         pageSize={CLIENTES_TIENDA_DEFAULT_LIMIT}
         puedeGestionar
         cuentas={cuentas}
+        tiendas={tiendas}
       />
     </div>
   )

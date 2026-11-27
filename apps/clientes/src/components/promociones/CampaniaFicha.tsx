@@ -43,6 +43,36 @@ export function PestaniaOferta({ pct }: { pct: number }) {
   );
 }
 
+/**
+ * Precio habitual que se tacha y ahorro en pesos del recuadro, los dos con IVA y de la MISMA lista.
+ * Con medio destacado (transferencia) es la suya: el precio grande de la ficha y el carrito (que
+ * cotiza con transferencia) usan esa lista, así el «Ahorre $ X» de la ficha es el «Usted ahorra» del
+ * carrito para 1 unidad. Sin medio, la lista general (`oldPrice` contra `precioFinal`).
+ */
+export function habitualYAhorro(
+  producto: Pick<Product, "oldPrice" | "precioFinal" | "precioMedio" | "preciosMedios" | "campania">,
+): { habitual: number; ahorro: number | null; medio?: string } | null {
+  // Ficha: el medio más barato de sus líneas (el que se destaca) contra su propio habitual.
+  const deFicha = (producto.preciosMedios ?? [])
+    .flatMap((m) => {
+      const habitual = producto.campania?.habitualesMedios?.find((h) => h.slug === m.slug && h.forma === m.forma)?.precioFinal;
+      return m.precioFinal != null && habitual != null && habitual > m.precioFinal ? [{ m, habitual, final: m.precioFinal }] : [];
+    })
+    .sort((a, b) => a.final - b.final)[0];
+  if (deFicha) return { habitual: deFicha.habitual, ahorro: redondear(deFicha.habitual - deFicha.final), medio: deFicha.m.nombre };
+  const habitualMedio = producto.campania?.habitualMedio;
+  const campaniaMedio = producto.precioMedio?.precioFinal;
+  if (habitualMedio != null && campaniaMedio != null && habitualMedio > campaniaMedio) {
+    return { habitual: habitualMedio, ahorro: redondear(habitualMedio - campaniaMedio), medio: producto.precioMedio!.nombre };
+  }
+  if (!producto.oldPrice) return null;
+  const ahorro =
+    producto.precioFinal != null && producto.oldPrice > producto.precioFinal ? redondear(producto.oldPrice - producto.precioFinal) : null;
+  return { habitual: producto.oldPrice, ahorro };
+}
+
+const redondear = (n: number) => Math.round(n * 100) / 100;
+
 export function CampaniaFicha({ producto }: { producto: Product }) {
   const router = useRouter();
   const ahora = useAhora();
@@ -51,11 +81,8 @@ export function CampaniaFicha({ producto }: { producto: Product }) {
   // Sin stock en la tienda manda el stock: nunca "quedan N" sobre algo que no se puede comprar.
   const quedan = producto.stock === "out" ? 0 : c.quedan;
   const conFin = !c.hastaAgotarStock && mostrarFin(c.fin, ahora);
-  // Ahorro en pesos contra el precio habitual de la misma lista: los dos con IVA.
-  const ahorro =
-    producto.oldPrice && producto.precioFinal != null && producto.oldPrice > producto.precioFinal
-      ? producto.oldPrice - producto.precioFinal
-      : null;
+  const precios = habitualYAhorro(producto);
+  const ahorro = precios?.ahorro ?? null;
   return (
     <div data-campania={c.id} className="mt-4 overflow-hidden rounded-2xl border-2 border-accent bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-2 bg-accent-soft px-4 py-2.5">
@@ -67,10 +94,11 @@ export function CampaniaFicha({ producto }: { producto: Product }) {
         ) : null}
       </div>
       <div className="flex flex-col gap-3 p-4">
-        {producto.oldPrice ? (
+        {precios ? (
           <div className="flex flex-col gap-2">
             <p className="text-sm text-muted">
-              Precio habitual <span className="tabular-nums line-through">{fmtPrecioCorto(producto.oldPrice)}</span>
+              Precio habitual <span className="tabular-nums line-through">{fmtPrecioCorto(precios.habitual)}</span>
+              {precios.medio ? <> con {precios.medio}</> : null}
             </p>
             <p className="flex flex-wrap items-center gap-2">
               <span data-descuento="" className="rounded-full bg-highlight px-3 py-1 text-sm font-extrabold text-text">

@@ -7,7 +7,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 // Reloj fijo: 26/11/2026 12:00 (Argentina). BF termina el 30/11 23:59, a 4 días.
 const reloj = vi.hoisted(() => ({ ahora: Date.parse("2026-11-26T15:00:00.000Z") as number | null }));
 vi.mock("./reloj", () => ({ useAhora: () => reloj.ahora }));
-const { CampaniaFicha, PestaniaOferta, mostrarFin } = await import("./CampaniaFicha");
+const { CampaniaFicha, PestaniaOferta, habitualYAhorro, mostrarFin } = await import("./CampaniaFicha");
 
 // Campañas de precios en cards y ficha (spec 2026-10-28-campanias-precios-design.md). Datos inventados.
 
@@ -42,6 +42,32 @@ describe("CampaniaFicha", () => {
     expect(t).toMatch(/Ahorre \$ ?38,72/);
     expect(t).toContain("Termina el 30/11");
     expect(html).not.toContain("danger");
+  });
+
+  it("con transferencia: tachado y ahorro de esa lista (los mismos que el carrito)", () => {
+    const conMedio = {
+      ...producto,
+      precioMedio: { slug: "transferencia", nombre: "Transferencia", price: 105, precioFinal: 127.05 },
+      campania: { ...BF, habitualMedio: 158.81 },
+    } as unknown as Product;
+    expect(habitualYAhorro(conMedio)).toEqual({ habitual: 158.81, ahorro: 31.76, medio: "Transferencia" });
+    const t = texto(renderToStaticMarkup(<CampaniaFicha producto={conMedio} />));
+    expect(t).toMatch(/Precio habitual \$ ?158,81 con Transferencia/);
+    expect(t).toMatch(/Ahorre \$ ?31,76/);
+    expect(t).not.toContain("193,60");
+  });
+
+  it("ficha: el medio de sus líneas (transferencia) contra su propio habitual, el mismo que el carrito", () => {
+    const ficha = {
+      ...producto,
+      preciosMedios: [{ slug: "transferencia", nombre: "Transferencia", price: 105, precioFinal: 127.05 }],
+      campania: { ...BF, habitualesMedios: [{ slug: "transferencia", precioFinal: 158.81 }] },
+    } as unknown as Product;
+    expect(habitualYAhorro(ficha)).toEqual({ habitual: 158.81, ahorro: 31.76, medio: "Transferencia" });
+  });
+
+  it("sin el habitual del medio, la lista general como antes", () => {
+    expect(habitualYAhorro(producto)).toEqual({ habitual: 193.6, ahorro: 38.72 });
   });
 
   it("sin precio final no inventa el ahorro", () => {

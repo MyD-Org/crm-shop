@@ -19,12 +19,12 @@ export function textoBarraOfertas(campanias: readonly Pick<CampaniaActiva, "etiq
 }
 
 /**
- * Línea «OFERTAS · <etiqueta> · Ver ofertas» (diseño «Ofertas más llamativas», punto 1). Se ve en los
- * dos tamaños: es la entrada a las ofertas desde cualquier página.
+ * Línea «OFERTAS · <etiqueta> · Ver ofertas» (diseño «Ofertas más llamativas», punto 1): la entrada a
+ * las ofertas desde cualquier página. `clases`: dónde se ve (las del anuncio, ver `CentroBarra`).
  */
-export function LineaOfertas({ texto }: { texto: string }) {
+export function LineaOfertas({ texto, clases = "" }: { texto: string; clases?: string }) {
   return (
-    <p data-barra-ofertas="" className="flex flex-wrap items-center justify-center gap-x-2 text-center text-[12.5px] font-semibold tracking-wide">
+    <p data-barra-ofertas="" className={`flex flex-wrap items-center justify-center gap-x-2 text-center text-[12.5px] font-semibold tracking-wide ${clases}`}>
       <span className="font-display font-extrabold uppercase tracking-wider text-highlight">{TEXTOS_BARRA_OFERTAS.marca}</span>
       <span>{texto}</span>
       <Link href={HREF_OFERTAS} className="underline underline-offset-2 transition-colors hover:text-highlight">
@@ -38,10 +38,14 @@ export function LineaOfertas({ texto }: { texto: string }) {
  * Centro de la barra, hueco por request: la vigencia de las campañas no se calcula en el shell
  * cacheado (`campaniasVigentes` lee el reloj). Con alguna campaña activa, la línea de ofertas
  * reemplaza al anuncio del editor mientras dure; sin campañas (o si la lectura falla: devuelve
- * ninguna), queda el anuncio de siempre, que es también el fallback del Suspense: la barra no
- * cambia de alto mientras llega.
+ * ninguna), queda el anuncio de siempre, que es también el fallback del Suspense.
+ *
+ * La línea se ve donde se ve el anuncio (`clases`, default del editor: sólo desktop): en mobile la
+ * barra es una columna y una fila nueva al llegar el hueco empujaría la página. Sin anuncio, sólo
+ * desktop (ahí la fila ya existe por las redes y el WhatsApp). En mobile llegan por el bloque de la
+ * home y el menú; el editor puede poner el anuncio en "siempre" para que también se vea arriba.
  */
-export async function CentroBarra({ anuncio }: { anuncio: ReactNode }) {
+export async function CentroBarra({ anuncio, clases }: { anuncio: ReactNode; clases: string }) {
   const texto = textoBarraOfertas(await campaniasVigentes());
-  return texto ? <LineaOfertas texto={texto} /> : anuncio;
+  return texto ? <LineaOfertas texto={texto} clases={clases} /> : anuncio;
 }

@@ -12,7 +12,8 @@ describe("línea de ofertas de la barra de arriba", () => {
     expect(textoBarraOfertas([{ etiqueta: "A" }, { etiqueta: "B" }])).toBe(TEXTOS_BARRA_OFERTAS.varias);
   });
 
-  it("dice OFERTAS en el resaltado, la etiqueta y enlaza a las ofertas; se ve en los dos tamaños", () => {
+  it("dice OFERTAS en el resaltado, la etiqueta y enlaza a las ofertas; se ve donde se ve el anuncio", () => {
+    expect(renderToStaticMarkup(<LineaOfertas texto="X" clases="max-md:hidden" />)).toContain("max-md:hidden");
     const html = renderToStaticMarkup(<LineaOfertas texto="Black Friday" />);
     expect(html).toContain("text-highlight");
     expect(html).toContain("Black Friday");

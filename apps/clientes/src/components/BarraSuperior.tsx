@@ -44,7 +44,13 @@ export function BarraSuperior({
     <div className={`bg-primary text-on-primary ${clasesBarra}`}>
       <div className="mx-auto flex max-w-contenido flex-col items-center gap-1.5 px-[clamp(18px,4vw,48px)] py-2.5 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] md:gap-4">
         <span aria-hidden className="max-md:hidden" />
-        {ofertas ? <Suspense fallback={centro}><CentroBarra anuncio={centro} /></Suspense> : centro}
+        {ofertas ? (
+          <Suspense fallback={centro}>
+            <CentroBarra anuncio={centro} clases={clasesVisibilidad(anuncio && visibilidad !== "nunca" ? visibilidad : "desktop")} />
+          </Suspense>
+        ) : (
+          centro
+        )}
         <div className="flex items-center justify-center gap-x-4 md:gap-x-5 md:justify-end">
           <RedesSociales redes={redes} className="flex-nowrap justify-center md:justify-end" />
           {whatsapp ? (

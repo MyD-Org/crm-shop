@@ -44,6 +44,7 @@ export function migas(estado: EstadoCatalogo): BreadcrumbItem[] {
     { label: "Catálogo", href: "/catalogo" },
   ];
   if (estado.query || interpretacionVigente(estado)) items.push({ label: "Resultados" });
+  else if (estado.soloOfertas && estado.categorias.length === 0) items.push({ label: TEXTOS_OFERTAS.titulo });
   else if (estado.categorias.length === 1)
     items.push({ label: formatRubro(estado.categorias[0]) });
   return items;
@@ -62,7 +63,18 @@ export const ORDENES: { label: string; value: OrdenCatalogo }[] = [
   { label: "Nombre A-Z", value: "nombre" },
   { label: "Precio: menor a mayor", value: "precio-asc" },
   { label: "Precio: mayor a menor", value: "precio-desc" },
+  { label: "Mayor descuento", value: "descuento" },
 ];
+
+/** Textos de «Solo ofertas» (usted): chip, título, bajada y la página vacía. */
+export const TEXTOS_OFERTAS = {
+  titulo: "Ofertas",
+  chip: "Solo ofertas",
+  bajada: (n: number) => `${miles.format(n)} ${n === 1 ? "producto" : "productos"} con precio especial`,
+  vacioTitulo: "Por ahora no hay ofertas",
+  vacioDescripcion: "Cuando haya productos con precio especial, los verá aquí.",
+  vacioAccion: "Ver el catálogo",
+} as const;
 
 /**
  * ¿Es un orden de verdad? El Select (Radix) a veces avisa un cambio a "" al navegar fuera del
@@ -78,9 +90,12 @@ export function esOrden(v: string): v is OrdenCatalogo {
  * `filtrosSinBusqueda` el panel recibe el estado sin `query`, y el Select no
  * puede quedar sin la opción elegida).
  */
-export function ordenesPara(estado: Pick<EstadoCatalogo, "query" | "orden">) {
+export function ordenesPara(estado: Pick<EstadoCatalogo, "query" | "orden" | "soloOfertas">) {
   const fueraDeCaso: OrdenCatalogo = estado.query ? "destacados" : "relevancia";
-  return ORDENES.filter((o) => o.value !== fueraDeCaso || o.value === estado.orden);
+  // «Mayor descuento» sólo tiene sentido mirando ofertas (o si ya es el orden elegido).
+  return ORDENES.filter(
+    (o) => (o.value !== fueraDeCaso || o.value === estado.orden) && (o.value !== "descuento" || estado.soloOfertas || estado.orden === "descuento"),
+  );
 }
 
 /**
@@ -103,6 +118,7 @@ export function tituloCatalogo(estado: EstadoCatalogo): string {
   if (interpretada) return `Resultados para "${interpretada}"`;
   if (estado.query) return `Resultados para "${estado.query}"`;
   if (estado.categorias.length === 1) return formatRubro(estado.categorias[0]);
+  if (estado.soloOfertas) return TEXTOS_OFERTAS.titulo;
   return "Catálogo";
 }
 
@@ -270,6 +286,7 @@ export function chipsActivos(
     cambios,
   });
   return [
+    ...(estado.soloOfertas ? [chip("ofertas", TEXTOS_OFERTAS.chip, { soloOfertas: undefined })] : []),
     ...estado.categorias.map((c) =>
       chip(`categoria:${c}`, formatRubro(c), {
         categorias: estado.categorias.filter((x) => x !== c),
@@ -326,7 +343,16 @@ export function limpiarFiltros(): Partial<EstadoCatalogo> {
     potenciaMax: undefined,
     soloStock: SOLO_STOCK_DEFAULT,
     retiroEn: undefined,
+    soloOfertas: undefined,
   };
+}
+
+/**
+ * «Solo ofertas» que da 0 sin otro filtro ni búsqueda que lo explique: no hay ofertas vigentes.
+ * Con otros filtros, el 0 puede ser de la combinación y va el «sin resultados» de siempre.
+ */
+export function ofertasVacias(estado: EstadoCatalogo): boolean {
+  return !!estado.soloOfertas && !estado.query && contarFiltrosActivos(estado) === 1;
 }
 
 /** ¿Hay algún filtro del panel aplicado? (la búsqueda no cuenta). */
@@ -343,7 +369,8 @@ export function contarFiltrosActivos(estado: EstadoCatalogo): number {
     estado.caracteristicas.length +
     (hayPrecio(estado) ? 1 : 0) +
     (hayPotencia(estado) ? 1 : 0) +
-    (estado.retiroEn || stockFueraDeDefault(estado) ? 1 : 0)
+    (estado.retiroEn || stockFueraDeDefault(estado) ? 1 : 0) +
+    (estado.soloOfertas ? 1 : 0)
   );
 }
 
@@ -372,6 +399,7 @@ export function indexable(estado: EstadoCatalogo): boolean {
     !hayPrecio(estado) &&
     !hayPotencia(estado) &&
     !stockFueraDeDefault(estado) &&
+    !estado.soloOfertas &&
     estado.orden === ORDEN_DEFAULT &&
     estado.vista === VISTA_DEFAULT &&
     estado.categorias.length <= 1

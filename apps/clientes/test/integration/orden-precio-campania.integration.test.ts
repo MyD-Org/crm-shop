@@ -51,7 +51,7 @@ async function sembrar() {
   }
 }
 
-const ids = async (orden: "precio-asc" | "precio-desc", filtros: FiltrosCatalogo = {}) =>
+const ids = async (orden: "precio-asc" | "precio-desc" | "descuento", filtros: FiltrosCatalogo = {}) =>
   (await getPaginaCatalogo({ soloVisibles: false, orden, filtros })).productos.map((p) => p.id);
 
 const conCampania: FiltrosCatalogo = { precioCampanias: [CAMPANIA] };
@@ -86,6 +86,17 @@ describe.skipIf(process.env.CAMPANIAS_SQL !== "1")("precio de campaña en orden,
     const sin = await getFacetas({}, false);
     expect(sin.precio).toEqual({ min: 121, max: 242 });
   });
+  it("«Solo ofertas»: sólo lo que tiene precio de campaña menor al habitual; sin campañas, nada", async () => {
+    expect(await ids("precio-asc", { ...conCampania, soloOfertas: true })).toEqual(["cientoCincuenta"]);
+    expect(await ids("precio-asc", { soloOfertas: true })).toEqual([]);
+    const f = await getFacetas({ ...conCampania, soloOfertas: true }, false);
+    expect(f.precio).toEqual({ min: 90, max: 91 });
+  });
+
+  it("«Mayor descuento» pone primero lo que está en campaña", async () => {
+    expect((await ids("descuento", conCampania))[0]).toBe("cientoCincuenta");
+  });
+
   it("una regla con límite agotada deja de ordenar y filtrar por el precio de campaña", async () => {
     // El de 150 pasa a tener límite 1 y se vende esa unidad: su card ya muestra el normal (181,5).
     await getDb().execute(

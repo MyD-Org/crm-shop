@@ -1241,6 +1241,12 @@ export interface FiltrosCatalogo {
    */
   precioCampanias?: string[];
   /**
+   * «Solo ofertas» (`?ofertas=1`): sólo lo que tiene precio de campaña vigente MENOR al habitual
+   * (`precioVigenteSql(precioCampanias) < precioSql`, el mismo precio que ordena y que muestra la
+   * card). Sin campañas activas no queda nada: la página dice «Por ahora no hay ofertas».
+   */
+  soloOfertas?: boolean;
+  /**
    * Una línea de una página de marca: lo que está en alguna de estas categorías (con su
    * subárbol, como `categorias`) O tiene alguno de estos códigos (como `getProductosPorSkus`).
    * Las dos listas vacías no filtran.
@@ -1840,7 +1846,23 @@ function condicionesDe(
       ? sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} <= ${filtros.precioMax}`
       : undefined,
     aplicar.stock && filtros.soloStock ? conStock(disp, modalidades) : undefined,
+    filtros.soloOfertas ? filtroOfertasSql(filtros.precioCampanias) : undefined,
   );
+}
+
+/** «Solo ofertas»: precio vigente de campaña por debajo del habitual. Sin campañas, ninguno. */
+function filtroOfertasSql(idsCampanias: readonly string[] | undefined) {
+  if (!idsCampanias?.length) return sql`false`;
+  return sql`${precioVigenteSql(idsCampanias)} < ${precioSql}`;
+}
+
+/**
+ * Descuento de campaña como fracción del precio habitual (0 sin campaña): el orden «Mayor
+ * descuento». Mismo precio vigente que el filtro y el orden por precio.
+ */
+function descuentoSql(idsCampanias: readonly string[] | undefined) {
+  if (!idsCampanias?.length) return sql<string>`0`;
+  return sql<string>`coalesce((${precioSql} - ${precioVigenteSql(idsCampanias)}) / nullif(${precioSql}, 0), 0)`;
 }
 
 /**
@@ -2008,6 +2030,8 @@ function ordenPropio(
       return [sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} asc`, asc(crmCatalogo.name)];
     case "precio-desc":
       return [sql`${precioExhibidoVigenteSql(filtros.precioCampanias)} desc`, asc(crmCatalogo.name)];
+    case "descuento":
+      return [sql`${descuentoSql(filtros.precioCampanias)} desc`, asc(crmCatalogo.name)];
     case "destacados":
       return ordenDestacadosSql(destacados ?? contextoDestacados([]), disp, modalidades);
     default:

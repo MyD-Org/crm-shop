@@ -170,6 +170,14 @@ export function paginaCatalogoPublica(args: ArgsPaginaPublica): Promise<PaginaCa
  * que `paginaCatalogoPublica`, pero SIN texto (el tipo no lo admite). El texto de una búsqueda lo
  * arma sólo el motor (`busqueda-v2/motor.ts`); una página de marca nunca busca.
  */
+/**
+ * Primera página de «Solo ofertas» con stock por mayor descuento (bloque de ofertas de la home), de
+ * la misma caché que el catálogo: las campañas activas son parte de la clave. Sin texto.
+ */
+export function paginaOfertasPublica(args: Omit<ArgsPaginaPublica, "filtros" | "orden" | "pagina">): Promise<PaginaCatalogo> {
+  return paginaCatalogoPublica({ ...args, filtros: { soloOfertas: true, soloStock: true }, orden: "descuento", pagina: 1 });
+}
+
 export function paginaMarcaPublica(args: Omit<ArgsPaginaPublica, "filtros"> & { filtros: FiltrosSinTexto }): Promise<PaginaCatalogo> {
   return paginaCatalogoPublica(args);
 }

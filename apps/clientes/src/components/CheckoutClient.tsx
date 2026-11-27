@@ -2594,7 +2594,7 @@ export function CheckoutClient({
             )}
             {cotizacion && ahorroCampania(cotizacion.lineas) > 0 && (
               <p className="text-right text-[13px] font-bold text-success">
-                Usted ahorra {fmtPrecio(ahorroCampania(cotizacion.lineas))}
+                Ahorro: {fmtPrecio(ahorroCampania(cotizacion.lineas))}
               </p>
             )}
             <p className="text-xs text-muted">

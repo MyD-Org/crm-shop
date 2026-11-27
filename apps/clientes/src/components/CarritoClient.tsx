@@ -626,7 +626,7 @@ export function CarritoClient({
             )}
 
             {ahorro > 0 && (
-              <p className="-mt-2 text-right text-[13px] font-bold text-success">Usted ahorra {fmtPrecio(ahorro)}</p>
+              <p className="-mt-2 text-right text-[13px] font-bold text-success">Ahorro: {fmtPrecio(ahorro)}</p>
             )}
             <div className="border-t border-border pt-4">
               <div className="flex items-baseline justify-between gap-3">

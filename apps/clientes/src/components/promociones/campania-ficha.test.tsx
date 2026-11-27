@@ -57,6 +57,21 @@ describe("CampaniaFicha", () => {
     expect(t).not.toContain("Termina");
   });
 
+  it("«Hasta agotar stock»: lo dice en lugar del fin y sin cuenta regresiva, aunque falten pocos días", () => {
+    const html = renderToStaticMarkup(<CampaniaFicha producto={{ ...producto, campania: { ...BF, hastaAgotarStock: true } }} />);
+    const t = texto(html);
+    expect(t).toContain("Hasta agotar stock");
+    expect(t).toContain("20 % menos");
+    expect(t).not.toContain("Termina");
+  });
+
+  it("«Hasta agotar stock» con una campaña lejana: igual lo dice", () => {
+    const lejana = { ...BF, fin: "2027-06-30T02:59:00.000Z", hastaAgotarStock: true as const };
+    const t = texto(renderToStaticMarkup(<CampaniaFicha producto={{ ...producto, campania: lejana }} />));
+    expect(t).toContain("Hasta agotar stock");
+    expect(t).not.toContain("Termina");
+  });
+
   it("con límite chico: un punto por unidad (2 libres de 5) y la urgencia", () => {
     const html = renderToStaticMarkup(<CampaniaFicha producto={{ ...producto, campania: { ...BF, unidades: 5, quedan: 2 } }} />);
     expect(texto(html)).toContain("¡Últimas 2 unidades a precio de BF!");

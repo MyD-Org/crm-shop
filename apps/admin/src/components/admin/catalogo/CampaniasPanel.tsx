@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Alert, Badge, Button, Dialog, EmptyState, Field, Input, Select, Table, type TableColumn } from "@myd-org/ui"
+import { Alert, Badge, Button, Checkbox, Dialog, EmptyState, Field, Input, Select, Table, type TableColumn } from "@myd-org/ui"
 import type { CampaniaDetalleDto, CampaniaDto, PreviaCampania } from "@/lib/campanias-repo"
 import type { MarcaDto } from "@/lib/precios-online-repo"
 import { BuscadorProducto } from "./BuscadorProducto"
@@ -38,7 +38,7 @@ const reglaVacia = (): FormRegla => ({
 })
 
 function formVacio(): FormCampania {
-  return { nombre: "", etiqueta: "", inicioFecha: "", inicioHora: "00:00", finFecha: "", finHora: "23:59", reglas: [reglaVacia()] }
+  return { nombre: "", etiqueta: "", inicioFecha: "", inicioHora: "00:00", finFecha: "", finHora: "23:59", hastaAgotarStock: false, reglas: [reglaVacia()] }
 }
 
 function formDe(c: CampaniaDetalleDto): FormCampania {
@@ -51,6 +51,7 @@ function formDe(c: CampaniaDetalleDto): FormCampania {
     inicioHora: i.hora,
     finFecha: f.fecha,
     finHora: f.hora,
+    hastaAgotarStock: c.hastaAgotarStock,
     reglas: c.reglas.map((r) => ({
       clave: nuevaClave(),
       tipo: r.alcance.tipo,
@@ -190,7 +191,20 @@ export function CampaniasPanel({ categorias }: Props) {
         </span>
       ),
     },
-    { key: "ventana", header: TX.columnas.ventana, render: (c) => <span className="tabular-nums">{fmtVentana(c.inicio, c.fin)}</span> },
+    {
+      key: "ventana",
+      header: TX.columnas.ventana,
+      render: (c) => (
+        <span className="tabular-nums">
+          {fmtVentana(c.inicio, c.fin)}
+          {c.hastaAgotarStock && (
+            <span className="block text-xs" style={{ color: "var(--ink-soft)" }}>
+              {TX.hastaAgotarStockColumna}
+            </span>
+          )}
+        </span>
+      ),
+    },
     {
       key: "estado",
       header: TX.columnas.estado,
@@ -285,6 +299,16 @@ export function CampaniasPanel({ categorias }: Props) {
                 </span>
               </Field>
             </div>
+            <Field hint={TX.hastaAgotarStockAyuda}>
+              <label htmlFor="campania-hasta-agotar" className="flex cursor-pointer items-center gap-2 text-sm" style={{ color: "var(--ink)" }}>
+                <Checkbox
+                  id="campania-hasta-agotar"
+                  checked={form.hastaAgotarStock}
+                  onCheckedChange={(v) => setForm({ ...form, hastaAgotarStock: v })}
+                />
+                {TX.hastaAgotarStock}
+              </label>
+            </Field>
 
             <div className="flex flex-col gap-2">
               <span className="text-sm font-medium" style={{ color: "var(--ink)" }}>

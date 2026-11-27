@@ -26,6 +26,8 @@ export interface CampaniaShop {
   etiqueta: string;
   inicio: string;
   fin: string;
+  /** La ficha dice «Hasta agotar stock» en vez del fin y sin cuenta regresiva (0108 del CRM). */
+  hastaAgotarStock?: boolean;
 }
 
 /** Lo que necesita la exhibición de una campaña activa (nombre, badge y cuenta regresiva). */
@@ -34,6 +36,8 @@ export interface CampaniaActiva {
   nombre: string;
   etiqueta: string;
   fin: string;
+  /** Sólo presente (true) en las campañas «Hasta agotar stock». */
+  hastaAgotarStock?: true;
 }
 
 /** Las activas en `fecha` (inicio inclusivo, fin exclusivo), ordenadas por id: van en la clave. */
@@ -41,7 +45,13 @@ export function idsActivasEn(campanias: readonly CampaniaShop[], fecha: Date): C
   const t = fecha.getTime();
   return campanias
     .filter((c) => new Date(c.inicio).getTime() <= t && t < new Date(c.fin).getTime())
-    .map(({ id, nombre, etiqueta, fin }) => ({ id, nombre, etiqueta, fin }))
+    .map(({ id, nombre, etiqueta, fin, hastaAgotarStock }) => ({
+      id,
+      nombre,
+      etiqueta,
+      fin,
+      ...(hastaAgotarStock ? { hastaAgotarStock: true as const } : {}),
+    }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
@@ -58,6 +68,7 @@ async function leerCampanias(): Promise<CampaniaShop[]> {
       etiqueta: crmCampanias.etiqueta,
       inicio: crmCampanias.inicio,
       fin: crmCampanias.fin,
+      hastaAgotarStock: crmCampanias.hastaAgotarStock,
     })
     .from(crmCampanias)
     .where(eq(crmCampanias.tenantId, shopTenantId()))

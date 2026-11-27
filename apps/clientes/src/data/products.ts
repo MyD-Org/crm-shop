@@ -104,6 +104,8 @@ export interface CampaniaProducto {
   etiqueta: string;
   /** ISO; fin exclusivo (cuenta regresiva). */
   fin: string;
+  /** La ficha dice «Hasta agotar stock» en vez del fin y sin cuenta regresiva. Ausente = con fecha. */
+  hastaAgotarStock?: true;
   /** % de descuento contra el normal que se tacha. */
   pct: number;
   /** Límite de unidades de la regla; null = sin límite. */

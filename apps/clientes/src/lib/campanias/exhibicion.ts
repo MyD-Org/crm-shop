@@ -50,6 +50,7 @@ export function campaniaParaExhibir(
       nombre: meta.nombre,
       etiqueta: meta.etiqueta,
       fin: meta.fin,
+      ...(meta.hastaAgotarStock ? { hastaAgotarStock: true as const } : {}),
       pct: r.pct,
       unidades: r.campania.unidades,
       quedan: r.campania.unidades != null ? (quedan.get(r.campania.reglaId) ?? null) : null,

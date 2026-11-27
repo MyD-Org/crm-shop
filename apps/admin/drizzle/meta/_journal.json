@@ -729,6 +729,13 @@
       "when": 1795100000000,
       "tag": "0107_catalog_datos_envio",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1795200000000,
+      "tag": "0108_campanias_hasta_agotar_stock",
+      "breakpoints": true
     }
   ]
 }

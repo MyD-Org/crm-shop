@@ -19,6 +19,11 @@ export interface CampaniaEntrada {
   /** ISO con offset (p. ej. "2026-11-27T00:00:00-03:00"). */
   inicio: string
   fin: string
+  /**
+   * El cliente ve «Hasta agotar stock» en lugar de la fecha de fin y la cuenta regresiva. El fin
+   * sigue siendo obligatorio: es el que corta la campaña.
+   */
+  hastaAgotarStock?: boolean
   reglas: ReglaEntrada[]
 }
 
@@ -70,6 +75,9 @@ export function validarCampania(e: unknown): { ok: true; valor: CampaniaEntrada 
   if (!inicio) agregar("Indique una fecha de inicio válida.")
   if (!fin) agregar("Indique una fecha de fin válida.")
   if (inicio && fin && fin.getTime() <= inicio.getTime()) agregar("La fecha de fin debe ser posterior al inicio.")
+  if (o.hastaAgotarStock != null && typeof o.hastaAgotarStock !== "boolean") {
+    agregar("Indique si la campaña es hasta agotar stock.")
+  }
 
   const reglasRaw = Array.isArray(o.reglas) ? o.reglas : []
   if (reglasRaw.length === 0) agregar("Agregue al menos una regla.")
@@ -109,7 +117,10 @@ export function validarCampania(e: unknown): { ok: true; valor: CampaniaEntrada 
   }
 
   if (errores.length > 0) return { ok: false, errores }
-  return { ok: true, valor: { nombre, etiqueta, inicio: o.inicio as string, fin: o.fin as string, reglas } }
+  return {
+    ok: true,
+    valor: { nombre, etiqueta, inicio: o.inicio as string, fin: o.fin as string, hastaAgotarStock: o.hastaAgotarStock === true, reglas },
+  }
 }
 
 /** Programada / activa / terminada por las fechas (fin exclusivo). */

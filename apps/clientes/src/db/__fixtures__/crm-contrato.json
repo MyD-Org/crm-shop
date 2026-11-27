@@ -293,7 +293,8 @@
     "nombre": "text",
     "etiqueta": "text",
     "inicio": "timestamp with time zone",
-    "fin": "timestamp with time zone"
+    "fin": "timestamp with time zone",
+    "hasta_agotar_stock": "boolean"
   },
   "public.cupones_shop": {
     "tenant_id": "text",

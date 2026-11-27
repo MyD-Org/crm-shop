@@ -35,7 +35,7 @@ export function CampaniaFicha({ producto }: { producto: Product }) {
   if (!c) return null;
   // Sin stock en la tienda manda el stock: nunca "quedan N" sobre algo que no se puede comprar.
   const quedan = producto.stock === "out" ? 0 : c.quedan;
-  const conFin = mostrarFin(c.fin, ahora);
+  const conFin = !c.hastaAgotarStock && mostrarFin(c.fin, ahora);
   // Ahorro en pesos contra el precio habitual de la misma lista: los dos con IVA.
   const ahorro =
     producto.oldPrice && producto.precioFinal != null && producto.oldPrice > producto.precioFinal
@@ -45,7 +45,11 @@ export function CampaniaFicha({ producto }: { producto: Product }) {
     <div data-campania={c.id} className="mt-4 overflow-hidden rounded-2xl border-2 border-accent bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-2 bg-accent-soft px-4 py-2.5">
         <span className="font-display text-sm font-extrabold uppercase tracking-wider text-accent">{c.etiqueta}</span>
-        {conFin ? <span className="text-sm font-semibold text-accent">Termina el {fechaCortaAR(c.fin)}</span> : null}
+        {c.hastaAgotarStock ? (
+          <span className="text-sm font-semibold text-accent">Hasta agotar stock</span>
+        ) : conFin ? (
+          <span className="text-sm font-semibold text-accent">Termina el {fechaCortaAR(c.fin)}</span>
+        ) : null}
       </div>
       <div className="flex flex-col gap-3 p-4">
         {producto.oldPrice ? (

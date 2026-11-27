@@ -29,6 +29,7 @@ export interface FormCampania {
   inicioHora: string
   finFecha: string
   finHora: string
+  hastaAgotarStock: boolean
   reglas: FormRegla[]
 }
 
@@ -67,6 +68,7 @@ export function cuerpoCampania(f: FormCampania): CampaniaEntrada {
     ...(etiqueta ? { etiqueta } : {}),
     inicio: aIsoArgentina(f.inicioFecha, f.inicioHora),
     fin: aIsoArgentina(f.finFecha, f.finHora),
+    hastaAgotarStock: f.hastaAgotarStock,
     reglas: f.reglas.map((r) => {
       const alcance =
         r.tipo === "producto"
@@ -93,6 +95,10 @@ export const TEXTOS_CAMPANIAS = {
   inicio: "Inicio",
   fin: "Fin",
   horaAyuda: "Hora de Argentina.",
+  hastaAgotarStock: "Hasta agotar stock",
+  hastaAgotarStockAyuda:
+    "El cliente ve «Hasta agotar stock» en lugar de la fecha de fin y la cuenta regresiva. La campaña igual termina en la fecha de fin indicada.",
+  hastaAgotarStockColumna: "Hasta agotar stock",
   reglas: "Reglas",
   reglasAyuda:
     "Producto le gana a marca y marca a categoría. Un producto con 0 % queda fuera de la campaña. Una regla de producto alcanza a todas las variantes del modelo.",

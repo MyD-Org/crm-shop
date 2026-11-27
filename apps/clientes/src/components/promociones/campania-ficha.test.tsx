@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CampaniaProducto, Product } from "@/data/products";
-import { badgeCampania } from "./PromoProvider";
+import { badgeCampania, propsCardCampania } from "./PromoProvider";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 // Reloj fijo: 26/11/2026 12:00 (Argentina). BF termina el 30/11 23:59, a 4 días.
@@ -16,28 +16,44 @@ const BF: CampaniaProducto = { id: "c1", nombre: "Black Friday", etiqueta: "BF",
 const producto = { id: "7", name: "Lámpara", price: 128, precioFinal: 154.88, oldPrice: 193.6, stock: "in", campania: BF } as unknown as Product;
 
 describe("badgeCampania (cards)", () => {
-  it("la etiqueta y el % en verde, nunca en rojo", () => {
+  it("pestaña con la etiqueta y el % en el acento de la marca, nunca en rojo", () => {
     const html = renderToStaticMarkup(<>{badgeCampania(BF)}</>);
     expect(texto(html)).toContain("BF");
-    expect(texto(html)).toContain("20 % de descuento");
-    expect(html).toContain("text-success");
-    expect(html).not.toContain("text-danger");
+    expect(texto(html)).toContain("−20 % de descuento");
+    expect(html).toContain("bg-accent");
+    expect(html).toContain("text-accent");
+    expect(html).not.toContain("danger");
+  });
+
+  it("propsCardCampania: card resaltada y badge en la esquina sólo con campaña", () => {
+    expect(propsCardCampania(BF)).toEqual({ highlight: "accent", badgePlacement: "corner" });
+    expect(propsCardCampania(undefined)).toEqual({});
   });
 });
 
 describe("CampaniaFicha", () => {
-  it("badge, el normal tachado con el % y la pastilla con el fin", () => {
-    const t = texto(renderToStaticMarkup(<CampaniaFicha producto={producto} />));
+  it("recuadro con el acento, el normal tachado, el % y el ahorro en pesos, y el fin", () => {
+    const html = renderToStaticMarkup(<CampaniaFicha producto={producto} />);
+    const t = texto(html);
+    expect(html).toContain("border-accent");
     expect(t).toContain("BF");
     expect(t).toContain("Precio habitual");
-    expect(t).toContain("20 % de descuento");
+    expect(t).toContain("20 % menos");
+    expect(t).toMatch(/Ahorre \$ ?38,72/);
     expect(t).toContain("Termina el 30/11");
+    expect(html).not.toContain("danger");
+  });
+
+  it("sin precio final no inventa el ahorro", () => {
+    const t = texto(renderToStaticMarkup(<CampaniaFicha producto={{ ...producto, precioFinal: undefined } as unknown as Product} />));
+    expect(t).toContain("20 % menos");
+    expect(t).not.toContain("Ahorre");
   });
 
   it("campaña larga: no anuncia el fin ni la cuenta regresiva", () => {
     const lejana = { ...BF, fin: "2027-06-30T02:59:00.000Z" };
     const t = texto(renderToStaticMarkup(<CampaniaFicha producto={{ ...producto, campania: lejana }} />));
-    expect(t).toContain("20 % de descuento");
+    expect(t).toContain("20 % menos");
     expect(t).not.toContain("Termina");
   });
 
@@ -45,7 +61,7 @@ describe("CampaniaFicha", () => {
     const html = renderToStaticMarkup(<CampaniaFicha producto={{ ...producto, campania: { ...BF, hastaAgotarStock: true } }} />);
     const t = texto(html);
     expect(t).toContain("Hasta agotar stock");
-    expect(t).toContain("20 % de descuento");
+    expect(t).toContain("20 % menos");
     expect(t).not.toContain("Termina");
   });
 

@@ -6,6 +6,7 @@ import {
   emailVerificadoDeUsuarioClerk,
   registrarUsuarioClerk,
 } from "@/lib/clientes-espejo";
+import { sitioOrigenDeEntorno } from "@/lib/sitio-origen";
 import { reclamarPedidosInvitado } from "@/lib/reclamo-invitado";
 import { shopTenantId } from "@/lib/tenant";
 
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
     const resultado =
       evt.type === "user.deleted"
         ? await eliminarUsuarioClerk(tenant, id)
-        : await registrarUsuarioClerk(tenant, datosDeUsuarioClerk(evt.data));
+        : await registrarUsuarioClerk(tenant, datosDeUsuarioClerk(evt.data), sitioOrigenDeEntorno());
     console.info(`clerk-webhook tipo=${tipo} id=${id} resultado=${resultado}`);
     if (evt.type !== "user.deleted" && (resultado === "insertado" || resultado === "actualizado")) {
       await reclamarPedidos(tipo, id, emailVerificadoDeUsuarioClerk(evt.data), tenant);

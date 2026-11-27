@@ -53,6 +53,7 @@ beforeEach(() => {
   verifyWebhook.mockReset();
   process.env.CLERK_WEBHOOK_SIGNING_SECRET = "whsec_de_prueba";
   process.env.SHOP_TENANT_ID = "tenant-shop";
+  vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://tienda-a.example/");
   logs = [];
   for (const m of ["log", "info", "warn", "error"] as const) {
     vi.spyOn(console, m).mockImplementation((...a: unknown[]) => {
@@ -63,6 +64,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   // Ningún log del webhook lleva emails (ni de este payload ni de ninguno).
   for (const l of logs) expect(l).not.toContain("@");
 });
@@ -96,6 +98,8 @@ describe("POST /api/webhooks/clerk", () => {
       const [c] = grabadora.consultas;
       expect(c.sql).toContain("shop.clientes_upsert_clerk");
       expect(c.params.slice(0, 4)).toEqual(["tenant-shop", "user_abc123", "ana@cliente.example", "Ana Pérez"]);
+      // Tienda de origen = sitio del despliegue (0050), nunca del payload.
+      expect(c.params.at(-1)).toBe("https://tienda-a.example");
       expect(c.params).not.toContain("tenant-intruso");
       expect(logs).toContain(`clerk-webhook tipo=${tipo} id=user_abc123 resultado=insertado`);
     },

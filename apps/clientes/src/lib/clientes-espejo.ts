@@ -85,14 +85,18 @@ async function llamar(consulta: ReturnType<typeof sql>): Promise<ResultadoEspejo
  * Alta o actualización. Las fechas viajan como ISO y se castean en SQL: un
  * `Date` suelto como parámetro lo serializa postgres.js a su manera. Lanza si
  * la base falla: el webhook tiene que responder 5xx para que Clerk reintente.
+ *
+ * `sitio` = tienda del despliegue (`sitioOrigenDeEntorno()`, 0050): cada dominio
+ * tiene su instancia de Clerk. null no pisa el valor guardado.
  */
 export function registrarUsuarioClerk(
   tenantId: string,
   d: DatosClienteClerk,
+  sitio: string | null,
 ): Promise<ResultadoEspejoCliente> {
   const creado = d.creadoEn ? d.creadoEn.toISOString() : null;
   return llamar(
-    sql`select shop.clientes_upsert_clerk(${tenantId}, ${d.clerkUserId}, ${d.email}, ${d.nombre}, ${creado}::timestamptz, ${d.actualizadoEn.toISOString()}::timestamptz) as resultado`,
+    sql`select shop.clientes_upsert_clerk(${tenantId}, ${d.clerkUserId}, ${d.email}, ${d.nombre}, ${creado}::timestamptz, ${d.actualizadoEn.toISOString()}::timestamptz, ${sitio}::text) as resultado`,
   );
 }
 

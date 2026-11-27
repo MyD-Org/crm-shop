@@ -23,6 +23,12 @@ export const CLIENTES_TIENDA_MAX_LIMIT = 50
 /** Largo máximo de la búsqueda (la API responde 400 por encima). */
 export const CLIENTES_TIENDA_Q_MAX = 100
 
+/**
+ * Tienda de origen (`shop.clientes.sitio_origen`, 0050 del Shop): mismo formato que su CHECK.
+ * El filtro `tienda` sólo acepta esto (o "todas").
+ */
+export const SITIO_ORIGEN_RE = /^https?:\/\/[^/\s]{1,200}$/
+
 export const FILTROS_VINCULO = ["todos", "vinculados", "sin_vincular"] as const
 export const FILTROS_ACCESO = ["todos", "con", "sin"] as const
 export const FILTROS_PEDIDOS = ["todos", "con"] as const
@@ -35,6 +41,8 @@ export interface ListarClientesTiendaFiltro {
   vinculo?: FiltroVinculo
   acceso?: FiltroAcceso
   pedidos?: FiltroPedidos
+  /** Origen de la tienda (`SITIO_ORIGEN_RE`); ausente = todas. */
+  tienda?: string
   start?: number
   /** Default CLIENTES_TIENDA_DEFAULT_LIMIT, máximo CLIENTES_TIENDA_MAX_LIMIT. */
   limit?: number
@@ -49,6 +57,8 @@ export interface ClienteTiendaDto {
   email: string | null
   /** Alta en Clerk (ISO). */
   altaEn: string | null
+  /** Tienda donde se registró (`https://host`); null si la fila no tiene el dato todavía. */
+  tienda: string | null
   vinculo: {
     estado: EstadoVinculo
     metodo: string | null
@@ -78,6 +88,7 @@ interface FilaListado {
   nombre: string | null
   email: string | null
   creado_en_clerk: Date | string | null
+  sitio_origen: string | null
   link_estado: string | null
   link_metodo: string | null
   alegra_contact_id: string | null
@@ -120,6 +131,7 @@ function aDto(f: FilaListado): ClienteTiendaDto {
     nombre: f.nombre,
     email: f.email,
     altaEn: iso(f.creado_en_clerk),
+    tienda: f.sitio_origen ?? null,
     vinculo: {
       estado,
       metodo: f.link_metodo,
@@ -162,7 +174,7 @@ export async function listarClientesTienda(
   // con principal = true, cualquiera sea su slug).
   const base = sql`
     WITH base AS (
-      SELECT c.id, c.clerk_user_id, c.nombre, c.email, c.creado_en_clerk,
+      SELECT c.id, c.clerk_user_id, c.nombre, c.email, c.creado_en_clerk, c.sitio_origen,
              l.estado AS link_estado, l.metodo AS link_metodo, l.alegra_contact_id,
              l.alegra_account AS link_cuenta,
              (SELECT ac.nombre FROM public.alegra_cuentas ac
@@ -210,6 +222,7 @@ export async function listarClientesTienda(
   if (filtro.acceso === "con") condiciones.push(sql`acceso`)
   if (filtro.acceso === "sin") condiciones.push(sql`NOT acceso`)
   if (filtro.pedidos === "con") condiciones.push(sql`pedidos > 0`)
+  if (filtro.tienda && SITIO_ORIGEN_RE.test(filtro.tienda)) condiciones.push(sql`sitio_origen = ${filtro.tienda}`)
   const where = condiciones.length ? sql`WHERE ${sql.join(condiciones, sql` AND `)}` : sql``
 
   const [filas, conteo] = await Promise.all([
@@ -225,4 +238,17 @@ export async function listarClientesTienda(
   const items = (filas as unknown as FilaListado[]).map(aDto)
   const total = Number((conteo as unknown as { total: number }[])[0]?.total ?? 0)
   return { items, total }
+}
+
+/**
+ * Tiendas con usuarios registrados (para el filtro y para decidir si mostrar la columna): los
+ * `sitio_origen` distintos del tenant, sin bajas. Con una sola tienda la UI no muestra nada.
+ */
+export async function listarTiendasClientes(tenantId: string): Promise<string[]> {
+  const filas = (await getDb().execute(sql`
+    SELECT DISTINCT sitio_origen FROM shop.clientes
+    WHERE tenant_id = ${tenantId} AND eliminado_en IS NULL AND sitio_origen IS NOT NULL
+    ORDER BY sitio_origen
+  `)) as unknown as { sitio_origen: string }[]
+  return filas.map((f) => f.sitio_origen)
 }

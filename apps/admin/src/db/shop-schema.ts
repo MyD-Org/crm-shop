@@ -293,6 +293,9 @@ export const shopClientes = shop.table("clientes", {
   email: text("email"),
   emailNorm: text("email_norm"),
   nombre: text("nombre"),
+  // Tienda donde se registró (0050 del Shop): origen del sitio (`https://host`). Cada dominio
+  // tiene su instancia de Clerk. null = fila anterior sin backfill.
+  sitioOrigen: text("sitio_origen"),
   creadoEnClerk: timestamp("creado_en_clerk", { withTimezone: true }),
   actualizadoEnClerk: timestamp("actualizado_en_clerk", { withTimezone: true }).notNull(),
   eliminadoEn: timestamp("eliminado_en", { withTimezone: true }),

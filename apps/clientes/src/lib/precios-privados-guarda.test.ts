@@ -31,6 +31,8 @@ const LISTA_BLANCA = new Set([
   "lib/precios-privados-repo.ts",
   "db/crm.ts",
   "app/api/precios-cuenta/route.ts",
+  // Qué ofertas le aplican a la cuenta: catálogo público de la caché + precios privados fuera de ella.
+  "app/api/ofertas-cuenta/route.ts",
   "app/api/carrito/route.ts",
   "app/api/carrito/cotizar/route.ts",
   "app/api/pedidos/route.ts",

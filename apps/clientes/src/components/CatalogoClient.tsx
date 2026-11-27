@@ -28,6 +28,8 @@ import {
   quitarBusqueda,
   type EstadoCatalogo,
 } from "@/lib/catalogo-url";
+import { useOfertasCuenta } from "@/hooks/useOfertasCuenta";
+import { filtrarOfertasCuenta } from "@/lib/ofertas-cuenta";
 import { TEXTOS_OFERTAS, anuncioResultados, hayFiltros, interpretacionVigente, limpiarFiltros, ofertasVacias } from "@/lib/catalogo-vista";
 import type { ChipSugerido } from "@/lib/busqueda-inteligente/url";
 import { TEXTOS_SIN_RESULTADOS } from "@/lib/busqueda-inteligente/textos";
@@ -169,10 +171,18 @@ export function CatalogoClient({
 
   // Precio de la lista privada de la cuenta (cuenta corriente con lista enlazada), superpuesto
   // sobre el catálogo público. Con sesión, un marcador hasta que llega.
-  const preciosCuenta = usePreciosCuenta(productos.map((p) => p.id));
+  // En «Solo ofertas», a una cuenta con lista propia sólo las ofertas que le aplican (las demás las
+  // paga a su precio de lista, más bajo: no son ofertas para ella).
+  const ofertasCuenta = useOfertasCuenta();
+  const productosVistos = useMemo(
+    () => (estado.soloOfertas ? filtrarOfertasCuenta(productos, ofertasCuenta) : productos),
+    [productos, ofertasCuenta, estado.soloOfertas],
+  );
+  const totalVisto = estado.soloOfertas && ofertasCuenta.tipo === "privado" ? productosVistos.length : total;
+  const preciosCuenta = usePreciosCuenta(productosVistos.map((p) => p.id));
   const productosCuenta = useMemo(
-    () => productos.map((p) => aplicarEstadoPrecio(p, preciosCuenta.get(p.id))),
-    [productos, preciosCuenta],
+    () => productosVistos.map((p) => aplicarEstadoPrecio(p, preciosCuenta.get(p.id))),
+    [productosVistos, preciosCuenta],
   );
 
   // Mejor opción de cuotas sin interés por producto (viene armada del servidor, con flag).
@@ -234,7 +244,7 @@ export function CatalogoClient({
           misma altura. */}
       <CatalogoEncabezado
         estado={estado}
-        bajada={estado.soloOfertas && total > 0 ? TEXTOS_OFERTAS.bajada(total) : undefined}
+        bajada={estado.soloOfertas && totalVisto > 0 ? TEXTOS_OFERTAS.bajada(totalVisto) : undefined}
         acciones={
           <div className="flex items-center gap-3 max-lg:w-full max-lg:justify-between">
             <div className="lg:hidden">
@@ -288,7 +298,7 @@ export function CatalogoClient({
         </FadeScroll>
 
         <div className="flex min-w-0 flex-1 flex-col gap-6">
-          {productos.length === 0 && ofertasVacias(estado) ? (
+          {productosVistos.length === 0 && ofertasVacias(estado) ? (
             // «Solo ofertas» sin nada más que lo explique: no hay campañas vigentes (o ninguna baja
             // el precio). Se dice así y se ofrece el catálogo.
             <EmptyState

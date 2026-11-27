@@ -285,8 +285,9 @@ export function HomeClient({
     destacados: (
       <Contenido>
         <Reveal>
-          <SeccionEditable seccion="destacados" titulo={secDestacados.titulo} visibilidad={vis("destacados")} botonTop="top-[calc(clamp(56px,7vw,96px)-2.5rem)]">
-            <section className="pt-[clamp(56px,7vw,96px)]">
+          {/* Menos aire arriba que el resto (pedido 2026-11-27): suele ir pegada a la cinta de marcas. */}
+          <SeccionEditable seccion="destacados" titulo={secDestacados.titulo} visibilidad={vis("destacados")} botonTop="top-[calc(clamp(36px,4.5vw,64px)-2.5rem)]">
+            <section className="pt-[clamp(36px,4.5vw,64px)]">
               <TituloSeccion textos={secDestacados} linkTodos={secDestacados.linkTodos} />
               {destacados}
             </section>

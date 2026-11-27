@@ -21,7 +21,7 @@ import { vistaCardVariantes } from "@/lib/variantes-ficha";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { badgeProducto } from "@/components/badge-producto";
-import { badgeCampania, badgePromo, useInfoPromo } from "@/components/promociones/PromoProvider";
+import { badgeCampania, badgePromo, useInfoPromo, propsCardCampania } from "@/components/promociones/PromoProvider";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { LightbulbIcon } from "./iconos";
 import { linkNext } from "./link-next";
@@ -146,6 +146,7 @@ export function CatalogoProductos({
           priceNote={vv.nota}
           oldPrice={vv.esDesde || p.oldPrice == null ? undefined : market ? Math.round(p.oldPrice) : p.oldPrice}
           badge={p.campania ? badgeCampania(p.campania) : (badgePromo(promoDe(p.sku), p) ?? badgeProducto(p))}
+          {...propsCardCampania(p.campania)}
           // El slot queda fuera del enlace estirado de la card: no navega.
           // Favorito arriba y compartir debajo, apilados en la esquina de la foto.
           cornerAction={

@@ -22,9 +22,10 @@ export function mostrarFin(fin: string, ahora: number | null): boolean {
 
 /**
  * Bloque de una campaña de precios en la ficha (spec apps/admin/docs/superpowers/specs/
- * 2026-10-28-campanias-precios-design.md), con el diseño del de la promo de la home: la etiqueta,
- * "Termina el …" (sólo en los últimos días, ver `mostrarFin`), nuestro precio habitual tachado con el % en verde, las unidades que quedan (si la
- * regla tiene límite) y la cuenta regresiva. El precio grande ya es el de campaña (`producto.price`).
+ * 2026-10-28-campanias-precios-design.md; diseño «A · color de la marca», 2026-11-26): recuadro con
+ * el acento de cada piel, franja con la etiqueta y "Termina el …" (sólo en los últimos días, ver
+ * `mostrarFin`), nuestro precio habitual tachado, el % (en `highlight`, el color "luz" de la piel) y
+ * el ahorro en pesos en verde, las unidades que quedan (si la regla tiene límite) y la cuenta regresiva. El precio grande ya es el de campaña (`producto.price`).
  * Al terminar la campaña la página se refresca: el precio vuelve al normal sin recargar a mano.
  */
 export function CampaniaFicha({ producto }: { producto: Product }) {
@@ -34,23 +35,40 @@ export function CampaniaFicha({ producto }: { producto: Product }) {
   if (!c) return null;
   // Sin stock en la tienda manda el stock: nunca "quedan N" sobre algo que no se puede comprar.
   const quedan = producto.stock === "out" ? 0 : c.quedan;
-  const conFin = mostrarFin(c.fin, ahora);
+  const conFin = !c.hastaAgotarStock && mostrarFin(c.fin, ahora);
+  // Ahorro en pesos contra el precio habitual de la misma lista: los dos con IVA.
+  const ahorro =
+    producto.oldPrice && producto.precioFinal != null && producto.oldPrice > producto.precioFinal
+      ? producto.oldPrice - producto.precioFinal
+      : null;
   return (
-    <div data-campania={c.id} className="mt-4 flex flex-col gap-3 rounded-xl border border-black/10 bg-white p-4 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">{c.etiqueta}</span>
-        {conFin ? <span className="text-sm text-text">Termina el {fechaCortaAR(c.fin)}</span> : null}
+    <div data-campania={c.id} className="mt-4 overflow-hidden rounded-2xl border-2 border-accent bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-accent-soft px-4 py-2.5">
+        <span className="font-display text-sm font-extrabold uppercase tracking-wider text-accent">{c.etiqueta}</span>
+        {c.hastaAgotarStock ? (
+          <span className="text-sm font-semibold text-accent">Hasta agotar stock</span>
+        ) : conFin ? (
+          <span className="text-sm font-semibold text-accent">Termina el {fechaCortaAR(c.fin)}</span>
+        ) : null}
       </div>
-      {producto.oldPrice ? (
-        <p className="flex flex-wrap items-center gap-2 text-sm text-muted">
-          <span>
-            Precio habitual <span className="tabular-nums line-through">{fmtPrecioCorto(producto.oldPrice)}</span>
-          </span>
-          <span data-descuento="" className="rounded-md bg-success-soft px-2 py-0.5 text-xs font-bold text-success">
-            {c.pct} % de descuento
-          </span>
-        </p>
-      ) : null}
+      <div className="flex flex-col gap-3 p-4">
+        {producto.oldPrice ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-muted">
+              Precio habitual <span className="tabular-nums line-through">{fmtPrecioCorto(producto.oldPrice)}</span>
+            </p>
+            <p className="flex flex-wrap items-center gap-2">
+              <span data-descuento="" className="rounded-full bg-highlight px-3 py-1 text-sm font-extrabold text-text">
+                {c.pct} % menos
+              </span>
+              {ahorro ? (
+                <span data-ahorro="" className="rounded-full bg-success-soft px-3 py-1 text-sm font-extrabold text-success">
+                  Ahorre {fmtPrecioCorto(ahorro)}
+                </span>
+              ) : null}
+            </p>
+          </div>
+        ) : null}
       {c.unidades != null && quedan != null ? (
         quedan > 0 ? (
           // La urgencia (rojo, "¡Últimas…!") sólo cuando quedan pocas; si no, el dato neutro.
@@ -65,7 +83,8 @@ export function CampaniaFicha({ producto }: { producto: Product }) {
           <p className="text-sm font-semibold text-text">Agotadas las unidades a {frasePrecio(c.etiqueta)}</p>
         )
       ) : null}
-      {conFin ? <CuentaRegresiva fin={c.fin} className="text-sm text-text" onFin={() => router.refresh()} /> : null}
+        {conFin ? <CuentaRegresiva fin={c.fin} className="text-sm text-text" onFin={() => router.refresh()} /> : null}
+      </div>
     </div>
   );
 }

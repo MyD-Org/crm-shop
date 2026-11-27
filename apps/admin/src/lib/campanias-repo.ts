@@ -23,6 +23,8 @@ export interface CampaniaDto {
   etiqueta: string
   inicio: string
   fin: string
+  /** El cliente ve «Hasta agotar stock» en lugar del fin (0108). */
+  hastaAgotarStock: boolean
   estado: EstadoCampania
   /** Productos que la campaña alcanza hoy (entradas materializadas). */
   productos: number
@@ -190,6 +192,7 @@ async function snapshot(tx: Tx, id: string): Promise<Record<string, unknown>> {
     etiqueta: c.etiqueta,
     inicio: c.inicio.toISOString(),
     fin: c.fin.toISOString(),
+    hastaAgotarStock: c.hastaAgotarStock,
     reglas: reglas.map((r) => ({ id: r.id, alcance: alcanceDeFila(r), pct: r.pct, unidades: r.unidades })),
   }
 }
@@ -238,7 +241,7 @@ export async function guardarCampania(
     }
     // Varias campañas pueden estar activas a la vez. Si un producto queda en más de una, rige la
     // que empezó primero (orden de `campanias_online`, el mismo en el Shop y en el carrito).
-    const valores = { nombre: e.nombre, etiqueta: e.etiqueta || e.nombre, inicio, fin }
+    const valores = { nombre: e.nombre, etiqueta: e.etiqueta || e.nombre, inicio, fin, hastaAgotarStock: e.hastaAgotarStock === true }
     let campaniaId = id
     if (campaniaId) {
       await tx.update(campanias).set({ ...valores, updatedAt: sql`now()` }).where(eq(campanias.id, campaniaId))
@@ -375,6 +378,7 @@ export async function listarCampanias(tenantId: string): Promise<CampaniaDto[]> 
       etiqueta: campanias.etiqueta,
       inicio: campanias.inicio,
       fin: campanias.fin,
+      hastaAgotarStock: campanias.hastaAgotarStock,
       productos: sql<number>`(SELECT count(*)::int FROM catalog_products p
         WHERE p.tenant_id = ${tenantId}
           AND p.campanias_online @> jsonb_build_array(jsonb_build_object('id', "campanias"."id"::text)))`,
@@ -388,6 +392,7 @@ export async function listarCampanias(tenantId: string): Promise<CampaniaDto[]> 
     etiqueta: c.etiqueta,
     inicio: c.inicio.toISOString(),
     fin: c.fin.toISOString(),
+    hastaAgotarStock: c.hastaAgotarStock,
     estado: estadoCampania(c, ahora),
     productos: Number(c.productos),
   }))

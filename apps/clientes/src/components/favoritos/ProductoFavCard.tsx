@@ -11,7 +11,7 @@ import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
 import { agotadoSinModalidad } from "@/lib/venta-sin-stock";
 import { badgeProducto } from "@/components/badge-producto";
-import { badgeCampania, badgePromo, usePromoProducto } from "@/components/promociones/PromoProvider";
+import { badgeCampania, badgePromo, usePromoProducto, propsCardCampania } from "@/components/promociones/PromoProvider";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { IconoLampara } from "@/components/mi-cuenta/iconos";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard, stockParaCard } from "@/lib/catalogo-vista";
@@ -71,6 +71,7 @@ export function ProductoFavCard({ p }: { p: Product }) {
       price={p.precioFinal ?? p.price}
       oldPrice={p.oldPrice}
       badge={p.campania ? badgeCampania(p.campania) : (badgePromo(promo, p) ?? badgeProducto(p))}
+      {...propsCardCampania(p.campania)}
       image={
         p.images?.[0] ? (
           <Image

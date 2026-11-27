@@ -32,6 +32,7 @@ describe("cuerpoCampania", () => {
     inicioHora: "00:00",
     finFecha: "2026-11-30",
     finHora: "23:59",
+    hastaAgotarStock: false,
     reglas: [
       { clave: "a", tipo: "marca", marca: "acme", categoriaId: "", producto: null, pct: "20", unidades: "" },
       {
@@ -51,11 +52,16 @@ describe("cuerpoCampania", () => {
       nombre: "Black Friday",
       inicio: "2026-11-27T00:00:00-03:00",
       fin: "2026-11-30T23:59:00-03:00",
+      hastaAgotarStock: false,
       reglas: [
         { alcance: { tipo: "marca", marca: "acme" }, pct: 20 },
         { alcance: { tipo: "producto", alegraId: "7" }, pct: 30, unidades: 5 },
       ],
     })
+  })
+
+  it("la casilla «Hasta agotar stock» viaja en el cuerpo", () => {
+    expect(cuerpoCampania({ ...form, hastaAgotarStock: true }).hastaAgotarStock).toBe(true)
   })
 
   it("la etiqueta va sólo si se cargó", () => {

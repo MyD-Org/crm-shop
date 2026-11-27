@@ -50,6 +50,13 @@ describe("mapFilaToProduct con campaña activa", () => {
     expect(p.campania).toEqual({ id: "c1", nombre: "Black Friday", etiqueta: "BF", fin: BF.fin, pct: 20, unidades: null, quedan: null });
   });
 
+  it("«Hasta agotar stock» viaja hasta el producto; sin el flag no aparece", () => {
+    const p = mapFilaToProduct(fila, undefined, sinHosts, null, { destacado: null, ficha: [], campanias: [{ ...BF, hastaAgotarStock: true }] });
+    expect(p.campania?.hastaAgotarStock).toBe(true);
+    const sin = mapFilaToProduct(fila, undefined, sinHosts, null, { destacado: null, ficha: [], campanias: [BF] });
+    expect(sin.campania).not.toHaveProperty("hastaAgotarStock");
+  });
+
   it("la línea \"$X con Transferencia\" muestra el precio de campaña de esa lista", () => {
     const p = mapFilaToProduct(fila, undefined, sinHosts, null, { destacado: transf, ficha: [transf], campanias: [BF] });
     expect(p.precioMedio).toEqual({ slug: "transf", nombre: "Transferencia", price: 104, precioFinal: 125.84 });

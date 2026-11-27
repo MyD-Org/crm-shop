@@ -34,12 +34,12 @@ export function CampaniaFicha({ producto }: { producto: Product }) {
   if (!c) return null;
   // Sin stock en la tienda manda el stock: nunca "quedan N" sobre algo que no se puede comprar.
   const quedan = producto.stock === "out" ? 0 : c.quedan;
-  const conFin = mostrarFin(c.fin, ahora);
+  const conFin = !c.hastaAgotarStock && mostrarFin(c.fin, ahora);
   return (
     <div data-campania={c.id} className="mt-4 flex flex-col gap-3 rounded-xl border border-black/10 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">{c.etiqueta}</span>
-        {conFin ? <span className="text-sm text-text">Termina el {fechaCortaAR(c.fin)}</span> : null}
+        {c.hastaAgotarStock ? <span className="text-sm text-text">Hasta agotar stock</span> : conFin ? <span className="text-sm text-text">Termina el {fechaCortaAR(c.fin)}</span> : null}
       </div>
       {producto.oldPrice ? (
         <p className="flex flex-wrap items-center gap-2 text-sm text-muted">

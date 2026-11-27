@@ -37,6 +37,13 @@ describe("idsActivasEn", () => {
     expect(en("2026-12-03T10:00:00.000Z")).toEqual([]);
   });
 
+  it("«Hasta agotar stock» pasa a la activa sólo si está prendido (no cambia la clave de las demás)", () => {
+    const [con] = idsActivasEn([{ ...BF, hastaAgotarStock: true }], new Date("2026-11-28T00:00:00Z"));
+    expect(con).toEqual({ id: "c-bf", nombre: "Black Friday", etiqueta: "BF", fin: BF.fin, hastaAgotarStock: true });
+    const [sin] = idsActivasEn([{ ...BF, hastaAgotarStock: false }], new Date("2026-11-28T00:00:00Z"));
+    expect(sin).not.toHaveProperty("hastaAgotarStock");
+  });
+
   it("devuelve la meta para exhibir, ordenada por id (va en la clave de la caché)", () => {
     const solapadas = [{ ...CYBER, inicio: BF.inicio }, BF];
     expect(idsActivasEn(solapadas, new Date("2026-11-28T00:00:00Z"))).toEqual([

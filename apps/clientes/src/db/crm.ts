@@ -252,6 +252,8 @@ export const crmCampanias = publico
     etiqueta: text("etiqueta").notNull(),
     inicio: timestamp("inicio", { withTimezone: true, mode: "string" }).notNull(),
     fin: timestamp("fin", { withTimezone: true, mode: "string" }).notNull(),
+    /** 0108 del CRM: la ficha dice «Hasta agotar stock» en vez del fin (que sigue cortando la campaña). */
+    hastaAgotarStock: boolean("hasta_agotar_stock").notNull(),
   })
   .existing();
 

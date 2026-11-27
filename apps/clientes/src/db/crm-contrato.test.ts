@@ -126,7 +126,8 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
 
   it("las campañas (0095 del CRM): la columna al final de la vista y sólo la ventana, nunca las reglas", () => {
     expect(esperado["public.catalog_products_shop"].campanias_online).toBe("jsonb");
-    expect(Object.keys(esperado["public.campanias_shop"])).toEqual(["tenant_id", "id", "nombre", "etiqueta", "inicio", "fin"]);
+    expect(Object.keys(esperado["public.campanias_shop"])).toEqual(["tenant_id", "id", "nombre", "etiqueta", "inicio", "fin", "hasta_agotar_stock"]);
+    expect(esperado["public.campanias_shop"].hasta_agotar_stock).toBe("boolean");
     expect(esperado["public.campanias"]).toBeUndefined();
     expect(esperado["public.campania_reglas"]).toBeUndefined();
   });

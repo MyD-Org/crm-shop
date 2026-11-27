@@ -42,6 +42,16 @@ describe("Solo ofertas en la URL", () => {
     expect(hrefCon(estado, { soloOfertas: undefined })).toBe("/catalogo");
   });
 
+  it("quitarlo (chip o «Limpiar filtros») desde /ofertas vuelve al orden de siempre", () => {
+    const desdeOfertas = leerEstado({ ofertas: "1", orden: "descuento" });
+    expect(hrefCon(desdeOfertas, { soloOfertas: undefined })).toBe("/catalogo");
+    expect(hrefCon(desdeOfertas, limpiarFiltros())).toBe("/catalogo");
+    expect(hrefCon({ ...desdeOfertas, query: "panel" }, { soloOfertas: undefined })).toBe("/catalogo?q=panel");
+    // Con ofertas, cambiar otro filtro conserva el orden; y quien lo pide explícito, lo tiene.
+    expect(hrefCon(desdeOfertas, { marcas: ["KING"] })).toBe("/catalogo?marca=KING&ofertas=1&orden=descuento");
+    expect(hrefCon(desdeOfertas, { soloOfertas: undefined, orden: "descuento" })).toBe("/catalogo?orden=descuento");
+  });
+
   it("llega a los filtros de la consulta sólo si está prendido", () => {
     expect(filtrosDeEstado(leerEstado({ ofertas: "1" })).soloOfertas).toBe(true);
     expect("soloOfertas" in filtrosDeEstado(leerEstado({}))).toBe(false);

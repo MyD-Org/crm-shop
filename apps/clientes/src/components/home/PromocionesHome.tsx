@@ -42,11 +42,12 @@ export async function PromocionesHome({ contenido: guardado }: { contenido: Prom
   );
   const estado = estadoPromo(contenido, ahoraServidor());
 
-  // Sin promo armada en el editor y con campañas de precios activas, el lugar de la sección lo ocupa
+  // Sin promo vigente del editor (sin armar, programada o terminada: el público no ve nada) y con
+  // campañas de precios activas, el lugar de la sección lo ocupa
   // el bloque automático de ofertas (mayor descuento, con stock): mismo orden y misma visibilidad que
   // «Promociones», así no hay dos secciones de oferta en la home. El botón de editar la sección
   // (SeccionEditable) sigue encima: armar una promo la vuelve a mostrar en lugar del bloque.
-  if (estado === "inactiva" && campanias.length > 0) {
+  if (estado !== "vigente" && campanias.length > 0) {
     const ofertas = await ofertasParaHome({
       soloVisibles,
       agrupar: !!variantes,

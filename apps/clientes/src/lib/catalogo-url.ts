@@ -465,6 +465,11 @@ export function estadoConCambios(
   // búsqueda nueva sobre "Destacados" pasa a relevancia (destacados no ordena búsquedas).
   if (nuevo.orden === "relevancia" && !nuevo.query) nuevo.orden = ORDEN_DEFAULT;
   if (nuevo.orden === "destacados" && nuevo.query) nuevo.orden = "relevancia";
+  // «Mayor descuento» viene con «Solo ofertas» (`HREF_OFERTAS`): quitar las ofertas vuelve al orden de
+  // siempre, si no quedaría el catálogo entero ordenado por un descuento que casi nadie tiene.
+  if ("soloOfertas" in cambios && !nuevo.soloOfertas && estado.soloOfertas && nuevo.orden === "descuento" && !("orden" in cambios)) {
+    nuevo.orden = ordenPorDefecto(nuevo.query);
+  }
   return nuevo;
 }
 

@@ -22,9 +22,12 @@ import { linkNext } from "./link-next";
  */
 export function CatalogoEncabezado({
   estado,
+  bajada,
   acciones,
 }: {
   estado: EstadoCatalogo;
+  /** Línea chica bajo el título (hoy sólo «Ofertas»: "9 productos con precio especial"). */
+  bajada?: string;
   /** Vista, orden y —en mobile— el botón que abre la hoja de filtros. */
   acciones?: ReactNode;
 }) {
@@ -32,9 +35,12 @@ export function CatalogoEncabezado({
     <header className="flex flex-col gap-3">
       <Breadcrumb items={migas(estado)} renderLink={linkNext} />
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <h1 className="font-display text-3xl font-medium tracking-tight text-text md:text-4xl">
-          {tituloCatalogo(estado)}
-        </h1>
+        <div className="flex flex-col gap-1">
+          <h1 className="font-display text-3xl font-medium tracking-tight text-text md:text-4xl">
+            {tituloCatalogo(estado)}
+          </h1>
+          {bajada ? <p className="text-sm text-muted">{bajada}</p> : null}
+        </div>
         {acciones}
       </div>
     </header>

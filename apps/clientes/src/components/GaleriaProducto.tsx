@@ -45,11 +45,14 @@ export function GaleriaProducto({
   videos,
   nombre,
   acciones,
+  etiqueta,
 }: {
   fotos?: ProductImage[];
   videos?: VideoProducto[];
   nombre: string;
   acciones?: ReactNode;
+  /** Pestaña pegada a la esquina superior izquierda de la foto (p. ej. «OFERTA −9 %»). */
+  etiqueta?: ReactNode;
 }) {
   const [activa, setActiva] = useState(0);
   const [visor, setVisor] = useState<{
@@ -171,6 +174,7 @@ export function GaleriaProducto({
             )}
           </>
         )}
+        {etiqueta ? <div className="pointer-events-none absolute left-0 top-0 z-10">{etiqueta}</div> : null}
         {acciones && <div className="absolute right-3 top-3 flex gap-2">{acciones}</div>}
       </div>
 

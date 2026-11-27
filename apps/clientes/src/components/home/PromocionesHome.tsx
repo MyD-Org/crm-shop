@@ -7,6 +7,7 @@ import { contenidoConCampania, estadoPromo, skusNoResueltos, skusPromo } from "@
 import { quedanEstrella } from "@/lib/promociones/stock";
 import { dispCatalogo } from "@/lib/zona-servidor";
 import { PromocionesVista } from "./PromocionesVista";
+import { OfertasHomeVista, ofertasParaHome } from "./OfertasHome";
 
 /**
  * Sección "Promociones" de la home (spec 2026-10-26-promociones-home §5). Hueco por request: la
@@ -40,6 +41,22 @@ export async function PromocionesHome({ contenido: guardado }: { contenido: Prom
     productos,
   );
   const estado = estadoPromo(contenido, ahoraServidor());
+
+  // Sin promo vigente del editor (sin armar, programada o terminada: el público no ve nada) y con
+  // campañas de precios activas, el lugar de la sección lo ocupa
+  // el bloque automático de ofertas (mayor descuento, con stock): mismo orden y misma visibilidad que
+  // «Promociones», así no hay dos secciones de oferta en la home. El botón de editar la sección
+  // (SeccionEditable) sigue encima: armar una promo la vuelve a mostrar en lugar del bloque.
+  if (estado !== "vigente" && campanias.length > 0) {
+    const ofertas = await ofertasParaHome({
+      soloVisibles,
+      agrupar: !!variantes,
+      disp,
+      mediosPrecio,
+      campanias,
+    });
+    if (ofertas.length > 0) return <OfertasHomeVista productos={ofertas} />;
+  }
   const porSku = new Map(productos.map((p) => [(p.sku ?? "").toUpperCase(), p]));
   const skuEstrella = contenido.estrella?.sku.trim().toUpperCase();
   const prodEstrella = skuEstrella ? porSku.get(skuEstrella) : undefined;

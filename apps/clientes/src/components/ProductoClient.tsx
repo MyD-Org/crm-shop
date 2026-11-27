@@ -6,7 +6,7 @@ import { textoConsultaProducto } from "@/lib/contacto-pedido";
 import { Badge, Button, QuantityStepper, Skeleton, VariantSelector, type PaymentLogo } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { PromoFicha } from "@/components/promociones/PromoFicha";
-import { CampaniaFicha } from "@/components/promociones/CampaniaFicha";
+import { CampaniaFicha, PestaniaOferta } from "@/components/promociones/CampaniaFicha";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { CuotasConCarrito, useProgresoCuotasCarrito } from "@/components/producto/CuotasConCarrito";
 import { cuotasFichaConCarrito, cuotasHastaFicha, metaCuotasFicha } from "@/lib/ficha-cuotas-carrito";
@@ -370,6 +370,7 @@ export function ProductoClient({
               fotos={producto.images}
               videos={producto.videos}
               nombre={nombreParaMostrar}
+              etiqueta={!sinPrecio && producto.campania ? <PestaniaOferta pct={producto.campania.pct} /> : undefined}
               acciones={
                 <>
                   <BotonCompartir />

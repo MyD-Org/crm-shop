@@ -28,6 +28,21 @@ export function mostrarFin(fin: string, ahora: number | null): boolean {
  * el ahorro en pesos en verde, las unidades que quedan (si la regla tiene límite) y la cuenta regresiva. El precio grande ya es el de campaña (`producto.price`).
  * Al terminar la campaña la página se refresca: el precio vuelve al normal sin recargar a mano.
  */
+/**
+ * Pestaña «OFERTA −N %» pegada a la esquina de la foto de la ficha (diseño A): en el resaltado de
+ * la piel (ámbar en Luz Atlántica, amarillo en Central Led), como el «N % menos» del recuadro.
+ */
+export function PestaniaOferta({ pct }: { pct: number }) {
+  return (
+    <span
+      data-pestania-oferta=""
+      className="inline-block rounded-br-2xl bg-highlight px-4 py-2 font-display text-xs font-extrabold uppercase tracking-wider text-text"
+    >
+      Oferta −{pct} %
+    </span>
+  );
+}
+
 export function CampaniaFicha({ producto }: { producto: Product }) {
   const router = useRouter();
   const ahora = useAhora();

@@ -7,7 +7,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 // Reloj fijo: 26/11/2026 12:00 (Argentina). BF termina el 30/11 23:59, a 4 días.
 const reloj = vi.hoisted(() => ({ ahora: Date.parse("2026-11-26T15:00:00.000Z") as number | null }));
 vi.mock("./reloj", () => ({ useAhora: () => reloj.ahora }));
-const { CampaniaFicha, mostrarFin } = await import("./CampaniaFicha");
+const { CampaniaFicha, PestaniaOferta, mostrarFin } = await import("./CampaniaFicha");
 
 // Campañas de precios en cards y ficha (spec 2026-10-28-campanias-precios-design.md). Datos inventados.
 
@@ -109,5 +109,15 @@ describe("mostrarFin", () => {
   });
   it("sin reloj (servidor), no", () => {
     expect(mostrarFin("2026-11-27T00:00:00.000Z", null)).toBe(false);
+  });
+});
+
+describe("PestaniaOferta (esquina de la foto de la ficha)", () => {
+  it("dice «Oferta −N %» en el resaltado de la piel, sin rojo", () => {
+    const html = renderToStaticMarkup(<PestaniaOferta pct={9} />);
+    expect(html).toContain("Oferta −9 %");
+    expect(html).toContain("bg-highlight");
+    expect(html).toContain("uppercase");
+    expect(html).not.toMatch(/danger|red-/);
   });
 });

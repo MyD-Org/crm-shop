@@ -12,6 +12,10 @@ import { busquedaAplicada } from "@/lib/busqueda-header";
 import { useHidratado } from "@/lib/hidratado";
 import { MAX_CATEGORIAS_NAV, conBadgeNav } from "@/lib/nav-badge";
 import { formatRubro } from "@/lib/formato-rubro";
+import { HREF_OFERTAS } from "@/lib/catalogo-url";
+
+/** Ítem del menú que lleva a las ofertas (sólo con campañas activas). */
+export const TEXTO_NAV_OFERTAS = "Ofertas";
 import { CartPreview } from "./CartPreview";
 import { linkNext } from "./catalogo/link-next";
 import { MenuUsuario } from "./MenuUsuario";
@@ -65,6 +69,8 @@ interface PropsHeader {
   busquedaIa?: boolean;
   /** Ve precios de su lista online privada: chip "Precios de cliente" junto al "Enviar a". */
   preciosCliente?: boolean;
+  /** Hay campañas de precios activas: «Ofertas» al final del menú de categorías (lo resuelve el hueco). */
+  conOfertas?: boolean;
   /** "Enviar a" de desktop, en las acciones a la izquierda del usuario. Lo resuelve el servidor. */
   ubicacion?: ReactNode;
   /** El mismo "Enviar a" en una línea, para mobile: debajo del buscador. */
@@ -136,6 +142,7 @@ function HeaderVista({
   navBadgeVisibleOn,
   busquedaIa = false,
   preciosCliente = false,
+  conOfertas = false,
   ubicacion,
   ubicacionEnLinea,
   whatsapp = null,
@@ -166,14 +173,18 @@ function HeaderVista({
   // en todas las páginas.
   const nav =
     pathname === "/" && categorias
-      ? conBadgeNav(
-          categorias.slice(0, MAX_CATEGORIAS_NAV).map((cat) => ({
-            label: formatRubro(cat),
-            href: `/catalogo?categoria=${encodeURIComponent(cat)}`,
-          })),
-          navBadge,
-          navBadgeVisibleOn,
-        )
+      ? [
+          ...conBadgeNav(
+            categorias.slice(0, MAX_CATEGORIAS_NAV).map((cat) => ({
+              label: formatRubro(cat),
+              href: `/catalogo?categoria=${encodeURIComponent(cat)}`,
+            })),
+            navBadge,
+            navBadgeVisibleOn,
+          ),
+          // Con campañas activas, la entrada a las ofertas cierra el menú (diseño «Ofertas más llamativas»).
+          ...(conOfertas ? [{ label: TEXTO_NAV_OFERTAS, href: HREF_OFERTAS }] : []),
+        ]
       : [];
 
   // Sin <Show> de Clerk: mientras cierra sesión deja la sesión "en

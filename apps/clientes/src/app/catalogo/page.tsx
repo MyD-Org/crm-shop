@@ -45,6 +45,7 @@ type Props = {
     potencia_max?: ParamCrudo;
     stock?: ParamCrudo;
     retiro?: ParamCrudo;
+    ofertas?: ParamCrudo;
     vista?: ParamCrudo;
     ia?: ParamCrudo;
     car?: ParamCrudo;

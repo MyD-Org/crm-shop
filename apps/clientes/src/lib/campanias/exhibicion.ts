@@ -25,7 +25,7 @@ export function preciosConCampania(prices: AlegraPrice[], entrada: EntradaCampan
 export function campaniaParaExhibir(
   prices: AlegraPrice[],
   campaniasOnline: unknown,
-  medios: Pick<MediosPrecio, "campanias" | "quedanCampania" | "destacado"> | undefined,
+  medios: (Pick<MediosPrecio, "campanias" | "quedanCampania" | "destacado"> & Partial<Pick<MediosPrecio, "ficha">>) | undefined,
   idPriceList?: string,
   /** IVA del producto: para el normal con IVA del medio destacado (`habitualMedio`). */
   iva: number | null = null,
@@ -42,6 +42,14 @@ export function campaniaParaExhibir(
     ? armarPreciosMedios(prices, iva, { destacado: medios.destacado, ficha: [] }).precioMedio
     : undefined;
   const habitualMedio = normalMedio ? (normalMedio.precioFinal ?? precioFinal(normalMedio.price, iva) ?? normalMedio.price) : undefined;
+  // Lo mismo para cada medio de la ficha: el recuadro tacha y calcula el ahorro con la lista del
+  // precio grande (la que usa el carrito), no con la general.
+  const habitualesMedios = medios?.ficha?.length
+    ? (armarPreciosMedios(prices, iva, { destacado: null, ficha: medios.ficha }).preciosMedios ?? []).flatMap((p) => {
+        const final = p.precioFinal ?? precioFinal(p.price, iva);
+        return final != null ? [{ slug: p.slug, ...(p.forma ? { forma: p.forma } : {}), precioFinal: final }] : [];
+      })
+    : [];
   return {
     precios: preciosConCampania(prices, r.campania),
     normal: r.normal,
@@ -55,6 +63,7 @@ export function campaniaParaExhibir(
       unidades: r.campania.unidades,
       quedan: r.campania.unidades != null ? (quedan.get(r.campania.reglaId) ?? null) : null,
       ...(habitualMedio !== undefined ? { habitualMedio } : {}),
+      ...(habitualesMedios.length ? { habitualesMedios } : {}),
     },
   };
 }

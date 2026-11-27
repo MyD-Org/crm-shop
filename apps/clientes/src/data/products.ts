@@ -117,6 +117,12 @@ export interface CampaniaProducto {
    * precio grande es el del medio (sección Promociones de la home). Ausente = sin medio destacado.
    */
   habitualMedio?: number;
+  /**
+   * Precio NORMAL con IVA de cada medio de la ficha (transferencia…), por slug y forma: lo que se
+   * tacha y contra lo que se calcula el ahorro en el recuadro de la ficha, de la misma lista que el
+   * precio grande y que el carrito. Ausente = sin medios de ficha.
+   */
+  habitualesMedios?: { slug: string; forma?: OpcionCobro; precioFinal: number }[];
 }
 
 export interface Product {

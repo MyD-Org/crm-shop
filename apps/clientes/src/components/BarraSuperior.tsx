@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { CentroBarra } from "@/components/BarraOfertas";
 import { RedesSociales } from "@/components/footer/RedesSociales";
 import { IconoWhatsapp } from "@/components/IconoWhatsapp";
 import { hrefWhatsapp, type RedFooter } from "@/data/footer";
@@ -15,6 +17,7 @@ export function BarraSuperior({
   visibilidad,
   redes,
   whatsapp: numeroWhatsapp,
+  ofertas = false,
 }: {
   /** Texto del anuncio ya filtrado por visibilidad "nunca" (undefined = sin anuncio). */
   anuncio: string | undefined;
@@ -22,20 +25,26 @@ export function BarraSuperior({
   redes: RedFooter[];
   /** Número en dígitos; vacío = sin link. */
   whatsapp: string;
+  /**
+   * Con campañas de precios activas, la línea «OFERTAS · … · Ver ofertas» reemplaza al anuncio
+   * (hueco por request, `CentroBarra`). Lo prende el layout; los tests de la barra la dejan fuera.
+   */
+  ofertas?: boolean;
 }) {
   const whatsapp = numeroWhatsapp ? hrefWhatsapp(numeroWhatsapp) : null;
   if (!anuncio && redes.length === 0 && !whatsapp) return null;
   // Qué esconde la barra entera: con redes o WhatsApp se ve siempre; si no, lo que pida el anuncio.
   const clasesBarra = redes.length > 0 || whatsapp ? "" : clasesVisibilidad(visibilidad);
+  const centro = anuncio ? (
+    <p className={`text-center text-[12.5px] font-semibold tracking-wide ${clasesVisibilidad(visibilidad)}`}>{anuncio}</p>
+  ) : (
+    <span aria-hidden className="max-md:hidden" />
+  );
   return (
     <div className={`bg-primary text-on-primary ${clasesBarra}`}>
       <div className="mx-auto flex max-w-contenido flex-col items-center gap-1.5 px-[clamp(18px,4vw,48px)] py-2.5 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] md:gap-4">
         <span aria-hidden className="max-md:hidden" />
-        {anuncio ? (
-          <p className={`text-center text-[12.5px] font-semibold tracking-wide ${clasesVisibilidad(visibilidad)}`}>{anuncio}</p>
-        ) : (
-          <span aria-hidden className="max-md:hidden" />
-        )}
+        {ofertas ? <Suspense fallback={centro}><CentroBarra anuncio={centro} /></Suspense> : centro}
         <div className="flex items-center justify-center gap-x-4 md:gap-x-5 md:justify-end">
           <RedesSociales redes={redes} className="flex-nowrap justify-center md:justify-end" />
           {whatsapp ? (

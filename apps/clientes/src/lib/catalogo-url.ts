@@ -29,7 +29,7 @@ import { leerCar } from "@/lib/catalogo-car";
  * accesorios, subcategorías intercaladas; ver `ordenDestacadosSql` en catalog.ts).
  * `nombre` sigue disponible a mano y en los links viejos que lo traen explícito.
  */
-export const ORDENES = ["relevancia", "destacados", "nombre", "precio-asc", "precio-desc"] as const;
+export const ORDENES = ["relevancia", "destacados", "nombre", "precio-asc", "precio-desc", "descuento"] as const;
 export type OrdenCatalogo = (typeof ORDENES)[number];
 /** Default SIN búsqueda. Con búsqueda es `relevancia` (ver `ordenPorDefecto`). */
 export const ORDEN_DEFAULT: OrdenCatalogo = "destacados";
@@ -122,6 +122,11 @@ export interface EstadoCatalogo {
   retiroEn?: string;
   /** `?vista=lista`; cualquier otra cosa es grilla. */
   vista: VistaCatalogo;
+  /**
+   * «Solo ofertas» (`?ofertas=1`): sólo productos con precio de campaña vigente y menor al habitual.
+   * Ausente = apagado (opcional, así los estados de siempre no cambian de forma).
+   */
+  soloOfertas?: true;
   /**
    * Búsqueda inteligente (`?ia=`, flag `busqueda-ia`):
    * - la consulta original, cuando el estado vino de interpretarla (la franja
@@ -231,6 +236,17 @@ function comoRetiro(v: ParamCrudo): string | undefined {
   return s && /^[a-z0-9][a-z0-9-]{0,39}$/.test(s) ? s : undefined;
 }
 
+/** `ofertas=1` exactamente prende «Solo ofertas»; cualquier otra cosa lo deja apagado. */
+function comoSoloOfertas(v: ParamCrudo): boolean {
+  return primero(v) === OFERTAS_SOLO;
+}
+
+/** Valor de `?ofertas=` que prende «Solo ofertas». */
+export const OFERTAS_SOLO = "1";
+
+/** El catálogo con «Solo ofertas» y «Mayor descuento»: adonde llevan la barra, el menú y la home. */
+export const HREF_OFERTAS = `/catalogo?ofertas=${OFERTAS_SOLO}&orden=descuento`;
+
 /** `vista=lista` exactamente; cualquier otra cosa es la grilla. */
 function comoVista(v: ParamCrudo): VistaCatalogo {
   return primero(v) === "lista" ? "lista" : VISTA_DEFAULT;
@@ -251,6 +267,7 @@ export function leerEstado(params: {
   potencia_max?: ParamCrudo;
   stock?: ParamCrudo;
   retiro?: ParamCrudo;
+  ofertas?: ParamCrudo;
   vista?: ParamCrudo;
   ia?: ParamCrudo;
 }): EstadoCatalogo {
@@ -284,6 +301,7 @@ export function leerEstado(params: {
     soloStock: comoSoloStock(params.stock),
     retiroEn: comoRetiro(params.retiro),
     vista: comoVista(params.vista),
+    ...(comoSoloOfertas(params.ofertas) ? { soloOfertas: true as const } : {}),
     ...(ia ? { ia } : {}),
   };
 }
@@ -308,6 +326,7 @@ export function estadoDeBusqueda(sp: URLSearchParams): EstadoCatalogo {
     potencia_max: param("potencia_max"),
     stock: param("stock"),
     retiro: param("retiro"),
+    ofertas: param("ofertas"),
     vista: param("vista"),
     ia: param("ia"),
   });
@@ -374,7 +393,7 @@ export function filtrosDesfasados(
  * que `/catalogo` siga siendo `/catalogo` y no `/catalogo?orden=destacados&pagina=1`.
  *
  * El orden de los parámetros es fijo (`q, categoria*, marca*, atr*, car*,
- * precio_min, precio_max, potencia_min, potencia_max, stock, retiro, orden, vista,
+ * precio_min, precio_max, potencia_min, potencia_max, stock, retiro, ofertas, orden, vista,
  * pagina, ia`): dos estados
  * iguales dan la misma URL, que es lo que necesitan el canonical y los tests.
  */
@@ -392,6 +411,7 @@ export function hrefCatalogo(estado: EstadoCatalogo): string {
   // Con un local, "Solo con stock" va implícito (`filtrosDeEstado`): `retiro` alcanza.
   if (estado.soloStock !== SOLO_STOCK_DEFAULT && !estado.retiroEn) sp.set("stock", STOCK_SOLO_CON_STOCK);
   if (estado.retiroEn) sp.set("retiro", estado.retiroEn);
+  if (estado.soloOfertas) sp.set("ofertas", OFERTAS_SOLO);
   if (estado.orden !== ordenPorDefecto(estado.query)) sp.set("orden", estado.orden);
   if (estado.vista !== VISTA_DEFAULT) sp.set("vista", estado.vista);
   if (estado.pagina > 1) sp.set("pagina", String(estado.pagina));
@@ -445,6 +465,11 @@ export function estadoConCambios(
   // búsqueda nueva sobre "Destacados" pasa a relevancia (destacados no ordena búsquedas).
   if (nuevo.orden === "relevancia" && !nuevo.query) nuevo.orden = ORDEN_DEFAULT;
   if (nuevo.orden === "destacados" && nuevo.query) nuevo.orden = "relevancia";
+  // «Mayor descuento» viene con «Solo ofertas» (`HREF_OFERTAS`): quitar las ofertas vuelve al orden de
+  // siempre, si no quedaría el catálogo entero ordenado por un descuento que casi nadie tiene.
+  if ("soloOfertas" in cambios && !nuevo.soloOfertas && estado.soloOfertas && nuevo.orden === "descuento" && !("orden" in cambios)) {
+    nuevo.orden = ordenPorDefecto(nuevo.query);
+  }
   return nuevo;
 }
 
@@ -518,6 +543,7 @@ export function filtrosDeEstado(estado: EstadoCatalogo): FiltrosSinTexto {
     potenciaMax: estado.potenciaMax,
     // "Con stock en <local>" es un filtro de stock: sin stock no tiene sentido.
     soloStock: estado.soloStock || Boolean(estado.retiroEn),
+    ...(estado.soloOfertas ? { soloOfertas: true } : {}),
   };
 }
 

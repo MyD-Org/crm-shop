@@ -62,8 +62,8 @@ describe("lectura de la query string", () => {
     expect(comoPagina(undefined)).toBe(1);
   });
 
-  it("los órdenes ofrecidos son relevancia, destacados, nombre y precio; sin búsqueda el default es destacados", () => {
-    expect(ORDENES).toEqual(["relevancia", "destacados", "nombre", "precio-asc", "precio-desc"]);
+  it("los órdenes ofrecidos son relevancia, destacados, nombre, precio y descuento; sin búsqueda el default es destacados", () => {
+    expect(ORDENES).toEqual(["relevancia", "destacados", "nombre", "precio-asc", "precio-desc", "descuento"]);
     expect(ORDENES).not.toContain("ventas");
     expect(ORDEN_DEFAULT).toBe("destacados");
   });

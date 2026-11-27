@@ -17,6 +17,7 @@ import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 import type { Facetas } from "@/lib/catalog";
 import {
   IA_PLAN,
+  ORDEN_DEFAULT,
   estadoConCambios,
   estadoDeBusqueda,
   filtrosDesfasados,
@@ -27,7 +28,7 @@ import {
   quitarBusqueda,
   type EstadoCatalogo,
 } from "@/lib/catalogo-url";
-import { anuncioResultados, hayFiltros, interpretacionVigente, limpiarFiltros } from "@/lib/catalogo-vista";
+import { TEXTOS_OFERTAS, anuncioResultados, hayFiltros, interpretacionVigente, limpiarFiltros, ofertasVacias } from "@/lib/catalogo-vista";
 import type { ChipSugerido } from "@/lib/busqueda-inteligente/url";
 import { TEXTOS_SIN_RESULTADOS } from "@/lib/busqueda-inteligente/textos";
 import type { Intencion } from "@/lib/busqueda-v2/plan";
@@ -233,6 +234,7 @@ export function CatalogoClient({
           misma altura. */}
       <CatalogoEncabezado
         estado={estado}
+        bajada={estado.soloOfertas && total > 0 ? TEXTOS_OFERTAS.bajada(total) : undefined}
         acciones={
           <div className="flex items-center gap-3 max-lg:w-full max-lg:justify-between">
             <div className="lg:hidden">
@@ -286,7 +288,19 @@ export function CatalogoClient({
         </FadeScroll>
 
         <div className="flex min-w-0 flex-1 flex-col gap-6">
-          {productos.length === 0 && sinCategoria ? (
+          {productos.length === 0 && ofertasVacias(estado) ? (
+            // «Solo ofertas» sin nada más que lo explique: no hay campañas vigentes (o ninguna baja
+            // el precio). Se dice así y se ofrece el catálogo.
+            <EmptyState
+              title={TEXTOS_OFERTAS.vacioTitulo}
+              description={TEXTOS_OFERTAS.vacioDescripcion}
+              action={
+                <Button variant="primary" onClick={() => ir({ soloOfertas: undefined, orden: ORDEN_DEFAULT })}>
+                  {TEXTOS_OFERTAS.vacioAccion}
+                </Button>
+              }
+            />
+          ) : productos.length === 0 && sinCategoria ? (
             <EmptyState
               title={sinCategoria.titulo}
               description={sinCategoria.descripcion}

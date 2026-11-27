@@ -13,6 +13,8 @@ import { useHidratado } from "@/lib/hidratado";
 import { MAX_CATEGORIAS_NAV, conBadgeNav } from "@/lib/nav-badge";
 import { formatRubro } from "@/lib/formato-rubro";
 import { HREF_OFERTAS } from "@/lib/catalogo-url";
+import { useOfertasCuenta } from "@/hooks/useOfertasCuenta";
+import { hayOfertasParaCuenta } from "@/lib/ofertas-cuenta";
 
 /** Ítem del menú que lleva a las ofertas (sólo con campañas activas). */
 export const TEXTO_NAV_OFERTAS = "Ofertas";
@@ -171,6 +173,7 @@ function HeaderVista({
   // hay en cada categoría—, así que ahí repetía cuatro nombres de más; en el
   // resto del sitio (ficha, carrito, Mi cuenta) no aporta y suma 52px de alto
   // en todas las páginas.
+  const ofertasCuenta = useOfertasCuenta();
   const nav =
     pathname === "/" && categorias
       ? [
@@ -183,7 +186,8 @@ function HeaderVista({
             navBadgeVisibleOn,
           ),
           // Con campañas activas, la entrada a las ofertas cierra el menú (diseño «Ofertas más llamativas»).
-          ...(conOfertas ? [{ label: TEXTO_NAV_OFERTAS, href: HREF_OFERTAS }] : []),
+          // A una cuenta con lista propia sin ofertas que le apliquen no se le ofrece la entrada.
+          ...(conOfertas && hayOfertasParaCuenta(ofertasCuenta) ? [{ label: TEXTO_NAV_OFERTAS, href: HREF_OFERTAS }] : []),
         ]
       : [];
 

@@ -14,6 +14,9 @@
  *   - CLERK_SECRET_KEY   clave de la Backend API de la instancia de Clerk del Shop.
  *   - DATABASE_URL       rol `shop_app` (el mismo del runtime).
  *   - SHOP_TENANT_ID     tenant de la tienda (slug de public.tenants.id).
+ *   - NEXT_PUBLIC_SITE_URL  sitio de ESTE proyecto de Vercel (0050): se guarda como
+ *                        tienda de origen. Correr una vez por proyecto, con su
+ *                        CLERK_SECRET_KEY y su NEXT_PUBLIC_SITE_URL.
  *   - BACKFILL_CONFIRM   obligatorio si la base NO es local: el host exacto.
  *
  * Pide `GET https://api.clerk.com/v1/users?limit=500&offset=N&order_by=+created_at`
@@ -31,6 +34,7 @@ import {
   type ResultadoEspejoCliente,
   type UsuarioClerkJSON,
 } from "../src/lib/clientes-espejo";
+import { sitioOrigenDeEntorno } from "../src/lib/sitio-origen";
 
 export const CLERK_USERS_LIMIT = 500;
 const MAX_REINTENTOS_429 = 3;
@@ -138,8 +142,13 @@ async function main() {
     console.error(destino.error);
     process.exit(1);
   }
+  const sitio = sitioOrigenDeEntorno();
+  if (!sitio) {
+    console.error("Falta NEXT_PUBLIC_SITE_URL (o no es una URL válida): es la tienda de origen de los usuarios.");
+    process.exit(1);
+  }
   console.log(
-    `backfill clientes · base ${destino.host} · tenant ${destino.tenant} · Clerk ${destino.instancia}${dryRun ? " · DRY-RUN (no escribe)" : ""}`,
+    `backfill clientes · base ${destino.host} · tenant ${destino.tenant} · sitio ${sitio} · Clerk ${destino.instancia}${dryRun ? " · DRY-RUN (no escribe)" : ""}`,
   );
 
   const { getDb } = await import("../src/db");
@@ -169,7 +178,7 @@ async function main() {
 
     const c: Conteo = { leidos: 0, insertado: 0, actualizado: 0, ignorado: 0, eliminado: 0, rechazado: 0 };
     c.leidos = await recorrerUsuariosClerk(fetchPagina, async (u) => {
-      c[await registrarUsuarioClerk(destino.tenant, datosDeUsuarioClerk(u))] += 1;
+      c[await registrarUsuarioClerk(destino.tenant, datosDeUsuarioClerk(u), sitio)] += 1;
     });
     console.log(resumen(c));
   } finally {

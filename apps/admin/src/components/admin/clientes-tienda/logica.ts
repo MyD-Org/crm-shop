@@ -19,9 +19,19 @@ export interface FiltrosLista {
   vinculo: FiltroVinculo
   acceso: FiltroAcceso
   pedidos: FiltroPedidos
+  /** "todas" o el origen de una tienda (`https://host`). */
+  tienda: string
 }
 
-export const FILTROS_INICIALES: FiltrosLista = { q: "", vinculo: "todos", acceso: "todos", pedidos: "todos" }
+export const TODAS_LAS_TIENDAS = "todas"
+
+export const FILTROS_INICIALES: FiltrosLista = {
+  q: "",
+  vinculo: "todos",
+  acceso: "todos",
+  pedidos: "todos",
+  tienda: TODAS_LAS_TIENDAS,
+}
 
 export interface OpcionSelect<T extends string = string> {
   value: T
@@ -59,13 +69,38 @@ export function queryDeLista(input: FiltrosLista & { start: number; limit: numbe
   params.set("vinculo", input.vinculo)
   params.set("acceso", input.acceso)
   params.set("pedidos", input.pedidos)
+  params.set("tienda", input.tienda)
   params.set("start", String(Math.max(0, Math.trunc(input.start))))
   params.set("limit", String(input.limit))
   return params.toString()
 }
 
 export function hayFiltros(f: FiltrosLista): boolean {
-  return f.q.trim() !== "" || f.vinculo !== "todos" || f.acceso !== "todos" || f.pedidos !== "todos"
+  return (
+    f.q.trim() !== "" ||
+    f.vinculo !== "todos" ||
+    f.acceso !== "todos" ||
+    f.pedidos !== "todos" ||
+    f.tienda !== TODAS_LAS_TIENDAS
+  )
+}
+
+/** Nombre corto de una tienda: el host sin `www.` (`https://www.tienda.example` ⇒ `tienda.example`). */
+export function etiquetaTienda(origen: string | null): string {
+  if (!origen) return "—"
+  try {
+    return new URL(origen).hostname.replace(/^www\./, "")
+  } catch {
+    return origen
+  }
+}
+
+/** Opciones del filtro de tienda: "Todas las tiendas" primero, después cada sitio. */
+export function opcionesTienda(tiendas: string[]): OpcionSelect[] {
+  return [
+    { value: TODAS_LAS_TIENDAS, label: "Todas las tiendas" },
+    ...tiendas.map((t) => ({ value: t, label: etiquetaTienda(t) })),
+  ]
 }
 
 export function mensajeVacio(conFiltros: boolean): string {

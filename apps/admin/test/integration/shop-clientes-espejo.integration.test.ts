@@ -286,3 +286,57 @@ describe("migración 0018 del Shop: espejo de usuarios de Clerk (DB real)", () =
     })
   })
 })
+
+describe("0050 del Shop: tienda de origen (clientes_upsert_clerk de 7 argumentos)", () => {
+  const SITIO = "https://www.tienda-b.example"
+
+  async function upsertSitio(id: string, actualizado: string, sitio: string | null): Promise<string> {
+    const [f] = await sql`
+      SELECT shop.clientes_upsert_clerk('tenant-sc', ${id}, 'ana@cliente.example', 'Ana', ${T0}::timestamptz, ${actualizado}::timestamptz, ${sitio}::text) AS r`
+    return f.r as string
+  }
+
+  async function sitioDe(id: string): Promise<string | null> {
+    const [f] = await sql`SELECT sitio_origen FROM shop.clientes WHERE tenant_id = 'tenant-sc' AND clerk_user_id = ${id}`
+    return (f?.sitio_origen as string | null) ?? null
+  }
+
+  beforeAll(async () => {
+    assertLocalTestDb(TEST_DATABASE_URL)
+    // La suite de arriba cierra su conexión en su afterAll: ésta abre la suya.
+    sql = postgres(TEST_DATABASE_URL, { max: 1, onnotice: () => {} })
+  })
+
+  afterAll(async () => {
+    await sql`DELETE FROM shop.clientes WHERE tenant_id = 'tenant-sc' AND clerk_user_id LIKE 'user_sitio%'`
+    await sql.end()
+  })
+
+  beforeEach(async () => {
+    await sql`DELETE FROM shop.clientes WHERE tenant_id = 'tenant-sc' AND clerk_user_id LIKE 'user_sitio%'`
+  })
+
+  it("al insertar guarda el sitio", async () => {
+    expect(await upsertSitio("user_sitio1", T1, SITIO)).toBe("insertado")
+    expect(await sitioDe("user_sitio1")).toBe(SITIO)
+  })
+
+  it("un update con sitio null no borra el guardado; con valor lo completa", async () => {
+    await upsertSitio("user_sitio2", T1, null)
+    expect(await sitioDe("user_sitio2")).toBeNull()
+    expect(await upsertSitio("user_sitio2", T1, SITIO)).toBe("actualizado")
+    expect(await sitioDe("user_sitio2")).toBe(SITIO)
+    expect(await upsertSitio("user_sitio2", T2, null)).toBe("actualizado")
+    expect(await sitioDe("user_sitio2")).toBe(SITIO)
+  })
+
+  it("el CHECK rechaza un sitio con otro formato", async () => {
+    await expect(upsertSitio("user_sitio3", T1, "javascript:alert(1)")).rejects.toThrow()
+  })
+
+  it("la de 6 argumentos (código anterior) sigue andando y no toca el sitio", async () => {
+    await upsertSitio("user_sitio4", T1, SITIO)
+    expect(await upsert("tenant-sc", "user_sitio4", "ana@cliente.example", "Ana", T2)).toBe("actualizado")
+    expect(await sitioDe("user_sitio4")).toBe(SITIO)
+  })
+})

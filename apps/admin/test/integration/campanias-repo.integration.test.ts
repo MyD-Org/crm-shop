@@ -106,6 +106,58 @@ describe("guardarCampania", () => {
     expect((await leerCampania(T, id))?.hastaAgotarStock).toBe(false)
   })
 
+  it("mínimo de unidades: se guarda, se lee, se edita y viaja en campanias_online", async () => {
+    const ahora = await ahoraDb()
+    const { id } = await guardarCampania(
+      T,
+      entrada(ahora, {
+        reglas: [
+          { alcance: { tipo: "marca", marca: "acme" }, pct: 10, minimo: 6 },
+          { alcance: { tipo: "marca", marca: "otra" }, pct: 5 },
+        ],
+      }),
+      ACTOR,
+    )
+    const leida = await leerCampania(T, id)
+    expect(leida?.reglas.find((r) => r.alcance.tipo === "marca" && r.alcance.marca === "acme")?.minimo).toBe(6)
+    const entradaDe = async (alegraId: string) => {
+      const [p] = await getDb()
+        .select({ c: catalogProducts.campaniasOnline })
+        .from(catalogProducts)
+        .where(and(eq(catalogProducts.tenantId, T), eq(catalogProducts.alegraId, alegraId)))
+      return (p.c as { minimo: number | null; pct: number }[])[0]
+    }
+    expect(await entradaDe("1")).toMatchObject({ pct: 10, minimo: 6 })
+    expect((await entradaDe("2")).minimo).toBeNull()
+
+    // Editar conserva la regla (mismo id) y cambia el mínimo; sacarlo lo deja en null.
+    const reglaId = leida!.reglas.find((r) => r.alcance.tipo === "marca" && r.alcance.marca === "acme")!.id
+    await guardarCampania(
+      T,
+      entrada(ahora, { inicio: leida!.inicio, reglas: [{ alcance: { tipo: "marca", marca: "acme" }, pct: 10, minimo: 4 }] }),
+      ACTOR,
+      id,
+    )
+    expect((await leerCampania(T, id))?.reglas[0]).toMatchObject({ id: reglaId, minimo: 4 })
+    expect((await entradaDe("1")).minimo).toBe(4)
+    await guardarCampania(
+      T,
+      entrada(ahora, { inicio: leida!.inicio, reglas: [{ alcance: { tipo: "marca", marca: "acme" }, pct: 10 }] }),
+      ACTOR,
+      id,
+    )
+    expect((await entradaDe("1")).minimo).toBeNull()
+  })
+
+  it("la base rechaza un mínimo menor que 2 o junto con límite de unidades", async () => {
+    const ahora = await ahoraDb()
+    const { id } = await guardarCampania(T, entrada(ahora), ACTOR)
+    const insertar = (extra: { unidades?: number; minimoUnidades: number }) =>
+      getDb().insert(campaniaReglas).values({ tenantId: T, campaniaId: id, tipo: "producto", alegraId: "9", pct: 10, ...extra })
+    await expect(insertar({ minimoUnidades: 1 })).rejects.toThrow()
+    await expect(insertar({ unidades: 10, minimoUnidades: 3 })).rejects.toThrow()
+  })
+
   it("sin la casilla, la campaña no es hasta agotar stock", async () => {
     const ahora = await ahoraDb()
     const { id } = await guardarCampania(T, entrada(ahora), ACTOR)

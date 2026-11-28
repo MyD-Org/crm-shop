@@ -109,6 +109,11 @@ export interface LineaCotizada {
   campaniaId?: string;
   campaniaReglaId?: string;
   campaniaEtiqueta?: string;
+  /**
+   * Descuento por cantidad que la línea todavía no alcanza (0109 del CRM): «Llevando `minimo`, `pct` %
+   * off; faltan `faltan`». Las unidades se suman entre las líneas de la misma regla.
+   */
+  porCantidad?: { minimo: number; pct: number; faltan: number };
   /** Unitario sin IVA ANTES del cupón (sólo en las líneas que el cupón alcanzó). */
   precioSinCupon?: number;
 }
@@ -255,6 +260,9 @@ export function cotizarItem(
           campaniaReglaId: vigente.campania.reglaId,
           ...(campanias?.etiquetas?.get(vigente.campania.id) ? { campaniaEtiqueta: campanias.etiquetas.get(vigente.campania.id) } : {}),
         }
+      : {}),
+    ...(vigente?.porCantidad
+      ? { porCantidad: { minimo: vigente.porCantidad.minimo, pct: vigente.porCantidad.pct, faltan: vigente.porCantidad.faltan } }
       : {}),
   };
 
@@ -413,6 +421,25 @@ async function leerEspejo(
 }
 
 /**
+ * Unidades pedidas por regla de campaña CON mínimo de unidades (de las campañas activas): la suma de
+ * las líneas cuyo producto trae esa regla. Una misma regla alcanza a variantes, marca o categoría.
+ */
+export function cantidadesPorRegla(
+  pedidas: readonly LineaPedida[],
+  items: ReadonlyMap<string, { item: ItemCotizable }>,
+  activas: ReadonlySet<string>,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const p of pedidas) {
+    const reglas = new Set(
+      (items.get(p.id)?.item.campanias ?? []).filter((e) => activas.has(e.id) && e.minimo != null && e.minimo > 1).map((e) => e.reglaId),
+    );
+    for (const r of reglas) out.set(r, (out.get(r) ?? 0) + p.qty);
+  }
+  return out;
+}
+
+/**
  * Cotiza el carrito con los precios, el IVA y el stock del espejo.
  *
  * Nunca tira si un ítem falla: devuelve la línea marcada con `problema` para
@@ -479,10 +506,14 @@ export async function cotizar(
   const quedan = activas.size
     ? await quedanParaEntradas(getDb(), [...items.values()].map((i) => i.item.campanias), activas, opts.excluirPedidoId)
     : undefined;
+  // Descuento por cantidad: unidades del carrito por regla con mínimo (variantes, marca o categoría
+  // se suman). Es lo único que `resolverPrecioVigente` no puede saber de una línea sola.
+  const cantidades = activas.size ? cantidadesPorRegla(pedidas, items, activas) : undefined;
   const campanias: ContextoCotizacionCampania | undefined = opts.campanias?.length
     ? {
         activas,
         ...(quedan?.size ? { quedan } : {}),
+        ...(cantidades?.size ? { cantidades } : {}),
         etiquetas: new Map(opts.campanias.map((c) => [c.id, c.etiqueta])),
       }
     : undefined;

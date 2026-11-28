@@ -1,5 +1,6 @@
 "use client";
 
+import { textoFaltanPorCantidad } from "@/lib/campanias/textos";
 import { frasePrecio } from "@/lib/promociones/promo";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -494,6 +495,12 @@ export function CarritoClient({
                           {linea?.ventaSinStock && (
                             <p className="text-xs font-semibold text-muted" data-testid="linea-a-pedido">
                               {linea.ventaSinStock.texto}
+                            </p>
+                          )}
+                          {/* Descuento por cantidad todavía no alcanzado (se suman las líneas de la regla). */}
+                          {!linea?.problema && linea?.porCantidad && (
+                            <p className="text-xs font-semibold text-accent" data-testid="linea-por-cantidad">
+                              {textoFaltanPorCantidad(linea.porCantidad)}
                             </p>
                           )}
                           {linea?.problema && (

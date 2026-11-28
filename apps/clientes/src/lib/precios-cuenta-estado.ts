@@ -67,6 +67,9 @@ export function aplicarEstadoPrecio(p: Product, estado: EstadoPrecioCuenta | und
     discount: undefined,
     // Campaña de precios: sólo si gana (abajo); nunca un badge sobre un precio que no se ve.
     campania: undefined,
+    // Descuento por cantidad: el % es contra el público, no contra su lista; no se le anuncia (el
+    // carrito igual le cobra el menor si llega al mínimo, como el resolver).
+    porCantidad: undefined,
   };
   if (estado.tipo === "privado") {
     // Decisión B (campañas): paga el menor entre su privado y el de campaña de la lista general (el

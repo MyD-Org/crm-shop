@@ -82,7 +82,7 @@ import { contextoUnion, type ContextoDisponibilidad } from "./disponibilidad-con
 import { modalidadPorId, type VentaSinStock } from "./venta-sin-stock";
 import { modalidadesActivas } from "./venta-sin-stock-repo";
 import { armarPreciosMedios, type MediosPrecio } from "./medios-precio";
-import { campaniaParaExhibir } from "./campanias/exhibicion";
+import { campaniaParaExhibir, porCantidadParaExhibir } from "./campanias/exhibicion";
 import { mapCampanias } from "./campanias/precio";
 import { quedanParaEntradas } from "./campanias/unidades";
 import { disponibleSucursalSql, joinStock, stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
@@ -114,8 +114,8 @@ import { acotarPorDeducidas, condicionAmplia, condicionRecuperar, terminosQueRec
 import { puntajeBusqueda } from "./busqueda-v2/ordenar";
 import { patronTermino, type CriterioPlan, type PiezasBusqueda } from "./busqueda-v2/piezas";
 
-/** Debajo de esta cantidad, el stock se muestra como "bajo" («Queda 1»): sólo la última unidad. */
-const STOCK_BAJO = 2;
+// Debajo de STOCK_BAJO, el stock se muestra como "bajo" («Queda 1»): sólo la última unidad.
+import { STOCK_BAJO } from "./stock-bajo";
 
 /**
  * Deriva el estado de stock del shop a partir de una cantidad de inventario.
@@ -225,6 +225,7 @@ export function mapFilaToProduct(
   // Campaña activa: los precios efectivos son los de campaña (también "$X con <Medio>") y el normal
   // de la misma lista se tacha. La misma regla que el cobro (`resolverPrecioVigente`).
   const enCampania = campaniaParaExhibir(mapPrecios(fila.prices), fila.campaniasOnline, mediosPrecio, idPriceList, iva);
+  const porCantidad = porCantidadParaExhibir(mapPrecios(fila.prices), fila.campaniasOnline, mediosPrecio, idPriceList);
   const precios = enCampania ? enCampania.precios : mapPrecios(fila.prices);
   const price = precioDeLista(precios, idPriceList);
   const atributosEstructurados = leerAtributosEstructurados(fila.atributos);
@@ -249,6 +250,7 @@ export function mapFilaToProduct(
               : enCampania.campania,
         }
       : {}),
+    ...(porCantidad ? { porCantidad } : {}),
     stock,
     stockQty: qty ?? undefined,
     // `reference` de Alegra; si falta, `name`, que en esta cuenta ES el
@@ -1403,7 +1405,7 @@ const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${crmCatalogo
  * entrada de `campanias_online` cuya id está activa; si no, `precioSql`. Es el equivalente de
  * `campaniaParaExhibir` para ORDENAR, filtrar por rango y armar el slider, así el catálogo ordena
  * por el precio que muestra la card. Una regla con límite de unidades agotada no rige (cuenta los
- * pedidos sólo en las filas con límite, que son pocas).
+ * pedidos sólo en las filas con límite, que son pocas), ni una con mínimo de unidades (rige en el carrito).
  */
 function precioVigenteSql(idsCampanias: readonly string[] | undefined) {
   if (!idsCampanias?.length) return precioSql;
@@ -1415,6 +1417,8 @@ function precioVigenteSql(idsCampanias: readonly string[] | undefined) {
     cross join jsonb_array_elements(case when jsonb_typeof(e->'precios') = 'array' then e->'precios' else '[]'::jsonb end) pe
     where e->>'id' = any(${ids})
       and (pe->>'price')::numeric > 0
+      -- Descuento por cantidad (mínimo de unidades): la card muestra el precio por unidad, el normal.
+      and coalesce((e->>'minimo')::numeric, 1) <= 1
       -- Regla con límite de unidades agotada: rige el precio normal (mismo criterio de conteo que
       -- \`unidadesUsadas\`, lib/campanias/unidades.ts).
       and (e->>'unidades' is null or (
@@ -1850,10 +1854,22 @@ function condicionesDe(
   );
 }
 
-/** «Solo ofertas»: precio vigente de campaña por debajo del habitual. Sin campañas, ninguno. */
+/**
+ * «Solo ofertas»: precio vigente de campaña por debajo del habitual, o un descuento por cantidad
+ * (entrada con mínimo de unidades) de una campaña activa: la barra de ofertas no lleva a una lista
+ * vacía cuando la única campaña es por cantidad. Sin campañas, ninguno.
+ */
 function filtroOfertasSql(idsCampanias: readonly string[] | undefined) {
   if (!idsCampanias?.length) return sql`false`;
-  return sql`${precioVigenteSql(idsCampanias)} < ${precioSql}`;
+  const ids = sql`array[${sql.join(idsCampanias.map((i) => sql`${i}`), sql`, `)}]::text[]`;
+  const campanias = crmCatalogo.campaniasOnline;
+  return sql`(${precioVigenteSql(idsCampanias)} < ${precioSql} or exists (
+    select 1
+    from jsonb_array_elements(case when jsonb_typeof(${campanias}) = 'array' then ${campanias} else '[]'::jsonb end) e
+    where e->>'id' = any(${ids})
+      and coalesce((e->>'minimo')::numeric, 1) > 1
+      and (e->>'pct')::numeric > 0
+  ))`;
 }
 
 /**

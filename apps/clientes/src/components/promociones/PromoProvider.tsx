@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import type { CampaniaProducto, Product } from "@/data/products";
+import type { CampaniaProducto, PorCantidadProducto, Product } from "@/data/products";
 import {
   descuentoPropio,
   infoPromoSku,
@@ -91,6 +91,23 @@ export function badgeCampania(c: CampaniaProducto): ReactNode {
       <span className="mt-1.5 rounded-lg bg-accent-soft px-1.5 py-0.5 font-display text-xs font-extrabold text-accent sm:text-sm">
         −{c.pct} %<span className="sr-only"> de descuento</span>
       </span>
+    </span>
+  );
+}
+
+/** Texto del descuento por cantidad: «−10 % llevando 6». */
+export const textoPorCantidad = (p: Pick<PorCantidadProducto, "minimo" | "pct">) => `−${p.pct} % llevando ${p.minimo}`;
+
+/**
+ * Badge de un descuento por cantidad (campaña con mínimo de unidades): la etiqueta de la campaña y
+ * «−X % llevando N», con el estilo de pastilla de `badgePromo` (la card no se resalta ni va a la
+ * esquina: el precio que muestra es el de 1 unidad).
+ */
+export function badgePorCantidad(p: PorCantidadProducto): ReactNode {
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white">{p.etiqueta}</span>
+      <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-bold text-success">{textoPorCantidad(p)}</span>
     </span>
   );
 }

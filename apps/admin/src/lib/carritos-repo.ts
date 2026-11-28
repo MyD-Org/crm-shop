@@ -132,6 +132,7 @@ function aDto(f: FilaCarrito): CarritoAbandonadoDto {
  *  1. Neto: el de campaña de la lista general si alguna entrada de `campanias_online` es de una
  *     campaña activa ahora (inicio inclusivo, fin exclusivo) y no agotó su límite de unidades —
  *     mismo criterio que `precioVigenteSql` / `unidadesUsadas` del Shop—; si no, el de la lista.
+ *     Una entrada con mínimo de unidades (0109) no rige: es el precio por unidad que muestra la web.
  *  2. Con IVA y el redondeo de `precioFinal()` del Shop: neto al centavo + IVA al centavo. Sin
  *     alícuota conocida, el neto (la web muestra el neto en ese caso).
  * Sin precio online (o <= 0) da NULL: el ítem cuenta como faltante, igual que en la web, que no
@@ -157,6 +158,8 @@ const precioWebSql = sql`(
       ) pe
       WHERE pe->>'idPriceList' = gral.id_lista
         AND (pe->>'price')::numeric > 0
+        -- Descuento por cantidad (0109): la web muestra el precio normal por unidad.
+        AND coalesce((e.value->>'minimo')::numeric, 1) <= 1
         AND (e.value->>'unidades' IS NULL OR (
           SELECT coalesce(sum(oi.qty), 0)
           FROM shop.order_items oi

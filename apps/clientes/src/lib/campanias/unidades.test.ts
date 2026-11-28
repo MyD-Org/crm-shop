@@ -11,6 +11,7 @@ const entrada = (reglaId: string, unidades: number | null, id = "c1"): EntradaCa
   fin: "2026-12-01T03:00:00.000Z",
   pct: 20,
   unidades,
+  minimo: null,
   precios: [{ idPriceList: "G", price: 128 }],
 });
 

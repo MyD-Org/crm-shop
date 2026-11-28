@@ -125,6 +125,18 @@ export interface CampaniaProducto {
   habitualesMedios?: { slug: string; forma?: OpcionCobro; precioFinal: number }[];
 }
 
+/**
+ * Descuento por cantidad que se anuncia (campaña con mínimo de unidades, 0109 del CRM): «Llevando
+ * `minimo`, `pct` % de descuento». El precio que se muestra sigue siendo el de 1 unidad; el carrito
+ * aplica el descuento al llegar al mínimo (se suman variantes, marca o categoría de la regla).
+ */
+export interface PorCantidadProducto {
+  minimo: number;
+  pct: number;
+  /** Etiqueta de la campaña (la del badge). */
+  etiqueta: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -214,6 +226,8 @@ export interface Product {
    * Ausente = precio normal. El % se muestra en el badge, en verde (nunca en `discount`).
    */
   campania?: CampaniaProducto;
+  /** Descuento por cantidad que todavía no rige (se cobra en el carrito al llegar al mínimo). */
+  porCantidad?: PorCantidadProducto;
   discount?: string;
   badgeTone?: "danger" | "info" | "warning" | "neutral";
   badgeText?: string;

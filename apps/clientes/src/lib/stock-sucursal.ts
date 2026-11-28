@@ -29,6 +29,8 @@ import { shopTenantId } from "./tenant";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import {
   armarStockPorSucursal,
+  conTramosPorCantidad,
+  disponibilidadAmbas,
   disponibilidadPorSucursal,
   type ResultadoDisponibilidad,
   type StockPorSucursal,
@@ -270,6 +272,11 @@ export async function disponibilidadDe(
     agrupar?: boolean;
     /** Modalidades de venta sin stock activas (`modalidadesActivas()`); vacía = como siempre. */
     modalidades?: readonly VentaSinStock[];
+    /**
+     * Ficha: suma unidades por sucursal y los tramos por cantidad (`conTramosPorCantidad`). Sólo
+     * con "ambas" y sin `cantidades` (la vista base es la de 1 unidad).
+     */
+    tramos?: boolean;
   },
 ): Promise<ResultadoDisponibilidad> {
   const lista = [...new Set(Array.isArray(ids) ? ids : [ids])];
@@ -287,25 +294,14 @@ export async function disponibilidadDe(
     datos.agrupar,
     datos.modalidades,
   );
-  const calcular = (m: "envio" | "retiro") =>
-    disponibilidadPorSucursal({
-      ...bruta,
-      sucursales: datos.sucursales,
-      zona,
-      modalidad: m,
-      reglas: datos.reglas,
-      cantidades: datos.cantidades,
-    });
-  if (modalidad !== "ambas") return calcular(modalidad);
-  const envio = calcular("envio");
-  const retiro = calcular("retiro");
-  return {
-    lineasATraer: envio.lineasATraer,
-    productos: Object.fromEntries(
-      Object.entries(envio.productos).map(([id, p]) => [
-        id,
-        { ...p, retiro: retiro.productos[id]?.retiro ?? null },
-      ]),
-    ),
+  const entrada = {
+    ...bruta,
+    sucursales: datos.sucursales,
+    zona,
+    reglas: datos.reglas,
   };
+  if (modalidad !== "ambas")
+    return disponibilidadPorSucursal({ ...entrada, modalidad, cantidades: datos.cantidades });
+  const r = disponibilidadAmbas({ ...entrada, cantidades: datos.cantidades });
+  return datos.tramos ? { ...r, productos: conTramosPorCantidad(entrada, r.productos) } : r;
 }

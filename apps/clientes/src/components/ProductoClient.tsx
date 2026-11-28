@@ -6,6 +6,7 @@ import { textoConsultaProducto } from "@/lib/contacto-pedido";
 import { Badge, Button, QuantityStepper, Skeleton, VariantSelector, type PaymentLogo } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { PromoFicha } from "@/components/promociones/PromoFicha";
+import { PorCantidadFicha } from "@/components/promociones/PorCantidadFicha";
 import { CampaniaFicha, PestaniaOferta } from "@/components/promociones/CampaniaFicha";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { CuotasConCarrito, useProgresoCuotasCarrito } from "@/components/producto/CuotasConCarrito";
@@ -35,6 +36,7 @@ import { GaleriaProducto } from "@/components/GaleriaProducto";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
 import { CONFIG_ENVIO_DEFAULT, type ConfigEnvio } from "@/lib/envio";
 import type { DisponibilidadVista, LocalDisponibilidad } from "@/lib/disponibilidad-textos";
+import { desdeParaCantidad, stockPorLocal, vistaParaCantidad } from "@/lib/disponibilidad-cantidad";
 import { EspecificacionesProducto } from "@/components/producto/EspecificacionesProducto";
 import { DudasProducto } from "@/components/producto/DudasProducto";
 import type { Product } from "@/data/products";
@@ -94,6 +96,7 @@ export function ProductoClient({
   configEnvio = CONFIG_ENVIO_DEFAULT,
   envioUbicacion,
   envioUbicacionPorId,
+  envioUbicacionPorTramo,
   localElegido,
   localDeZona = null,
   envioElegido,
@@ -125,6 +128,11 @@ export function ProductoClient({
   localesDisponibilidad?: LocalDisponibilidad[];
   /** Con selector: el texto del envío de cada opción (su plazo puede diferir). */
   envioUbicacionPorId?: Record<string, ReactNode>;
+  /**
+   * El texto del envío para más unidades de las que hay en la sucursal de origen, por id y por el
+   * `desde` del tramo (`DisponibilidadVista.tramos`): el origen y el método por zona pueden cambiar.
+   */
+  envioUbicacionPorTramo?: Record<string, Record<number, ReactNode>>;
   /**
    * Flag `disponibilidad-sucursal`: disponibilidad del producto por modalidad, armada en el server.
    * Ausente = flag apagado (la ficha se ve como siempre).
@@ -220,6 +228,24 @@ export function ProductoClient({
   // Sin cantidad si es 0 o menos (pasa con la simulación de stock): nada de
   // "En stock: 0 disponibles".
   const disponibles = textoUnidadesDisponibles(producto);
+  // Disponibilidad por sucursal (flag `disponibilidad-sucursal`): la de la opción elegida y, de sus
+  // tramos, la que vale para la cantidad elegida (una línea sale entera de una sola sucursal).
+  const vistaBase = disponibilidadPorId?.[producto.id] ?? disponibilidad?.producto;
+  const locales = (disponibilidadPorId?.[producto.id] && localesDisponibilidad) || disponibilidad?.locales || [];
+  // La etiqueta dice de qué local son las unidades: el de retiro elegido o, con envío elegido, la
+  // sucursal de su zona. Sin ubicación, cuántas hay en cada local. A pedido o agotado, la de siempre.
+  const stockLocal =
+    esAPedido(producto) || agotado
+      ? null
+      : stockPorLocal(
+          vistaBase,
+          locales,
+          localElegido
+            ? { local: localElegido, modalidad: "retiro" }
+            : localDeZona
+              ? { local: localDeZona, modalidad: "envio" }
+              : null,
+        );
   // Un ítem sin precio en Alegra llega a 0: nunca se ofrece a la venta (ver
   // `conPrecioSql` en src/lib/catalog.ts). La ficha se lee en vivo, así que el
   // filtro de los listados no la cubre y hay que cortar acá también.
@@ -279,6 +305,11 @@ export function ProductoClient({
   // cambia el carrito al momento; con 1, el − es un tacho). Al lado, «Ver
   // carrito» abre la hoja del carrito (BarraCarritoMobile).
   const enCarrito = hidratado ? itemsCarrito.find((i) => i.id === producto.id) : undefined;
+  // Cantidad para el plazo: la del selector o, en mobile (donde la barra cambia el carrito y el
+  // selector queda en 1), la que ya está en el carrito. La mayor, sin sumar: sumarlas daría una
+  // demora falsa en mobile.
+  const cantidadPlazo = Math.max(qty, enCarrito?.qty ?? 0);
+  const vistaCantidad = vistaBase ? vistaParaCantidad(vistaBase, cantidadPlazo) : undefined;
   const barraMobile = enCarrito ? (
     <div className="flex items-center gap-3">
       <QuantityStepper
@@ -469,6 +500,7 @@ export function ProductoClient({
                   <PromoFicha producto={producto} quedan={quedanPromo} slugDestacado={slugDestacadoPromo} />
                 )
               ) : null}
+              {!sinPrecio ? <PorCantidadFicha producto={producto} /> : null}
               {!sinPrecio && !aConfirmar && cuotas && producto.precioFinal != null && hayCuotasParaModal(cuotas) && (
                 <div className="mt-3">
                   {cuotasConCarrito ? (
@@ -500,11 +532,21 @@ export function ProductoClient({
               {!noComprable && !agotado && !aConfirmar && <CuotasConCarrito meta={metaCarrito} />}
             </div>
 
-            <p className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${CLASE_TONO_PILL[tonoEstado]}`}>
-              <span className="h-2 w-2 rounded-full bg-current" aria-hidden />
-              {textoEstado}
-              {disponibles && `: ${disponibles}`}
-            </p>
+            {stockLocal ? (
+              <div data-stock-local>
+                <p className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${CLASE_TONO_PILL[stockLocal.tono]}`}>
+                  <span className="h-2 w-2 rounded-full bg-current" aria-hidden />
+                  {stockLocal.texto}
+                </p>
+                {stockLocal.detalle && <p className="mt-1.5 text-sm text-muted">{stockLocal.detalle}</p>}
+              </div>
+            ) : (
+              <p className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${CLASE_TONO_PILL[tonoEstado]}`}>
+                <span className="h-2 w-2 rounded-full bg-current" aria-hidden />
+                {textoEstado}
+                {disponibles && `: ${disponibles}`}
+              </p>
+            )}
 
             {/* Cantidad + agregar (desktop; en mobile va en la barra fija). */}
             <div className="hidden items-center gap-3 lg:flex">
@@ -526,12 +568,12 @@ export function ProductoClient({
 
             <EntregaProducto
               configEnvio={configEnvio}
-              envioUbicacion={envioUbicacionPorId?.[producto.id] ?? envioUbicacion}
-              disponibilidad={
-                disponibilidadPorId?.[producto.id] && localesDisponibilidad
-                  ? { producto: disponibilidadPorId[producto.id], locales: localesDisponibilidad }
-                  : disponibilidad
+              envioUbicacion={
+                envioUbicacionPorTramo?.[producto.id]?.[desdeParaCantidad(vistaBase, cantidadPlazo)] ??
+                envioUbicacionPorId?.[producto.id] ??
+                envioUbicacion
               }
+              disponibilidad={vistaCantidad ? { producto: vistaCantidad, locales } : undefined}
               localElegido={localElegido}
               localDeZona={localDeZona}
               envioElegido={envioElegido}

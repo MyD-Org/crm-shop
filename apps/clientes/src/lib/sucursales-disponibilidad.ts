@@ -83,6 +83,24 @@ export interface DisponibilidadProducto {
   retiro: Record<string, DisponibilidadRetiro> | null;
   /** ¿Alguna sucursal activa lo sirve? (falso = oculto en todas: el catálogo no lo muestra). */
   servible: boolean;
+  /**
+   * Sólo con `conTramosPorCantidad` (la ficha): unidades netas de reserva por sucursal activa donde
+   * el producto no está oculto. `null` = no inventariable. Ausente = no se calculó.
+   */
+  unidades?: Record<string, number> | null;
+  /**
+   * Sólo con `conTramosPorCantidad`: lo que se promete desde `desde` unidades en adelante (envío y
+   * retiro, con la misma regla). Ordenados por `desde`; con menos unidades que el primero vale la
+   * vista base (1 unidad). La ficha elige el tramo según la cantidad, sin volver al servidor.
+   */
+  tramos?: TramoCantidad[];
+}
+
+/** La disponibilidad de un producto para `desde` unidades o más (hasta el tramo siguiente). */
+export interface TramoCantidad {
+  desde: number;
+  envio: DisponibilidadEnvio | null;
+  retiro: Record<string, DisponibilidadRetiro> | null;
 }
 
 export interface ResultadoDisponibilidad {
@@ -170,6 +188,89 @@ export function disponibilidadPorSucursal(entrada: EntradaDisponibilidad): Resul
     productos[id] = { envio, retiro, servible };
   }
   return { productos, lineasATraer };
+}
+
+/**
+ * Envío y retiro juntos (lo que pide la ficha y el carrito con "ambas"): el envío manda en
+ * `lineasATraer`.
+ */
+export function disponibilidadAmbas(
+  entrada: Omit<EntradaDisponibilidad, "modalidad">,
+): ResultadoDisponibilidad {
+  const envio = disponibilidadPorSucursal({ ...entrada, modalidad: "envio" });
+  const retiro = disponibilidadPorSucursal({ ...entrada, modalidad: "retiro" });
+  return {
+    lineasATraer: envio.lineasATraer,
+    productos: Object.fromEntries(
+      Object.entries(envio.productos).map(([id, p]) => [
+        id,
+        { ...p, retiro: retiro.productos[id]?.retiro ?? null },
+      ]),
+    ),
+  };
+}
+
+/**
+ * Unidades netas por sucursal activa donde el producto no está oculto. `null` = no inventariable.
+ */
+export function unidadesPorSucursal(
+  entrada: Pick<EntradaDisponibilidad, "stockPorSucursal" | "reservadoPorSucursal" | "ocultoEn" | "sucursales">,
+  id: string,
+): Record<string, number> | null {
+  const stock = entrada.stockPorSucursal[id];
+  if (stock === null) return null;
+  const oculto = entrada.ocultoEn[id] ?? [];
+  const salida: Record<string, number> = {};
+  for (const s of entrada.sucursales) {
+    if (!s.activa || oculto.includes(s.slug)) continue;
+    salida[s.slug] = disponibleNeto(stock, entrada.reservadoPorSucursal[id], s.slug) ?? 0;
+  }
+  return salida;
+}
+
+/**
+ * Cantidades en las que puede cambiar lo que se promete: una más que las unidades de cada
+ * sucursal (ahí esa sucursal deja de cubrir la línea entera). Sin repetir, ordenadas y desde 2 (la
+ * vista base ya es la de 1 unidad).
+ */
+export function umbralesDeCantidad(unidades: Record<string, number>): number[] {
+  return [...new Set(Object.values(unidades).map((u) => u + 1))]
+    .filter((n) => n >= 2)
+    .sort((a, b) => a - b);
+}
+
+/**
+ * Suma `unidades` y `tramos` a la disponibilidad base (1 unidad) de cada producto: cada tramo es
+ * la MISMA regla (`disponibilidadAmbas`, que usa `origenDeLinea`) con la cantidad del umbral, así
+ * la ficha cambia el plazo al subir la cantidad sin reimplementar nada. Una línea sale entera de
+ * una sola sucursal: con 2 en un local y 21 en otro, 3 unidades ya no salen del primero.
+ */
+export function conTramosPorCantidad(
+  entrada: Omit<EntradaDisponibilidad, "modalidad" | "cantidades">,
+  productos: Record<string, DisponibilidadProducto>,
+): Record<string, DisponibilidadProducto> {
+  const salida: Record<string, DisponibilidadProducto> = {};
+  for (const [id, base] of Object.entries(productos)) {
+    const unidades = unidadesPorSucursal(entrada, id);
+    if (unidades === null) {
+      salida[id] = { ...base, unidades: null };
+      continue;
+    }
+    // Sólo este producto: los demás no cambian con su cantidad.
+    const soloEste: Omit<EntradaDisponibilidad, "modalidad"> = {
+      ...entrada,
+      stockPorSucursal: { [id]: entrada.stockPorSucursal[id] },
+      reservadoPorSucursal: entrada.reservadoPorSucursal[id] ? { [id]: entrada.reservadoPorSucursal[id] } : {},
+      ocultoEn: entrada.ocultoEn[id] ? { [id]: entrada.ocultoEn[id] } : {},
+      ventaSinStock: entrada.ventaSinStock?.[id] ? { [id]: entrada.ventaSinStock[id] } : {},
+    };
+    const tramos = umbralesDeCantidad(unidades).map((desde) => {
+      const p = disponibilidadAmbas({ ...soloEste, cantidades: { [id]: desde } }).productos[id];
+      return { desde, envio: p?.envio ?? null, retiro: p?.retiro ?? null };
+    });
+    salida[id] = { ...base, unidades, tramos };
+  }
+  return salida;
 }
 
 /** Una fila de `catalog_stock_sucursal` (stock BRUTO de la cuenta de esa sucursal). */

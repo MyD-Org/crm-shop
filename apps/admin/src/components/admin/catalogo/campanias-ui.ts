@@ -20,6 +20,8 @@ export interface FormRegla {
   producto: ProductoElegido | null
   pct: string
   unidades: string
+  /** Descuento por cantidad: «A partir de N unidades». Vacío = sin mínimo. */
+  minimo: string
 }
 
 export interface FormCampania {
@@ -77,7 +79,13 @@ export function cuerpoCampania(f: FormCampania): CampaniaEntrada {
             ? { tipo: "marca" as const, marca: r.marca }
             : { tipo: "categoria" as const, categoriaId: r.categoriaId }
       const unidades = r.tipo === "producto" && r.unidades.trim() ? Number(r.unidades.trim()) : null
-      return { alcance, pct: Number(r.pct.trim()), ...(unidades !== null ? { unidades } : {}) }
+      const minimo = r.minimo.trim() ? Number(r.minimo.trim()) : null
+      return {
+        alcance,
+        pct: Number(r.pct.trim()),
+        ...(unidades !== null ? { unidades } : {}),
+        ...(minimo !== null ? { minimo } : {}),
+      }
     }),
   }
 }
@@ -101,7 +109,7 @@ export const TEXTOS_CAMPANIAS = {
   hastaAgotarStockColumna: "Hasta agotar stock",
   reglas: "Reglas",
   reglasAyuda:
-    "Producto le gana a marca y marca a categoría. Un producto con 0 % queda fuera de la campaña. Una regla de producto alcanza a todas las variantes del modelo.",
+    "Producto le gana a marca y marca a categoría. Un producto con 0 % queda fuera de la campaña. Una regla de producto alcanza a todas las variantes del modelo. Con «A partir de» el descuento rige sólo cuando el carrito lleva esa cantidad de productos de la regla (se suman variantes, marca o categoría); con menos, se cobra el precio normal.",
   agregarRegla: "Agregar regla",
   alcance: "Alcance",
   producto: "Producto",
@@ -109,6 +117,7 @@ export const TEXTOS_CAMPANIAS = {
   categoria: "Categoría",
   descuento: "Descuento (%)",
   unidades: "Unidades (opcional)",
+  minimo: "A partir de (opcional)",
   quitar: "Quitar",
   vistaPrevia: "Vista previa",
   guardar: "Guardar",
@@ -125,7 +134,7 @@ export const TEXTOS_CAMPANIAS = {
   confirmarBajoCosto: (n: number) =>
     `Hay ${n === 1 ? "1 producto que quedaría" : `${n} productos que quedarían`} por debajo del costo. ¿Desea guardar igual?`,
   choque: (nombre: string) =>
-    `Convive con la campaña "${nombre}". Si un producto está en las dos, rige la que empezó primero.`,
+    `Convive con la campaña "${nombre}". Si un producto está en las dos, rige la que empezó primero, salvo un descuento por cantidad alcanzado de mayor %.`,
   muestra: "Muestra",
   normal: "Normal",
   conCampania: "Con campaña",

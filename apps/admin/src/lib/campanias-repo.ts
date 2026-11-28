@@ -97,6 +97,7 @@ function filaRegla(tenantId: string, campaniaId: string, r: ReglaEntrada) {
     categoriaId: a.tipo === "categoria" ? a.categoriaId : null,
     pct: r.pct,
     unidades: a.tipo === "producto" ? (r.unidades ?? null) : null,
+    minimoUnidades: r.minimo ?? null,
   }
 }
 
@@ -123,7 +124,12 @@ async function sincronizarReglas(tx: Tx, tenantId: string, campaniaId: string, r
       quedan.add(existente.id)
       await tx
         .update(campaniaReglas)
-        .set({ pct: r.pct, unidades: r.alcance.tipo === "producto" ? (r.unidades ?? null) : null, updatedAt: sql`now()` })
+        .set({
+          pct: r.pct,
+          unidades: r.alcance.tipo === "producto" ? (r.unidades ?? null) : null,
+          minimoUnidades: r.minimo ?? null,
+          updatedAt: sql`now()`,
+        })
         .where(eq(campaniaReglas.id, existente.id))
     } else {
       await tx.insert(campaniaReglas).values(filaRegla(tenantId, campaniaId, r))
@@ -193,7 +199,13 @@ async function snapshot(tx: Tx, id: string): Promise<Record<string, unknown>> {
     inicio: c.inicio.toISOString(),
     fin: c.fin.toISOString(),
     hastaAgotarStock: c.hastaAgotarStock,
-    reglas: reglas.map((r) => ({ id: r.id, alcance: alcanceDeFila(r), pct: r.pct, unidades: r.unidades })),
+    reglas: reglas.map((r) => ({
+      id: r.id,
+      alcance: alcanceDeFila(r),
+      pct: r.pct,
+      unidades: r.unidades,
+      minimo: r.minimoUnidades,
+    })),
   }
 }
 
@@ -426,6 +438,7 @@ export async function leerCampania(tenantId: string, id: string): Promise<Campan
       alcance: alcanceDeFila(regla),
       pct: regla.pct,
       unidades: regla.unidades,
+      minimo: regla.minimoUnidades,
       descripcion: regla.tipo === "producto" ? producto : regla.tipo === "categoria" ? categoria : regla.marca,
     })),
   }

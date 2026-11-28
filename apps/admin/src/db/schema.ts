@@ -1725,8 +1725,9 @@ export const campanias = pgTable(
 
 // Reglas de una campaña (0095): 'producto' (alegra_id; alcanza a todo el modelo) | 'marca'
 // (normalizada lower+trim) | 'categoria'. `pct` 0..90 (0 = excluido); `unidades` sólo en producto.
-// El id es estable entre ediciones: el Shop cuenta las unidades vendidas por regla. Drift solo-SQL:
-// CHECK de forma, de pct y de unidades.
+// `minimo_unidades` (0109, >= 2, nunca junto con `unidades`): el descuento rige desde N unidades en el
+// carrito. El id es estable entre ediciones: el Shop cuenta las unidades vendidas por regla. Drift
+// solo-SQL: CHECK de forma, de pct, de unidades y de mínimo.
 export const campaniaReglas = pgTable(
   "campania_reglas",
   {
@@ -1741,6 +1742,7 @@ export const campaniaReglas = pgTable(
     categoriaId: uuid("categoria_id").references(() => shopCategories.id, { onDelete: "cascade" }),
     pct: smallint("pct").notNull(),
     unidades: integer("unidades"),
+    minimoUnidades: integer("minimo_unidades"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

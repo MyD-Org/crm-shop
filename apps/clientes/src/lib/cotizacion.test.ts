@@ -375,3 +375,61 @@ describe("cotizarItem: venta sin stock por modalidad", () => {
     expect(privadoSinPrecio.ventaSinStock).toBeUndefined();
   });
 });
+
+import { cantidadesPorRegla } from "./cotizacion";
+import type { EntradaCampania } from "./campanias/precio";
+
+describe("descuento por cantidad en la cotización (mínimo de unidades)", () => {
+  const G = "lista-general";
+  const vol: EntradaCampania = {
+    id: "c-vol",
+    reglaId: "r-vol",
+    inicio: "2026-11-27T03:00:00.000Z",
+    fin: "2026-12-01T03:00:00.000Z",
+    pct: 10,
+    unidades: null,
+    minimo: 6,
+    precios: [{ idPriceList: G, price: 90 }],
+  };
+  // Dos variantes del mismo modelo (comparten la regla) y un producto sin campaña. Inventado.
+  const item = (id: string, campanias: EntradaCampania[] = [vol]) =>
+    ({
+      id,
+      name: `Dicroica ${id}`,
+      status: "active",
+      price: [{ idPriceList: G, name: "General", price: 100, main: true }],
+      inventory: { availableQuantity: 50 },
+      campanias,
+    }) as unknown as AlegraItem & { campanias: EntradaCampania[] };
+  const items = new Map([
+    ["fria", { item: item("fria") }],
+    ["calida", { item: item("calida") }],
+    ["otro", { item: item("otro", []) }],
+  ]);
+  const activas = new Set(["c-vol"]);
+
+  it("suma las unidades de todas las líneas de la regla", () => {
+    const pedidas = [
+      { id: "fria", qty: 4 },
+      { id: "calida", qty: 2 },
+      { id: "otro", qty: 9 },
+    ];
+    expect(cantidadesPorRegla(pedidas, items, activas)).toEqual(new Map([["r-vol", 6]]));
+    expect(cantidadesPorRegla(pedidas, items, new Set(["otra"]))).toEqual(new Map());
+  });
+
+  it("al llegar al mínimo entre las variantes, todas las unidades van con descuento", () => {
+    const ctx = { activas, cantidades: new Map([["r-vol", 6]]) };
+    const l = cotizarItem({ id: "fria", qty: 4 }, items.get("fria")!.item, undefined, undefined, undefined, ctx);
+    expect(l).toMatchObject({ precioUnitario: 90, precioNormal: 100, campaniaId: "c-vol", campaniaReglaId: "r-vol" });
+    expect(l.porCantidad).toBeUndefined();
+  });
+
+  it("debajo del mínimo: precio normal, sin campaña (el cupón la alcanza) y cuántas faltan", () => {
+    const ctx = { activas, cantidades: new Map([["r-vol", 4]]) };
+    const l = cotizarItem({ id: "fria", qty: 4 }, items.get("fria")!.item, undefined, undefined, undefined, ctx);
+    expect(l.precioUnitario).toBe(100);
+    expect(l.campaniaId).toBeUndefined();
+    expect(l.porCantidad).toEqual({ minimo: 6, pct: 10, faltan: 2 });
+  });
+});

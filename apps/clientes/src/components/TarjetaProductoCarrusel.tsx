@@ -18,7 +18,7 @@ import { vistaCardVariantes } from "@/lib/variantes-ficha";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { Product } from "@/data/products";
 import { badgeProducto } from "@/components/badge-producto";
-import { badgeCampania, badgePromo, usePromoProducto, propsCardCampania } from "@/components/promociones/PromoProvider";
+import { badgeCampania, badgePorCantidad, badgePromo, usePromoProducto, propsCardCampania } from "@/components/promociones/PromoProvider";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
@@ -105,7 +105,7 @@ export function TarjetaProductoCarrusel({
         showStock={mostrarStockEnCard(p)}
         price={vv.precio}
         oldPrice={vv.esDesde ? undefined : p.oldPrice}
-        badge={sinBadge ? undefined : p.campania ? badgeCampania(p.campania) : (badgePromo(promo, p) ?? badgeProducto(p))}
+        badge={sinBadge ? undefined : p.campania ? badgeCampania(p.campania) : p.porCantidad ? badgePorCantidad(p.porCantidad) : (badgePromo(promo, p) ?? badgeProducto(p))}
         {...(sinBadge ? {} : propsCardCampania(p.campania))}
         // La card entera es un <Link>: el corazón corta la navegación.
         cornerAction={<BotonFavorito productId={p.id} dentroDeLink />}

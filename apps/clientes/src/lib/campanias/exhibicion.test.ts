@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { campaniaParaExhibir } from "./exhibicion";
+import { campaniaParaExhibir, porCantidadParaExhibir } from "./exhibicion";
 
 // Datos inventados: lista general 100 neto, transferencia 80 neto; campaña al 10 % en las dos.
 const GENERAL = "l-general";
@@ -35,5 +35,20 @@ describe("campaniaParaExhibir: habituales de los medios de la ficha", () => {
     const r = campaniaParaExhibir(prices as never, campanias, { campanias: activas, destacado: null }, undefined, 21);
     expect(r).not.toBeNull();
     expect(r?.campania).not.toHaveProperty("habitualesMedios");
+  });
+});
+
+describe("porCantidadParaExhibir: descuento por cantidad (mínimo de unidades)", () => {
+  const conMinimo = [{ ...campanias[0], minimo: 6 }];
+
+  it("se anuncia con la etiqueta de la campaña y la card sigue a precio normal", () => {
+    const medios = { campanias: activas, destacado: null };
+    expect(porCantidadParaExhibir(prices as never, conMinimo, medios)).toEqual({ minimo: 6, pct: 10, etiqueta: "BF" });
+    expect(campaniaParaExhibir(prices as never, conMinimo, medios)).toBeNull();
+  });
+
+  it("sin campañas activas o sin mínimo, nada", () => {
+    expect(porCantidadParaExhibir(prices as never, conMinimo, { campanias: [] })).toBeNull();
+    expect(porCantidadParaExhibir(prices as never, campanias, { campanias: activas })).toBeNull();
   });
 });

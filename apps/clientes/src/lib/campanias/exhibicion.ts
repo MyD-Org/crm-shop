@@ -3,7 +3,7 @@
  * regla que el cobro (`resolverPrecioVigente`), así lo exhibido y lo cobrado no se separan.
  */
 import type { AlegraPrice } from "../alegra";
-import type { CampaniaProducto } from "@/data/products";
+import type { CampaniaProducto, PorCantidadProducto } from "@/data/products";
 import type { MediosPrecio } from "../medios-precio";
 import { armarPreciosMedios } from "../medios-precio";
 import { precioFinal } from "../precio-final";
@@ -66,4 +66,23 @@ export function campaniaParaExhibir(
       ...(habitualesMedios.length ? { habitualesMedios } : {}),
     },
   };
+}
+
+/**
+ * El descuento por cantidad que se le anuncia al producto (ficha, cards): sale del MISMO resolver que
+ * cobra el carrito (`resolverPrecioVigente` sin cantidades), así lo prometido es lo que se cobra al
+ * llegar al mínimo. `null` = ninguno (o no mejora el % que ya rige).
+ */
+export function porCantidadParaExhibir(
+  prices: AlegraPrice[],
+  campaniasOnline: unknown,
+  medios: Pick<MediosPrecio, "campanias" | "quedanCampania"> | undefined,
+  idPriceList?: string,
+): PorCantidadProducto | null {
+  const activas = medios?.campanias;
+  if (!activas?.length) return null;
+  const quedan = new Map(Object.entries(medios?.quedanCampania ?? {}));
+  const r = resolverPrecioVigente(prices, mapCampanias(campaniasOnline), { activas: new Set(activas.map((c) => c.id)), quedan }, { idListaMedio: idPriceList });
+  const meta = r.porCantidad ? activas.find((c) => c.id === r.porCantidad!.campaniaId) : undefined;
+  return r.porCantidad && meta ? { minimo: r.porCantidad.minimo, pct: r.porCantidad.pct, etiqueta: meta.etiqueta } : null;
 }

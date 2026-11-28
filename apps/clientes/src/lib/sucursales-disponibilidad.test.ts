@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import casos from "./__fixtures__/sucursales-lineas-casos.json";
-import type { SucursalDato } from "./sucursales";
-import { armarStockPorSucursal, disponibilidadPorSucursal, disponibleNeto } from "./sucursales-disponibilidad";
+import type { ReglasVenta, SucursalDato } from "./sucursales";
+import {
+  armarStockPorSucursal,
+  conTramosPorCantidad,
+  disponibilidadAmbas,
+  disponibilidadPorSucursal,
+  disponibleNeto,
+  umbralesDeCantidad,
+  unidadesPorSucursal,
+} from "./sucursales-disponibilidad";
 import type { VentaSinStock } from "./venta-sin-stock";
 
 const sucursales = casos.dataset.sucursales as SucursalDato[];
@@ -305,5 +313,84 @@ describe("armarStockPorSucursal", () => {
   it("no inventariable (stock null) queda null aunque haya filas", () => {
     const r = armarStockPorSucursal([{ alegraId: "1", stock: null }], [{ alegraId: "1", sucursal: "sede-a", stock: 2 }], slugs, "sede-a");
     expect(r["1"]).toBeNull();
+  });
+});
+
+describe("tramos por cantidad (ficha)", () => {
+  // sede-b es la zona y su local: 2 ahí y 21 en sede-a (el caso de una fuente en MdP e Iguazú).
+  const entrada = {
+    sucursales,
+    zona: "sede-b",
+    reglas: reglas as ReglasVenta,
+    reservadoPorSucursal: {},
+    ocultoEn: {},
+    stockPorSucursal: { P: { "sede-a": 21, "sede-b": 2 } } as Record<string, Record<string, number> | null>,
+  };
+  const conTramos = (e: typeof entrada) => conTramosPorCantidad(e, disponibilidadAmbas(e).productos);
+
+  it("umbrales: una más que las unidades de cada sucursal, desde 2, sin repetir", () => {
+    expect(umbralesDeCantidad({ "sede-a": 21, "sede-b": 2 })).toEqual([3, 22]);
+    expect(umbralesDeCantidad({ "sede-a": 0, "sede-b": 5 })).toEqual([6]);
+    expect(umbralesDeCantidad({ "sede-a": 4, "sede-b": 4 })).toEqual([5]);
+    expect(umbralesDeCantidad({})).toEqual([]);
+  });
+
+  it("unidades netas de reserva por sucursal activa, sin las ocultas; null si no es inventariable", () => {
+    expect(unidadesPorSucursal({ ...entrada, reservadoPorSucursal: { P: { "sede-b": 1 } } }, "P")).toEqual({
+      "sede-a": 21,
+      "sede-b": 1,
+    });
+    expect(unidadesPorSucursal({ ...entrada, ocultoEn: { P: ["sede-a"] } }, "P")).toEqual({ "sede-b": 2 });
+    expect(unidadesPorSucursal({ ...entrada, stockPorSucursal: { P: null } }, "P")).toBeNull();
+  });
+
+  it("el local cubre hasta sus unidades; más que eso la línea entera viene de la otra sucursal", () => {
+    const p = conTramos(entrada).P;
+    expect(p.unidades).toEqual({ "sede-a": 21, "sede-b": 2 });
+    expect(p.retiro?.["sede-b"].estado).toBe("disponible");
+    expect(p.envio?.estado).toBe("disponible");
+    expect(p.tramos?.map((t) => t.desde)).toEqual([3, 22]);
+    const [tres, masDelMaximo] = p.tramos!;
+    expect(tres.retiro?.["sede-b"]).toEqual({ estado: "con_demora", desde: "sede-a", demoraDias: 7 });
+    expect(tres.retiro?.["sede-a"].estado).toBe("disponible");
+    expect(tres.envio).toMatchObject({ estado: "a_traer", origen: "sede-a", demoraDias: 7 });
+    expect(masDelMaximo.retiro?.["sede-b"].estado).toBe("sin_stock");
+    expect(masDelMaximo.envio?.estado).toBe("sin_stock");
+  });
+
+  it("sin respaldo (retiro bloqueado y envío sin respaldo) pasar las unidades del local es sin stock", () => {
+    const p = conTramos({ ...entrada, reglas: { ...reglas, respaldoEnvio: false, retiroSinStock: "bloquear" as const } }).P;
+    expect(p.tramos?.[0].retiro?.["sede-b"].estado).toBe("sin_stock");
+    expect(p.tramos?.[0].envio?.estado).toBe("sin_stock");
+  });
+
+  it("oculto en una sucursal: no cuenta en las unidades ni en los umbrales", () => {
+    const p = conTramos({ ...entrada, ocultoEn: { P: ["sede-a"] } }).P;
+    expect(p.unidades).toEqual({ "sede-b": 2 });
+    expect(p.tramos?.map((t) => t.desde)).toEqual([3]);
+    expect(p.tramos?.[0].retiro?.["sede-b"].estado).toBe("sin_stock");
+  });
+
+  it("no inventariable: sin tramos (siempre disponible)", () => {
+    const p = conTramos({ ...entrada, stockPorSucursal: { P: null } }).P;
+    expect(p.unidades).toBeNull();
+    expect(p.tramos).toBeUndefined();
+    expect(p.retiro?.["sede-b"].estado).toBe("disponible");
+  });
+
+  it("con modalidad de venta sin stock, pasar el máximo es por pedido", () => {
+    const venta: VentaSinStock = { id: "m", texto: "A pedido", plazoDias: 10, flujo: "en_linea" };
+    const p = conTramos({ ...entrada, ventaSinStock: { P: venta } } as typeof entrada).P;
+    expect(p.tramos?.at(-1)?.desde).toBe(22);
+    expect(p.tramos?.at(-1)?.retiro?.["sede-b"]).toEqual({ estado: "por_pedido", desde: null, demoraDias: 10 });
+    expect(p.tramos?.at(-1)?.envio?.estado).toBe("por_pedido");
+  });
+
+  it("los tramos de un producto no cambian la vista de los otros", () => {
+    const e = { ...entrada, stockPorSucursal: { P: { "sede-a": 21, "sede-b": 2 }, Q: { "sede-b": 1 } } };
+    const r = conTramos(e);
+    expect(r.Q.tramos?.map((t) => t.desde)).toEqual([2]);
+    expect(r.Q.retiro?.["sede-b"].estado).toBe("disponible");
+    expect(r.P.tramos?.map((t) => t.desde)).toEqual([3, 22]);
   });
 });

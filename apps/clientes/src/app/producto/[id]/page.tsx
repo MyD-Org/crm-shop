@@ -24,6 +24,7 @@ import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { estadoEnvio } from "@/lib/disponibilidad-textos";
+import type { DisponibilidadEnvio } from "@/lib/sucursales-disponibilidad";
 import { urlCanonicaDelSitio } from "@/lib/sitio-url";
 import { EnvioProductoUbicacion } from "@/components/producto/EnvioProductoUbicacion";
 import { origenDeEnvioProducto } from "@/lib/envio-plan";
@@ -94,20 +95,31 @@ export default async function ProductoPage({ params }: Props) {
   // Con selector de variantes (flag `variantes-selector`), la disponibilidad de TODAS las opciones:
   // elegir otra no vuelve al servidor.
   const idsDisponibilidad = producto.grupo ? producto.grupo.opciones.map((o) => o.id) : [producto.id];
-  const disponibilidad = await (variantes
-    ? disponibilidadParaMostrar(idsDisponibilidad, dispEntrega, undefined, true)
-    : disponibilidadParaMostrar(idsDisponibilidad, dispEntrega));
+  // Con tramos por cantidad: la ficha cambia el plazo si se piden más unidades de las que hay en un
+  // local (la línea entera sale de otra sucursal), sin volver al servidor.
+  const disponibilidad = await disponibilidadParaMostrar(idsDisponibilidad, dispEntrega, undefined, variantes, true);
   const configEnvio = reglas.envio ?? CONFIG_ENVIO_DEFAULT;
-  const envioDe = (id: string) => (
+  const envioCon = (envio: DisponibilidadEnvio | null | undefined) => (
     <Suspense fallback={textoEnvioFicha(configEnvio)}>
       <EnvioProductoUbicacion
         configEnvio={configEnvio}
-        plazo={disponibilidad?.productos[id]?.envio ? estadoEnvio(disponibilidad.productos[id].envio!) : null}
+        plazo={envio ? estadoEnvio(envio) : null}
         // Misma condición de origen que el checkout: un producto que hay que traer de otra sucursal no
         // anticipa el método por zona («Llega hoy») que después no se cobra.
-        origen={origenDeEnvioProducto(dispEntrega, disponibilidad?.productos[id]?.envio)}
+        origen={origenDeEnvioProducto(dispEntrega, envio)}
       />
     </Suspense>
+  );
+  const envioDe = (id: string) => envioCon(disponibilidad?.productos[id]?.envio);
+  // Un slot por tramo cuyo envío difiere del de 1 unidad (origen o estado): son pocos (uno por
+  // sucursal como mucho) y se resuelven en el servidor, como el de siempre.
+  const envioPorTramo = Object.fromEntries(
+    Object.entries(disponibilidad?.productos ?? {}).flatMap(([id, p]) => {
+      const distintos = (p.tramos ?? []).filter(
+        (t) => t.envio?.estado !== p.envio?.estado || t.envio?.origen !== p.envio?.origen,
+      );
+      return distintos.length ? [[id, Object.fromEntries(distintos.map((t) => [t.desde, envioCon(t.envio)]))]] : [];
+    }),
   );
   // Migas: la categoría del admin con sus padres. Sin ella, la de Alegra.
   const rutaCategorias = producto.categoriaPropiaId ? await rutaCategoriaPublica(producto.categoriaPropiaId) : [];
@@ -144,6 +156,7 @@ export default async function ProductoPage({ params }: Props) {
         // La ubicación sale de la cookie: va en un hueco por request, con la regla general de
         // fallback, para que la ficha siga con su shell estático.
         envioUbicacion={envioDe(producto.id)}
+        envioUbicacionPorTramo={Object.keys(envioPorTramo).length ? envioPorTramo : undefined}
         envioUbicacionPorId={
           producto.grupo ? Object.fromEntries(producto.grupo.opciones.map((o) => [o.id, envioDe(o.id)])) : undefined
         }

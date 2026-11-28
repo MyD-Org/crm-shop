@@ -6,6 +6,7 @@ import { textoConsultaProducto } from "@/lib/contacto-pedido";
 import { Badge, Button, QuantityStepper, Skeleton, VariantSelector, type PaymentLogo } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { PromoFicha } from "@/components/promociones/PromoFicha";
+import { PorCantidadFicha } from "@/components/promociones/PorCantidadFicha";
 import { CampaniaFicha, PestaniaOferta } from "@/components/promociones/CampaniaFicha";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { CuotasConCarrito, useProgresoCuotasCarrito } from "@/components/producto/CuotasConCarrito";
@@ -469,6 +470,7 @@ export function ProductoClient({
                   <PromoFicha producto={producto} quedan={quedanPromo} slugDestacado={slugDestacadoPromo} />
                 )
               ) : null}
+              {!sinPrecio ? <PorCantidadFicha producto={producto} /> : null}
               {!sinPrecio && !aConfirmar && cuotas && producto.precioFinal != null && hayCuotasParaModal(cuotas) && (
                 <div className="mt-3">
                   {cuotasConCarrito ? (

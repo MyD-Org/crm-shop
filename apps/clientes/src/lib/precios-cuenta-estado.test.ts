@@ -130,6 +130,17 @@ describe("aplicarEstadoPrecio con campaña de precios (decisión B: paga el meno
     expect(p.campania).toBeUndefined();
   });
 
+  it("una cuenta con lista privada no ve el aviso de descuento por cantidad", () => {
+    const conVolumen = { ...enCampania, porCantidad: { minimo: 6, pct: 10, etiqueta: "BF" } };
+    for (const estado of [
+      { tipo: "privado", precio: { price: 120, precioFinal: 145.2 } },
+      { tipo: "consulte" },
+      { tipo: "pendiente" },
+    ] as const) {
+      expect(aplicarEstadoPrecio(conVolumen, estado).porCantidad).toBeUndefined();
+    }
+  });
+
   it("consulte y pendiente: sin campaña (nunca un badge sobre un precio que no se ve)", () => {
     expect(aplicarEstadoPrecio(enCampania, { tipo: "consulte" }).campania).toBeUndefined();
     expect(aplicarEstadoPrecio(enCampania, { tipo: "pendiente" }).campania).toBeUndefined();

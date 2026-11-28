@@ -316,3 +316,39 @@ describe("cotizar: costo de envío por zona (costoEnvioPara)", () => {
     expect(vistos).toEqual([1000]);
   });
 });
+
+describe("cotizar: descuento por cantidad (mínimo de unidades)", () => {
+  // Dos variantes del mismo modelo con la regla «A partir de 6, 10 %» (900 neto). Inventado.
+  const vol = {
+    id: "c-vol",
+    reglaId: "r-vol",
+    inicio: "2026-11-27T03:00:00.000Z",
+    fin: "2026-12-01T03:00:00.000Z",
+    pct: 10,
+    unidades: null,
+    minimo: 6,
+    precios: [{ idPriceList: "1", price: 900 }],
+  };
+  const activa = [{ id: "c-vol", nombre: "Volumen", etiqueta: "Llevando 6", fin: "2026-12-01T03:00:00.000Z" }];
+  const fila = (id: string): Fila => [id, `Dicroica ${id}`, null, null, precios, "50", "21", "active", null, null, [vol]];
+
+  it("4 + 2 variantes llegan al mínimo: todas las unidades a precio de campaña", async () => {
+    filas = [fila("fria"), fila("calida")];
+    const c = await cotizar([{ id: "fria", qty: 4 }, { id: "calida", qty: 2 }], { campanias: activa });
+    for (const l of c.lineas) {
+      expect(l).toMatchObject({ precioUnitario: 900, precioNormal: 1000, campaniaReglaId: "r-vol", campaniaEtiqueta: "Llevando 6" });
+      expect(l.porCantidad).toBeUndefined();
+    }
+    expect(c.subtotal).toBe(5400);
+  });
+
+  it("3 + 2 no llegan: precio normal y les falta 1", async () => {
+    filas = [fila("fria"), fila("calida")];
+    const c = await cotizar([{ id: "fria", qty: 3 }, { id: "calida", qty: 2 }], { campanias: activa });
+    for (const l of c.lineas) {
+      expect(l.precioUnitario).toBe(1000);
+      expect(l.campaniaId).toBeUndefined();
+      expect(l.porCantidad).toEqual({ minimo: 6, pct: 10, faltan: 1 });
+    }
+  });
+});

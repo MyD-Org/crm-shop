@@ -97,6 +97,23 @@ describe.skipIf(process.env.CAMPANIAS_SQL !== "1")("precio de campaña en orden,
     expect((await ids("descuento", conCampania))[0]).toBe("cientoCincuenta");
   });
 
+  it("una regla con mínimo de unidades no ordena ni filtra por precio de campaña, pero sí entra en «Solo ofertas»", async () => {
+    const db = getDb();
+    await db.execute(
+      sql`update public.catalog_products set campanias_online = jsonb_set(campanias_online, '{0,minimo}', '6'::jsonb)
+          where tenant_id = ${TENANT} and alegra_id = 'cientoCincuenta'`,
+    );
+    expect(await ids("precio-asc", conCampania)).toEqual(["cien", "cientoCincuenta", "doscientos"]);
+    expect(await ids("precio-asc", { ...conCampania, soloOfertas: true })).toEqual(["cientoCincuenta"]);
+    expect(await ids("precio-asc", { soloOfertas: true })).toEqual([]);
+    expect(await ids("precio-asc", { ...conCampania, precioMax: 95 })).toEqual([]);
+    await db.execute(
+      sql`update public.catalog_products set campanias_online = campanias_online #- '{0,minimo}'
+          where tenant_id = ${TENANT} and alegra_id = 'cientoCincuenta'`,
+    );
+    expect(await ids("precio-asc", conCampania)).toEqual(["cientoCincuenta", "cien", "doscientos"]);
+  });
+
   it("una regla con límite agotada deja de ordenar y filtrar por el precio de campaña", async () => {
     // El de 150 pasa a tener límite 1 y se vende esa unidad: su card ya muestra el normal (181,5).
     await getDb().execute(

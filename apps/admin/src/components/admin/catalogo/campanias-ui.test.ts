@@ -34,7 +34,7 @@ describe("cuerpoCampania", () => {
     finHora: "23:59",
     hastaAgotarStock: false,
     reglas: [
-      { clave: "a", tipo: "marca", marca: "acme", categoriaId: "", producto: null, pct: "20", unidades: "" },
+      { clave: "a", tipo: "marca", marca: "acme", categoriaId: "", producto: null, pct: "20", unidades: "", minimo: "" },
       {
         clave: "b",
         tipo: "producto",
@@ -43,6 +43,7 @@ describe("cuerpoCampania", () => {
         producto: { alegraId: "7", nombre: "Lámpara", code: null },
         pct: "30",
         unidades: "5",
+        minimo: "",
       },
     ],
   }
@@ -58,6 +59,11 @@ describe("cuerpoCampania", () => {
         { alcance: { tipo: "producto", alegraId: "7" }, pct: 30, unidades: 5 },
       ],
     })
+  })
+
+  it("«A partir de» viaja como número sólo si se cargó, en cualquier tipo de regla", () => {
+    const conMinimo = { ...form, reglas: [{ ...form.reglas[0], minimo: " 6 " }] }
+    expect(cuerpoCampania(conMinimo).reglas).toEqual([{ alcance: { tipo: "marca", marca: "acme" }, pct: 20, minimo: 6 }])
   })
 
   it("la casilla «Hasta agotar stock» viaja en el cuerpo", () => {

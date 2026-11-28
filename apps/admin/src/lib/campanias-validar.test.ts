@@ -58,6 +58,20 @@ describe("validarCampania", () => {
     )
   })
 
+  it("mínimo de unidades: entero entre 2 y 999, en cualquier tipo de regla y nunca con límite", () => {
+    const marca = (extra: object) => ({ ...base, reglas: [{ alcance: { tipo: "marca", marca: "acme" }, pct: 10, ...extra }] })
+    const ok = validarCampania(marca({ minimo: 6 }))
+    expect(ok.ok && ok.valor.reglas[0].minimo).toBe(6)
+    const sin = validarCampania(base)
+    expect(sin.ok && sin.valor.reglas[0].minimo).toBe(null)
+    for (const minimo of [1, 0, 2.5, 1000, "6"]) {
+      expect(errores(marca({ minimo }))).toContain("La cantidad mínima debe ser un número entero entre 2 y 999.")
+    }
+    expect(
+      errores({ ...base, reglas: [{ alcance: { tipo: "producto", alegraId: "1" }, pct: 10, unidades: 50, minimo: 4 }] }),
+    ).toContain("Una regla no puede tener límite de unidades y cantidad mínima a la vez.")
+  })
+
   it("unidades sólo en reglas de producto, entero >= 1", () => {
     expect(
       errores({ ...base, reglas: [{ alcance: { tipo: "marca", marca: "acme" }, pct: 20, unidades: 5 }] }),

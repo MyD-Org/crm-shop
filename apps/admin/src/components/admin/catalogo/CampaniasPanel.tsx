@@ -35,6 +35,7 @@ const reglaVacia = (): FormRegla => ({
   producto: null,
   pct: "",
   unidades: "",
+  minimo: "",
 })
 
 function formVacio(): FormCampania {
@@ -60,6 +61,7 @@ function formDe(c: CampaniaDetalleDto): FormCampania {
       producto: r.alcance.tipo === "producto" ? { alegraId: r.alcance.alegraId, nombre: r.descripcion ?? r.alcance.alegraId, code: null } : null,
       pct: String(r.pct),
       unidades: r.unidades != null ? String(r.unidades) : "",
+      minimo: r.minimo != null ? String(r.minimo) : "",
     })),
   }
 }
@@ -318,7 +320,7 @@ export function CampaniasPanel({ categorias }: Props) {
                 {TX.reglasAyuda}
               </p>
               {form.reglas.map((r) => (
-                <div key={r.clave} className="grid grid-cols-[9rem_1fr_6rem_7rem_auto] items-end gap-2">
+                <div key={r.clave} className="grid grid-cols-[9rem_1fr_6rem_7rem_7rem_auto] items-end gap-2">
                   <Field label={TX.alcance}>
                     <Select
                       value={r.tipo}
@@ -365,6 +367,13 @@ export function CampaniasPanel({ categorias }: Props) {
                       value={r.unidades}
                       disabled={r.tipo !== "producto"}
                       onChange={(e) => cambiarRegla(r.clave, { unidades: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={TX.minimo}>
+                    <Input
+                      inputMode="numeric"
+                      value={r.minimo}
+                      onChange={(e) => cambiarRegla(r.clave, { minimo: e.target.value })}
                     />
                   </Field>
                   <Button

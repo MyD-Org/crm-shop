@@ -11,6 +11,8 @@ export interface ReglaEntrada {
   alcance: AlcanceRegla
   pct: number
   unidades?: number | null
+  /** Descuento por cantidad: rige desde N unidades en el carrito (>= 2). Nunca junto con `unidades`. */
+  minimo?: number | null
 }
 
 export interface CampaniaEntrada {
@@ -32,6 +34,7 @@ export type EstadoCampania = "programada" | "activa" | "terminada"
 export const NOMBRE_MAX = 80
 export const ETIQUETA_MAX = 24
 export const PCT_MAX = 90
+export const MINIMO_MAX = 999
 
 /** ISO 8601 con zona explícita (Z u offset): una fecha sin zona se interpretaría en la del servidor. */
 export const ISO_CON_ZONA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
@@ -107,13 +110,25 @@ export function validarCampania(e: unknown): { ok: true; valor: CampaniaEntrada 
       }
       unidades = r.unidades
     }
+    let minimo: number | null = null
+    if (r.minimo != null) {
+      if (typeof r.minimo !== "number" || !Number.isInteger(r.minimo) || r.minimo < 2 || r.minimo > MINIMO_MAX) {
+        agregar(`La cantidad mínima debe ser un número entero entre 2 y ${MINIMO_MAX}.`)
+        continue
+      }
+      if (unidades !== null) {
+        agregar("Una regla no puede tener límite de unidades y cantidad mínima a la vez.")
+        continue
+      }
+      minimo = r.minimo
+    }
     const clave = claveAlcance(alcance)
     if (claves.has(clave)) {
       agregar("Hay reglas repetidas para el mismo producto, marca o categoría.")
       continue
     }
     claves.add(clave)
-    reglas.push({ alcance, pct, unidades })
+    reglas.push({ alcance, pct, unidades, minimo })
   }
 
   if (errores.length > 0) return { ok: false, errores }
